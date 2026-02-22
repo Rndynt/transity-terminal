@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { tripsApi, outletsApi } from '@/lib/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Store, Calendar, Bus, Clock, MapPin, Users, ArrowRight, Loader2 } from 'lucide-react';
+import { Store, Calendar, Bus, Loader2, MapPin, Clock, ChevronRight, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { tripsApi, outletsApi } from '@/lib/api';
 import type { Outlet, CsoAvailableTrip } from '@/types';
 
 interface TripSelectorProps {
@@ -17,37 +17,6 @@ interface TripSelectorProps {
   onOutletSelect: (outlet: Outlet) => void;
   onTripSelect: (trip: CsoAvailableTrip) => void;
 }
-
-// Format time in Asia/Jakarta timezone
-const formatTime = (timestamp: string | null): string => {
-  if (!timestamp) return '--:--';
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'Asia/Jakarta'
-  }) + ' WIB';
-};
-
-// Calculate duration between two timestamps
-const calculateDuration = (departAt: string | null, arriveAt: string | null): string => {
-  if (!departAt || !arriveAt) return '--';
-  
-  const depart = new Date(departAt);
-  const arrive = new Date(arriveAt);
-  const diffMs = arrive.getTime() - depart.getTime();
-  
-  if (diffMs < 0) return '--';
-  
-  const hours = Math.floor(diffMs / (1000 * 60 * 60));
-  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-  
-  if (hours > 0) {
-    return `${hours}j ${minutes}m`;
-  }
-  return `${minutes} menit`;
-};
 
 export default function TripSelector({ 
   selectedOutlet, 
@@ -67,11 +36,9 @@ export default function TripSelector({
   const { data: trips = [], isLoading: tripsLoading, refetch: refetchTrips } = useQuery<CsoAvailableTrip[]>({
     queryKey: ['/api/cso/available-trips', selectedDate, selectedOutlet?.id],
     queryFn: () => tripsApi.getCsoAvailableTrips(selectedDate, selectedOutlet!.id),
-    enabled: !!selectedDate && !!selectedOutlet?.id,
-    refetchInterval: 30000, // Simple polling every 30 seconds
+    enabled: !!selectedDate && !!selectedOutlet?.id
   });
 
-  // Materialize trip mutation
   const materializeMutation = useMutation({
     mutationFn: async (baseId: string) => {
       setMaterializingBaseId(baseId);
@@ -82,32 +49,19 @@ export default function TripSelector({
       });
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || errorData.code || 'Gagal membuat trip');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to materialize trip');
       }
       
-      const result = await response.json();
-      
-      if (result.tripId) {
-        const tripResponse = await fetch(`/api/trips/${result.tripId}`);
-        if (tripResponse.ok) {
-          const tripData = await tripResponse.json();
-          return { ...result, materializedTrip: tripData };
-        }
-      }
-      
-      return result;
+      return await response.json();
     },
     onSuccess: (data) => {
       setMaterializingBaseId(null);
-      toast({ title: "Trip Tersedia", description: "Trip berhasil dibuat dan siap untuk booking." });
-      
+      toast({ title: "Trip Siap", description: "Trip berhasil dibuat" });
       refetchTrips().then((result) => {
         if (data.tripId && result.data) {
-          const materializedTrip = result.data.find(t => t.tripId === data.tripId);
-          if (materializedTrip) {
-            onTripSelect(materializedTrip);
-          }
+          const trip = result.data.find(t => t.tripId === data.tripId);
+          if (trip) onTripSelect(trip);
         }
       });
     },
@@ -119,18 +73,14 @@ export default function TripSelector({
 
   const handleTripSelect = async (trip: CsoAvailableTrip) => {
     if (trip.status === 'closed') {
-      toast({ title: "Trip Ditutup", description: "Trip ini sudah ditutup.", variant: "destructive" });
-      return;
-    }
-
-    if (trip.status === 'canceled') {
-      toast({ title: "Trip Dibatalkan", description: "Trip ini sudah dibatalkan.", variant: "destructive" });
+      toast({ title: "Trip Ditutup", description: "Trip ini sudah ditutup", variant: "destructive" });
       return;
     }
 
     if (trip.isVirtual && trip.baseId) {
       try {
-        await materializeMutation.mutateAsync(trip.baseId);
+        const result = await materializeMutation.mutateAsync(trip.baseId);
+        // Will auto-select in onSuccess
       } catch (error) {
         // Error handled in onError
       }
@@ -139,32 +89,37 @@ export default function TripSelector({
     }
   };
 
-  const isSelected = (trip: CsoAvailableTrip): boolean => {
-    if (!selectedTrip) return false;
-    if (trip.isVirtual) {
-      return selectedTrip.isVirtual && selectedTrip.baseId === trip.baseId;
+  const formatDepartTime = (isoString: string | null): string => {
+    if (!isoString) return '--:--';
+    try {
+      const date = new Date(isoString);
+      if (isNaN(date.getTime())) return '--:--';
+      return date.toLocaleTimeString('id-ID', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: false, 
+        timeZone: 'Asia/Jakarta' 
+      });
+    } catch {
+      return '--:--';
     }
-    return selectedTrip.tripId === trip.tripId;
   };
 
   // Group trips by route
-  const groupedTrips = trips.reduce((groups: Record<string, CsoAvailableTrip[]>, trip) => {
-    const routeName = trip.patternPath;
-    if (!groups[routeName]) {
-      groups[routeName] = [];
-    }
+  const groupedTrips = (trips || []).reduce((groups: Record<string, CsoAvailableTrip[]>, trip) => {
+    const routeName = trip.patternPath || 'Unknown Route';
+    if (!groups[routeName]) groups[routeName] = [];
     groups[routeName].push(trip);
     return groups;
   }, {});
 
   return (
     <div className="space-y-4">
-      {/* Outlet & Date Selection */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Section 1: Outlet & Date - Compact */}
+      <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label className="text-sm font-medium flex items-center gap-1.5">
-            <Store className="w-4 h-4 text-muted-foreground" />
-            Lokasi Keberangkatan
+          <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+            <Store className="w-3 h-3" /> Outlet
           </Label>
           <Select 
             value={selectedOutlet?.id} 
@@ -173,7 +128,7 @@ export default function TripSelector({
               if (outlet) onOutletSelect(outlet);
             }}
           >
-            <SelectTrigger className="h-10">
+            <SelectTrigger className="h-9 text-sm">
               <SelectValue placeholder="Pilih outlet..." />
             </SelectTrigger>
             <SelectContent>
@@ -187,41 +142,39 @@ export default function TripSelector({
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-sm font-medium flex items-center gap-1.5">
-            <Calendar className="w-4 h-4 text-muted-foreground" />
-            Tanggal Keberangkatan
+          <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+            <Calendar className="w-3 h-3" /> Tanggal
           </Label>
           <Input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="h-10"
+            className="h-9 text-sm"
           />
         </div>
       </div>
 
-      {/* Available Trips */}
-      <div className="space-y-1.5">
-        <Label className="text-sm font-medium flex items-center gap-1.5">
-          <Bus className="w-4 h-4 text-muted-foreground" />
-          Jadwal Tersedia
+      {/* Section 2: Trip Selection */}
+      <div className="space-y-2">
+        <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+          <Bus className="w-3 h-3" /> Jadwal Keberangkatan
         </Label>
-        
+
         <div className="border rounded-lg overflow-hidden">
           {!selectedOutlet ? (
-            <div className="text-center py-8 px-4 bg-muted/30">
-              <Store className="w-10 h-10 text-muted-foreground/50 mx-auto mb-2" />
-              <p className="text-muted-foreground text-sm">Pilih outlet untuk melihat jadwal</p>
+            <div className="p-6 text-center">
+              <Store className="w-10 h-10 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Pilih outlet terlebih dahulu</p>
             </div>
           ) : tripsLoading ? (
-            <div className="text-center py-8 px-4">
-              <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
-              <p className="text-sm text-muted-foreground">Memuat jadwal...</p>
+            <div className="p-6 text-center">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+              <p className="text-sm text-muted-foreground mt-2">Memuat jadwal...</p>
             </div>
-          ) : trips.length === 0 ? (
-            <div className="text-center py-8 px-4 bg-muted/30">
-              <Bus className="w-10 h-10 text-muted-foreground/50 mx-auto mb-2" />
-              <p className="text-muted-foreground text-sm">Tidak ada jadwal tersedia</p>
+          ) : Object.keys(groupedTrips).length === 0 ? (
+            <div className="p-6 text-center">
+              <Bus className="w-10 h-10 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Tidak ada jadwal tersedia</p>
               <p className="text-xs text-muted-foreground mt-1">Coba tanggal atau outlet lain</p>
             </div>
           ) : (
@@ -229,112 +182,82 @@ export default function TripSelector({
               {Object.entries(groupedTrips).map(([routeName, routeTrips]) => (
                 <div key={routeName}>
                   {/* Route Header */}
-                  <div className="px-3 py-2 bg-muted/50 text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <MapPin className="w-3.5 h-3.5" />
-                    {routeName}
+                  <div className="px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground flex items-center gap-2">
+                    <MapPin className="w-3 h-3" />
+                    <span className="truncate">{routeName}</span>
+                    <Badge variant="outline" className="ml-auto text-[10px]">
+                      {routeTrips.length} jadwal
+                    </Badge>
                   </div>
                   
-                  {/* Trips List */}
+                  {/* Trip List */}
                   <div className="divide-y">
                     {routeTrips
                       .sort((a, b) => {
+                        if (!a.departAtAtOutlet && !b.departAtAtOutlet) return 0;
                         if (!a.departAtAtOutlet) return 1;
                         if (!b.departAtAtOutlet) return -1;
                         return new Date(a.departAtAtOutlet).getTime() - new Date(b.departAtAtOutlet).getTime();
                       })
                       .map(trip => {
-                        const selected = isSelected(trip);
-                        const disabled = trip.status === 'closed' || trip.status === 'canceled';
+                        const isSelected = selectedTrip?.tripId === trip.tripId || 
+                          (trip.isVirtual && selectedTrip?.baseId === trip.baseId);
+                        const isDisabled = trip.status === 'closed' || trip.status === 'canceled';
                         const isMaterializing = materializingBaseId === trip.baseId;
-                        
+
                         return (
                           <button
                             key={trip.tripId || trip.baseId}
-                            className={`w-full p-3 text-left transition-colors ${
-                              disabled 
-                                ? 'bg-muted/30 cursor-not-allowed opacity-60'
-                                : selected
-                                  ? 'bg-primary/10 border-l-2 border-l-primary'
-                                  : 'hover:bg-muted/30'
+                            onClick={() => !isDisabled && !isMaterializing && handleTripSelect(trip)}
+                            disabled={isDisabled || isMaterializing}
+                            className={`w-full px-3 py-2.5 flex items-center gap-3 text-left transition-colors ${
+                              isDisabled 
+                                ? 'opacity-50 cursor-not-allowed bg-muted/30' 
+                                : isSelected 
+                                  ? 'bg-primary/10 border-l-2 border-primary' 
+                                  : 'hover:bg-muted/50'
                             }`}
-                            onClick={() => !disabled && !isMaterializing && handleTripSelect(trip)}
-                            disabled={disabled || isMaterializing}
                           >
-                            <div className="flex items-center gap-3">
-                              {/* Departure Time */}
-                              <div className="text-center min-w-[70px]">
-                                <div className="text-lg font-bold text-foreground">
-                                  {formatTime(trip.departAtAtOutlet).replace(' WIB', '')}
-                                </div>
-                                <div className="text-[10px] text-muted-foreground">WIB</div>
-                              </div>
-                              
-                              {/* Arrow */}
-                              <div className="flex-shrink-0">
-                                <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                              </div>
-                              
-                              {/* Arrival Time & Duration */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  {trip.isVirtual ? (
-                                    <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
-                                      Virtual
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">
-                                      Aktif
-                                    </Badge>
-                                  )}
-                                  
-                                  {trip.status === 'closed' && (
-                                    <Badge variant="destructive" className="text-[10px]">Ditutup</Badge>
-                                  )}
-                                  {trip.status === 'canceled' && (
-                                    <Badge variant="secondary" className="text-[10px]">Dibatalkan</Badge>
-                                  )}
-                                </div>
-                                
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <Clock className="w-3 h-3" />
-                                  <span>{calculateDuration(trip.departAtAtOutlet, trip.finalArrivalAt)}</span>
-                                  {trip.finalArrivalAt && (
-                                    <>
-                                      <span>·</span>
-                                      <span>Tiba {formatTime(trip.finalArrivalAt).replace(' WIB', '')}</span>
-                                    </>
-                                  )}
-                                </div>
-                                
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                                  <Users className="w-3 h-3" />
-                                  <span className={trip.isVirtual ? 'text-blue-600' : 'text-green-600 font-medium'}>
-                                    {trip.isVirtual ? '~' : ''}{trip.availableSeats ?? trip.capacity ?? '?'} kursi
-                                  </span>
-                                  {trip.vehicle && (
-                                    <>
-                                      <span>·</span>
-                                      <span>{trip.vehicle.code}</span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                              
-                              {/* Select Indicator */}
-                              <div className="flex-shrink-0">
+                            {/* Time */}
+                            <div className="w-14 text-center flex-shrink-0">
+                              <div className="text-lg font-bold tabular-nums">
                                 {isMaterializing ? (
-                                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                                ) : selected ? (
-                                  <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                  </div>
+                                  <Loader2 className="w-4 h-4 animate-spin mx-auto" />
                                 ) : (
-                                  <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30" />
+                                  formatDepartTime(trip.departAtAtOutlet)
                                 )}
                               </div>
                             </div>
+
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 mb-0.5">
+                                {trip.isVirtual ? (
+                                  <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-600 border-blue-200">
+                                    Virtual
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] bg-green-50 text-green-600 border-green-200">
+                                    Aktif
+                                  </Badge>
+                                )}
+                                
+                                {trip.status === 'closed' && (
+                                  <Badge variant="destructive" className="text-[10px]">Ditutup</Badge>
+                                )}
+                              </div>
+                              
+                              <div className="text-xs text-muted-foreground">
+                                {trip.vehicle ? `${trip.vehicle.code}` : 'Kendaraan TBD'}
+                                {' • '}
+                                <span className={trip.availableSeats && trip.availableSeats > 0 ? 'text-green-600 font-medium' : 'text-red-600'}>
+                                  {trip.availableSeats ?? trip.capacity ?? '?'} kursi
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Arrow */}
+                            <ChevronRight className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
                           </button>
                         );
                       })}

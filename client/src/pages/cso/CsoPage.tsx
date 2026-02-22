@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import TripSelector from '@/components/cso/TripSelector';
 import RouteTimeline from '@/components/cso/RouteTimeline';
 import SeatMap from '@/components/cso/SeatMap';
@@ -8,11 +10,17 @@ import PaymentPanel from '@/components/cso/PaymentPanel';
 import PrintPreview from '@/components/cso/PrintPreview';
 import { useBookingFlow } from '@/hooks/useBookingFlow';
 import { useSeatHold } from '@/hooks/useSeatHold';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Users, CreditCard, CheckCircle, Circle, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, MapPin, Grid3X3, Users, CreditCard, Ticket } from 'lucide-react';
 import type { Trip, Stop, Outlet, CsoAvailableTrip } from '@/types';
+
+// Simplified steps - 5 steps instead of 6
+const STEPS = [
+  { id: 1, name: 'Jadwal', icon: MapPin, desc: 'Pilih outlet & keberangkatan' },
+  { id: 2, name: 'Rute', icon: MapPin, desc: 'Pilih titik naik & turun' },
+  { id: 3, name: 'Kursi', icon: Grid3X3, desc: 'Pilih kursi' },
+  { id: 4, name: 'Penumpang', icon: Users, desc: 'Isi data' },
+  { id: 5, name: 'Bayar', icon: CreditCard, desc: 'Pembayaran' }
+];
 
 export default function CsoPage() {
   const [bookingResult, setBookingResult] = useState<{ booking: any; printPayload: any } | null>(null);
@@ -44,7 +52,7 @@ export default function CsoPage() {
         const total = await calculateTotalAmount();
         setTotalAmount(total);
       } catch (error) {
-        console.error('Failed to calculate total amount:', error);
+        console.error('Failed to calculate total:', error);
         setTotalAmount(0);
       }
     };
@@ -68,17 +76,17 @@ export default function CsoPage() {
       passengers: [],
       payment: undefined
     });
-    releaseAllHolds();
     setSelectedCsoTrip(undefined);
+    releaseAllHolds();
   };
 
   const handleTripSelect = (csoTrip: CsoAvailableTrip) => {
     setSelectedCsoTrip(csoTrip);
     const trip: Trip = {
       id: csoTrip.tripId || '', 
-      patternId: '', 
-      vehicleId: '', 
-      serviceDate: csoTrip.departAtAtOutlet ? new Date(csoTrip.departAtAtOutlet).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      patternId: '',
+      vehicleId: '',
+      serviceDate: new Date().toISOString().split('T')[0],
       capacity: csoTrip.capacity || 0,
       status: csoTrip.status as 'scheduled' | 'canceled' | 'closed',
       layoutId: null,
@@ -102,10 +110,7 @@ export default function CsoPage() {
   };
 
   const handleDestinationSelect = (stop: Stop, sequence: number) => {
-    updateState({ 
-      destinationStop: stop, 
-      destinationSeq: sequence 
-    });
+    updateState({ destinationStop: stop, destinationSeq: sequence });
   };
 
   const handleSeatSelect = (seatNo: string) => addSeat(seatNo);
@@ -117,7 +122,7 @@ export default function CsoPage() {
     try {
       const result = await createBooking();
       setBookingResult(result);
-      setCurrentStep(7);
+      setCurrentStep(6); // Success step
     } catch (error) {
       console.error('Booking failed:', error);
     }
@@ -137,414 +142,297 @@ export default function CsoPage() {
       payment: undefined
     });
     resetFlow();
-
-  const handleStepClick = (stepNumber: number) => {
-    if (stepNumber <= state.currentStep) {
-      setCurrentStep(stepNumber);
-    }
-  };
     releaseAllHolds();
   };
 
-  // Steps configuration
-  const steps = [
-    { id: 1, name: 'Outlet & Trip', icon: Circle },
-    { id: 2, name: 'Rute', icon: Circle },
-    { id: 3, name: 'Kursi', icon: Circle },
-    { id: 4, name: 'Penumpang', icon: Users },
-    { id: 5, name: 'Pembayaran', icon: CreditCard },
-  ];
+  const handleStepClick = (stepNumber: number) => {
+    if (stepNumber < state.currentStep) {
+      setCurrentStep(stepNumber);
+    }
+  };
 
-  const currentStepIndex = state.currentStep <= 2 ? 0 : state.currentStep - 2;
-  const currentStep = steps[currentStepIndex] || steps[0];
+  const getStepStatus = (stepId: number) => {
+    if (bookingResult) return stepId < 6 ? 'completed' : 'active';
+    if (state.currentStep > stepId) return 'completed';
+    if (state.currentStep === stepId) return 'active';
+    return 'pending';
+  };
+
+  const canProceed = () => {
+    switch (state.currentStep) {
+      case 1: return !!state.outlet && !!state.trip;
+      case 2: return !!state.originStop && !!state.destinationStop;
+      case 3: return state.selectedSeats.length > 0;
+      case 4: return state.passengers.length === state.selectedSeats.length && 
+                     state.passengers.every(p => (p.fullName ?? '').trim());
+      case 5: return !!state.payment;
+      default: return false;
+    }
+  };
+
+  // Format currency
+  const formatCurrency = (amount: number) => 
+    new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
+
+  // Success view
+  if (state.currentStep === 6 && bookingResult) {
+    return (
+      <div className="max-w-2xl mx-auto p-4">
+        <PrintPreview
+          booking={bookingResult.booking}
+          printPayload={bookingResult.printPayload}
+          onNewBooking={handleNewBooking}
+          onPrint={() => window.print()}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-card border-b px-4 py-3 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold">CSO Booking Terminal</h1>
-            <p className="text-xs text-muted-foreground">Sistem Reservasi Tiket Bus</p>
-          </div>
-          
-          {state.outlet && (
-            <Badge variant="outline" className="bg-primary/10">
-              {state.outlet.name}
-            </Badge>
-          )}
+    <div className="h-[calc(100vh-120px)] flex flex-col">
+      {/* Compact Stepper */}
+      <div className="bg-card border-b px-4 py-2">
+        <div className="flex items-center justify-center gap-1 overflow-x-auto">
+          {STEPS.map((step, index) => {
+            const status = getStepStatus(step.id);
+            const Icon = step.icon;
+            
+            return (
+              <div key={step.id} className="flex items-center">
+                <button
+                  onClick={() => handleStepClick(step.id)}
+                  disabled={status === 'pending'}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors ${
+                    status === 'active' 
+                      ? 'bg-primary text-primary-foreground' 
+                      : status === 'completed'
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'text-muted-foreground cursor-not-allowed'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${
+                    status === 'completed' ? 'bg-green-500 text-white' : status === 'active' ? 'bg-primary-foreground/20' : 'bg-muted'
+                  }`}>
+                    {status === 'completed' ? <Check className="w-3 h-3" /> : step.id}
+                  </div>
+                  <span className="text-sm font-medium hidden sm:inline">{step.name}</span>
+                </button>
+                
+                {index < STEPS.length - 1 && (
+                  <ChevronRight className={`w-4 h-4 mx-1 ${
+                    state.currentStep > step.id ? 'text-green-500' : 'text-muted-foreground/30'
+                  }`} />
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-4">
-        {/* Step Indicator */}
-        {state.currentStep < 7 && (
-          <div className="mb-4">
-            <div className="flex items-center justify-center space-x-2 md:space-x-4 lg:space-x-8 min-w-max px-4">
-              {[
-                { id: 1, name: 'Outlet', icon: '1' },
-                { id: 2, name: 'Trip', icon: '2' },
-                { id: 3, name: 'Route', icon: '3' },
-                { id: 4, name: 'Seats', icon: '4' },
-                { id: 5, name: 'Passengers', icon: '5' },
-                { id: 6, name: 'Payment', icon: '6' }
-              ].map((step, index) => {
-                const isActive = state.currentStep === step.id;
-                const isCompleted = state.currentStep > step.id;
-                const isClickable = state.currentStep >= step.id;
-                
-                return (
-                  <div key={step.id} className="flex items-center">
-                    <div 
-                      className={`flex flex-col items-center cursor-pointer ${
-                        isClickable ? 'hover:opacity-80' : 'opacity-50'
-                      }`}
-                      onClick={() => isClickable && handleStepClick(step.id)}
-                    >
-                      <div className={`w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-medium ${
-                        isActive 
-                          ? 'bg-primary text-primary-foreground' 
-                          : isCompleted 
-                            ? 'bg-green-500 text-white'
-                            : 'bg-muted text-muted-foreground border border-border'
-                      }`}>
-                        {isCompleted ? '✓' : step.icon}
-                      </div>
-                      <span className={`text-[10px] md:text-xs mt-1 text-center leading-tight ${
-                        isActive ? 'text-primary font-medium' : 'text-muted-foreground'
-                      }`}>
-                        {step.name}
-                      </span>
-                    </div>
-                    {index < 5 && (
-                      <div className={`h-px w-4 md:w-8 lg:w-16 mx-1 md:mx-2 lg:mx-4 ${
-                        isCompleted ? 'bg-green-500' : 'bg-border'
-                      }`} />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Left Column - Always visible */}
-          <div className="lg:col-span-3 space-y-4">
-            {/* Booking Summary Card */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Ringkasan Booking</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                {/* Trip Info */}
-                {selectedCsoTrip && (
-                  <div className="pb-3 border-b">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                      <span>Jadwal</span>
-                    </div>
-                    <p className="font-medium">{selectedCsoTrip.patternPath}</p>
-                    {selectedCsoTrip.departAtAtOutlet && (
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(selectedCsoTrip.departAtAtOutlet).toLocaleTimeString('id-ID', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          timeZone: 'Asia/Jakarta'
-                        })} WIB
-                        {selectedCsoTrip.finalArrivalAt && (
-                          <> → {new Date(selectedCsoTrip.finalArrivalAt).toLocaleTimeString('id-ID', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            timeZone: 'Asia/Jakarta'
-                          })} WIB</>
-                        )}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Route Info */}
-                {state.originStop && state.destinationStop && (
-                  <div className="pb-3 border-b">
-                    <div className="text-xs text-muted-foreground mb-1">Rute</div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{state.originStop.code}</span>
-                      <ChevronRight className="w-3 h-3" />
-                      <span className="font-medium">{state.destinationStop.code}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Seats Info */}
-                {state.selectedSeats.length > 0 && (
-                  <div className="pb-3 border-b">
-                    <div className="text-xs text-muted-foreground mb-1">Kursi ({state.selectedSeats.length})</div>
-                    <div className="flex flex-wrap gap-1">
-                      {state.selectedSeats.map(seat => (
-                        <Badge key={seat} variant="secondary" className="text-xs">
-                          {seat}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Passengers Info */}
-                {state.passengers.length > 0 && (
-                  <div className="pb-3 border-b">
-                    <div className="text-xs text-muted-foreground mb-1">Penumpang ({state.passengers.length})</div>
-                    <p className="truncate">{state.passengers.map(p => p.fullName).join(', ')}</p>
-                  </div>
-                )}
-
-                {/* Total */}
-                {state.selectedSeats.length > 0 && (
-                  <div className="pt-2">
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium">Total</span>
-                      <span className="text-lg font-bold text-primary">
-                        {new Intl.NumberFormat('id-ID', {
-                          style: 'currency',
-                          currency: 'IDR',
-                          minimumFractionDigits: 0
-                        }).format(totalAmount)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Quick Actions */}
-            {state.currentStep > 1 && state.currentStep < 7 && (
-              <Card>
-                <CardContent className="p-3 space-y-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="w-full"
-                    onClick={() => setCurrentStep(1)}
-                  >
-                    <ChevronLeft className="w-4 h-4 mr-2" />
-                    Ganti Jadwal
-                  </Button>
-                  
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="w-full justify-start text-muted-foreground"
-                    onClick={handleNewBooking}
-                  >
-                    Mulai Baru
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {/* Middle Column - Main Content */}
-          <div className="lg:col-span-6">
-            {/* Step 7: Print Preview */}
-            {state.currentStep === 7 && bookingResult && (
-              <PrintPreview
-                booking={bookingResult.booking}
-                printPayload={bookingResult.printPayload}
-                onNewBooking={handleNewBooking}
-                onPrint={() => window.print()}
+      {/* Main Content - 3 Column Layout */}
+      <div className="flex-1 grid grid-cols-12 gap-4 p-4 overflow-hidden">
+        {/* Column 1: Jadwal (Always visible) */}
+        <div className="col-span-12 lg:col-span-4 flex flex-col">
+          <Card className="flex-1 flex flex-col">
+            <CardContent className="flex-1 overflow-auto p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                  state.currentStep >= 1 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                }`}>1</div>
+                <h2 className="font-semibold">Pilih Jadwal</h2>
+              </div>
+              <TripSelector
+                selectedOutlet={state.outlet}
+                selectedTrip={selectedCsoTrip}
+                onOutletSelect={handleOutletSelect}
+                onTripSelect={handleTripSelect}
               />
-            )}
+            </CardContent>
+          </Card>
+        </div>
 
-            {/* Steps 1-2: Outlet & Trip Selection */}
-            {state.currentStep <= 2 && (
-              <Card>
-                <CardContent className="p-4">
-                  <TripSelector
-                    selectedOutlet={state.outlet}
-                    selectedTrip={selectedCsoTrip}
-                    onOutletSelect={handleOutletSelect}
-                    onTripSelect={handleTripSelect}
-                  />
-                  
-                  {/* Next Button */}
-                  {canProceedToNextStep() && (
-                    <div className="mt-4 pt-4 border-t">
-                      <Button 
-                        className="w-full"
-                        onClick={nextStep}
-                      >
-                        Lanjutkan ke Pemilihan Rute
-                        <ChevronRight className="w-4 h-4 ml-2" />
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Step 3: Route Selection */}
-            {state.currentStep === 3 && (
-              <Card>
-                <CardContent className="p-4">
+        {/* Column 2: Rute / Kursi */}
+        <div className="col-span-12 lg:col-span-4 flex flex-col">
+          <Card className="flex-1 flex flex-col">
+            <CardContent className="flex-1 overflow-auto p-4">
+              {/* Step 2: Rute */}
+              {state.currentStep === 2 && (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">2</div>
+                    <h2 className="font-semibold">Pilih Rute</h2>
+                  </div>
                   {state.trip ? (
-                    <>
-                      <RouteTimeline
-                        trip={state.trip}
-                        selectedOrigin={state.originStop}
-                        selectedDestination={state.destinationStop}
-                        onOriginSelect={handleOriginSelect}
-                        onDestinationSelect={handleDestinationSelect}
-                      />
-                      
-                      {/* Navigation */}
-                      <div className="mt-4 pt-4 border-t flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          onClick={prevStep}
-                        >
-                          <ChevronLeft className="w-4 h-4 mr-2" />
-                          Kembali
-                        </Button>
-                        
-                        {canProceedToNextStep() && (
-                          <Button 
-                            className="flex-1"
-                            onClick={nextStep}
-                          >
-                            Lanjutkan ke Pemilihan Kursi
-                            <ChevronRight className="w-4 h-4 ml-2" />
-                          </Button>
-                        )}
-                      </div>
-                    </>
+                    <RouteTimeline
+                      trip={state.trip}
+                      selectedOrigin={state.originStop}
+                      selectedDestination={state.destinationStop}
+                      onOriginSelect={handleOriginSelect}
+                      onDestinationSelect={handleDestinationSelect}
+                    />
                   ) : (
-                    <div className="text-center py-8">
-                      <p className="text-muted-foreground">Pilih trip terlebih dahulu</p>
-                      <Button onClick={() => setCurrentStep(1)} className="mt-2">
-                        Kembali ke Pemilihan Trip
-                      </Button>
+                    <div className="text-center py-8 text-muted-foreground">
+                      <MapPin className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p>Pilih jadwal terlebih dahulu</p>
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            )}
+                </>
+              )}
 
-            {/* Step 4: Seat Selection */}
-            {state.currentStep === 4 && (
-              <Card>
-                <CardContent className="p-4">
+              {/* Step 3: Kursi */}
+              {state.currentStep === 3 && (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">3</div>
+                    <h2 className="font-semibold">Pilih Kursi</h2>
+                  </div>
                   {state.trip && state.originSeq && state.destinationSeq ? (
-                    <>
-                      <SeatMap
-                        trip={state.trip}
-                        originSeq={state.originSeq}
-                        destinationSeq={state.destinationSeq}
-                        selectedSeats={state.selectedSeats}
-                        onSeatSelect={handleSeatSelect}
-                        onSeatDeselect={handleSeatDeselect}
-                      />
-                      
-                      {/* Navigation */}
-                      <div className="mt-4 pt-4 border-t flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          onClick={prevStep}
-                        >
-                          <ChevronLeft className="w-4 h-4 mr-2" />
-                          Kembali
-                        </Button>
-                        
-                        {state.selectedSeats.length > 0 && (
-                          <Button 
-                            className="flex-1"
-                            onClick={nextStep}
-                          >
-                            Lanjutkan ke Data Penumpang
-                            <ChevronRight className="w-4 h-4 ml-2" />
-                          </Button>
-                        )}
-                      </div>
-                    </>
+                    <SeatMap
+                      trip={state.trip}
+                      originSeq={state.originSeq}
+                      destinationSeq={state.destinationSeq}
+                      selectedSeats={state.selectedSeats}
+                      onSeatSelect={handleSeatSelect}
+                      onSeatDeselect={handleSeatDeselect}
+                    />
                   ) : (
-                    <div className="text-center py-8">
-                      <p className="text-muted-foreground">Pilih rute terlebih dahulu</p>
-                      <Button onClick={() => setCurrentStep(3)} className="mt-2">
-                        Kembali ke Pemilihan Rute
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Grid3X3 className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p>Pilih rute terlebih dahulu</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Summary for steps 4-5 */}
+              {state.currentStep >= 4 && (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Check className="w-5 h-5 text-green-500" />
+                    <h2 className="font-semibold">Rute & Kursi</h2>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-muted-foreground">Rute:</span>
+                        <span className="font-medium">
+                          {state.originStop?.code} → {state.destinationStop?.code}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Kursi:</span>
+                        <span className="font-medium">{state.selectedSeats.join(', ')}</span>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => setCurrentStep(2)}>
+                      Ubah Rute/Kursi
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Column 3: Penumpang / Pembayaran */}
+        <div className="col-span-12 lg:col-span-4 flex flex-col">
+          <Card className="flex-1 flex flex-col">
+            <CardContent className="flex-1 overflow-auto p-4">
+              {/* Step 4: Penumpang */}
+              {state.currentStep === 4 && (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">4</div>
+                    <h2 className="font-semibold">Data Penumpang</h2>
+                  </div>
+                  <PassengerForm
+                    selectedSeats={state.selectedSeats}
+                    passengers={state.passengers}
+                    onPassengersUpdate={handlePassengersUpdate}
+                    onNext={nextStep}
+                    onBack={prevStep}
+                  />
+                </>
+              )}
+
+              {/* Step 5: Pembayaran */}
+              {state.currentStep === 5 && (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">5</div>
+                    <h2 className="font-semibold">Pembayaran</h2>
+                  </div>
+                  <PaymentPanel
+                    totalAmount={totalAmount}
+                    payment={state.payment}
+                    onPaymentUpdate={handlePaymentUpdate}
+                    onSubmit={handleCreateBooking}
+                    onBack={prevStep}
+                    loading={bookingLoading}
+                  />
+                </>
+              )}
+
+              {/* Summary for steps 1-3 */}
+              {state.currentStep < 4 && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Ticket className="w-5 h-5 text-primary" />
+                    <h2 className="font-semibold">Ringkasan Booking</h2>
+                  </div>
+
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between py-1 border-b">
+                      <span className="text-muted-foreground">Outlet</span>
+                      <span className="font-medium">{state.outlet?.name || '-'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b">
+                      <span className="text-muted-foreground">Jadwal</span>
+                      <span className="font-medium">{selectedCsoTrip?.patternPath || '-'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b">
+                      <span className="text-muted-foreground">Rute</span>
+                      <span className="font-medium">
+                        {state.originStop && state.destinationStop 
+                          ? `${state.originStop.code} → ${state.destinationStop.code}`
+                          : '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b">
+                      <span className="text-muted-foreground">Kursi</span>
+                      <span className="font-medium">
+                        {state.selectedSeats.length > 0 ? state.selectedSeats.join(', ') : '-'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {state.selectedSeats.length > 0 && (
+                    <div className="p-3 bg-primary/5 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">Total</span>
+                        <span className="text-lg font-bold text-primary">{formatCurrency(totalAmount)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Navigation */}
+                  <div className="space-y-2 pt-4">
+                    {state.currentStep > 1 && (
+                      <Button variant="outline" className="w-full" onClick={prevStep}>
+                        <ChevronLeft className="w-4 h-4 mr-1" /> Kembali
                       </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Step 5: Passenger Form */}
-            {state.currentStep === 5 && (
-              <PassengerForm
-                selectedSeats={state.selectedSeats}
-                passengers={state.passengers}
-                onPassengersUpdate={handlePassengersUpdate}
-                onNext={nextStep}
-                onBack={prevStep}
-              />
-            )}
-
-            {/* Step 6: Payment */}
-            {state.currentStep === 6 && (
-              <PaymentPanel
-                totalAmount={totalAmount}
-                payment={state.payment}
-                onPaymentUpdate={handlePaymentUpdate}
-                onSubmit={handleCreateBooking}
-                onBack={prevStep}
-                loading={bookingLoading}
-              />
-            )}
-          </div>
-
-          {/* Right Column - Additional Info */}
-          <div className="lg:col-span-3 space-y-4">
-            {/* Current Trip Info */}
-            {selectedCsoTrip && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Info Trip</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Status</span>
-                    <Badge variant={selectedCsoTrip.isVirtual ? "outline" : "default"}>
-                      {selectedCsoTrip.isVirtual ? 'Virtual' : 'Aktif'}
-                    </Badge>
+                    )}
+                    
+                    {canProceed() && state.currentStep < 5 && (
+                      <Button className="w-full" onClick={nextStep}>
+                        Lanjutkan <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    )}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Kapasitas</span>
-                    <span>{selectedCsoTrip.capacity} kursi</span>
-                  </div>
-                  {selectedCsoTrip.vehicle && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Kendaraan</span>
-                      <span>{selectedCsoTrip.vehicle.code}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Jumlah Stop</span>
-                    <span>{selectedCsoTrip.stopCount} titik</span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Help Card */}
-            <Card className="bg-muted/30">
-              <CardContent className="p-4">
-                <h4 className="font-medium text-sm mb-2">Butuh Bantuan?</h4>
-                <p className="text-xs text-muted-foreground">
-                  Hubungi supervisor atau teknisi jika mengalami kendala dalam proses booking.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
