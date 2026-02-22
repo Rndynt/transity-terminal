@@ -11,6 +11,61 @@ import { tripsApi, tripStopTimesApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import type { Trip, TripStopTimeWithEffectiveFlags } from '@shared/schema';
 
+/**
+ * Convert UTC timestamp to local datetime string for datetime-local input
+ * This ensures the input displays the correct local time (e.g., 08:00 WIB instead of 01:00 UTC)
+ */
+function utcToLocalDatetime(utcTimestamp: string | Date | null): string {
+  if (!utcTimestamp) return '';
+  
+  const date = new Date(utcTimestamp);
+  // Format in Asia/Jakarta timezone (WIB = UTC+7)
+  const year = date.toLocaleString('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric' });
+  const month = date.toLocaleString('en-CA', { timeZone: 'Asia/Jakarta', month: '2-digit' });
+  const day = date.toLocaleString('en-CA', { timeZone: 'Asia/Jakarta', day: '2-digit' });
+  const hours = date.toLocaleString('en-CA', { timeZone: 'Asia/Jakarta', hour: '2-digit', hour12: false });
+  const minutes = date.toLocaleString('en-CA', { timeZone: 'Asia/Jakarta', minute: '2-digit' });
+  
+  // Pad with zeros if needed
+  const padHours = hours.padStart(2, '0');
+  const padMinutes = minutes.padStart(2, '0');
+  
+  return `${year}-${month}-${day}T${padHours}:${padMinutes}`;
+}
+
+/**
+ * Format UTC timestamp to display time in Asia/Jakarta timezone
+ */
+function formatTimeWIB(utcTimestamp: string | Date | null): string {
+  if (!utcTimestamp) return '--:--';
+  
+  const date = new Date(utcTimestamp);
+  return date.toLocaleTimeString('id-ID', { 
+    timeZone: 'Asia/Jakarta', 
+    hour: '2-digit', 
+    minute: '2-digit',
+    hour12: false 
+  });
+}
+
+/**
+ * Format UTC timestamp to display full date and time in Asia/Jakarta timezone
+ */
+function formatDateTimeWIB(utcTimestamp: string | Date | null): string {
+  if (!utcTimestamp) return '--';
+  
+  const date = new Date(utcTimestamp);
+  return date.toLocaleString('id-ID', { 
+    timeZone: 'Asia/Jakarta', 
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit', 
+    minute: '2-digit',
+    hour12: false 
+  });
+}
+
 interface TripScheduleEditorProps {
   trip: Trip;
   onClose: () => void;
@@ -153,10 +208,10 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
           id: st.id,
           stopId: st.stopId,
           stopSequence: st.stopSequence,
-          // Convert UTC timestamps to local datetime for datetime-local inputs
-          // The browser will interpret these as local time for the input field
-          arriveAt: st.arriveAt ? new Date(st.arriveAt).toISOString().slice(0, 16) : '',
-          departAt: st.departAt ? new Date(st.departAt).toISOString().slice(0, 16) : '',
+          // Convert UTC timestamps to local datetime (Asia/Jakarta) for datetime-local inputs
+          // This ensures the input displays the correct local time (e.g., 08:00 WIB instead of 01:00 UTC)
+          arriveAt: utcToLocalDatetime(st.arriveAt),
+          departAt: utcToLocalDatetime(st.departAt),
           dwellSeconds: st.dwellSeconds || 0,
           boardingAllowed: st.boardingAllowed,
           alightingAllowed: st.alightingAllowed
