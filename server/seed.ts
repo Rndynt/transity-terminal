@@ -1,5 +1,4 @@
 import { storage } from "./storage";
-import { fromZonedHHMMToUtc } from "./utils/timezone";
 
 /**
  * SEED DATA - TransityCore
@@ -9,6 +8,7 @@ import { fromZonedHHMMToUtc } from "./utils/timezone";
  *   Contoh: "08:30" BUKAN "08.30"
  * - Tanggal valid_from dan valid_to harus mencakup tanggal sekarang
  * - Untuk testing, buat minimal 2 jadwal dengan waktu berbeda
+ * - TIDAK membuat trip manual, gunakan Virtual Scheduling dari Trip Bases
  */
 
 export async function seedData() {
@@ -18,10 +18,8 @@ export async function seedData() {
   const currentYear = new Date().getFullYear();
   const validFrom = `${currentYear}-01-01`;
   const validTo = `${currentYear}-12-31`;
-  const today = new Date().toISOString().split("T")[0];
 
   console.log(`[SEED] Date range: ${validFrom} to ${validTo}`);
-  console.log(`[SEED] Today: ${today}`);
 
   // ============================================
   // 1. STOPS - Lokasi pemberhentian
@@ -366,75 +364,14 @@ export async function seedData() {
   console.log("[SEED]   - JKT-SMR 07:00 Pagi (8 seat)");
 
   // ============================================
-  // 9. TRIP INSTANCE (untuk hari ini)
+  // NOTE: Tidak ada trip manual yang dibuat
+  // Gunakan Virtual Scheduling dari Trip Bases
+  // CSO akan memilih virtual trip yang kemudian di-materialize
   // ============================================
-  console.log("\n[SEED] Creating trip instance for today...");
 
-  const trip = await storage.createTrip({
-    patternId: patternA.id,
-    serviceDate: today,
-    vehicleId: vehicleA.id,
-    layoutId: layout12.id,
-    capacity: 12,
-    status: "scheduled",
-    channelFlags: { CSO: true, WEB: false, APP: false, OTA: false },
-  });
-
-  console.log(`[SEED] Trip created for ${today}`);
-
-  // Create trip stop times using proper timezone conversion
-  // Format waktu: "HH:MM" dengan COLON
-  const jakartaDepartAt = fromZonedHHMMToUtc(today, "08:00", "Asia/Jakarta");
-  const purwakartaArriveAt = fromZonedHHMMToUtc(today, "09:00", "Asia/Jakarta");
-  const purwakartaDepartAt = fromZonedHHMMToUtc(today, "09:05", "Asia/Jakarta");
-  const bandungArriveAt = fromZonedHHMMToUtc(today, "10:00", "Asia/Jakarta");
-
-  await storage.createTripStopTime({
-    tripId: trip.id,
-    stopId: jakartaStop.id,
-    stopSequence: 1,
-    arriveAt: null,
-    departAt: jakartaDepartAt,
-    dwellSeconds: 0,
-  });
-
-  await storage.createTripStopTime({
-    tripId: trip.id,
-    stopId: purwakartaStop.id,
-    stopSequence: 2,
-    arriveAt: purwakartaArriveAt,
-    departAt: purwakartaDepartAt,
-    dwellSeconds: 300, // 5 menit
-  });
-
-  await storage.createTripStopTime({
-    tripId: trip.id,
-    stopId: bandungStop.id,
-    stopSequence: 3,
-    arriveAt: bandungArriveAt,
-    departAt: null,
-    dwellSeconds: 0,
-  });
-
-  console.log("[SEED] Trip stop times created: 08:00 -> 09:00-09:05 -> 10:00");
-
-  // Derive legs
-  const { TripLegsService } = await import("./modules/tripLegs/tripLegs.service");
-  const tripLegsService = new TripLegsService(storage);
-  await tripLegsService.deriveLegsFromTrip(trip);
-
-  console.log("[SEED] Trip legs derived");
-
-  // Precompute seat inventory
-  const { SeatInventoryService } = await import("./modules/seatInventory/seatInventory.service");
-  const seatInventoryService = new SeatInventoryService(storage);
-  await seatInventoryService.precomputeInventory(trip);
-
-  console.log("[SEED] Seat inventory precomputed");
-
-  console.log("\n=======================================");
+  console.log("\n========================================");
   console.log("SEED DATA CREATION COMPLETED");
-  console.log("=======================================");
+  console.log("========================================");
   console.log("\nSummary:");
   console.log(`  Stops: 4 (JKT, PWK, BDG, SMR)`);
   console.log(`  Outlets: 4 (Jakarta, Bandung, Purwakarta, Semarang)`);
@@ -442,9 +379,14 @@ export async function seedData() {
   console.log(`  Vehicles: 2 (BUS-A, BUS-B)`);
   console.log(`  Patterns: 2 (JKT-BDG, JKT-SMR)`);
   console.log(`  Trip Bases: 3 (08:00, 14:00, 07:00)`);
-  console.log(`  Real Trip: 1 (today ${today})`);
+  console.log(`  Real Trips: 0 (gunakan Virtual Scheduling)`);
   console.log(`\nValid Period: ${validFrom} to ${validTo}`);
-  console.log("=======================================\n");
+  console.log("\nHow to use:");
+  console.log("  1. Go to CSO page");
+  console.log("  2. Select outlet and date");
+  console.log("  3. Virtual trips will appear");
+  console.log("  4. Select virtual trip to materialize it");
+  console.log("========================================\n");
 }
 
 // Run the seeder if this file is executed directly
