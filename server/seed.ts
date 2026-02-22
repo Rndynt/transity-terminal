@@ -1,10 +1,33 @@
 import { storage } from "./storage";
 import { fromZonedHHMMToUtc } from "./utils/timezone";
 
+/**
+ * SEED DATA - TransityCore
+ * 
+ * Penting:
+ * - Format waktu HARUS menggunakan colon (:) bukan titik (.)
+ *   Contoh: "08:30" BUKAN "08.30"
+ * - Tanggal valid_from dan valid_to harus mencakup tanggal sekarang
+ * - Untuk testing, buat minimal 2 jadwal dengan waktu berbeda
+ */
+
 export async function seedData() {
   console.log("Starting seed data creation...");
 
-  // Create stops
+  // Get current year for date ranges
+  const currentYear = new Date().getFullYear();
+  const validFrom = `${currentYear}-01-01`;
+  const validTo = `${currentYear}-12-31`;
+  const today = new Date().toISOString().split("T")[0];
+
+  console.log(`[SEED] Date range: ${validFrom} to ${validTo}`);
+  console.log(`[SEED] Today: ${today}`);
+
+  // ============================================
+  // 1. STOPS - Lokasi pemberhentian
+  // ============================================
+  console.log("\n[SEED] Creating stops...");
+
   const jakartaStop = await storage.createStop({
     code: "JKT",
     name: "Jakarta Terminal",
@@ -16,19 +39,12 @@ export async function seedData() {
     code: "PWK",
     name: "Purwakarta",
     city: "Purwakarta",
-    isOutlet: true, // Make it an outlet for pickup-only testing
+    isOutlet: true, // Pickup-only stop
   });
 
   const bandungStop = await storage.createStop({
     code: "BDG",
     name: "Bandung Terminal",
-    city: "Bandung",
-    isOutlet: true,
-  });
-
-  const bandungStop1 = await storage.createStop({
-    code: "BDP",
-    name: "Bandung Pasteur",
     city: "Bandung",
     isOutlet: true,
   });
@@ -40,28 +56,25 @@ export async function seedData() {
     isOutlet: true,
   });
 
-  console.log("✅ Stops created");
+  console.log("[SEED] Stops created: JKT, PWK, BDG, SMR");
 
-  // Create outlets (only for stops with isOutlet=true: Jakarta & Bandung)
+  // ============================================
+  // 2. OUTLETS - Lokasi penjualan tiket
+  // ============================================
+  console.log("\n[SEED] Creating outlets...");
+
   await storage.createOutlet({
     stopId: jakartaStop.id,
     name: "Jakarta Terminal Outlet",
-    address: "Jl. Terminal Jakarta",
+    address: "Jl. Terminal Jakarta No. 1",
     phone: "+62-21-1234567",
   });
 
   await storage.createOutlet({
     stopId: bandungStop.id,
     name: "Bandung Terminal Outlet",
-    address: "Jl. Terminal Bandung",
+    address: "Jl. Terminal Bandung No. 1",
     phone: "+62-22-1234567",
-  });
-
-  await storage.createOutlet({
-    stopId: bandungStop1.id,
-    name: "Bandung Pasteur Outlet",
-    address: "Jl. Pasteur Bandung",
-    phone: "+62-22-7654321",
   });
 
   await storage.createOutlet({
@@ -78,11 +91,15 @@ export async function seedData() {
     phone: "+62-24-1234567",
   });
 
-  console.log("✅ Outlets created");
+  console.log("[SEED] Outlets created: Jakarta, Bandung, Purwakarta, Semarang");
 
-  // Create layouts (12-seat and 8-seat)
+  // ============================================
+  // 3. LAYOUTS - Konfigurasi kursi
+  // ============================================
+  console.log("\n[SEED] Creating layouts...");
+
   const layout12 = await storage.createLayout({
-    name: "Standard 12-seat",
+    name: "Standard 12-seat (3x4)",
     rows: 3,
     cols: 4,
     seatMap: [
@@ -102,7 +119,7 @@ export async function seedData() {
   });
 
   const layout8 = await storage.createLayout({
-    name: "Standard 8-seat",
+    name: "Standard 8-seat (2x4)",
     rows: 2,
     cols: 4,
     seatMap: [
@@ -117,15 +134,19 @@ export async function seedData() {
     ],
   });
 
-  console.log("✅ Layouts created");
+  console.log("[SEED] Layouts created: 12-seat, 8-seat");
 
-  // Create vehicles (BUS-A with 12-seat, BUS-B with 8-seat)
+  // ============================================
+  // 4. VEHICLES - Armada kendaraan
+  // ============================================
+  console.log("\n[SEED] Creating vehicles...");
+
   const vehicleA = await storage.createVehicle({
     code: "BUS-A",
     plate: "B 1234 ABC",
     layoutId: layout12.id,
     capacity: 12,
-    notes: "12-seat vehicle for Slot-1",
+    notes: "Bus besar 12 kursi untuk rute utama",
   });
 
   const vehicleB = await storage.createVehicle({
@@ -133,34 +154,43 @@ export async function seedData() {
     plate: "B 5678 DEF",
     layoutId: layout8.id,
     capacity: 8,
-    notes: "8-seat vehicle for Slot-2",
+    notes: "Bus kecil 8 kursi untuk rute sekunder",
   });
 
-  console.log("✅ Vehicles created");
+  console.log("[SEED] Vehicles created: BUS-A (12 seat), BUS-B (8 seat)");
 
-  // Create trip pattern
+  // ============================================
+  // 5. TRIP PATTERNS - Pola rute
+  // ============================================
+  console.log("\n[SEED] Creating trip patterns...");
+
   const patternA = await storage.createTripPattern({
-    code: "AB_via_C",
-    name: "Jakarta to Bandung via Purwakarta",
+    code: "JKT-BDG",
+    name: "Jakarta - Bandung via Purwakarta",
     vehicleClass: "standard",
     defaultLayoutId: layout12.id,
     active: true,
-    tags: ["intercity", "demo"],
+    tags: ["intercity", "reguler"],
   });
 
   const patternB = await storage.createTripPattern({
     code: "JKT-SMR",
-    name: "Jakarta to Semarang via Bandung",
+    name: "Jakarta - Semarang via Bandung",
     vehicleClass: "standard",
     defaultLayoutId: layout8.id,
     active: true,
-    tags: ["intercity", "demo"],
+    tags: ["intercity", "reguler"],
   });
 
-  console.log("✅ Trip pattern created");
+  console.log("[SEED] Trip patterns created: JKT-BDG, JKT-SMR");
 
-  // Create pattern stops with pickup-only setup
+  // ============================================
+  // 6. PATTERN STOPS - Detail stop per pattern
+  // ============================================
+  console.log("\n[SEED] Creating pattern stops...");
+
   // Pattern A: Jakarta -> Purwakarta -> Bandung
+  // Purwakarta adalah pickup-only (boarding=true, alighting=false)
   await storage.createPatternStop({
     patternId: patternA.id,
     stopId: jakartaStop.id,
@@ -174,9 +204,9 @@ export async function seedData() {
     patternId: patternA.id,
     stopId: purwakartaStop.id,
     stopSequence: 2,
-    dwellSeconds: 300, // 5 minutes
+    dwellSeconds: 300, // 5 menit
     boardingAllowed: true,
-    alightingAllowed: false, // PICKUP-ONLY stop
+    alightingAllowed: false, // PICKUP-ONLY: hanya bisa naik, tidak bisa turun
   });
 
   await storage.createPatternStop({
@@ -188,7 +218,8 @@ export async function seedData() {
     alightingAllowed: true,
   });
 
-  // Pattern B: Jakarta -> Bandung -> Semarang 
+  // Pattern B: Jakarta -> Bandung -> Semarang
+  // Bandung adalah transit stop (boarding=true, alighting=false)
   await storage.createPatternStop({
     patternId: patternB.id,
     stopId: jakartaStop.id,
@@ -202,9 +233,9 @@ export async function seedData() {
     patternId: patternB.id,
     stopId: bandungStop.id,
     stopSequence: 2,
-    dwellSeconds: 600, // 5 minutes
+    dwellSeconds: 600, // 10 menit
     boardingAllowed: true,
-    alightingAllowed: false, // PICKUP-ONLY stop
+    alightingAllowed: false, // PICKUP-ONLY
   });
 
   await storage.createPatternStop({
@@ -216,83 +247,13 @@ export async function seedData() {
     alightingAllowed: true,
   });
 
-  console.log("✅ Pattern stops created");
+  console.log("[SEED] Pattern stops created with pickup-only configurations");
 
-  // Create trip for today (using vehicleA for demo)
-  const today = new Date().toISOString().split("T")[0];
-  const trip = await storage.createTrip({
-    patternId: patternA.id,
-    serviceDate: today,
-    vehicleId: vehicleA.id,
-    layoutId: layout12.id,
-    capacity: 12,
-    status: "scheduled",
-    channelFlags: { CSO: true, WEB: false, APP: false, OTA: false },
-  });
+  // ============================================
+  // 7. PRICE RULES - Aturan harga
+  // ============================================
+  console.log("\n[SEED] Creating price rules...");
 
-  console.log("✅ Trip created");
-
-  // Create trip stop times with schedule: A08:30 C09:30 B10:00
-  // Using Asia/Jakarta timezone with proper timezone utilities
-  
-  // Jakarta departure at 08:30 in Asia/Jakarta timezone
-  const jakartaDepartAt = fromZonedHHMMToUtc(today, "08:30", "Asia/Jakarta");
-  
-  await storage.createTripStopTime({
-    tripId: trip.id,
-    stopId: jakartaStop.id,
-    stopSequence: 1,
-    arriveAt: null,
-    departAt: jakartaDepartAt,
-    dwellSeconds: 0,
-  });
-
-  // Purwakarta arrival and departure at 09:30 in Asia/Jakarta timezone
-  const purwakartaArriveAt = fromZonedHHMMToUtc(today, "09:30", "Asia/Jakarta");
-  const purwakartaDepartAt = fromZonedHHMMToUtc(today, "09:30", "Asia/Jakarta");
-
-  await storage.createTripStopTime({
-    tripId: trip.id,
-    stopId: purwakartaStop.id,
-    stopSequence: 2,
-    arriveAt: purwakartaArriveAt,
-    departAt: purwakartaDepartAt,
-    dwellSeconds: 0,
-  });
-
-  // Bandung arrival at 10:00 in Asia/Jakarta timezone
-  const bandungArriveAt = fromZonedHHMMToUtc(today, "10:00", "Asia/Jakarta");
-
-  await storage.createTripStopTime({
-    tripId: trip.id,
-    stopId: bandungStop.id,
-    stopSequence: 3,
-    arriveAt: bandungArriveAt,
-    departAt: null,
-    dwellSeconds: 0,
-  });
-
-  console.log("✅ Trip stop times created");
-
-  // Derive legs
-  const { TripLegsService } = await import(
-    "./modules/tripLegs/tripLegs.service"
-  );
-  const tripLegsService = new TripLegsService(storage);
-  await tripLegsService.deriveLegsFromTrip(trip);
-
-  console.log("✅ Trip legs derived");
-
-  // Precompute seat inventory
-  const { SeatInventoryService } = await import(
-    "./modules/seatInventory/seatInventory.service"
-  );
-  const seatInventoryService = new SeatInventoryService(storage);
-  await seatInventoryService.precomputeInventory(trip);
-
-  console.log("✅ Seat inventory precomputed");
-
-  // Create basic price rule
   await storage.createPriceRule({
     scope: "pattern",
     patternId: patternA.id,
@@ -308,115 +269,182 @@ export async function seedData() {
     priority: 1,
   });
 
-  console.log("✅ Price rule created");
+  await storage.createPriceRule({
+    scope: "pattern",
+    patternId: patternB.id,
+    tripId: null,
+    legIndex: null,
+    rule: {
+      basePricePerLeg: 35000,
+      currency: "IDR",
+      multiplier: 1.0,
+    },
+    validFrom: null,
+    validTo: null,
+    priority: 1,
+  });
 
-  // Create Trip Bases for Virtual Scheduling
+  console.log("[SEED] Price rules created: JKT-BDG Rp25.000/leg, JKT-SMR Rp35.000/leg");
+
+  // ============================================
+  // 8. TRIP BASES - Template jadwal virtual
+  // ============================================
+  console.log("\n[SEED] Creating trip bases...");
+
+  // JADWAL 1: Jakarta-Bandung 08:00 (Pagi)
+  // Pattern: JKT -> PWK -> BDG
+  // Waktu: 08:00 -> 09:00 -> 10:00
   const tripBase1 = await storage.createTripBase({
     patternId: patternA.id,
-    code: "10:00-SLOT-1",
-    name: "Jakarta-Bandung 10:00 Slot-1",
+    code: "JKT-BDG-08:00",
+    name: "Jakarta-Bandung 08:00 Pagi",
     active: true,
     timezone: "Asia/Jakarta",
-    mon: true,
-    tue: true,
-    wed: true,
-    thu: true,
-    fri: true,
-    sat: true,
-    sun: true,
-    validFrom: "2025-01-01",
-    validTo: "2025-12-31",
+    mon: true, tue: true, wed: true, thu: true, fri: true, sat: true, sun: true,
+    validFrom,
+    validTo,
     defaultLayoutId: layout12.id,
     defaultVehicleId: vehicleA.id,
     capacity: 12,
     channelFlags: { CSO: true, WEB: true, APP: true, OTA: false },
     defaultStopTimes: [
-      { stopSequence: 1, arriveAt: null, departAt: "10:00" },
-      { stopSequence: 2, arriveAt: "10:55", departAt: "11:00" },
-      { stopSequence: 3, arriveAt: "12:00", departAt: null },
+      { stopSequence: 1, arriveAt: null, departAt: "08:00" },  // JKT: berangkat 08:00
+      { stopSequence: 2, arriveAt: "09:00", departAt: "09:05" }, // PWK: transit 5 menit
+      { stopSequence: 3, arriveAt: "10:00", departAt: null },  // BDG: tiba 10:00
     ],
   });
 
+  // JADWAL 2: Jakarta-Bandung 14:00 (Siang)
+  // Pattern: JKT -> PWK -> BDG
+  // Waktu: 14:00 -> 15:00 -> 16:00
   const tripBase2 = await storage.createTripBase({
     patternId: patternA.id,
-    code: "10:00-SLOT-2",
-    name: "Jakarta-Bandung 10:00 Slot-2",
+    code: "JKT-BDG-14:00",
+    name: "Jakarta-Bandung 14:00 Siang",
     active: true,
     timezone: "Asia/Jakarta",
-    mon: true,
-    tue: true,
-    wed: true,
-    thu: true,
-    fri: true,
-    sat: true,
-    sun: true,
-    validFrom: "2025-01-01",
-    validTo: "2025-12-31",
+    mon: true, tue: true, wed: true, thu: true, fri: true, sat: true, sun: true,
+    validFrom,
+    validTo,
     defaultLayoutId: layout8.id,
     defaultVehicleId: vehicleB.id,
     capacity: 8,
     channelFlags: { CSO: true, WEB: true, APP: true, OTA: false },
     defaultStopTimes: [
-      { stopSequence: 1, arriveAt: null, departAt: "10:00" },
-      { stopSequence: 2, arriveAt: "10:55", departAt: "11:00" },
-      { stopSequence: 3, arriveAt: "12:00", departAt: null },
+      { stopSequence: 1, arriveAt: null, departAt: "14:00" },  // JKT: berangkat 14:00
+      { stopSequence: 2, arriveAt: "15:00", departAt: "15:05" }, // PWK: transit 5 menit
+      { stopSequence: 3, arriveAt: "16:00", departAt: null },  // BDG: tiba 16:00
     ],
   });
 
+  // JADWAL 3: Jakarta-Semarang 07:00 (Pagi)
+  // Pattern: JKT -> BDG -> SMR
+  // Waktu: 07:00 -> 09:00 -> 15:00
   const tripBase3 = await storage.createTripBase({
-    patternId: patternA.id,
-    code: "13:00-SLOT-1",
-    name: "Jakarta-Bandung 13:00 Slot-1",
-    active: true,
-    timezone: "Asia/Jakarta",
-    mon: true,
-    tue: true,
-    wed: true,
-    thu: true,
-    fri: true,
-    sat: true,
-    sun: true,
-    validFrom: "2025-01-01",
-    validTo: "2025-12-31",
-    defaultLayoutId: layout12.id,
-    defaultVehicleId: vehicleA.id,
-    capacity: 12,
-    channelFlags: { CSO: true, WEB: true, APP: true, OTA: false },
-    defaultStopTimes: [
-      { stopSequence: 1, arriveAt: null, departAt: "13:00" },
-      { stopSequence: 2, arriveAt: "13:55", departAt: "14:00" },
-      { stopSequence: 3, arriveAt: "15:00", departAt: null },
-    ],
-  });
-
-  const tripBase4 = await storage.createTripBase({
     patternId: patternB.id,
-    code: "07:00-REG",
-    name: "Jakarta-Semarang 07:00",
+    code: "JKT-SMR-07:00",
+    name: "Jakarta-Semarang 07:00 Pagi",
     active: true,
     timezone: "Asia/Jakarta",
-    mon: true,
-    tue: true,
-    wed: true,
-    thu: true,
-    fri: true,
-    sat: true,
-    sun: true,
-    validFrom: "2025-01-01",
-    validTo: "2025-12-31",
+    mon: true, tue: true, wed: true, thu: true, fri: true, sat: true, sun: true,
+    validFrom,
+    validTo,
     defaultLayoutId: layout8.id,
     defaultVehicleId: vehicleB.id,
     capacity: 8,
     channelFlags: { CSO: true, WEB: true, APP: true, OTA: false },
     defaultStopTimes: [
-      { stopSequence: 1, arriveAt: null, departAt: "07:00" },
-      { stopSequence: 2, arriveAt: "08.20", departAt: "08:40" },
-      { stopSequence: 3, arriveAt: "15:00", departAt: null },
+      { stopSequence: 1, arriveAt: null, departAt: "07:00" },  // JKT: berangkat 07:00
+      { stopSequence: 2, arriveAt: "09:00", departAt: "09:15" }, // BDG: transit 15 menit
+      { stopSequence: 3, arriveAt: "15:00", departAt: null },  // SMR: tiba 15:00
     ],
   });
 
-  console.log("✅ Trip Bases created");
-  console.log("🎉 Seed data creation completed!");
+  console.log("[SEED] Trip bases created:");
+  console.log("[SEED]   - JKT-BDG 08:00 Pagi (12 seat)");
+  console.log("[SEED]   - JKT-BDG 14:00 Siang (8 seat)");
+  console.log("[SEED]   - JKT-SMR 07:00 Pagi (8 seat)");
+
+  // ============================================
+  // 9. TRIP INSTANCE (untuk hari ini)
+  // ============================================
+  console.log("\n[SEED] Creating trip instance for today...");
+
+  const trip = await storage.createTrip({
+    patternId: patternA.id,
+    serviceDate: today,
+    vehicleId: vehicleA.id,
+    layoutId: layout12.id,
+    capacity: 12,
+    status: "scheduled",
+    channelFlags: { CSO: true, WEB: false, APP: false, OTA: false },
+  });
+
+  console.log(`[SEED] Trip created for ${today}`);
+
+  // Create trip stop times using proper timezone conversion
+  // Format waktu: "HH:MM" dengan COLON
+  const jakartaDepartAt = fromZonedHHMMToUtc(today, "08:00", "Asia/Jakarta");
+  const purwakartaArriveAt = fromZonedHHMMToUtc(today, "09:00", "Asia/Jakarta");
+  const purwakartaDepartAt = fromZonedHHMMToUtc(today, "09:05", "Asia/Jakarta");
+  const bandungArriveAt = fromZonedHHMMToUtc(today, "10:00", "Asia/Jakarta");
+
+  await storage.createTripStopTime({
+    tripId: trip.id,
+    stopId: jakartaStop.id,
+    stopSequence: 1,
+    arriveAt: null,
+    departAt: jakartaDepartAt,
+    dwellSeconds: 0,
+  });
+
+  await storage.createTripStopTime({
+    tripId: trip.id,
+    stopId: purwakartaStop.id,
+    stopSequence: 2,
+    arriveAt: purwakartaArriveAt,
+    departAt: purwakartaDepartAt,
+    dwellSeconds: 300, // 5 menit
+  });
+
+  await storage.createTripStopTime({
+    tripId: trip.id,
+    stopId: bandungStop.id,
+    stopSequence: 3,
+    arriveAt: bandungArriveAt,
+    departAt: null,
+    dwellSeconds: 0,
+  });
+
+  console.log("[SEED] Trip stop times created: 08:00 -> 09:00-09:05 -> 10:00");
+
+  // Derive legs
+  const { TripLegsService } = await import("./modules/tripLegs/tripLegs.service");
+  const tripLegsService = new TripLegsService(storage);
+  await tripLegsService.deriveLegsFromTrip(trip);
+
+  console.log("[SEED] Trip legs derived");
+
+  // Precompute seat inventory
+  const { SeatInventoryService } = await import("./modules/seatInventory/seatInventory.service");
+  const seatInventoryService = new SeatInventoryService(storage);
+  await seatInventoryService.precomputeInventory(trip);
+
+  console.log("[SEED] Seat inventory precomputed");
+
+  console.log("\n=======================================");
+  console.log("SEED DATA CREATION COMPLETED");
+  console.log("=======================================");
+  console.log("\nSummary:");
+  console.log(`  Stops: 4 (JKT, PWK, BDG, SMR)`);
+  console.log(`  Outlets: 4 (Jakarta, Bandung, Purwakarta, Semarang)`);
+  console.log(`  Layouts: 2 (12-seat, 8-seat)`);
+  console.log(`  Vehicles: 2 (BUS-A, BUS-B)`);
+  console.log(`  Patterns: 2 (JKT-BDG, JKT-SMR)`);
+  console.log(`  Trip Bases: 3 (08:00, 14:00, 07:00)`);
+  console.log(`  Real Trip: 1 (today ${today})`);
+  console.log(`\nValid Period: ${validFrom} to ${validTo}`);
+  console.log("=======================================\n");
 }
 
 // Run the seeder if this file is executed directly

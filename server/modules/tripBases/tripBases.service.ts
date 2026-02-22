@@ -4,7 +4,7 @@ import { TripLegsService } from "../tripLegs/tripLegs.service";
 import { SeatInventoryService } from "../seatInventory/seatInventory.service";
 import { format, parseISO } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
-import { fromZonedHHMMToUtc, getDayInTZ, formatTimeInTZ, ensureDefaultTimezone } from "../../utils/timezone";
+import { fromZonedHHMMToUtc, getDayInTZ, formatTimeInTZ, ensureDefaultTimezone, normalizeTimeFormat } from "../../utils/timezone";
 
 export class TripBasesService {
   private tripLegsService: TripLegsService;
@@ -111,30 +111,34 @@ export class TripBasesService {
       let arriveAtTimestamp = null;
       let departAtTimestamp = null;
 
-      // Convert local time strings to UTC timestamps using proper timezone conversion
-      if (arriveAt) {
-        arriveAtTimestamp = fromZonedHHMMToUtc(serviceDate, arriveAt, timezone);
+      // Normalize and convert local time strings to UTC timestamps
+      // IMPORTANT: normalizeTimeFormat will convert "08.30" -> "08:30:00"
+      const normalizedArriveAt = normalizeTimeFormat(arriveAt);
+      const normalizedDepartAt = normalizeTimeFormat(departAt);
+
+      if (normalizedArriveAt) {
+        arriveAtTimestamp = fromZonedHHMMToUtc(serviceDate, normalizedArriveAt, timezone);
       }
       
-      if (departAt) {
-        departAtTimestamp = fromZonedHHMMToUtc(serviceDate, departAt, timezone);
+      if (normalizedDepartAt) {
+        departAtTimestamp = fromZonedHHMMToUtc(serviceDate, normalizedDepartAt, timezone);
       }
 
       // Validation rules
       if (index === 0) {
         // First stop: require departAt
-        if (!departAt) {
-          throw new Error(`First stop (sequence ${stopSequence}) must have departAt`);
+        if (!normalizedDepartAt || !departAtTimestamp) {
+          throw new Error(`First stop (sequence ${stopSequence}) must have valid departAt time. Got: "${departAt}"`);
         }
       } else if (index === defaultStopTimes.length - 1) {
         // Last stop: require arriveAt
-        if (!arriveAt) {
-          throw new Error(`Last stop (sequence ${stopSequence}) must have arriveAt`);
+        if (!normalizedArriveAt || !arriveAtTimestamp) {
+          throw new Error(`Last stop (sequence ${stopSequence}) must have valid arriveAt time. Got: "${arriveAt}"`);
         }
       } else {
         // Intermediate stops: if either is provided, both must be provided
-        if ((arriveAt && !departAt) || (!arriveAt && departAt)) {
-          throw new Error(`Intermediate stop (sequence ${stopSequence}) must have both arriveAt and departAt or neither`);
+        if ((normalizedArriveAt && !normalizedDepartAt) || (!normalizedArriveAt && normalizedDepartAt)) {
+          throw new Error(`Intermediate stop (sequence ${stopSequence}) must have both arriveAt and departAt or neither. Got arriveAt="${arriveAt}", departAt="${departAt}"`);
         }
       }
 
@@ -145,7 +149,7 @@ export class TripBasesService {
       };
     });
 
-    // Validate monotonicity
+    // Validate monotonicity (times must be increasing)
     for (let i = 1; i < result.length; i++) {
       const prev = result[i - 1];
       const curr = result[i];
@@ -154,7 +158,7 @@ export class TripBasesService {
       const currTime = curr.arriveAt || curr.departAt;
       
       if (prevTime && currTime && prevTime >= currTime) {
-        throw new Error(`Stop times must be monotonic. Stop ${prev.stopSequence} departs/arrives at or after stop ${curr.stopSequence}`);
+        throw new Error(`Stop times must be monotonic (increasing). Stop ${prev.stopSequence} departs/arrives at or after stop ${curr.stopSequence}`);
       }
     }
 
