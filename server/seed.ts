@@ -1,28 +1,31 @@
 import { storage } from "./storage";
+import { fromZonedHHMMToUtc } from "./utils/timezone";
 
 /**
  * SEED DATA - TransityCore
  * 
- * Penting:
- * - Format waktu HARUS menggunakan colon (:) bukan titik (.)
- *   Contoh: "08:30" BUKAN "08.30"
- * - Tanggal valid_from dan valid_to harus mencakup tanggal sekarang
- * - Untuk testing, buat minimal 2 jadwal dengan waktu berbeda
- * - TIDAK membuat trip manual, gunakan Virtual Scheduling dari Trip Bases
+ * Data konsisten untuk testing CSO booking flow
+ * 
+ * Rute:
+ * 1. JKT -> PWK -> BDG (Jakarta - Purwakarta - Bandung)
+ * 2. JKT -> BDG -> SMR (Jakarta - Bandung - Semarang)
+ * 
+ * Jadwal:
+ * - 08:00 Pagi - Jakarta-Bandung
+ * - 14:00 Siang - Jakarta-Bandung  
+ * - 07:00 Pagi - Jakarta-Semarang
  */
 
 export async function seedData() {
   console.log("Starting seed data creation...");
 
-  // Get current year for date ranges
+  // Current year for date ranges
   const currentYear = new Date().getFullYear();
   const validFrom = `${currentYear}-01-01`;
   const validTo = `${currentYear}-12-31`;
 
-  console.log(`[SEED] Date range: ${validFrom} to ${validTo}`);
-
   // ============================================
-  // 1. STOPS - Lokasi pemberhentian
+  // 1. STOPS
   // ============================================
   console.log("\n[SEED] Creating stops...");
 
@@ -30,6 +33,8 @@ export async function seedData() {
     code: "JKT",
     name: "Jakarta Terminal",
     city: "Jakarta",
+    lat: "-6.175110",
+    lng: "106.865039",
     isOutlet: true,
   });
 
@@ -37,13 +42,17 @@ export async function seedData() {
     code: "PWK",
     name: "Purwakarta",
     city: "Purwakarta",
-    isOutlet: true, // Pickup-only stop
+    lat: "-6.556830",
+    lng: "107.444618",
+    isOutlet: true,
   });
 
   const bandungStop = await storage.createStop({
     code: "BDG",
     name: "Bandung Terminal",
     city: "Bandung",
+    lat: "-6.914744",
+    lng: "107.609810",
     isOutlet: true,
   });
 
@@ -51,48 +60,50 @@ export async function seedData() {
     code: "SMR",
     name: "Semarang",
     city: "Semarang",
+    lat: "-6.972222",
+    lng: "110.416667",
     isOutlet: true,
   });
 
   console.log("[SEED] Stops created: JKT, PWK, BDG, SMR");
 
   // ============================================
-  // 2. OUTLETS - Lokasi penjualan tiket
+  // 2. OUTLETS (with CORRECT stop_id)
   // ============================================
   console.log("\n[SEED] Creating outlets...");
 
-  await storage.createOutlet({
-    stopId: jakartaStop.id,
+  const jakartaOutlet = await storage.createOutlet({
+    stopId: jakartaStop.id,  // JKT
     name: "Jakarta Terminal Outlet",
     address: "Jl. Terminal Jakarta No. 1",
     phone: "+62-21-1234567",
   });
 
-  await storage.createOutlet({
-    stopId: bandungStop.id,
-    name: "Bandung Terminal Outlet",
-    address: "Jl. Terminal Bandung No. 1",
-    phone: "+62-22-1234567",
-  });
-
-  await storage.createOutlet({
-    stopId: purwakartaStop.id,
+  const purwakartaOutlet = await storage.createOutlet({
+    stopId: purwakartaStop.id,  // PWK
     name: "Purwakarta Outlet",
     address: "Jl. Veteran Purwakarta",
     phone: "+62-264-1234567",
   });
 
-  await storage.createOutlet({
-    stopId: semarangStop.id,
+  const bandungOutlet = await storage.createOutlet({
+    stopId: bandungStop.id,  // BDG
+    name: "Bandung Terminal Outlet",
+    address: "Jl. Terminal Bandung No. 1",
+    phone: "+62-22-1234567",
+  });
+
+  const semarangOutlet = await storage.createOutlet({
+    stopId: semarangStop.id,  // SMR
     name: "Semarang Outlet",
     address: "Jl. Kh Dewantara Semarang",
     phone: "+62-24-1234567",
   });
 
-  console.log("[SEED] Outlets created: Jakarta, Bandung, Purwakarta, Semarang");
+  console.log("[SEED] Outlets created with correct stop_ids");
 
   // ============================================
-  // 3. LAYOUTS - Konfigurasi kursi
+  // 3. LAYOUTS
   // ============================================
   console.log("\n[SEED] Creating layouts...");
 
@@ -135,7 +146,7 @@ export async function seedData() {
   console.log("[SEED] Layouts created: 12-seat, 8-seat");
 
   // ============================================
-  // 4. VEHICLES - Armada kendaraan
+  // 4. VEHICLES
   // ============================================
   console.log("\n[SEED] Creating vehicles...");
 
@@ -144,7 +155,7 @@ export async function seedData() {
     plate: "B 1234 ABC",
     layoutId: layout12.id,
     capacity: 12,
-    notes: "Bus besar 12 kursi untuk rute utama",
+    notes: "Bus besar 12 kursi",
   });
 
   const vehicleB = await storage.createVehicle({
@@ -152,16 +163,17 @@ export async function seedData() {
     plate: "B 5678 DEF",
     layoutId: layout8.id,
     capacity: 8,
-    notes: "Bus kecil 8 kursi untuk rute sekunder",
+    notes: "Bus kecil 8 kursi",
   });
 
-  console.log("[SEED] Vehicles created: BUS-A (12 seat), BUS-B (8 seat)");
+  console.log("[SEED] Vehicles created: BUS-A, BUS-B");
 
   // ============================================
-  // 5. TRIP PATTERNS - Pola rute
+  // 5. TRIP PATTERNS
   // ============================================
   console.log("\n[SEED] Creating trip patterns...");
 
+  // Pattern A: Jakarta -> Purwakarta -> Bandung
   const patternA = await storage.createTripPattern({
     code: "JKT-BDG",
     name: "Jakarta - Bandung via Purwakarta",
@@ -171,6 +183,7 @@ export async function seedData() {
     tags: ["intercity", "reguler"],
   });
 
+  // Pattern B: Jakarta -> Bandung -> Semarang
   const patternB = await storage.createTripPattern({
     code: "JKT-SMR",
     name: "Jakarta - Semarang via Bandung",
@@ -183,19 +196,19 @@ export async function seedData() {
   console.log("[SEED] Trip patterns created: JKT-BDG, JKT-SMR");
 
   // ============================================
-  // 6. PATTERN STOPS - Detail stop per pattern
+  // 6. PATTERN STOPS
   // ============================================
   console.log("\n[SEED] Creating pattern stops...");
 
-  // Pattern A: Jakarta -> Purwakarta -> Bandung
-  // Purwakarta adalah pickup-only (boarding=true, alighting=false)
+  // Pattern A: JKT -> PWK -> BDG
+  // PWK = pickup-only (hanya bisa naik, tidak bisa turun)
   await storage.createPatternStop({
     patternId: patternA.id,
     stopId: jakartaStop.id,
     stopSequence: 1,
     dwellSeconds: 0,
     boardingAllowed: true,
-    alightingAllowed: true,
+    alightingAllowed: true,  // Terminal bisa naik & turun
   });
 
   await storage.createPatternStop({
@@ -203,8 +216,8 @@ export async function seedData() {
     stopId: purwakartaStop.id,
     stopSequence: 2,
     dwellSeconds: 300, // 5 menit
-    boardingAllowed: true,
-    alightingAllowed: false, // PICKUP-ONLY: hanya bisa naik, tidak bisa turun
+    boardingAllowed: true,   // Bisa naik
+    alightingAllowed: false, // TIDAK bisa turun (pickup-only)
   });
 
   await storage.createPatternStop({
@@ -216,8 +229,8 @@ export async function seedData() {
     alightingAllowed: true,
   });
 
-  // Pattern B: Jakarta -> Bandung -> Semarang
-  // Bandung adalah transit stop (boarding=true, alighting=false)
+  // Pattern B: JKT -> BDG -> SMR
+  // BDG = pickup-only
   await storage.createPatternStop({
     patternId: patternB.id,
     stopId: jakartaStop.id,
@@ -232,8 +245,8 @@ export async function seedData() {
     stopId: bandungStop.id,
     stopSequence: 2,
     dwellSeconds: 600, // 10 menit
-    boardingAllowed: true,
-    alightingAllowed: false, // PICKUP-ONLY
+    boardingAllowed: true,   // Bisa naik
+    alightingAllowed: false, // TIDAK bisa turun (pickup-only)
   });
 
   await storage.createPatternStop({
@@ -248,7 +261,7 @@ export async function seedData() {
   console.log("[SEED] Pattern stops created with pickup-only configurations");
 
   // ============================================
-  // 7. PRICE RULES - Aturan harga
+  // 7. PRICE RULES
   // ============================================
   console.log("\n[SEED] Creating price rules...");
 
@@ -258,7 +271,7 @@ export async function seedData() {
     tripId: null,
     legIndex: null,
     rule: {
-      basePricePerLeg: 25000,
+      basePricePerLeg: 25000, // Rp 25.000 per leg
       currency: "IDR",
       multiplier: 1.0,
     },
@@ -273,7 +286,7 @@ export async function seedData() {
     tripId: null,
     legIndex: null,
     rule: {
-      basePricePerLeg: 35000,
+      basePricePerLeg: 35000, // Rp 35.000 per leg (lebih jauh)
       currency: "IDR",
       multiplier: 1.0,
     },
@@ -282,16 +295,14 @@ export async function seedData() {
     priority: 1,
   });
 
-  console.log("[SEED] Price rules created: JKT-BDG Rp25.000/leg, JKT-SMR Rp35.000/leg");
+  console.log("[SEED] Price rules created");
 
   // ============================================
-  // 8. TRIP BASES - Template jadwal virtual
+  // 8. TRIP BASES (Virtual Scheduling)
   // ============================================
   console.log("\n[SEED] Creating trip bases...");
 
   // JADWAL 1: Jakarta-Bandung 08:00 (Pagi)
-  // Pattern: JKT -> PWK -> BDG
-  // Waktu: 08:00 -> 09:00 -> 10:00
   const tripBase1 = await storage.createTripBase({
     patternId: patternA.id,
     code: "JKT-BDG-08:00",
@@ -313,8 +324,6 @@ export async function seedData() {
   });
 
   // JADWAL 2: Jakarta-Bandung 14:00 (Siang)
-  // Pattern: JKT -> PWK -> BDG
-  // Waktu: 14:00 -> 15:00 -> 16:00
   const tripBase2 = await storage.createTripBase({
     patternId: patternA.id,
     code: "JKT-BDG-14:00",
@@ -329,15 +338,13 @@ export async function seedData() {
     capacity: 8,
     channelFlags: { CSO: true, WEB: true, APP: true, OTA: false },
     defaultStopTimes: [
-      { stopSequence: 1, arriveAt: null, departAt: "14:00" },  // JKT: berangkat 14:00
-      { stopSequence: 2, arriveAt: "15:00", departAt: "15:05" }, // PWK: transit 5 menit
-      { stopSequence: 3, arriveAt: "16:00", departAt: null },  // BDG: tiba 16:00
+      { stopSequence: 1, arriveAt: null, departAt: "14:00" },  // JKT
+      { stopSequence: 2, arriveAt: "15:00", departAt: "15:05" }, // PWK
+      { stopSequence: 3, arriveAt: "16:00", departAt: null },  // BDG
     ],
   });
 
   // JADWAL 3: Jakarta-Semarang 07:00 (Pagi)
-  // Pattern: JKT -> BDG -> SMR
-  // Waktu: 07:00 -> 09:00 -> 15:00
   const tripBase3 = await storage.createTripBase({
     patternId: patternB.id,
     code: "JKT-SMR-07:00",
@@ -352,9 +359,9 @@ export async function seedData() {
     capacity: 8,
     channelFlags: { CSO: true, WEB: true, APP: true, OTA: false },
     defaultStopTimes: [
-      { stopSequence: 1, arriveAt: null, departAt: "07:00" },  // JKT: berangkat 07:00
-      { stopSequence: 2, arriveAt: "09:00", departAt: "09:15" }, // BDG: transit 15 menit
-      { stopSequence: 3, arriveAt: "15:00", departAt: null },  // SMR: tiba 15:00
+      { stopSequence: 1, arriveAt: null, departAt: "07:00" },  // JKT
+      { stopSequence: 2, arriveAt: "09:00", departAt: "09:15" }, // BDG (transit 15 menit)
+      { stopSequence: 3, arriveAt: "15:00", departAt: null },  // SMR
     ],
   });
 
@@ -363,29 +370,17 @@ export async function seedData() {
   console.log("[SEED]   - JKT-BDG 14:00 Siang (8 seat)");
   console.log("[SEED]   - JKT-SMR 07:00 Pagi (8 seat)");
 
-  // ============================================
-  // NOTE: Tidak ada trip manual yang dibuat
-  // Gunakan Virtual Scheduling dari Trip Bases
-  // CSO akan memilih virtual trip yang kemudian di-materialize
-  // ============================================
-
   console.log("\n========================================");
   console.log("SEED DATA CREATION COMPLETED");
   console.log("========================================");
   console.log("\nSummary:");
   console.log(`  Stops: 4 (JKT, PWK, BDG, SMR)`);
-  console.log(`  Outlets: 4 (Jakarta, Bandung, Purwakarta, Semarang)`);
+  console.log(`  Outlets: 4 (matched with correct stops)`);
   console.log(`  Layouts: 2 (12-seat, 8-seat)`);
   console.log(`  Vehicles: 2 (BUS-A, BUS-B)`);
   console.log(`  Patterns: 2 (JKT-BDG, JKT-SMR)`);
   console.log(`  Trip Bases: 3 (08:00, 14:00, 07:00)`);
-  console.log(`  Real Trips: 0 (gunakan Virtual Scheduling)`);
   console.log(`\nValid Period: ${validFrom} to ${validTo}`);
-  console.log("\nHow to use:");
-  console.log("  1. Go to CSO page");
-  console.log("  2. Select outlet and date");
-  console.log("  3. Virtual trips will appear");
-  console.log("  4. Select virtual trip to materialize it");
   console.log("========================================\n");
 }
 

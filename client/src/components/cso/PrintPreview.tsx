@@ -5,188 +5,124 @@ interface PrintPreviewProps {
   booking: any;
   printPayload: any;
   onNewBooking: () => void;
-  onPrint?: () => void;
+  onPrint: () => void;
 }
 
-export default function PrintPreview({ 
-  booking, 
-  printPayload, 
-  onNewBooking, 
-  onPrint 
-}: PrintPreviewProps) {
-  const formatDateTime = (dateTime: string) => {
-    return new Date(dateTime).toLocaleString('id-ID', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-      timeZone: 'Asia/Jakarta'
-    });
-  };
+export default function PrintPreview({ booking, printPayload, onNewBooking, onPrint }: PrintPreviewProps) {
+  if (!booking) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center">
+          <p className="text-muted-foreground">Memuat data booking...</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(amount);
+  const formatCurrency = (amount: number) => 
+    new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
+
+  const formatDate = (date: string) => 
+    new Date(date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  const formatTime = (timestamp: string) => {
+    if (!timestamp) return '-';
+    return new Date(timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Success Message */}
-      <Card className="border-secondary bg-secondary/5" data-testid="booking-success">
-        <CardContent className="pt-6">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-secondary text-secondary-foreground rounded-full flex items-center justify-center mx-auto mb-4">
-              <i className="fas fa-check text-2xl"></i>
-            </div>
-            <h3 className="text-xl font-semibold text-foreground mb-2">
-              Booking Successful!
-            </h3>
-            <p className="text-muted-foreground">
-              Booking reference: <span className="font-mono font-bold">{booking.id.slice(-8).toUpperCase()}</span>
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+        <div className="text-4xl mb-2">_booking Berhasil!</div>
+        <p className="text-green-700">Booking ID: <strong>{booking.id?.slice(0, 8).toUpperCase()}</strong></p>
+      </div>
 
-      {/* Print Preview */}
-      <Card data-testid="print-preview">
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <i className="fas fa-receipt mr-2 text-primary"></i>
-            Ticket Preview
-          </CardTitle>
+      {/* Ticket Card */}
+      <Card className="overflow-hidden">
+        <CardHeader className="bg-primary text-primary-foreground pb-3">
+          <CardTitle className="text-center text-xl">E-Ticket</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="bg-white border border-border rounded-lg p-6 font-mono text-sm space-y-4">
-            {/* Header */}
-            <div className="text-center border-b border-dashed pb-4">
-              <h4 className="font-bold text-lg mb-1">{printPayload.content.header}</h4>
-              <p className="text-xs text-muted-foreground">Multi-Stop Travel System</p>
+        <CardContent className="p-4 space-y-4">
+          {/* Route Info */}
+          <div className="text-center border-b pb-4">
+            <div className="text-2xl font-bold">
+              {booking.originStop?.code || 'Origin'} &rarr; {booking.destinationStop?.code || 'Destination'}
             </div>
-
-            {/* Booking Info */}
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span>Booking Ref:</span>
-                <span className="font-bold">{printPayload.content.bookingRef}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Date/Time:</span>
-                <span>{formatDateTime(printPayload.content.timestamp)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Channel:</span>
-                <span>{booking.channel}</span>
-              </div>
-            </div>
-
-            {/* Journey Details */}
-            <div className="border-t border-dashed pt-4">
-              <h5 className="font-bold mb-2">JOURNEY DETAILS</h5>
-              <div className="space-y-1">
-                <div className="flex justify-between">
-                  <span>From:</span>
-                  <span>{booking.originStop?.name || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>To:</span>
-                  <span>{booking.destinationStop?.name || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Service Date:</span>
-                  <span>{booking.tripDetails?.serviceDate ? new Date(booking.tripDetails.serviceDate).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' }) : 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Departure:</span>
-                  <span>{booking.departAt ? new Date(booking.departAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' }) : 'N/A'}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Passenger Details */}
-            <div className="border-t border-dashed pt-4">
-              <h5 className="font-bold mb-2">PASSENGER(S)</h5>
-              {booking.passengers && booking.passengers.length > 0 ? (
-                booking.passengers.map((passenger: any, index: number) => (
-                  <div key={index} className="space-y-1 mb-3">
-                    <div className="flex justify-between">
-                      <span>Name:</span>
-                      <span>{passenger.fullName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Seat:</span>
-                      <span>{passenger.seatNo}</span>
-                    </div>
-                    {passenger.phone && (
-                      <div className="flex justify-between">
-                        <span>Phone:</span>
-                        <span>{passenger.phone}</span>
-                      </div>
-                    )}
-                    {index < booking.passengers.length - 1 && <hr className="border-dashed my-2" />}
-                  </div>
-                ))
-              ) : (
-                <div className="text-center text-muted-foreground">No passenger data</div>
-              )}
-            </div>
-
-            {/* Payment Details */}
-            <div className="border-t border-dashed pt-4">
-              <h5 className="font-bold mb-2">PAYMENT</h5>
-              <div className="space-y-1">
-                <div className="flex justify-between">
-                  <span>Total Amount:</span>
-                  <span className="font-bold">{formatCurrency(booking.totalAmount)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Method:</span>
-                  <span>{booking.payments?.[0]?.method?.toUpperCase() || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Status:</span>
-                  <span>{booking.payments?.[0]?.status?.toUpperCase() || 'PAID'}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="border-t border-dashed pt-4 text-center text-xs">
-              <p>{printPayload.content.note}</p>
-              <p className="mt-2">Thank you for choosing BusTicket Pro</p>
+            <div className="text-sm text-muted-foreground mt-1">
+              {booking.originStop?.name} - {booking.destinationStop?.name}
             </div>
           </div>
+
+          {/* Trip Details */}
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">Tanggal</span>
+              <p className="font-medium">{formatDate(booking.tripDetails?.serviceDate || booking.createdAt)}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Waktu Berangkat</span>
+              <p className="font-medium">{formatTime(booking.departAt || booking.createdAt)}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Outlet</span>
+              <p className="font-medium">{booking.outlet?.name || '-'}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Status</span>
+              <p className="font-medium text-green-600 capitalize">{booking.status}</p>
+            </div>
+          </div>
+
+          {/* Passengers */}
+          {booking.passengers && booking.passengers.length > 0 && (
+            <div className="border-t pt-4">
+              <h3 className="font-semibold mb-2">Penumpang ({booking.passengers.length})</h3>
+              <div className="space-y-2">
+                {booking.passengers.map((p: any, i: number) => (
+                  <div key={i} className="flex justify-between text-sm bg-muted/50 rounded p-2">
+                    <div>
+                      <span className="font-medium">{p.fullName}</span>
+                      <span className="text-muted-foreground ml-2">Kursi {p.seatNo}</span>
+                    </div>
+                    <span className="font-medium">{formatCurrency(p.fareAmount)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Total */}
+          <div className="border-t pt-4">
+            <div className="flex justify-between items-center text-lg">
+              <span className="font-semibold">Total Bayar</span>
+              <span className="font-bold text-primary text-xl">{formatCurrency(booking.totalAmount)}</span>
+            </div>
+          </div>
+
+          {/* Payment Info */}
+          {booking.payments && booking.payments.length > 0 && (
+            <div className="text-sm text-muted-foreground">
+              Dibayar via <span className="font-medium capitalize">{booking.payments[0].method}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Actions */}
-      <Card data-testid="print-actions">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-center space-x-4">
-            <Button 
-              onClick={onPrint} 
-              variant="outline"
-              data-testid="print-ticket"
-            >
-              <i className="fas fa-print mr-2"></i>
-              Print Ticket
-            </Button>
-            
-            <Button 
-              onClick={onNewBooking}
-              data-testid="new-booking"
-            >
-              <i className="fas fa-plus mr-2"></i>
-              New Booking
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex gap-3">
+        <Button onClick={onPrint} className="flex-1" size="lg">
+          Cetak Tiket
+        </Button>
+        <Button onClick={onNewBooking} variant="outline" className="flex-1" size="lg">
+          Booking Baru
+        </Button>
+      </div>
+
+      {/* Note */}
+      <p className="text-xs text-muted-foreground text-center">
+        Simpan e-ticket ini sebagai bukti pembayaran. Tunjukkan kepada petugas saat naik kendaraan.
+      </p>
     </div>
   );
 }

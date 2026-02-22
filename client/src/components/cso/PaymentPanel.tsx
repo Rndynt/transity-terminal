@@ -1,24 +1,24 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-
-interface PaymentData {
-  method: 'cash' | 'qr' | 'ewallet' | 'bank';
-  amount: number;
-}
+import { Card, CardContent } from '@/components/ui/card';
 
 interface PaymentPanelProps {
   totalAmount: number;
-  payment?: PaymentData;
-  onPaymentUpdate: (payment: PaymentData) => void;
+  payment?: { method: string; amount: number } | null;
+  onPaymentUpdate: (payment: { method: string; amount: number }) => void;
   onSubmit: () => void;
   onBack: () => void;
   loading?: boolean;
 }
+
+const PAYMENT_METHODS = [
+  { id: 'cash', label: 'Tunai', icon: '.money' },
+  { id: 'qr', label: 'QRIS', icon: 'qr' },
+  { id: 'ewallet', label: 'E-Wallet', icon: 'wallet' },
+  { id: 'bank', label: 'Transfer Bank', icon: 'bank' },
+];
 
 export default function PaymentPanel({
   totalAmount,
@@ -28,207 +28,93 @@ export default function PaymentPanel({
   onBack,
   loading = false
 }: PaymentPanelProps) {
-  const [selectedMethod, setSelectedMethod] = useState<PaymentData['method']>(payment?.method || 'cash');
-  const [receivedAmount, setReceivedAmount] = useState(payment?.amount?.toString() || totalAmount.toString());
-  const { toast } = useToast();
+  const [selectedMethod, setSelectedMethod] = useState<string>(payment?.method || '');
+  const [cashReceived, setCashReceived] = useState<string>('');
 
-  // Initialize payment data safely in useEffect to avoid render side effects
-  useEffect(() => {
-    if (!payment) {
-      onPaymentUpdate({
-        method: selectedMethod,
-        amount: parseFloat(receivedAmount) || totalAmount
-      });
-    }
-  }, []); // Empty dependency array - only run once on mount
-
-  const paymentMethods = [
-    { value: 'cash', label: 'Cash', icon: 'fas fa-money-bill-wave' },
-    { value: 'qr', label: 'QR Code', icon: 'fas fa-qrcode' },
-    { value: 'ewallet', label: 'E-Wallet', icon: 'fas fa-mobile-alt' },
-    { value: 'bank', label: 'Bank Transfer', icon: 'fas fa-university' }
-  ] as const;
-
-  const handleMethodChange = (method: PaymentData['method']) => {
+  const handleMethodSelect = (method: string) => {
     setSelectedMethod(method);
-    onPaymentUpdate({
-      method,
-      amount: parseFloat(receivedAmount) || totalAmount
-    });
+    onPaymentUpdate({ method, amount: totalAmount });
   };
 
-  const handleAmountChange = (amount: string) => {
-    setReceivedAmount(amount);
-    const numAmount = parseFloat(amount) || 0;
-    onPaymentUpdate({
-      method: selectedMethod,
-      amount: numAmount
-    });
-  };
-
-  const calculateChange = () => {
-    const received = parseFloat(receivedAmount) || 0;
-    return received - totalAmount;
-  };
-
-  const canSubmit = () => {
-    const received = parseFloat(receivedAmount) || 0;
-    return received >= totalAmount && selectedMethod;
-  };
+  const change = selectedMethod === 'cash' && cashReceived 
+    ? Math.max(0, parseFloat(cashReceived) - totalAmount) 
+    : 0;
 
   const handleSubmit = () => {
-    if (!canSubmit()) {
-      toast({
-        title: "Payment Error",
-        description: "Received amount must be at least the total amount",
-        variant: "destructive"
-      });
-      return;
-    }
-
+    if (!selectedMethod) return;
+    if (selectedMethod === 'cash' && parseFloat(cashReceived) < totalAmount) return;
     onSubmit();
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(amount);
+  const isValid = () => {
+    if (!selectedMethod) return false;
+    if (selectedMethod === 'cash') {
+      return parseFloat(cashReceived) >= totalAmount;
+    }
+    return true;
   };
 
+  const formatCurrency = (amount: number) => 
+    new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
+
   return (
-    <Card data-testid="payment-panel">
-      <CardHeader>
-        <CardTitle className="flex items-center">
-          <i className="fas fa-credit-card mr-2 text-primary"></i>
-          Payment
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-6">
-          {/* Amount Summary */}
-          <div className="bg-muted p-4 rounded-lg" data-testid="payment-summary">
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span>Total Amount:</span>
-                <span className="font-mono font-bold text-lg" data-testid="total-amount">
-                  {formatCurrency(totalAmount)}
-                </span>
-              </div>
-              {selectedMethod === 'cash' && (
-                <>
-                  <div className="flex justify-between">
-                    <span>Received:</span>
-                    <span className="font-mono" data-testid="received-amount">
-                      {formatCurrency(parseFloat(receivedAmount) || 0)}
-                    </span>
-                  </div>
-                  {calculateChange() >= 0 && (
-                    <div className="flex justify-between text-secondary">
-                      <span>Change:</span>
-                      <span className="font-mono font-bold" data-testid="change-amount">
-                        {formatCurrency(calculateChange())}
-                      </span>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
+    <div className="space-y-4">
+      {/* Total */}
+      <div className="p-4 bg-primary/5 rounded-lg">
+        <div className="flex justify-between items-center">
+          <span className="text-lg">Total Pembayaran</span>
+          <span className="text-2xl font-bold text-primary">{formatCurrency(totalAmount)}</span>
+        </div>
+      </div>
 
-          {/* Payment Method Selection */}
-          <div className="space-y-2">
-            <Label>Payment Method</Label>
-            <Select value={selectedMethod} onValueChange={handleMethodChange} data-testid="payment-method-select">
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {paymentMethods.map(method => (
-                  <SelectItem key={method.value} value={method.value}>
-                    <div className="flex items-center">
-                      <i className={`${method.icon} mr-2`}></i>
-                      {method.label}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      {/* Payment Methods */}
+      <div>
+        <Label className="text-sm mb-2 block">Pilih Metode Pembayaran</Label>
+        <div className="grid grid-cols-2 gap-2">
+          {PAYMENT_METHODS.map(method => (
+            <button
+              key={method.id}
+              onClick={() => handleMethodSelect(method.id)}
+              className={`p-3 border rounded-lg text-left transition-colors ${
+                selectedMethod === method.id 
+                  ? 'border-primary bg-primary/10' 
+                  : 'border-border hover:border-primary/50'
+              }`}
+            >
+              <span className="font-medium">{method.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
-          {/* Amount Input for Cash */}
-          {selectedMethod === 'cash' && (
-            <div className="space-y-2">
-              <Label htmlFor="received-amount">Received Amount</Label>
-              <Input
-                id="received-amount"
-                type="number"
-                value={receivedAmount}
-                onChange={(e) => handleAmountChange(e.target.value)}
-                placeholder="Enter received amount"
-                min={totalAmount}
-                step="1000"
-                data-testid="received-amount-input"
-              />
-            </div>
-          )}
-
-          {/* Payment Method Specific Info */}
-          {selectedMethod === 'qr' && (
-            <div className="text-center p-6 border border-dashed border-border rounded-lg">
-              <i className="fas fa-qrcode text-4xl text-muted-foreground mb-4"></i>
-              <p className="text-sm text-muted-foreground">
-                Scan QR code to complete payment
-              </p>
-            </div>
-          )}
-
-          {selectedMethod === 'ewallet' && (
-            <div className="text-center p-6 border border-dashed border-border rounded-lg">
-              <i className="fas fa-mobile-alt text-4xl text-muted-foreground mb-4"></i>
-              <p className="text-sm text-muted-foreground">
-                Complete payment through e-wallet app
-              </p>
-            </div>
-          )}
-
-          {selectedMethod === 'bank' && (
-            <div className="text-center p-6 border border-dashed border-border rounded-lg">
-              <i className="fas fa-university text-4xl text-muted-foreground mb-4"></i>
-              <p className="text-sm text-muted-foreground">
-                Process bank transfer payment
-              </p>
+      {/* Cash Input */}
+      {selectedMethod === 'cash' && (
+        <div>
+          <Label htmlFor="cashReceived" className="text-sm mb-2 block">Jumlah Uang Diterima</Label>
+          <Input
+            id="cashReceived"
+            type="number"
+            value={cashReceived}
+            onChange={(e) => setCashReceived(e.target.value)}
+            placeholder="Masukkan nominal"
+          />
+          {cashReceived && parseFloat(cashReceived) >= totalAmount && (
+            <div className="mt-2 p-3 bg-green-50 text-green-700 rounded-lg text-sm">
+              Kembalian: <strong>{formatCurrency(change)}</strong>
             </div>
           )}
         </div>
+      )}
 
-        {/* Payment Actions */}
-        <div className="flex items-center justify-between mt-6 pt-6 border-t border-border">
-          <Button onClick={onBack} variant="outline" data-testid="back-to-passengers">
-            <i className="fas fa-arrow-left mr-2"></i>
-            Back to Passengers
-          </Button>
-
-          <Button 
-            onClick={handleSubmit}
-            disabled={!canSubmit() || loading}
-            data-testid="process-payment"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground mr-2"></div>
-                Processing...
-              </>
-            ) : (
-              <>
-                <i className="fas fa-check mr-2"></i>
-                Process Payment & Issue Ticket
-              </>
-            )}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      {/* Actions */}
+      <div className="flex gap-3 pt-4">
+        <Button variant="outline" onClick={onBack} className="flex-1" disabled={loading}>
+          Kembali
+        </Button>
+        <Button onClick={handleSubmit} disabled={!isValid() || loading} className="flex-1">
+          {loading ? 'Memproses...' : 'Bayar Sekarang'}
+        </Button>
+      </div>
+    </div>
   );
 }
