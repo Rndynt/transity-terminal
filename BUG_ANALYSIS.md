@@ -1,7 +1,7 @@
 # Bug Analysis & Fix Report - TransityCore
 
 **Analysis Date:** 2026-02-22
-**Status:** ALL CRITICAL BUGS FIXED
+**Status:** ALL BUGS FIXED
 
 ---
 
@@ -13,7 +13,8 @@
 | KRITIS-001 | Timezone conversion salah | FIXED | `fromZonedHHMMToUtc` sekarang mengembalikan null untuk input invalid |
 | KRITIS-002 | Format waktu tidak konsisten | FIXED | Semua waktu menggunakan format ISO "HH:MM" dengan colon |
 | KRITIS-003 | Duplikasi trip (virtual + manual) | FIXED | Seeder tidak lagi membuat trip manual |
-| KRITIS-004 | Tampilan waktu di UI salah | FIXED | Frontend menggunakan `toLocaleTimeString` dengan timezone yang benar |
+| KRITIS-004 | Tampilan waktu di UI salah | FIXED | TripScheduleEditor menggunakan `utcToLocalDatetime()` untuk konversi ke Asia/Jakarta |
+| KRITIS-005 | Form schedule menampilkan UTC bukan WIB | FIXED | Ditambahkan fungsi `utcToLocalDatetime()`, `formatTimeWIB()`, `formatDateTimeWIB()` |
 
 ### Bug Major - SEMUA DIPERBAIKI
 | ID | Masalah | Status | Keterangan |
