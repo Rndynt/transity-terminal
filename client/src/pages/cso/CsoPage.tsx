@@ -10,22 +10,69 @@ import PaymentPanel from '@/components/cso/PaymentPanel';
 import PrintPreview from '@/components/cso/PrintPreview';
 import { useBookingFlow } from '@/hooks/useBookingFlow';
 import { useSeatHold } from '@/hooks/useSeatHold';
-import { ChevronLeft, ChevronRight, Check, MapPin, Grid3X3, Users, CreditCard, Ticket, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, MapPin, Grid3X3, Users, Ticket, Loader2, Clock, Bus, ArrowRight, Calendar } from 'lucide-react';
 import type { Trip, Stop, Outlet, CsoAvailableTrip } from '@/types';
 
 const STEPS = [
   { id: 1, name: 'Jadwal', icon: MapPin },
   { id: 2, name: 'Rute', icon: MapPin },
   { id: 3, name: 'Kursi', icon: Grid3X3 },
-  { id: 4, name: 'Penumpang', icon: Users },
-  { id: 5, name: 'Bayar', icon: CreditCard }
+  { id: 4, name: 'Penumpang', icon: Users }
 ];
+
+// Helper to format time
+const formatTime = (isoString: string | null | undefined): string => {
+  if (!isoString) return '--:--';
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString('id-ID', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'Asia/Jakarta'
+    });
+  } catch {
+    return '--:--';
+  }
+};
+
+// Helper to format date
+const formatDate = (isoString: string | null | undefined): string => {
+  if (!isoString) return '-';
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleDateString('id-ID', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short'
+    });
+  } catch {
+    return '-';
+  }
+};
+
+// Helper to calculate duration
+const calculateDuration = (depart: string | null | undefined, arrive: string | null | undefined): string => {
+  if (!depart || !arrive) return '-';
+  try {
+    const departDate = new Date(depart);
+    const arriveDate = new Date(arrive);
+    const diffMinutes = Math.round((arriveDate.getTime() - departDate.getTime()) / (1000 * 60));
+    const hours = Math.floor(diffMinutes / 60);
+    const minutes = diffMinutes % 60;
+    if (hours > 0) return `${hours}j ${minutes}m`;
+    return `${minutes} menit`;
+  } catch {
+    return '-';
+  }
+};
 
 export default function CsoPage() {
   const [bookingResult, setBookingResult] = useState<{ booking: any; printPayload: any } | null>(null);
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [selectedCsoTrip, setSelectedCsoTrip] = useState<CsoAvailableTrip | undefined>();
   const [isMaterializing, setIsMaterializing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const { 
     state, 
@@ -37,6 +84,7 @@ export default function CsoPage() {
     removeSeat,
     updatePassengers,
     createBooking,
+    createPendingBooking,
     resetFlow,
     calculateTotalAmount,
     loading: bookingLoading
@@ -68,7 +116,6 @@ export default function CsoPage() {
     try {
       let tripId = csoTrip.tripId;
       
-      // Materialize virtual trip
       if (csoTrip.isVirtual && csoTrip.baseId) {
         const res = await fetch('/api/cso/materialize-trip', {
           method: 'POST',
@@ -95,9 +142,11 @@ export default function CsoPage() {
           originDepartHHMM: null
         }
       });
+      
+      setIsMaterializing(false);
+      setCurrentStep(2);
     } catch (error) {
       console.error('Trip selection failed:', error);
-    } finally {
       setIsMaterializing(false);
     }
   };
@@ -113,15 +162,36 @@ export default function CsoPage() {
   const handleSeatSelect = (seatNo: string) => addSeat(seatNo);
   const handleSeatDeselect = (seatNo: string) => removeSeat(seatNo);
   const handlePassengersUpdate = (passengers: any[]) => updatePassengers(passengers);
+
+  const handlePay = () => {
+    nextStep();
+  };
+
+  const handleBook = async () => {
+    setIsProcessing(true);
+    try {
+      const result = await createPendingBooking();
+      setBookingResult(result);
+      setCurrentStep(6);
+    } catch (error) {
+      console.error('Pending booking failed:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handlePaymentUpdate = (payment: any) => updateState({ payment });
 
   const handleCreateBooking = async () => {
+    setIsProcessing(true);
     try {
       const result = await createBooking();
       setBookingResult(result);
       setCurrentStep(6);
     } catch (error) {
       console.error('Booking failed:', error);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -144,14 +214,17 @@ export default function CsoPage() {
       case 2: return !!state.originStop && !!state.destinationStop;
       case 3: return state.selectedSeats.length > 0;
       case 4: return state.passengers.length === state.selectedSeats.length && state.passengers.every(p => p.fullName?.trim());
-      case 5: return !!state.payment;
       default: return false;
     }
   };
 
   const formatCurrency = (amount: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
 
-  // Success view
+  // Calculate journey duration
+  const journeyDuration = selectedCsoTrip?.departAtAtOutlet && selectedCsoTrip?.finalArrivalAt
+    ? calculateDuration(selectedCsoTrip.departAtAtOutlet, selectedCsoTrip.finalArrivalAt)
+    : '-';
+
   if (state.currentStep === 6 && bookingResult) {
     return (
       <div className="max-w-2xl mx-auto p-4">
@@ -232,8 +305,8 @@ export default function CsoPage() {
                   Rute & Kursi Terpilih
                 </h2>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Rute:</span><span>{state.originStop?.code} &rarr; {state.destinationStop?.code}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Kursi:</span><span>{state.selectedSeats.join(', ')}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Rute:</span><span className="font-medium">{state.originStop?.name || state.originStop?.code} <ArrowRight className="w-3 h-3 inline" /> {state.destinationStop?.name || state.destinationStop?.code}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Kursi:</span><span className="font-medium">{state.selectedSeats.join(', ')}</span></div>
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-3" onClick={() => setCurrentStep(2)}>Ubah</Button>
               </>
@@ -248,17 +321,25 @@ export default function CsoPage() {
                   <Badge variant="default">4</Badge>
                   Data Penumpang
                 </h2>
-                <PassengerForm selectedSeats={state.selectedSeats} passengers={state.passengers} onPassengersUpdate={handlePassengersUpdate} onNext={nextStep} onBack={prevStep} />
+                <PassengerForm 
+                  selectedSeats={state.selectedSeats} 
+                  passengers={state.passengers} 
+                  onPassengersUpdate={handlePassengersUpdate} 
+                  onBook={handleBook}
+                  onPay={handlePay}
+                  onBack={prevStep}
+                  loading={isProcessing}
+                />
               </>
             )}
 
             {state.currentStep === 5 && (
               <>
                 <h2 className="font-semibold mb-3 flex items-center gap-2">
-                  <Badge variant="default">5</Badge>
+                  <Badge variant="default\">5</Badge>
                   Pembayaran
                 </h2>
-                <PaymentPanel totalAmount={totalAmount} payment={state.payment} onPaymentUpdate={handlePaymentUpdate} onSubmit={handleCreateBooking} onBack={prevStep} loading={bookingLoading} />
+                <PaymentPanel totalAmount={totalAmount} payment={state.payment} onPaymentUpdate={handlePaymentUpdate} onSubmit={handleCreateBooking} onBack={prevStep} loading={isProcessing} />
               </>
             )}
 
@@ -268,20 +349,85 @@ export default function CsoPage() {
                   <Ticket className="w-4 h-4" />
                   Ringkasan
                 </h2>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between py-1 border-b"><span className="text-muted-foreground">Outlet</span><span>{state.outlet?.name || '-'}</span></div>
-                  <div className="flex justify-between py-1 border-b"><span className="text-muted-foreground">Jadwal</span><span>{selectedCsoTrip?.patternPath || '-'}</span></div>
-                  <div className="flex justify-between py-1 border-b"><span className="text-muted-foreground">Rute</span><span>{state.originStop && state.destinationStop ? `${state.originStop.code} &rarr; ${state.destinationStop.code}` : '-'}</span></div>
-                  <div className="flex justify-between py-1 border-b"><span className="text-muted-foreground">Kursi</span><span>{state.selectedSeats.length > 0 ? state.selectedSeats.join(', ') : '-'}</span></div>
-                </div>
-                {state.selectedSeats.length > 0 && (
-                  <div className="p-3 bg-primary/5 rounded-lg mt-3">
-                    <div className="flex justify-between"><span>Total</span><span className="font-bold text-primary">{formatCurrency(totalAmount)}</span></div>
+                
+                {/* Trip Info Card */}
+                {selectedCsoTrip && (
+                  <div className="bg-muted/30 rounded-lg p-3 mb-3 space-y-2">
+                    {/* Date & Time */}
+                    <div className="flex items-center gap-2 text-sm">
+                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                      <span className="font-medium">{formatDate(selectedCsoTrip.departAtAtOutlet)}</span>
+                      <span className="text-primary font-bold">{formatTime(selectedCsoTrip.departAtAtOutlet)}</span>
+                    </div>
+                    
+                    {/* Route */}
+                    <div className="flex items-center gap-2 text-sm">
+                      <MapPin className="w-4 h-4 text-muted-foreground" />
+                      <span>{selectedCsoTrip.patternPath}</span>
+                    </div>
+                    
+                    {/* Duration & Vehicle */}
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-1">
+                        <Clock className="w-4 h-4 text-muted-foreground" />
+                        <span>{journeyDuration}</span>
+                      </div>
+                      {selectedCsoTrip.vehicle?.code && (
+                        <div className="flex items-center gap-1">
+                          <Bus className="w-4 h-4 text-muted-foreground" />
+                          <span>{selectedCsoTrip.vehicle.code}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Available Seats */}
+                    {selectedCsoTrip.availableSeats !== undefined && (
+                      <div className="text-xs text-muted-foreground">
+                        <span className={selectedCsoTrip.availableSeats > 5 ? 'text-green-600' : selectedCsoTrip.availableSeats > 0 ? 'text-amber-600' : 'text-red-600'}>
+                          {selectedCsoTrip.availableSeats} kursi tersedia
+                        </span>
+                        <span className="mx-1">•</span>
+                        <span>dari {selectedCsoTrip.capacity || '?'} total</span>
+                      </div>
+                    )}
                   </div>
                 )}
+                
+                {/* Selection Summary */}
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between py-1 border-b">
+                    <span className="text-muted-foreground">Outlet</span>
+                    <span className="font-medium">{state.outlet?.name || '-'}</span>
+                  </div>
+                  
+                  {state.originStop && state.destinationStop && (
+                    <div className="flex justify-between py-1 border-b">
+                      <span className="text-muted-foreground">Titik Naik/Turun</span>
+                      <span className="font-medium">
+                        {state.originStop.code} <ArrowRight className="w-3 h-3 inline" /> {state.destinationStop.code}
+                      </span>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-between py-1 border-b">
+                    <span className="text-muted-foreground">Kursi Dipilih</span>
+                    <span className="font-medium">{state.selectedSeats.length > 0 ? state.selectedSeats.join(', ') : '-'}</span>
+                  </div>
+                </div>
+                
+                {/* Total */}
+                {state.selectedSeats.length > 0 && (
+                  <div className="p-3 bg-primary/5 rounded-lg mt-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Total ({state.selectedSeats.length} penumpang)</span>
+                      <span className="font-bold text-lg text-primary">{formatCurrency(totalAmount)}</span>
+                    </div>
+                  </div>
+                )}
+                
                 <div className="space-y-2 mt-4">
-                  {state.currentStep > 1 && <Button variant="outline" className="w-full" onClick={prevStep}><ChevronLeft className="w-4 h-4 mr-1" /> Kembali</Button>}
-                  {canProceed() && state.currentStep < 5 && <Button className="w-full" onClick={nextStep}>Lanjut <ChevronRight className="w-4 h-4 ml-1" /></Button>}
+                  {state.currentStep > 1 && <Button variant="outline\" className="w-full\" onClick={prevStep}><ChevronLeft className="w-4 h-4 mr-1\" /> Kembali</Button>}
+                  {canProceed() && state.currentStep < 4 && <Button className="w-full" onClick={nextStep}>Lanjut <ChevronRight className="w-4 h-4 ml-1" /></Button>}
                 </div>
               </>
             )}
@@ -290,11 +436,11 @@ export default function CsoPage() {
       </div>
 
       {/* Loading overlay */}
-      {isMaterializing && (
+      {(isMaterializing || isProcessing) && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-card p-6 rounded-lg flex items-center gap-3">
             <Loader2 className="w-6 h-6 animate-spin" />
-            <span>Memproses jadwal...</span>
+            <span>{isMaterializing ? 'Memproses jadwal...' : 'Memproses booking...'}</span>
           </div>
         </div>
       )}

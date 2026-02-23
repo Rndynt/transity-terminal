@@ -4,6 +4,9 @@ import { HoldsService } from "../holds/holds.service";
 import { DeterministicBookingService } from "./deterministicBooking.service";
 import { PricingService } from "../pricing/pricing.service";
 import { PrintService } from "../printing/print.service";
+import { db } from "../../db";
+import { seatHolds, seatInventory } from "@shared/schema";
+import { eq, and, inArray, gt } from "drizzle-orm";
 
 export class BookingsService {
   private holdsService: HoldsService;
@@ -28,7 +31,6 @@ export class BookingsService {
       throw new Error(`Booking with id ${id} not found`);
     }
     
-    // Fetch all related data in parallel for better performance
     const [passengers, payments, trip, tripStopTimes] = await Promise.all([
       this.storage.getPassengers(booking.id),
       this.storage.getPayments(booking.id),
@@ -36,7 +38,6 @@ export class BookingsService {
       this.storage.getTripStopTimes(booking.tripId)
     ]);
     
-    // Fetch stop details in parallel if origin/destination stop IDs exist
     let originStop = null;
     let destinationStop = null;
     
@@ -47,7 +48,6 @@ export class BookingsService {
       ]);
     }
     
-    // Find the departure time from trip stop times based on origin sequence
     let departAt = null;
     if (tripStopTimes && booking.originSeq) {
       const originStopTime = tripStopTimes.find(st => st.stopSequence === booking.originSeq);
@@ -74,40 +74,42 @@ export class BookingsService {
     idempotencyKey?: string
   ): Promise<{ booking: Booking; printPayload: any }> {
     
-    // Validate boarding and alighting rules
     await this.validateBoardingAlightingRules(
       bookingData.tripId,
       bookingData.originSeq,
       bookingData.destinationSeq
     );
     
-    // Validate that all required seats are held
     const legIndexes = [];
     for (let i = bookingData.originSeq; i < bookingData.destinationSeq; i++) {
       legIndexes.push(i);
     }
 
-    // Check seat holds for all passengers and verify ownership
+    const operatorId = bookingData.createdBy || 'default-operator';
+
+    // Validate holds from DATABASE (not in-memory)
     for (const passenger of passengers) {
-      const isHeld = await this.holdsService.isSeatHeld(
-        bookingData.tripId,
-        passenger.seatNo,
-        legIndexes
-      );
+      // Check if seat has valid hold in database
+      const [holdRecord] = await db
+        .select()
+        .from(seatHolds)
+        .where(and(
+          eq(seatHolds.tripId, bookingData.tripId),
+          eq(seatHolds.seatNo, passenger.seatNo),
+          gt(seatHolds.expiresAt, new Date()),
+          eq(seatHolds.operatorId, operatorId)
+        ))
+        .limit(1);
       
-      if (!isHeld) {
+      if (!holdRecord) {
         throw new Error(`Seat ${passenger.seatNo} is not held or hold has expired`);
       }
 
-      // Verify hold ownership by checking the first leg
-      const holdInfo = await this.holdsService.getSeatHoldInfo(
-        bookingData.tripId,
-        passenger.seatNo,
-        legIndexes[0]
-      );
-      
-      if (!holdInfo || holdInfo.owner.operatorId !== (bookingData.createdBy || 'default-operator')) {
-        throw new Error(`Seat ${passenger.seatNo} is not held by your operator`);
+      // Verify all required legs are covered by this hold
+      const holdLegs = holdRecord.legIndexes as number[];
+      const allLegsCovered = legIndexes.every(leg => holdLegs.includes(leg));
+      if (!allLegsCovered) {
+        throw new Error(`Seat ${passenger.seatNo} hold does not cover all required legs`);
       }
     }
 
@@ -118,20 +120,20 @@ export class BookingsService {
       bookingData.destinationSeq
     );
 
-    // Validate payment amount matches fare quote (multiply by number of passengers)
     const expectedTotal = Number(fareQuote.total) * passengers.length;
     const paymentAmount = Number(payment.amount);
     if (Math.abs(paymentAmount - expectedTotal) > 0.01) {
       throw new Error(`Payment amount ${paymentAmount} does not match expected total ${expectedTotal}`);
     }
 
-    // Create booking in transaction
+    // Create booking with 'paid' status since payment is provided
     const booking = await this.storage.createBooking({
       ...bookingData,
+      status: 'paid',  // Set status to paid since payment is provided
       totalAmount: expectedTotal.toString()
     });
 
-    // Create passengers
+    // Create passengers and mark seats as booked
     for (const passengerData of passengers) {
       await this.storage.createPassenger({
         ...passengerData,
@@ -140,20 +142,27 @@ export class BookingsService {
         fareBreakdown: fareQuote.breakdown
       });
 
-      // Mark seats as booked and release holds
-      await this.storage.updateSeatInventory(
-        bookingData.tripId,
-        passengerData.seatNo,
-        legIndexes,
-        { booked: true, holdRef: null }
-      );
+      // Mark seats as booked and clear holds from database
+      await db.transaction(async (tx) => {
+        // Update seat inventory
+        await tx
+          .update(seatInventory)
+          .set({ booked: true, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, bookingData.tripId),
+            eq(seatInventory.seatNo, passengerData.seatNo),
+            inArray(seatInventory.legIndex, legIndexes)
+          ));
 
-      // Release the hold
-      await this.holdsService.releaseSeatHold(
-        bookingData.tripId,
-        passengerData.seatNo,
-        legIndexes
-      );
+        // Delete hold record
+        await tx
+          .delete(seatHolds)
+          .where(and(
+            eq(seatHolds.tripId, bookingData.tripId),
+            eq(seatHolds.seatNo, passengerData.seatNo),
+            eq(seatHolds.operatorId, operatorId)
+          ));
+      });
     }
 
     // Create payment
@@ -169,10 +178,7 @@ export class BookingsService {
       status: 'queued'
     });
 
-    // Fetch booking with all relations for complete data
     const bookingWithRelations = await this.getBookingById(booking.id);
-
-    // Generate print payload
     const printPayload = await this.printService.generatePrintPayload(booking.id);
 
     return { booking: bookingWithRelations, printPayload };
@@ -255,7 +261,7 @@ export class BookingsService {
   }
 
   async releaseHold(holdRef: string): Promise<void> {
-    await this.holdsService.releaseHoldByRef(holdRef);
+    await this.deterministicService.releaseHoldByRef(holdRef);
   }
 
   async createPendingBooking(
@@ -272,27 +278,21 @@ export class BookingsService {
       legIndexes.push(i);
     }
 
-    // Check seat holds for all passengers and verify ownership
+    // Check seat holds from DATABASE for all passengers
     for (const passenger of passengers) {
-      const isHeld = await this.holdsService.isSeatHeld(
-        bookingData.tripId,
-        passenger.seatNo,
-        legIndexes
-      );
+      const [holdRecord] = await db
+        .select()
+        .from(seatHolds)
+        .where(and(
+          eq(seatHolds.tripId, bookingData.tripId),
+          eq(seatHolds.seatNo, passenger.seatNo),
+          gt(seatHolds.expiresAt, new Date()),
+          eq(seatHolds.operatorId, operatorId)
+        ))
+        .limit(1);
       
-      if (!isHeld) {
+      if (!holdRecord) {
         throw new Error(`Seat ${passenger.seatNo} is not held or hold has expired`);
-      }
-
-      // Verify hold ownership by checking the first leg
-      const holdInfo = await this.holdsService.getSeatHoldInfo(
-        bookingData.tripId,
-        passenger.seatNo,
-        legIndexes[0]
-      );
-      
-      if (!holdInfo || holdInfo.owner.operatorId !== operatorId) {
-        throw new Error(`Seat ${passenger.seatNo} is not held by your operator`);
       }
     }
 
@@ -316,7 +316,7 @@ export class BookingsService {
       pendingExpiresAt
     });
 
-    // Create passengers
+    // Create passengers and mark seats as booked (pending status)
     for (const passengerData of passengers) {
       await this.storage.createPassenger({
         ...passengerData,
@@ -324,10 +324,29 @@ export class BookingsService {
         fareAmount: fareQuote.perPassenger.toString(),
         fareBreakdown: fareQuote.breakdown
       });
-    }
 
-    // Convert short holds to long holds and tie them to this booking
-    await this.holdsService.convertHoldsToLong(operatorId, booking.id);
+      // Mark seats as booked (with hold cleared) - pending booking
+      await db.transaction(async (tx) => {
+        // Update seat inventory - mark as booked
+        await tx
+          .update(seatInventory)
+          .set({ booked: true, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, bookingData.tripId),
+            eq(seatInventory.seatNo, passengerData.seatNo),
+            inArray(seatInventory.legIndex, legIndexes)
+          ));
+
+        // Delete hold record
+        await tx
+          .delete(seatHolds)
+          .where(and(
+            eq(seatHolds.tripId, bookingData.tripId),
+            eq(seatHolds.seatNo, passengerData.seatNo),
+            eq(seatHolds.operatorId, operatorId)
+          ));
+      });
+    }
 
     return { booking, pendingExpiresAt };
   }

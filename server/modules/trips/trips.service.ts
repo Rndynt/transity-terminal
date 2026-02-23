@@ -212,32 +212,32 @@ export class TripsService {
     // Get seat inventory for required legs
     const inventory = await this.storage.getSeatInventory(tripId, legIndexes);
     
-    // Get all bookings for this trip to determine booking types
+    // Get all bookings for this trip to determine booking types and status
     const allBookings = await this.storage.getBookings(tripId);
     const activeBookings = allBookings.filter(booking => 
-      booking.status === 'paid' || booking.status === 'pending'
+      booking.status === 'paid' || booking.status === 'pending' || booking.status === 'confirmed'
     );
     
     // Get all trip stop times to understand the full trip coverage
     const tripStopTimes = await this.storage.getTripStopTimes(tripId);
     const totalStops = tripStopTimes.length;
     
-    // Group by seat number and check availability
+    // Initialize all seats as available
     const seatAvailability: Record<string, { 
       available: boolean; 
       held: boolean; 
       holdRef?: string; 
       bookedType?: 'main' | 'transit' | null;
+      bookingStatus?: 'pending' | 'paid' | null;
     }> = {};
     
-    // Initialize all seats as available
     const seatMap = layout.seatMap as any[];
     seatMap.forEach(seat => {
-      seatAvailability[seat.seat_no] = { available: true, held: false, bookedType: null };
+      seatAvailability[seat.seat_no] = { available: true, held: false, bookedType: null, bookingStatus: null };
     });
 
     // Create a map of seat bookings for efficiency
-    const seatBookingMap = new Map<string, 'main' | 'transit'>();
+    const seatBookingMap = new Map<string, { type: 'main' | 'transit'; status: 'pending' | 'paid' }>();
     
     for (const booking of activeBookings) {
       // Check if this booking overlaps with the requested journey
@@ -247,11 +247,11 @@ export class TripsService {
         const totalTripCoverage = totalStops - 1; // Total legs
         
         // If booking covers more than 70% of the trip, consider it "main"
-        // Otherwise, consider it "transit"
         const bookingType: 'main' | 'transit' = (bookingStopCoverage / totalTripCoverage) > 0.7 ? 'main' : 'transit';
+        const bookingStatus: 'pending' | 'paid' = booking.status === 'paid' || booking.status === 'confirmed' ? 'paid' : 'pending';
         
         passengers.forEach(passenger => {
-          seatBookingMap.set(passenger.seatNo, bookingType);
+          seatBookingMap.set(passenger.seatNo, { type: bookingType, status: bookingStatus });
         });
       }
     }
@@ -259,18 +259,20 @@ export class TripsService {
     // Check each required leg for seat availability and determine booking type
     inventory.forEach(inv => {
       if (inv.booked) {
-        const bookedType = seatBookingMap.get(inv.seatNo) || null;
+        const bookingInfo = seatBookingMap.get(inv.seatNo);
         seatAvailability[inv.seatNo] = { 
           available: false, 
           held: false, 
-          bookedType 
+          bookedType: bookingInfo?.type || null,
+          bookingStatus: bookingInfo?.status || null
         };
       } else if (inv.holdRef) {
         seatAvailability[inv.seatNo] = { 
           available: false, 
           held: true, 
           holdRef: inv.holdRef,
-          bookedType: null
+          bookedType: null,
+          bookingStatus: null
         };
       }
     });

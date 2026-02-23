@@ -137,70 +137,92 @@ export class HoldsService {
   }
 
   async releaseHoldByRef(holdRef: string): Promise<void> {
+    console.log(`[HOLDS] Attempting to release hold: ${holdRef}`);
+    
+    // First check in-memory
     const hold = this.holds.get(holdRef);
-    if (!hold) return;
+    
+    if (hold) {
+      console.log(`[HOLDS] Found hold in memory, releasing...`);
+      // Remove from all legs
+      for (const legIndex of hold.legIndexes) {
+        const seatKey = this.getSeatKey(hold.tripId, hold.seatNo, legIndex);
+        this.seatHolds.delete(seatKey);
+      }
 
-    // Remove from all legs
-    for (const legIndex of hold.legIndexes) {
-      const seatKey = this.getSeatKey(hold.tripId, hold.seatNo, legIndex);
-      this.seatHolds.delete(seatKey);
+      this.holds.delete(holdRef);
     }
 
-    this.holds.delete(holdRef);
-
-    // Also clear database seatInventory holdRef for consistency
+    // ALWAYS clear from database regardless of memory state
+    // This handles holds created by DeterministicBookingService
     try {
-      await db.update(seatInventory)
-        .set({ holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, hold.tripId),
-          eq(seatInventory.seatNo, hold.seatNo),
-          inArray(seatInventory.legIndex, hold.legIndexes)
-        ));
+      // First, get hold info from database to know which trip/seat to clear
+      const [dbHold] = await db.select()
+        .from(seatHolds)
+        .where(eq(seatHolds.holdRef, holdRef))
+        .limit(1);
       
-      console.log(`[HOLDS] Cleared database seatInventory for released hold: ${holdRef}`);
+      if (dbHold) {
+        console.log(`[HOLDS] Found hold in database, clearing seat inventory for trip ${dbHold.tripId}, seat ${dbHold.seatNo}`);
+        
+        // Clear seat inventory
+        await db.update(seatInventory)
+          .set({ holdRef: null })
+          .where(eq(seatInventory.holdRef, holdRef));
+        
+        // Delete the hold record
+        await db.delete(seatHolds)
+          .where(eq(seatHolds.holdRef, holdRef));
+        
+        console.log(`[HOLDS] Cleared database for released hold: ${holdRef}`);
+        
+        // Emit WebSocket events for real-time updates
+        webSocketService.emitInventoryUpdated(dbHold.tripId, dbHold.seatNo, dbHold.legIndexes as number[]);
+        webSocketService.emitHoldsReleased(dbHold.tripId, [dbHold.seatNo]);
+        console.log(`[HOLDS] Emitted WebSocket events for release ${dbHold.tripId}:${dbHold.seatNo}`);
+      } else {
+        console.log(`[HOLDS] Hold ${holdRef} not found in database, may have already been released`);
+      }
     } catch (dbError) {
       console.error(`[HOLDS] Failed to clear database for hold ${holdRef}:`, dbError);
     }
-
-    // Emit WebSocket events for real-time updates
-    webSocketService.emitInventoryUpdated(hold.tripId, hold.seatNo, hold.legIndexes);
-    webSocketService.emitHoldsReleased(hold.tripId, [hold.seatNo]);
-    console.log(`[HOLDS] Emitted WebSocket INVENTORY_UPDATED and HOLDS_RELEASED for release ${hold.tripId}:${hold.seatNo}`);
   }
 
   async isSeatHeld(tripId: string, seatNo: string, legIndexes: number[]): Promise<boolean> {
-    // Check if all required legs are held by the same hold
-    let commonHoldRef: string | null = null;
-
-    for (const legIndex of legIndexes) {
-      const seatKey = this.getSeatKey(tripId, seatNo, legIndex);
-      const holdRef = this.seatHolds.get(seatKey);
-      
-      if (!holdRef) return false; // Not held
-      
-      if (commonHoldRef === null) {
-        commonHoldRef = holdRef;
-      } else if (commonHoldRef !== holdRef) {
-        return false; // Held by different holds
-      }
-
-      // Check if hold is expired
-      const hold = this.holds.get(holdRef);
-      if (!hold || hold.expiresAt <= Date.now()) {
-        return false;
-      }
-    }
-
-    return true;
+    // Check database for accurate hold status
+    const hold = await this.getSeatHoldInfoFromDb(tripId, seatNo, legIndexes[0]);
+    return hold !== null;
   }
 
   async getHoldInfo(holdRef: string): Promise<SeatHold | null> {
+    // Check memory first
     const hold = this.holds.get(holdRef);
-    if (!hold || hold.expiresAt <= Date.now()) {
-      return null;
+    if (hold && hold.expiresAt > Date.now()) {
+      return hold;
     }
-    return hold;
+    
+    // Check database
+    const [dbHold] = await db.select()
+      .from(seatHolds)
+      .where(eq(seatHolds.holdRef, holdRef))
+      .limit(1);
+    
+    if (dbHold && new Date(dbHold.expiresAt) > new Date()) {
+      return {
+        holdRef: dbHold.holdRef,
+        tripId: dbHold.tripId,
+        seatNo: dbHold.seatNo,
+        legIndexes: dbHold.legIndexes as number[],
+        expiresAt: new Date(dbHold.expiresAt).getTime(),
+        ttlClass: dbHold.ttlClass as 'short' | 'long',
+        owner: {
+          operatorId: dbHold.operatorId,
+          bookingId: dbHold.bookingId || undefined
+        }
+      };
+    }
+    
+    return null;
   }
 
   async getSeatHoldInfo(tripId: string, seatNo: string, legIndex: number): Promise<SeatHold | null> {
@@ -213,7 +235,32 @@ export class HoldsService {
         return hold;
       }
     }
-    return null;
+    
+    // Check database
+    return this.getSeatHoldInfoFromDb(tripId, seatNo, legIndex);
+  }
+
+  private async getSeatHoldInfoFromDb(tripId: string, seatNo: string, legIndex: number): Promise<SeatHold | null> {
+    try {
+      // Find hold that covers this seat and leg
+      const [inventoryRow] = await db.select()
+        .from(seatInventory)
+        .where(and(
+          eq(seatInventory.tripId, tripId),
+          eq(seatInventory.seatNo, seatNo),
+          eq(seatInventory.legIndex, legIndex)
+        ))
+        .limit(1);
+      
+      if (!inventoryRow || !inventoryRow.holdRef) {
+        return null;
+      }
+      
+      return this.getHoldInfo(inventoryRow.holdRef);
+    } catch (error) {
+      console.error(`[HOLDS] Error getting seat hold info from DB:`, error);
+      return null;
+    }
   }
 
   async extendHold(holdRef: string, ttlClass: 'short' | 'long'): Promise<boolean> {

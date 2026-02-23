@@ -1,24 +1,27 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
+import { CreditCard, Clock, ArrowLeft, Loader2 } from 'lucide-react';
 
 interface PassengerFormProps {
   selectedSeats: string[];
   passengers: Array<{ fullName: string; phone?: string; idNumber?: string; seatNo: string }>;
   onPassengersUpdate: (passengers: Array<{ fullName: string; phone?: string; idNumber?: string; seatNo: string }>) => void;
-  onNext: () => void;
+  onBook: () => void;
+  onPay: () => void;
   onBack: () => void;
+  loading?: boolean;
 }
 
 export default function PassengerForm({
   selectedSeats,
   passengers,
   onPassengersUpdate,
-  onNext,
-  onBack
+  onBook,
+  onPay,
+  onBack,
+  loading = false
 }: PassengerFormProps) {
   const [formData, setFormData] = useState<Array<{ fullName: string; phone: string; idNumber: string; seatNo: string }>>([]);
 
@@ -51,10 +54,14 @@ export default function PassengerForm({
     return formData.every(p => p.fullName.trim().length >= 2);
   };
 
-  const handleSubmit = () => {
+  const handleAction = (action: 'book' | 'pay') => {
     if (!isValid()) return;
     onPassengersUpdate(formData);
-    onNext();
+    if (action === 'book') {
+      onBook();
+    } else {
+      onPay();
+    }
   };
 
   if (selectedSeats.length === 0) {
@@ -118,12 +125,41 @@ export default function PassengerForm({
         </div>
       ))}
 
-      <div className="flex gap-3 pt-4">
-        <Button variant="outline" onClick={onBack} className="flex-1">
+      {/* Action Buttons */}
+      <div className="border-t pt-4 mt-4">
+        <p className="text-sm text-muted-foreground mb-3">
+          Pilih aksi setelah mengisi data penumpang:
+        </p>
+        <div className="flex flex-col gap-2">
+          <Button 
+            onClick={() => handleAction('pay')} 
+            disabled={!isValid() || loading}
+            className="w-full"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <CreditCard className="w-4 h-4 mr-2" />
+            )}
+            Bayar Sekarang
+          </Button>
+          <Button 
+            variant="secondary"
+            onClick={() => handleAction('book')} 
+            disabled={!isValid() || loading}
+            className="w-full"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Clock className="w-4 h-4 mr-2" />
+            )}
+            Booking Saja (Belum Bayar)
+          </Button>
+        </div>
+        <Button variant="ghost" onClick={onBack} className="w-full mt-2" disabled={loading}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
           Kembali
-        </Button>
-        <Button onClick={handleSubmit} disabled={!isValid()} className="flex-1">
-          Lanjutkan
         </Button>
       </div>
     </div>

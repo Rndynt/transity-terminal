@@ -21,6 +21,7 @@ export interface SeatAvailability {
   held: boolean;
   holdRef?: string;
   bookedType?: 'main' | 'transit' | null;
+  bookingStatus?: 'pending' | 'paid' | null;
 }
 
 export interface SeatmapResponse {

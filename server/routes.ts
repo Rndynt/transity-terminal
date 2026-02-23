@@ -254,6 +254,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/bookings', asyncHandler(bookingsController.getAll.bind(bookingsController)));
   app.get('/api/bookings/:id', asyncHandler(bookingsController.getById.bind(bookingsController)));
   app.post('/api/bookings', asyncHandler(bookingsController.create.bind(bookingsController)));
+  app.post('/api/bookings/pending', asyncHandler(bookingsController.createPendingBooking.bind(bookingsController)));
+  app.get('/api/bookings/pending', asyncHandler(bookingsController.getPendingBookings.bind(bookingsController)));
+  app.delete('/api/bookings/pending/:id', asyncHandler(bookingsController.releasePendingBooking.bind(bookingsController)));
 
   // Payments routes
   app.get('/api/bookings/:bookingId/payments', asyncHandler(paymentsController.getByBooking.bind(paymentsController)));

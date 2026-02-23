@@ -75,44 +75,45 @@
 .seat-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  max-width: 280px;
+  gap: 10px;
+  max-width: 260px;
   width: 100%;
   margin: 0 auto;
 }
 
 @media (max-width: 640px) {
   .seat-grid {
-    max-width: 240px;
-    gap: 8px;
+    max-width: 220px;
+    gap: 6px;
   }
 }
 
 .seat {
-  width: 50px;
-  height: 50px;
+  width: 48px;
+  height: 48px;
   border: 2px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   position: relative;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  user-select: none;
 }
 
 @media (max-width: 640px) {
   .seat {
-    width: 42px;
-    height: 42px;
+    width: 40px;
+    height: 40px;
     font-size: 10px;
+    border-radius: 8px;
   }
 }
 
@@ -125,47 +126,94 @@
 .seat.available:hover {
   background-color: var(--primary);
   color: var(--primary-foreground);
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .seat.selected {
   background-color: var(--primary);
   color: var(--primary-foreground);
   border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary), 0.2), 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .seat.booked {
-  background-color: hsl(0, 0%, 85%);
-  border-color: hsl(0, 0%, 70%);
-  color: hsl(0, 0%, 60%);
+  background-color: hsl(0, 0%, 88%);
+  border-color: hsl(0, 0%, 75%);
+  color: hsl(0, 0%, 55%);
   cursor: not-allowed;
+  opacity: 0.7;
 }
 
-.seat.booked-main {
-  background-color: hsl(0, 84%, 60%);
-  border-color: hsl(0, 84%, 50%);
-  color: hsl(0, 0%, 100%);
+/* Pending booking (unpaid) - Orange shades */
+.seat.booked-pending-main {
+  background-color: hsl(25, 90%, 55%);
+  border-color: hsl(25, 90%, 45%);
+  color: white;
   cursor: pointer;
 }
 
-.seat.booked-main:hover {
-  background-color: hsl(0, 84%, 55%);
+.seat.booked-pending-main:hover {
+  background-color: hsl(25, 90%, 50%);
+  transform: scale(1.02);
+}
+
+.seat.booked-pending-transit {
+  background-color: hsl(35, 85%, 55%);
+  border-color: hsl(35, 85%, 45%);
+  color: white;
+  cursor: pointer;
+}
+
+.seat.booked-pending-transit:hover {
+  background-color: hsl(35, 85%, 50%);
+  transform: scale(1.02);
+}
+
+/* Paid booking - Red/Blue shades */
+.seat.booked-paid-main {
+  background-color: hsl(0, 72%, 55%);
+  border-color: hsl(0, 72%, 45%);
+  color: white;
+  cursor: pointer;
+}
+
+.seat.booked-paid-main:hover {
+  background-color: hsl(0, 72%, 50%);
+  transform: scale(1.02);
+}
+
+.seat.booked-paid-transit {
+  background-color: hsl(220, 72%, 55%);
+  border-color: hsl(220, 72%, 45%);
+  color: white;
+  cursor: pointer;
+}
+
+.seat.booked-paid-transit:hover {
+  background-color: hsl(220, 72%, 50%);
+  transform: scale(1.02);
+}
+
+/* Legacy aliases for backward compatibility */
+.seat.booked-main {
+  background-color: hsl(0, 72%, 55%);
+  border-color: hsl(0, 72%, 45%);
+  color: white;
+  cursor: pointer;
 }
 
 .seat.booked-transit {
-  background-color: hsl(220, 84%, 60%);
-  border-color: hsl(220, 84%, 50%);
-  color: hsl(0, 0%, 100%);
+  background-color: hsl(220, 72%, 55%);
+  border-color: hsl(220, 72%, 45%);
+  color: white;
   cursor: pointer;
 }
 
-.seat.booked-transit:hover {
-  background-color: hsl(220, 84%, 55%);
-}
-
 .seat.held {
-  background-color: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-foreground);
+  background-color: hsl(38, 92%, 50%);
+  border-color: hsl(38, 92%, 40%);
+  color: white;
 }
 
 .stepper {
