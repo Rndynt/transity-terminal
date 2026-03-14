@@ -6,15 +6,16 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { tripBasesApi, tripPatternsApi, layoutsApi, vehiclesApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Edit, Trash2, Calendar, Clock, MapPin, Users } from 'lucide-react';
+import { Plus, Pencil, Trash2, Calendar, Clock, MapPin, Users } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import MasterPageHeader from './MasterPageHeader';
 
 interface TripBase {
   id: string;
@@ -384,19 +385,16 @@ export default function TripBasesManager() {
 
   return (
     <div className="space-y-6" data-testid="trip-bases-manager">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold">Trip Bases</h2>
-          <p className="text-muted-foreground">
-            Manage virtual scheduling templates for trips
-          </p>
-        </div>
-        <Button onClick={openCreateDialog} data-testid="button-create-trip-base">
-          <Plus className="h-4 w-4 mr-2" />
-          Create Trip Base
-        </Button>
-      </div>
+      <MasterPageHeader
+        title="Trip Bases Management"
+        description="Manage virtual scheduling templates for trips"
+        action={
+          <Button onClick={openCreateDialog} data-testid="button-create-trip-base">
+            <Plus className="h-4 w-4 mr-2" />
+            Tambah Trip Base
+          </Button>
+        }
+      />
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
@@ -430,7 +428,7 @@ export default function TripBasesManager() {
                   {tripBases.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        No trip bases found. Create your first trip base to enable virtual scheduling.
+                        Belum ada data
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -485,7 +483,7 @@ export default function TripBasesManager() {
                                       onClick={() => openEditDialog(base)}
                                       data-testid={`button-edit-${base.id}`}
                                     >
-                                      <Edit className="w-4 h-4" />
+                                      <Pencil className="w-4 h-4" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>Edit trip base</TooltipContent>

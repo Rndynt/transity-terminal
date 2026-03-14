@@ -6,14 +6,15 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { vehiclesApi, layoutsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import MasterPageHeader from './MasterPageHeader';
 import type { Vehicle, Layout } from '@/types';
 
 interface VehicleFormData {
@@ -167,18 +168,17 @@ export default function VehiclesManager() {
 
   return (
     <div className="space-y-6" data-testid="vehicles-manager">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">Vehicles Management</h3>
-          <p className="text-sm text-muted-foreground">Manage bus fleet and vehicle configurations</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={handleCreate} data-testid="add-vehicle-button">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Vehicle
-            </Button>
-          </DialogTrigger>
+      <MasterPageHeader
+        title="Vehicles Management"
+        description="Manage bus fleet and vehicle configurations"
+        action={
+          <Button onClick={handleCreate} data-testid="add-vehicle-button">
+            <Plus className="h-4 w-4 mr-2" />
+            Tambah Vehicle
+          </Button>
+        }
+      />
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent data-testid="vehicle-dialog">
             <DialogHeader>
               <DialogTitle>
@@ -276,8 +276,7 @@ export default function VehiclesManager() {
               </div>
             </form>
           </DialogContent>
-        </Dialog>
-      </div>
+      </Dialog>
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
@@ -310,7 +309,7 @@ export default function VehiclesManager() {
                 {vehicles.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No vehicles found. Create your first vehicle to get started.
+                      Belum ada data
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -334,7 +333,7 @@ export default function VehiclesManager() {
                                   aria-label={`Edit vehicle ${vehicle.code}`}
                                   data-testid={`edit-vehicle-${vehicle.code}`}
                                 >
-                                  <Edit className="h-4 w-4 text-primary" />
+                                  <Pencil className="h-4 w-4 text-primary" />
                                   <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                 </Button>
                               </TooltipTrigger>

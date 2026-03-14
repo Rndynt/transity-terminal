@@ -22,8 +22,8 @@ export default function DeleteConfirmDialog({
   open,
   onOpenChange,
   onConfirm,
-  title = 'Are you sure?',
-  description = 'This action cannot be undone. This will permanently delete the selected item.',
+  title = 'Konfirmasi Hapus',
+  description = 'Tindakan ini tidak dapat dibatalkan. Data yang dipilih akan dihapus secara permanen.',
   isPending = false,
 }: DeleteConfirmDialogProps) {
   return (
@@ -35,7 +35,7 @@ export default function DeleteConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel data-testid="delete-cancel-button" disabled={isPending}>
-            Cancel
+            Batal
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
@@ -43,7 +43,7 @@ export default function DeleteConfirmDialog({
             disabled={isPending}
             data-testid="delete-confirm-button"
           >
-            {isPending ? 'Deleting...' : 'Delete'}
+            {isPending ? 'Menghapus...' : 'Hapus'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

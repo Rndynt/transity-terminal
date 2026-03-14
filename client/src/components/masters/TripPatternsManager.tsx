@@ -6,15 +6,16 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { tripPatternsApi, layoutsApi, stopsApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Edit, Trash2, MapPin } from 'lucide-react';
+import { Plus, Pencil, Trash2, MapPin } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import MasterPageHeader from './MasterPageHeader';
 import type { TripPattern, Layout, Stop, PatternStop } from '@/types';
 
 interface TripPatternFormData {
@@ -303,18 +304,17 @@ export default function TripPatternsManager() {
 
   return (
     <div className="space-y-6" data-testid="trip-patterns-manager">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">Trip Patterns Management</h3>
-          <p className="text-sm text-muted-foreground">Manage route patterns and stop sequences</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={handleCreate} data-testid="add-pattern-button">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Trip Pattern
-            </Button>
-          </DialogTrigger>
+      <MasterPageHeader
+        title="Trip Patterns Management"
+        description="Manage route patterns and stop sequences"
+        action={
+          <Button onClick={handleCreate} data-testid="add-pattern-button">
+            <Plus className="h-4 w-4 mr-2" />
+            Tambah Trip Pattern
+          </Button>
+        }
+      />
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent data-testid="pattern-dialog">
             <DialogHeader>
               <DialogTitle>
@@ -417,8 +417,7 @@ export default function TripPatternsManager() {
               </div>
             </form>
           </DialogContent>
-        </Dialog>
-      </div>
+      </Dialog>
 
       {/* Pattern Stops Management Dialog */}
       <Dialog open={isStopsDialogOpen} onOpenChange={setIsStopsDialogOpen}>
@@ -556,7 +555,7 @@ export default function TripPatternsManager() {
                 {patterns.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      No trip patterns found. Create your first pattern to get started.
+                      Belum ada data
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -616,7 +615,7 @@ export default function TripPatternsManager() {
                                   aria-label={`Edit pattern ${pattern.name}`}
                                   data-testid={`edit-pattern-${pattern.code}`}
                                 >
-                                  <Edit className="h-4 w-4 text-primary" />
+                                  <Pencil className="h-4 w-4 text-primary" />
                                   <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                 </Button>
                               </TooltipTrigger>

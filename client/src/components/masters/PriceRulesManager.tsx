@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -15,8 +15,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useToast } from '@/hooks/use-toast';
 import { priceRulesApi, tripPatternsApi, tripsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import MasterPageHeader from './MasterPageHeader';
 import type { PriceRule, TripPattern, Trip } from '@/types';
 
 interface PriceRuleFormData {
@@ -244,18 +245,17 @@ export default function PriceRulesManager() {
 
   return (
     <div className="space-y-6" data-testid="price-rules-manager">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">Price Rules Management</h3>
-          <p className="text-sm text-muted-foreground">Manage pricing rules and fare calculations</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={handleCreate} data-testid="add-price-rule-button">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Price Rule
-            </Button>
-          </DialogTrigger>
+      <MasterPageHeader
+        title="Price Rules Management"
+        description="Manage pricing rules and fare calculations"
+        action={
+          <Button onClick={handleCreate} data-testid="add-price-rule-button">
+            <Plus className="h-4 w-4 mr-2" />
+            Tambah Price Rule
+          </Button>
+        }
+      />
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-w-2xl" data-testid="price-rule-dialog">
             <DialogHeader>
               <DialogTitle>
@@ -436,8 +436,7 @@ export default function PriceRulesManager() {
               </div>
             </form>
           </DialogContent>
-        </Dialog>
-      </div>
+      </Dialog>
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
@@ -470,7 +469,7 @@ export default function PriceRulesManager() {
                 {priceRules.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No price rules found. Create your first rule to get started.
+                      Belum ada data
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -510,7 +509,7 @@ export default function PriceRulesManager() {
                                   aria-label={`Edit price rule ${rule.scope}`}
                                   data-testid={`edit-price-rule-${rule.id}`}
                                 >
-                                  <Edit className="h-4 w-4 text-primary" />
+                                  <Pencil className="h-4 w-4 text-primary" />
                                   <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                 </Button>
                               </TooltipTrigger>

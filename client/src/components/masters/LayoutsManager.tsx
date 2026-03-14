@@ -4,14 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { layoutsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Edit, Trash2, Wand2, MousePointer2, CircleDot } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wand2, MousePointer2, CircleDot } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import MasterPageHeader from './MasterPageHeader';
 import type { Layout } from '@/types';
 
 interface LayoutFormData {
@@ -343,18 +344,17 @@ export default function LayoutsManager() {
 
   return (
     <div className="space-y-6" data-testid="layouts-manager">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">Layouts Management</h3>
-          <p className="text-sm text-muted-foreground">Manage seat layout configurations for vehicles</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={handleCreate} data-testid="add-layout-button">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Layout
-            </Button>
-          </DialogTrigger>
+      <MasterPageHeader
+        title="Layouts Management"
+        description="Manage seat layout configurations for vehicles"
+        action={
+          <Button onClick={handleCreate} data-testid="add-layout-button">
+            <Plus className="h-4 w-4 mr-2" />
+            Tambah Layout
+          </Button>
+        }
+      />
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="w-[800px] h-[700px] max-w-none" data-testid="layout-dialog">
             <DialogHeader>
               <DialogTitle>
@@ -652,8 +652,7 @@ export default function LayoutsManager() {
             </form>
             </div>
           </DialogContent>
-        </Dialog>
-      </div>
+      </Dialog>
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
@@ -685,7 +684,7 @@ export default function LayoutsManager() {
                 {layouts.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      No layouts found. Create your first layout to get started.
+                      Belum ada data
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -728,7 +727,7 @@ export default function LayoutsManager() {
                                     aria-label={`Edit layout ${layout.name}`}
                                     data-testid={`edit-layout-${layout.id}`}
                                   >
-                                    <Edit className="h-4 w-4 text-primary" />
+                                    <Pencil className="h-4 w-4 text-primary" />
                                     <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                   </Button>
                                 </TooltipTrigger>

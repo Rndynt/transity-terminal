@@ -5,15 +5,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Edit, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, CheckCircle, XCircle } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import MasterPageHeader from './MasterPageHeader';
 import type { Stop } from '@/types';
 
 interface StopFormData {
@@ -162,18 +163,17 @@ export default function StopsManager() {
 
   return (
     <div className="space-y-6" data-testid="stops-manager">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">Stops Management</h3>
-          <p className="text-sm text-muted-foreground">Manage bus stops and terminal locations</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={handleCreate} data-testid="add-stop-button">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Stop
-            </Button>
-          </DialogTrigger>
+      <MasterPageHeader
+        title="Stops Management"
+        description="Manage bus stops and terminal locations"
+        action={
+          <Button onClick={handleCreate} data-testid="add-stop-button">
+            <Plus className="h-4 w-4 mr-2" />
+            Tambah Stop
+          </Button>
+        }
+      />
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent data-testid="stop-dialog">
             <DialogHeader>
               <DialogTitle>
@@ -273,8 +273,7 @@ export default function StopsManager() {
               </div>
             </form>
           </DialogContent>
-        </Dialog>
-      </div>
+      </Dialog>
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
@@ -307,7 +306,7 @@ export default function StopsManager() {
                 {stops.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No stops found. Create your first stop to get started.
+                      Belum ada data
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -345,7 +344,7 @@ export default function StopsManager() {
                                   aria-label={`Edit stop ${stop.name}`}
                                   data-testid={`edit-stop-${stop.code}`}
                                 >
-                                  <Edit className="h-4 w-4 text-primary" />
+                                  <Pencil className="h-4 w-4 text-primary" />
                                   <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                 </Button>
                               </TooltipTrigger>

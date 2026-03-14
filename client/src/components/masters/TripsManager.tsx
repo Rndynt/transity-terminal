@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,8 +13,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, tripPatternsApi, vehiclesApi, layoutsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Edit, Trash2, Clock, Route, Grid3X3 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Clock, Route, Grid3X3 } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import MasterPageHeader from './MasterPageHeader';
 import type { Trip, TripPattern, Vehicle, Layout } from '@/types';
 import TripScheduleEditor from './TripScheduleEditor';
 
@@ -282,18 +283,17 @@ export default function TripsManager() {
 
   return (
     <div className="space-y-6" data-testid="trips-manager">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">Trips Management</h3>
-          <p className="text-sm text-muted-foreground">Manage scheduled trips and their configurations</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={handleCreate} data-testid="add-trip-button">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Trip
-            </Button>
-          </DialogTrigger>
+      <MasterPageHeader
+        title="Trips Management"
+        description="Manage scheduled trips and their configurations"
+        action={
+          <Button onClick={handleCreate} data-testid="add-trip-button">
+            <Plus className="h-4 w-4 mr-2" />
+            Tambah Trip
+          </Button>
+        }
+      />
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent data-testid="trip-dialog">
             <DialogHeader>
               <DialogTitle>
@@ -424,8 +424,7 @@ export default function TripsManager() {
               </div>
             </form>
           </DialogContent>
-        </Dialog>
-      </div>
+      </Dialog>
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
@@ -459,7 +458,7 @@ export default function TripsManager() {
                 {trips.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      No trips found. Create your first trip to get started.
+                      Belum ada data
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -556,7 +555,7 @@ export default function TripsManager() {
                                   aria-label={`Edit trip ${trip.id.slice(-8)}`}
                                   data-testid={`edit-trip-${trip.id}`}
                                 >
-                                  <Edit className="h-4 w-4 text-primary" />
+                                  <Pencil className="h-4 w-4 text-primary" />
                                   <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                 </Button>
                               </TooltipTrigger>

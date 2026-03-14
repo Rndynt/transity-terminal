@@ -5,14 +5,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { outletsApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import MasterPageHeader from './MasterPageHeader';
 import type { Outlet, Stop } from '@/types';
 
 interface OutletFormData {
@@ -161,18 +162,17 @@ export default function OutletsManager() {
 
   return (
     <div className="space-y-6" data-testid="outlets-manager">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">Outlets Management</h3>
-          <p className="text-sm text-muted-foreground">Manage ticket sales outlets and their configurations</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={handleCreate} data-testid="add-outlet-button">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Outlet
-            </Button>
-          </DialogTrigger>
+      <MasterPageHeader
+        title="Outlets Management"
+        description="Manage ticket sales outlets and their configurations"
+        action={
+          <Button onClick={handleCreate} data-testid="add-outlet-button">
+            <Plus className="h-4 w-4 mr-2" />
+            Tambah Outlet
+          </Button>
+        }
+      />
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent data-testid="outlet-dialog">
             <DialogHeader>
               <DialogTitle>
@@ -264,8 +264,7 @@ export default function OutletsManager() {
               </div>
             </form>
           </DialogContent>
-        </Dialog>
-      </div>
+      </Dialog>
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
@@ -298,7 +297,7 @@ export default function OutletsManager() {
                 {outlets.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No outlets found. Create your first outlet to get started.
+                      Belum ada data
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -324,7 +323,7 @@ export default function OutletsManager() {
                                   aria-label={`Edit outlet ${outlet.name}`}
                                   data-testid={`edit-outlet-${outlet.id}`}
                                 >
-                                  <Edit className="h-4 w-4 text-primary" />
+                                  <Pencil className="h-4 w-4 text-primary" />
                                   <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                 </Button>
                               </TooltipTrigger>
