@@ -10,7 +10,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useToast } from '@/hooks/use-toast';
 import { layoutsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Wand2, MousePointer2, CircleDot } from 'lucide-react';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
 import type { Layout } from '@/types';
 
 interface LayoutFormData {
@@ -41,6 +42,7 @@ export default function LayoutsManager() {
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('automatic');
   const [customSeatMap, setCustomSeatMap] = useState<SeatMapItem[]>([]);
   const [draggedSeat, setDraggedSeat] = useState<SeatMapItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
@@ -94,6 +96,7 @@ export default function LayoutsManager() {
     mutationFn: layoutsApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/layouts'] });
+      setDeleteTarget(null);
       toast({
         title: "Success",
         description: "Layout deleted successfully"
@@ -329,8 +332,12 @@ export default function LayoutsManager() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this layout?')) {
-      deleteMutation.mutate(id);
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteMutation.mutate(deleteTarget);
     }
   };
 
@@ -344,7 +351,7 @@ export default function LayoutsManager() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={handleCreate} data-testid="add-layout-button">
-              <i className="fas fa-plus mr-2"></i>
+              <Plus className="h-4 w-4 mr-2" />
               Add Layout
             </Button>
           </DialogTrigger>
@@ -476,7 +483,7 @@ export default function LayoutsManager() {
                     }}
                     data-testid="mode-automatic"
                   >
-                    <i className="fas fa-magic mr-2"></i>
+                    <Wand2 className="h-4 w-4 mr-2" />
                     Automatic
                   </Button>
                   <Button
@@ -486,7 +493,7 @@ export default function LayoutsManager() {
                     onClick={() => setLayoutMode('custom')}
                     data-testid="mode-custom"
                   >
-                    <i className="fas fa-hand-pointer mr-2"></i>
+                    <MousePointer2 className="h-4 w-4 mr-2" />
                     Custom Drag & Drop
                   </Button>
                 </div>
@@ -498,7 +505,7 @@ export default function LayoutsManager() {
                   <Label>Seat Map Preview</Label>
                   <div className="border border-border rounded-lg p-4 bg-muted/20">
                     <div className="text-center mb-2 text-xs text-muted-foreground">
-                      <i className="fas fa-steering-wheel mr-1"></i>
+                      <CircleDot className="h-3 w-3 inline mr-1" />
                       Driver
                     </div>
                     <div 
@@ -557,7 +564,7 @@ export default function LayoutsManager() {
                                 className="w-10 h-10 border border-primary rounded text-xs flex items-center justify-center bg-card text-primary font-mono cursor-grab hover:bg-primary/10 active:cursor-grabbing"
                                 title="Drag to place seat in layout"
                               >
-                                <i className="fas fa-chair"></i>
+                                <CircleDot className="h-4 w-4" />
                               </div>
                             );
                           })}
@@ -575,7 +582,7 @@ export default function LayoutsManager() {
                       <h4 className="text-sm font-medium">Layout Grid ({formData.rows}×{formData.cols})</h4>
                       <div className="border border-border rounded-lg p-4 bg-muted/10 overflow-auto max-h-[400px]">
                         <div className="text-center mb-2 text-xs text-muted-foreground">
-                          <i className="fas fa-steering-wheel mr-1"></i>
+                          <CircleDot className="h-3 w-3 inline mr-1" />
                           Driver
                         </div>
                         <div 
@@ -647,6 +654,15 @@ export default function LayoutsManager() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onConfirm={confirmDelete}
+        title="Delete Layout"
+        description="Are you sure you want to delete this layout? This action cannot be undone."
+        isPending={deleteMutation.isPending}
+      />
 
       <Card>
         <CardContent className="p-0">

@@ -5,13 +5,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BaseDialog } from '@/components/ui/base-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { outletsApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2 } from 'lucide-react';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
 import type { Outlet, Stop } from '@/types';
 
 interface OutletFormData {
@@ -25,6 +26,7 @@ interface OutletFormData {
 export default function OutletsManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [formData, setFormData] = useState<OutletFormData>({
     stopId: '',
     name: '',
@@ -89,6 +91,7 @@ export default function OutletsManager() {
     mutationFn: outletsApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/outlets'] });
+      setDeleteTarget(null);
       toast({
         title: "Success",
         description: "Outlet deleted successfully"
@@ -142,8 +145,12 @@ export default function OutletsManager() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this outlet?')) {
-      deleteMutation.mutate(id);
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteMutation.mutate(deleteTarget);
     }
   };
 
@@ -159,40 +166,20 @@ export default function OutletsManager() {
           <h3 className="text-lg font-semibold text-foreground">Outlets Management</h3>
           <p className="text-sm text-muted-foreground">Manage ticket sales outlets and their configurations</p>
         </div>
-        <Button onClick={handleCreate} data-testid="add-outlet-button">
-          <i className="fas fa-plus mr-2"></i>
-          Add Outlet
-        </Button>
-      </div>
-
-      <BaseDialog
-        open={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
-        title={editingOutlet ? 'Edit Outlet' : 'Add New Outlet'}
-        description="Configure outlet information and settings"
-        size="md"
-        footer={
-          <div className="flex justify-end space-x-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsDialogOpen(false)}
-              data-testid="cancel-button"
-            >
-              Cancel
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={handleCreate} data-testid="add-outlet-button">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Outlet
             </Button>
-            <Button
-              type="submit"
-              form="outlet-form"
-              disabled={createMutation.isPending || updateMutation.isPending}
-              data-testid="submit-button"
-            >
-              {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : 'Save'}
-            </Button>
-          </div>
-        }
-      >
-        <form id="outlet-form" onSubmit={handleSubmit} className="space-y-4">
+          </DialogTrigger>
+          <DialogContent data-testid="outlet-dialog">
+            <DialogHeader>
+              <DialogTitle>
+                {editingOutlet ? 'Edit Outlet' : 'Add New Outlet'}
+              </DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="stopId">Stop *</Label>
                 <Select 
@@ -258,8 +245,36 @@ export default function OutletsManager() {
                 />
               </div>
 
-        </form>
-      </BaseDialog>
+              <div className="flex justify-end space-x-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsDialogOpen(false)}
+                  data-testid="cancel-button"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  data-testid="submit-button"
+                >
+                  {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onConfirm={confirmDelete}
+        title="Delete Outlet"
+        description="Are you sure you want to delete this outlet? This action cannot be undone."
+        isPending={deleteMutation.isPending}
+      />
 
       <Card>
         <CardContent className="p-0">

@@ -13,7 +13,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useToast } from '@/hooks/use-toast';
 import { tripPatternsApi, layoutsApi, stopsApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Edit, Trash2, MapPin } from 'lucide-react';
+import { Plus, Edit, Trash2, MapPin } from 'lucide-react';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
 import type { TripPattern, Layout, Stop, PatternStop } from '@/types';
 
 interface TripPatternFormData {
@@ -47,6 +48,7 @@ export default function TripPatternsManager() {
     tags: ''
   });
   const [patternStops, setPatternStops] = useState<StopSequenceItem[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: patterns = [], isLoading } = useQuery({
@@ -109,6 +111,7 @@ export default function TripPatternsManager() {
     mutationFn: tripPatternsApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trip-patterns'] });
+      setDeleteTarget(null);
       toast({
         title: "Success",
         description: "Trip pattern deleted successfully"
@@ -187,8 +190,12 @@ export default function TripPatternsManager() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this trip pattern?')) {
-      deleteMutation.mutate(id);
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteMutation.mutate(deleteTarget);
     }
   };
 
@@ -304,7 +311,7 @@ export default function TripPatternsManager() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={handleCreate} data-testid="add-pattern-button">
-              <i className="fas fa-plus mr-2"></i>
+              <Plus className="h-4 w-4 mr-2" />
               Add Trip Pattern
             </Button>
           </DialogTrigger>
@@ -425,7 +432,7 @@ export default function TripPatternsManager() {
             <div className="flex justify-between items-center">
               <Label>Stop Sequence</Label>
               <Button onClick={addPatternStop} size="sm" data-testid="add-pattern-stop">
-                <i className="fas fa-plus mr-2"></i>
+                <Plus className="h-4 w-4 mr-2" />
                 Add Stop
               </Button>
             </div>
@@ -468,7 +475,7 @@ export default function TripPatternsManager() {
                     onClick={() => removePatternStop(index)}
                     data-testid={`remove-stop-${index}`}
                   >
-                    <i className="fas fa-trash text-destructive"></i>
+                    <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
                 <div className="flex items-center space-x-6 ml-14">
@@ -516,6 +523,15 @@ export default function TripPatternsManager() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onConfirm={confirmDelete}
+        title="Delete Trip Pattern"
+        description="Are you sure you want to delete this trip pattern? This action cannot be undone."
+        isPending={deleteMutation.isPending}
+      />
 
       <Card>
         <CardContent className="p-0">

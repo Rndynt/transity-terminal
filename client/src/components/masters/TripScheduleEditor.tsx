@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, tripStopTimesApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
+import { Route, LayoutGrid } from 'lucide-react';
 import type { Trip, TripStopTimeWithEffectiveFlags } from '@shared/schema';
 
 /**
@@ -505,7 +506,7 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
             title="Derive legs from current schedule (requires valid times)"
             data-testid="derive-legs-button"
           >
-            <i className="fas fa-route mr-2"></i>
+            <Route className="h-4 w-4 mr-2" />
             Derive Legs
           </Button>
           <Button
@@ -515,7 +516,7 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
             title="Precompute seat inventory (requires legs to exist)"
             data-testid="precompute-inventory-button"
           >
-            <i className="fas fa-th-large mr-2"></i>
+            <LayoutGrid className="h-4 w-4 mr-2" />
             Precompute Inventory
           </Button>
         </div>

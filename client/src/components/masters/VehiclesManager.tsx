@@ -12,7 +12,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useToast } from '@/hooks/use-toast';
 import { vehiclesApi, layoutsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2 } from 'lucide-react';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
 import type { Vehicle, Layout } from '@/types';
 
 interface VehicleFormData {
@@ -26,6 +27,7 @@ interface VehicleFormData {
 export default function VehiclesManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [formData, setFormData] = useState<VehicleFormData>({
     code: '',
     plate: '',
@@ -90,6 +92,7 @@ export default function VehiclesManager() {
     mutationFn: vehiclesApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/vehicles'] });
+      setDeleteTarget(null);
       toast({
         title: "Success",
         description: "Vehicle deleted successfully"
@@ -148,8 +151,12 @@ export default function VehiclesManager() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this vehicle?')) {
-      deleteMutation.mutate(id);
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteMutation.mutate(deleteTarget);
     }
   };
 
@@ -168,7 +175,7 @@ export default function VehiclesManager() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={handleCreate} data-testid="add-vehicle-button">
-              <i className="fas fa-plus mr-2"></i>
+              <Plus className="h-4 w-4 mr-2" />
               Add Vehicle
             </Button>
           </DialogTrigger>
@@ -271,6 +278,15 @@ export default function VehiclesManager() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onConfirm={confirmDelete}
+        title="Delete Vehicle"
+        description="Are you sure you want to delete this vehicle? This action cannot be undone."
+        isPending={deleteMutation.isPending}
+      />
 
       <Card>
         <CardContent className="p-0">

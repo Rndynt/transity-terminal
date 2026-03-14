@@ -13,7 +13,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, tripPatternsApi, vehiclesApi, layoutsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Edit, Trash2, Clock, Route, Grid3X3 } from 'lucide-react';
+import { Plus, Edit, Trash2, Clock, Route, Grid3X3 } from 'lucide-react';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
 import type { Trip, TripPattern, Vehicle, Layout } from '@/types';
 import TripScheduleEditor from './TripScheduleEditor';
 
@@ -31,6 +32,7 @@ export default function TripsManager() {
   const [isSchedulingDialogOpen, setIsSchedulingDialogOpen] = useState(false);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [schedulingTrip, setSchedulingTrip] = useState<Trip | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [formData, setFormData] = useState<TripFormData>({
     patternId: '',
     serviceDate: new Date().toISOString().split('T')[0],
@@ -110,6 +112,7 @@ export default function TripsManager() {
     mutationFn: tripsApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+      setDeleteTarget(null);
       toast({
         title: "Success",
         description: "Trip deleted successfully"
@@ -205,8 +208,12 @@ export default function TripsManager() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this trip?')) {
-      deleteMutation.mutate(id);
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteMutation.mutate(deleteTarget);
     }
   };
 
@@ -283,7 +290,7 @@ export default function TripsManager() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={handleCreate} data-testid="add-trip-button">
-              <i className="fas fa-plus mr-2"></i>
+              <Plus className="h-4 w-4 mr-2" />
               Add Trip
             </Button>
           </DialogTrigger>
@@ -419,6 +426,15 @@ export default function TripsManager() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onConfirm={confirmDelete}
+        title="Delete Trip"
+        description="Are you sure you want to delete this trip? This action cannot be undone."
+        isPending={deleteMutation.isPending}
+      />
 
       <Card>
         <CardContent className="p-0">

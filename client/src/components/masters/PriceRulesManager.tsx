@@ -15,7 +15,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useToast } from '@/hooks/use-toast';
 import { priceRulesApi, tripPatternsApi, tripsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2 } from 'lucide-react';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
 import type { PriceRule, TripPattern, Trip } from '@/types';
 
 interface PriceRuleFormData {
@@ -32,6 +33,7 @@ interface PriceRuleFormData {
 export default function PriceRulesManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<PriceRule | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [formData, setFormData] = useState<PriceRuleFormData>({
     scope: 'pattern',
     patternId: '',
@@ -104,6 +106,7 @@ export default function PriceRulesManager() {
     mutationFn: priceRulesApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/price-rules'] });
+      setDeleteTarget(null);
       toast({
         title: "Success",
         description: "Price rule deleted successfully"
@@ -192,8 +195,12 @@ export default function PriceRulesManager() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this price rule?')) {
-      deleteMutation.mutate(id);
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteMutation.mutate(deleteTarget);
     }
   };
 
@@ -245,7 +252,7 @@ export default function PriceRulesManager() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={handleCreate} data-testid="add-price-rule-button">
-              <i className="fas fa-plus mr-2"></i>
+              <Plus className="h-4 w-4 mr-2" />
               Add Price Rule
             </Button>
           </DialogTrigger>
@@ -431,6 +438,15 @@ export default function PriceRulesManager() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onConfirm={confirmDelete}
+        title="Delete Price Rule"
+        description="Are you sure you want to delete this price rule? This action cannot be undone."
+        isPending={deleteMutation.isPending}
+      />
 
       <Card>
         <CardContent className="p-0">

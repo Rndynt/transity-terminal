@@ -13,7 +13,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useToast } from '@/hooks/use-toast';
 import { tripBasesApi, tripPatternsApi, layoutsApi, vehiclesApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Edit, Trash2, Calendar, Clock, MapPin, Users } from 'lucide-react';
+import { Plus, Edit, Trash2, Calendar, Clock, MapPin, Users } from 'lucide-react';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
 
 interface TripBase {
   id: string;
@@ -125,6 +126,7 @@ export default function TripBasesManager() {
     defaultStopTimes: []
   });
   const [stopTimes, setStopTimes] = useState<DefaultStopTime[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: tripBases = [], isLoading } = useQuery({
@@ -183,6 +185,7 @@ export default function TripBasesManager() {
     mutationFn: tripBasesApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trip-bases'] });
+      setDeleteTarget(null);
       toast({ title: 'Success', description: 'Trip base deleted successfully' });
     },
     onError: (error: any) => {
@@ -301,8 +304,12 @@ export default function TripBasesManager() {
   };
 
   const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this trip base? This action cannot be undone.')) {
-      deleteMutation.mutate(id);
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteMutation.mutate(deleteTarget);
     }
   };
 
@@ -386,10 +393,19 @@ export default function TripBasesManager() {
           </p>
         </div>
         <Button onClick={openCreateDialog} data-testid="button-create-trip-base">
-          <Calendar className="w-4 h-4 mr-2" />
+          <Plus className="h-4 w-4 mr-2" />
           Create Trip Base
         </Button>
       </div>
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onConfirm={confirmDelete}
+        title="Delete Trip Base"
+        description="Are you sure you want to delete this trip base? This action cannot be undone."
+        isPending={deleteMutation.isPending}
+      />
 
       {/* Trip Bases Table */}
       {isLoading ? (

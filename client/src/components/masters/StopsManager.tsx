@@ -6,12 +6,14 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
 import type { Stop } from '@/types';
 
 interface StopFormData {
@@ -26,6 +28,7 @@ interface StopFormData {
 export default function StopsManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStop, setEditingStop] = useState<Stop | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [formData, setFormData] = useState<StopFormData>({
     code: '',
     name: '',
@@ -86,6 +89,7 @@ export default function StopsManager() {
     mutationFn: stopsApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/stops'] });
+      setDeleteTarget(null);
       toast({
         title: "Success",
         description: "Stop deleted successfully"
@@ -147,8 +151,12 @@ export default function StopsManager() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this stop?')) {
-      deleteMutation.mutate(id);
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteMutation.mutate(deleteTarget);
     }
   };
 
@@ -162,7 +170,7 @@ export default function StopsManager() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={handleCreate} data-testid="add-stop-button">
-              <i className="fas fa-plus mr-2"></i>
+              <Plus className="h-4 w-4 mr-2" />
               Add Stop
             </Button>
           </DialogTrigger>
@@ -268,6 +276,15 @@ export default function StopsManager() {
         </Dialog>
       </div>
 
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onConfirm={confirmDelete}
+        title="Delete Stop"
+        description="Are you sure you want to delete this stop? This action cannot be undone."
+        isPending={deleteMutation.isPending}
+      />
+
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
@@ -304,15 +321,15 @@ export default function StopsManager() {
                       </TableCell>
                       <TableCell>
                         {stop.isOutlet ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-secondary/10 text-secondary">
-                            <i className="fas fa-check-circle mr-1"></i>
+                          <Badge variant="secondary" className="gap-1">
+                            <CheckCircle className="h-3 w-3" />
                             Yes
-                          </span>
+                          </Badge>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-muted/50 text-muted-foreground">
-                            <i className="fas fa-times-circle mr-1"></i>
+                          <Badge variant="outline" className="gap-1 text-muted-foreground">
+                            <XCircle className="h-3 w-3" />
                             No
-                          </span>
+                          </Badge>
                         )}
                       </TableCell>
                       <TableCell className="overflow-visible">
