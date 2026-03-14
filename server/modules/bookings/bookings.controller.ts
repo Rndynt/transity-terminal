@@ -32,7 +32,7 @@ const createHoldSchema = z.object({
   seatNo: z.string(),
   originSeq: z.number(),
   destinationSeq: z.number(),
-  ttlSeconds: z.number().default(120)
+  ttlSeconds: z.number().default(300)
 });
 
 const createPendingBookingSchema = z.object({

@@ -225,7 +225,7 @@ export class BookingsService {
     seatNo: string, 
     originSeq: number, 
     destinationSeq: number, 
-    ttlSeconds: number = 120,
+    ttlSeconds: number = 300,
     operatorId: string = 'default-operator'
   ): Promise<{ ok: boolean; holdRef?: string; expiresAt?: number; ownedByYou?: boolean; reason?: string }> {
     const legIndexes = [];
@@ -233,9 +233,8 @@ export class BookingsService {
       legIndexes.push(i);
     }
 
-    const ttlClass = ttlSeconds <= 120 ? 'short' : 'long';
+    const ttlClass: 'short' | 'long' = ttlSeconds <= 600 ? 'short' : 'long';
     
-    // Use deterministic service for atomic database operations and WebSocket emissions
     const result = await this.deterministicService.atomicHold({
       tripId,
       seatNo,
