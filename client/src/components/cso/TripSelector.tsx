@@ -188,7 +188,7 @@ export default function TripSelector({
                         <div className="px-3 py-1.5 bg-muted/40 flex items-center gap-1.5 cursor-default" data-testid={`route-header-${routeName.slice(0, 10)}`}>
                           <MapPin className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                           <span className="text-[11px] font-medium text-muted-foreground truncate flex-1 min-w-0">{routeName}</span>
-                          <span className="text-[10px] text-muted-foreground/60 flex-shrink-0">{routeTrips.length}</span>
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 flex-shrink-0">{routeTrips.length} jadwal</Badge>
                         </div>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="max-w-xs">

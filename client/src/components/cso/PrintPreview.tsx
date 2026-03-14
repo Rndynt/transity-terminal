@@ -1,7 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, Printer, Plus, AlertCircle, QrCode, MapPin, Clock, Calendar, Store, Users, CreditCard } from 'lucide-react';
+import { CheckCircle2, Printer, Plus, AlertCircle, MapPin, Clock, Calendar, Store, Users, CreditCard } from 'lucide-react';
 
 interface PrintPreviewProps {
   booking: any;
@@ -122,8 +122,8 @@ export default function PrintPreview({ booking, onNewBooking, onPrint }: PrintPr
             <div className="w-px bg-border border-dashed" />
 
             <div className="w-28 flex flex-col items-center justify-center p-3 bg-muted/30">
-              <div className="w-20 h-20 bg-muted rounded-lg flex items-center justify-center border border-dashed border-muted-foreground/30" data-testid="qr-placeholder">
-                <QrCode className="w-10 h-10 text-muted-foreground/40" />
+              <div className="w-20 h-20 bg-gray-200 rounded-lg flex items-center justify-center" data-testid="qr-placeholder">
+                <span className="text-gray-500 font-bold text-lg">QR</span>
               </div>
               <div className="text-[9px] text-muted-foreground mt-1.5 text-center font-mono">{bookingIdShort}</div>
             </div>
