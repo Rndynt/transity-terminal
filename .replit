@@ -8,35 +8,11 @@ channel = "stable-25_05"
 [deployment]
 deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
-run = ["npm", "run", "start"]
+run = ["node", "./dist/index.cjs"]
 
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 44443
-externalPort = 3003
-
-[[ports]]
-localPort = 44457
-externalPort = 3000
-
-[[ports]]
-localPort = 45531
-externalPort = 3002
-
-[[ports]]
-localPort = 45539
-externalPort = 5000
-
-[[ports]]
-localPort = 46305
-externalPort = 4200
-
-[[ports]]
-localPort = 46807
-externalPort = 3001
 
 [env]
 PORT = "5000"
