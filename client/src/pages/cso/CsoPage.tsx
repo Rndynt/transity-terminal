@@ -71,7 +71,6 @@ export default function CsoPage() {
   const [bookingResult, setBookingResult] = useState<{ booking: any; printPayload: any } | null>(null);
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [selectedCsoTrip, setSelectedCsoTrip] = useState<CsoAvailableTrip | undefined>();
-  const [isMaterializing, setIsMaterializing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   
   const { 
@@ -112,43 +111,23 @@ export default function CsoPage() {
   };
 
   const handleTripSelect = async (csoTrip: CsoAvailableTrip) => {
-    setIsMaterializing(true);
-    try {
-      let tripId = csoTrip.tripId;
-      
-      if (csoTrip.isVirtual && csoTrip.baseId) {
-        const res = await fetch('/api/cso/materialize-trip', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ baseId: csoTrip.baseId, serviceDate: csoTrip.departAtAtOutlet?.split('T')[0] || new Date().toISOString().split('T')[0] })
-        });
-        const data = await res.json();
-        tripId = data.tripId;
+    setSelectedCsoTrip(csoTrip);
+    updateState({
+      trip: {
+        id: csoTrip.tripId || '',
+        patternId: '',
+        vehicleId: '',
+        serviceDate: new Date().toISOString().split('T')[0],
+        capacity: csoTrip.capacity || 0,
+        status: csoTrip.status as any,
+        layoutId: null,
+        channelFlags: {},
+        createdAt: null,
+        baseId: csoTrip.baseId || null,
+        originDepartHHMM: null
       }
-      
-      setSelectedCsoTrip({ ...csoTrip, tripId });
-      updateState({
-        trip: {
-          id: tripId || '',
-          patternId: '',
-          vehicleId: '',
-          serviceDate: new Date().toISOString().split('T')[0],
-          capacity: csoTrip.capacity || 0,
-          status: csoTrip.status as any,
-          layoutId: null,
-          channelFlags: {},
-          createdAt: null,
-          baseId: csoTrip.baseId || null,
-          originDepartHHMM: null
-        }
-      });
-      
-      setIsMaterializing(false);
-      setCurrentStep(2);
-    } catch (error) {
-      console.error('Trip selection failed:', error);
-      setIsMaterializing(false);
-    }
+    });
+    setCurrentStep(2);
   };
 
   const handleOriginSelect = (stop: Stop, sequence: number) => {
@@ -336,7 +315,7 @@ export default function CsoPage() {
             {state.currentStep === 5 && (
               <>
                 <h2 className="font-semibold mb-3 flex items-center gap-2">
-                  <Badge variant="default\">5</Badge>
+                  <Badge variant="default">5</Badge>
                   Pembayaran
                 </h2>
                 <PaymentPanel totalAmount={totalAmount} payment={state.payment} onPaymentUpdate={handlePaymentUpdate} onSubmit={handleCreateBooking} onBack={prevStep} loading={isProcessing} />
@@ -426,7 +405,7 @@ export default function CsoPage() {
                 )}
                 
                 <div className="space-y-2 mt-4">
-                  {state.currentStep > 1 && <Button variant="outline\" className="w-full\" onClick={prevStep}><ChevronLeft className="w-4 h-4 mr-1\" /> Kembali</Button>}
+                  {state.currentStep > 1 && <Button variant="outline" className="w-full" onClick={prevStep}><ChevronLeft className="w-4 h-4 mr-1" /> Kembali</Button>}
                   {canProceed() && state.currentStep < 4 && <Button className="w-full" onClick={nextStep}>Lanjut <ChevronRight className="w-4 h-4 ml-1" /></Button>}
                 </div>
               </>
@@ -436,11 +415,11 @@ export default function CsoPage() {
       </div>
 
       {/* Loading overlay */}
-      {(isMaterializing || isProcessing) && (
+      {isProcessing && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-card p-6 rounded-lg flex items-center gap-3">
             <Loader2 className="w-6 h-6 animate-spin" />
-            <span>{isMaterializing ? 'Memproses jadwal...' : 'Memproses booking...'}</span>
+            <span>Memproses booking...</span>
           </div>
         </div>
       )}
