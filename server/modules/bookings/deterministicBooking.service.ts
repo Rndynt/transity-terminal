@@ -464,6 +464,54 @@ export class DeterministicBookingService {
     }
   }
 
+  /**
+   * Release hold by reference
+   */
+  async releaseHoldByRef(holdRef: string): Promise<{ success: boolean }> {
+    console.log(`[DETERMINISTIC] Releasing hold: ${holdRef}`);
+    
+    try {
+      const result = await db.transaction(async (tx) => {
+        // Get hold details
+        const [hold] = await tx
+          .select()
+          .from(seatHolds)
+          .where(eq(seatHolds.holdRef, holdRef));
+
+        if (!hold) {
+          return { success: false, reason: 'HOLD_NOT_FOUND' };
+        }
+
+        // Clear hold reference from seat inventory
+        await tx
+          .update(seatInventory)
+          .set({ holdRef: null })
+          .where(eq(seatInventory.holdRef, holdRef));
+
+        // Delete hold record
+        await tx
+          .delete(seatHolds)
+          .where(eq(seatHolds.holdRef, holdRef));
+
+        // Emit inventory update event
+        webSocketService.emitInventoryUpdated(
+          hold.tripId,
+          hold.seatNo,
+          hold.legIndexes as number[]
+        );
+        webSocketService.emitHoldsReleased(hold.tripId, [hold.seatNo]);
+
+        console.log(`[DETERMINISTIC] Hold released: ${holdRef}`);
+        return { success: true };
+      });
+
+      return result;
+    } catch (error) {
+      console.error(`[DETERMINISTIC] Hold release failed:`, error);
+      return { success: false };
+    }
+  }
+
   // Helper methods
   private async findBookingByIdempotencyKey(key: string): Promise<any> {
     // Implementation depends on how you want to store idempotency keys

@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { tripsApi } from '@/lib/api';
+import { Progress } from '@/components/ui/progress';
+import { tripsApi, holdsApi } from '@/lib/api';
 import { useSeatHold } from '@/hooks/useSeatHold';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { Grid3X3, AlertTriangle, RotateCcw, Loader2, Car, Info } from 'lucide-react';
+import { AlertTriangle, RotateCcw, Loader2, Car, Users, Timer, CheckCircle2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import type { Trip, SeatmapResponse } from '@/types';
 import PassengerDetailModal from './PassengerDetailModal';
 
@@ -29,21 +30,19 @@ export default function SeatMap({
   const [localSelectedSeats, setLocalSelectedSeats] = useState<Set<string>>(new Set());
   const [showPassengerModal, setShowPassengerModal] = useState(false);
   const [selectedSeatForDetails, setSelectedSeatForDetails] = useState<string | null>(null);
+  const [seatLoading, setSeatLoading] = useState<string | null>(null);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const { createHold, releaseHold, getHoldTTL, isHeld } = useSeatHold();
+  const { toast } = useToast();
   
-  // WebSocket integration for real-time seat updates
-  const {
-    isConnected,
-    subscribeToTrip,
-    unsubscribeFromTrip,
-    addEventListener
-  } = useWebSocket();
+  // WebSocket integration
+  const { isConnected, subscribeToTrip, unsubscribeFromTrip, addEventListener } = useWebSocket();
 
-  const { data: seatmap, isLoading, refetch } = useQuery({
+  const { data: seatmap, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['/api/trips', trip.id, 'seatmap', originSeq, destinationSeq],
     queryFn: () => tripsApi.getSeatmap(trip.id, originSeq, destinationSeq),
     enabled: !!trip.id && originSeq > 0 && destinationSeq > 0,
-    refetchInterval: 30000 // Refresh every 30 seconds
+    staleTime: 5000
   });
 
   const passengerDetailsMutation = useMutation({
@@ -52,128 +51,182 @@ export default function SeatMap({
       seatNo: string;
       originSeq: number;
       destinationSeq: number;
-    }) => tripsApi.getSeatPassengerDetails(tripId, seatNo, originSeq, destinationSeq),
-    onSuccess: (data) => {
-      // Modal will display the data automatically since it's controlled by state
-    },
-    onError: (error) => {
-      console.error('Failed to fetch passenger details:', error);
-    }
+    }) => tripsApi.getSeatPassengerDetails(tripId, seatNo, originSeq, destinationSeq)
   });
 
   useEffect(() => {
     setLocalSelectedSeats(new Set(selectedSeats));
   }, [selectedSeats]);
 
-  // WebSocket subscription for real-time trip updates
+  // Auto-refresh every 30 seconds
   useEffect(() => {
-    if (!isConnected || !trip.id) {
-      return;
-    }
+    if (!autoRefreshEnabled) return;
+    
+    const interval = setInterval(() => {
+      refetch();
+    }, 30000);
 
-    // Subscribe to trip-specific WebSocket room
+    return () => clearInterval(interval);
+  }, [autoRefreshEnabled, refetch]);
+
+  // WebSocket subscription
+  useEffect(() => {
+    if (!isConnected || !trip.id) return;
     subscribeToTrip(trip.id);
-    console.log(`[SeatMap WebSocket] Subscribed to trip: ${trip.id}`);
-
-    return () => {
-      unsubscribeFromTrip(trip.id);
-      console.log(`[SeatMap WebSocket] Unsubscribed from trip: ${trip.id}`);
-    };
+    return () => unsubscribeFromTrip(trip.id);
   }, [isConnected, trip.id, subscribeToTrip, unsubscribeFromTrip]);
 
-  // Event listeners for real-time seat inventory updates
+  // WebSocket events
   useEffect(() => {
     if (!isConnected) return;
 
-    // Handle inventory updates (seat holds/releases/bookings)
-    const unsubscribeInventory = addEventListener('INVENTORY_UPDATED', (data) => {
-      console.log('[SeatMap WebSocket] Inventory updated:', data);
-      
-      // Only refetch if this update is for our current trip
-      if (data.tripId === trip.id) {
-        refetch();
-      }
+    const unsubInventory = addEventListener('INVENTORY_UPDATED', (data) => {
+      if (data.tripId === trip.id) refetch();
     });
 
-    // Handle trip status changes
-    const unsubscribeStatus = addEventListener('TRIP_STATUS_CHANGED', (data) => {
-      console.log('[SeatMap WebSocket] Trip status changed:', data);
-      
-      // Refetch seat map when trip status changes (e.g., closed)
-      if (data.tripId === trip.id) {
-        refetch();
-      }
+    const unsubStatus = addEventListener('TRIP_STATUS_CHANGED', (data) => {
+      if (data.tripId === trip.id) refetch();
     });
 
-    // Handle holds released events
-    const unsubscribeHolds = addEventListener('HOLDS_RELEASED', (data) => {
-      console.log('[SeatMap WebSocket] Holds released:', data);
-      
-      // Refetch seat map when holds are released
-      if (data.tripId === trip.id) {
-        refetch();
-      }
+    const unsubHolds = addEventListener('HOLDS_RELEASED', (data) => {
+      if (data.tripId === trip.id) refetch();
     });
 
     return () => {
-      unsubscribeInventory();
-      unsubscribeStatus();
-      unsubscribeHolds();
+      unsubInventory();
+      unsubStatus();
+      unsubHolds();
     };
   }, [isConnected, trip.id, addEventListener, refetch]);
 
+  // Release hold directly via API (for seats held by this session or orphaned holds)
+  const releaseHoldDirectly = async (holdRef: string, seatNo: string) => {
+    try {
+      await holdsApi.release(holdRef);
+      toast({
+        title: "Hold Dilepas",
+        description: `Kursi ${seatNo} sekarang tersedia`
+      });
+      // Refresh seatmap after release
+      setTimeout(() => refetch(), 100);
+      return true;
+    } catch (error) {
+      console.error('Failed to release hold:', error);
+      toast({
+        title: "Gagal Melepas Hold",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive"
+      });
+      return false;
+    }
+  };
+
   const handleSeatClick = async (seatNo: string) => {
-    if (!seatmap) return;
+    if (!seatmap || seatLoading) return;
 
     const seatAvailability = seatmap.seatAvailability[seatNo];
     const isHeldByMe = isHeld(seatNo);
     
-    // If seat is booked, show passenger details modal
+    // If seat is booked, show passenger details
     if (!seatAvailability.available && !seatAvailability.held) {
       setSelectedSeatForDetails(seatNo);
       setShowPassengerModal(true);
-      passengerDetailsMutation.mutate({
-        tripId: trip.id,
-        seatNo,
-        originSeq,
-        destinationSeq
-      });
+      passengerDetailsMutation.mutate({ tripId: trip.id, seatNo, originSeq, destinationSeq });
       return;
     }
     
-    // Block if seat is held by someone else (not by me)
-    if (!seatAvailability.available && seatAvailability.held && !isHeldByMe) {
-      return;
-    }
-
-    // If seat is already selected, deselect it
-    if (localSelectedSeats.has(seatNo)) {
-      setLocalSelectedSeats(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(seatNo);
-        return newSet;
+    // If seat is held (yellow) - try to release it
+    // Since there's no login yet, we allow releasing any held seat
+    if (seatAvailability.held) {
+      // Check if it's in our local holds
+      if (localSelectedSeats.has(seatNo)) {
+        // Release via hook (has holdRef in memory)
+        setSeatLoading(seatNo);
+        try {
+          await releaseHold(seatNo);
+          setLocalSelectedSeats(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(seatNo);
+            return newSet;
+          });
+          onSeatDeselect(seatNo);
+          setTimeout(() => refetch(), 100);
+        } catch (error) {
+          console.error('Failed to release hold via hook:', error);
+        } finally {
+          setSeatLoading(null);
+        }
+        return;
+      }
+      
+      // Not in local state - try to release via API using holdRef from server
+      if (seatAvailability.holdRef) {
+        setSeatLoading(seatNo);
+        try {
+          const success = await releaseHoldDirectly(seatAvailability.holdRef, seatNo);
+          if (success) {
+            setLocalSelectedSeats(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(seatNo);
+              return newSet;
+            });
+            onSeatDeselect(seatNo);
+          }
+        } finally {
+          setSeatLoading(null);
+        }
+        return;
+      }
+      
+      // No holdRef available - just refresh
+      toast({
+        title: "Tidak Dapat Melepas",
+        description: "Hold tidak valid, memuat ulang...",
+        variant: "destructive"
       });
-      await releaseHold(seatNo);
-      onSeatDeselect(seatNo);
-      refetch(); // Refresh after releasing hold
+      refetch();
       return;
     }
 
-    // If seat is held by me but not selected, just select it without creating new hold
+    // If already selected, deselect and release hold
+    if (localSelectedSeats.has(seatNo)) {
+      setSeatLoading(seatNo);
+      try {
+        await releaseHold(seatNo);
+        setLocalSelectedSeats(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(seatNo);
+          return newSet;
+        });
+        onSeatDeselect(seatNo);
+        setTimeout(() => refetch(), 100);
+      } catch (error) {
+        console.error('Failed to release hold:', error);
+      } finally {
+        setSeatLoading(null);
+      }
+      return;
+    }
+
+    // If held by me but not selected, just select it
     if (isHeldByMe) {
       setLocalSelectedSeats(prev => new Set(prev).add(seatNo));
       onSeatSelect(seatNo);
       return;
     }
 
-    // If seat is available, select it and create hold
+    // If available, create hold and select
+    setSeatLoading(seatNo);
     try {
-      await createHold(trip.id, seatNo, originSeq, destinationSeq, 1200); // 20 minutes = 1200 seconds
+      await createHold(trip.id, seatNo, originSeq, destinationSeq, 300);
       setLocalSelectedSeats(prev => new Set(prev).add(seatNo));
       onSeatSelect(seatNo);
-      refetch(); // Refresh after creating hold
+      setTimeout(() => refetch(), 100);
     } catch (error) {
       console.error('Failed to hold seat:', error);
+      refetch();
+    } finally {
+      setSeatLoading(null);
     }
   };
 
@@ -182,30 +235,22 @@ export default function SeatMap({
     
     const seatAvailability = seatmap.seatAvailability[seatNo];
     
-    // Check if seat is selected by current user
-    if (localSelectedSeats.has(seatNo)) {
-      return 'seat selected';
-    }
+    // Priority 1: Selected by me (blue)
+    if (localSelectedSeats.has(seatNo)) return 'seat selected';
     
-    // Check if seat is held by current user (from local holds)
-    if (isHeld(seatNo)) {
-      return 'seat held';
-    }
+    // Priority 2: Held (yellow/amber) - can be clicked to release
+    if (seatAvailability.held) return 'seat held';
     
-    // Check server-side availability
+    // Priority 3: Booked (with different colors based on status and type)
     if (!seatAvailability.available) {
-      if (seatAvailability.held) {
-        return 'seat held';
-      }
+      const isPaid = seatAvailability.bookingStatus === 'paid';
+      const isMain = seatAvailability.bookedType === 'main';
       
-      // Use bookedType to determine specific booked class
-      if (seatAvailability.bookedType === 'main') {
-        return 'seat booked-main';
-      } else if (seatAvailability.bookedType === 'transit') {
-        return 'seat booked-transit';
-      }
+      if (isPaid && isMain) return 'seat booked-paid-main';
+      if (isPaid && !isMain) return 'seat booked-paid-transit';
+      if (!isPaid && isMain) return 'seat booked-pending-main';
+      if (!isPaid && !isMain) return 'seat booked-pending-transit';
       
-      // Fallback to generic booked class
       return 'seat booked';
     }
     
@@ -220,163 +265,187 @@ export default function SeatMap({
   const formatTTL = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds}s`;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
+
+  // Get minimum TTL among selected seats for progress bar
+  const getMinTTL = useCallback(() => {
+    const ttls = Array.from(localSelectedSeats).map(s => getHoldTTL(s)).filter(t => t > 0);
+    return ttls.length > 0 ? Math.min(...ttls) : 0;
+  }, [localSelectedSeats, getHoldTTL]);
+
+  const minTTL = getMinTTL();
+  const holdProgress = minTTL > 0 ? (minTTL / 300) * 100 : 0;
 
   if (isLoading) {
     return (
-      <Card data-testid="seat-map-loading">
-        <CardContent className="flex items-center justify-center h-40">
-          <div className="text-center">
-            <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
-            <p className="text-sm text-muted-foreground mt-2">Loading seat map...</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
+        <p className="text-sm text-muted-foreground">Memuat layout kursi...</p>
+      </div>
     );
   }
 
   if (!seatmap) {
     return (
-      <Card data-testid="seat-map-error">
-        <CardContent className="flex items-center justify-center h-40">
-          <div className="text-center">
-            <AlertTriangle className="w-8 h-8 text-destructive mx-auto mb-2" />
-            <p className="text-muted-foreground text-sm">Failed to load seat map</p>
-            <Button onClick={() => refetch()} className="mt-2" size="sm">
-              <RotateCcw className="w-3 h-3 mr-1" />
-              Retry
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center justify-center py-12">
+        <AlertTriangle className="w-10 h-10 text-destructive mb-3" />
+        <p className="text-sm text-muted-foreground mb-3">Gagal memuat layout kursi</p>
+        <Button onClick={() => refetch()} size="sm" variant="outline">
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Coba Lagi
+        </Button>
+      </div>
     );
   }
 
   const seatMapLayout = seatmap.layout.seatMap as any[];
+  const availableCount = getAvailableCount();
+  const totalSeats = seatMapLayout.length;
+  const occupancyPercent = Math.round(((totalSeats - availableCount) / totalSeats) * 100);
 
   return (
-    <Card data-testid="seat-map">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center text-base">
-            <Grid3X3 className="w-4 h-4 mr-2 text-primary" />
-            Seat Selection
-          </CardTitle>
-          <div className="text-xs text-muted-foreground">
-            <span data-testid="available-count">{getAvailableCount()}</span> of{' '}
-            <span data-testid="total-capacity">{seatMapLayout.length}</span> available
+    <div className="space-y-4">
+      {/* Compact Header with Stats */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <Users className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium">{availableCount}/{totalSeats}</span>
+            <span className="text-xs text-muted-foreground">tersedia</span>
+          </div>
+          <div className="h-4 w-px bg-border" />
+          <span className="text-xs text-muted-foreground">{occupancyPercent}% terisi</span>
+        </div>
+        
+        <Button 
+          onClick={() => refetch()} 
+          variant="ghost" 
+          size="sm"
+          className="h-8 px-2"
+          disabled={isRefetching}
+        >
+          {isRefetching ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <RotateCcw className="w-4 h-4" />
+          )}
+        </Button>
+      </div>
+
+      {/* Compact Legend - Two Rows */}
+      <div className="space-y-2">
+        {/* Row 1: Available, Selected, Held */}
+        <div className="flex items-center justify-center gap-3 py-1.5 px-3 bg-muted/30 rounded-lg text-xs">
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded border-2 border-primary bg-background flex items-center justify-center text-[8px] font-bold text-primary">A</div>
+            <span>Tersedia</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-primary flex items-center justify-center text-[8px] font-bold text-white">S</div>
+            <span>Dipilih</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-amber-500 flex items-center justify-center text-[8px] font-bold text-white">H</div>
+            <span>Dipegang</span>
           </div>
         </div>
-      </CardHeader>
-      <CardContent>
-        {/* Seat Legend */}
-        <div className="bg-card p-3 rounded-lg border border-border mb-4" data-testid="seat-legend">
-          <h4 className="text-sm font-semibold mb-2">Seat Legend</h4>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <div className="flex items-center gap-1.5 min-w-0" data-testid="legend-available">
-              <div className="seat available w-5 h-5 flex-shrink-0 text-[9px] flex items-center justify-center">A</div>
-              <span className="truncate">Available</span>
-            </div>
-            <div className="flex items-center gap-1.5 min-w-0" data-testid="legend-selected">
-              <div className="seat selected w-5 h-5 flex-shrink-0 text-[9px] flex items-center justify-center">S</div>
-              <span className="truncate">Selected</span>
-            </div>
-            <div className="flex items-center gap-1.5 min-w-0" data-testid="legend-booked-main">
-              <div className="seat booked-main w-5 h-5 flex-shrink-0 text-[9px] flex items-center justify-center">M</div>
-              <span className="truncate">Main Schedule</span>
-            </div>
-            <div className="flex items-center gap-1.5 min-w-0" data-testid="legend-booked-transit">
-              <div className="seat booked-transit w-5 h-5 flex-shrink-0 text-[9px] flex items-center justify-center">T</div>
-              <span className="truncate">Transit</span>
-            </div>
-            <div className="flex items-center gap-1.5 min-w-0" data-testid="legend-booked-generic">
-              <div className="seat booked w-5 h-5 flex-shrink-0 text-[9px] flex items-center justify-center">B</div>
-              <span className="truncate">Booked</span>
-            </div>
-            <div className="flex items-center gap-1.5 min-w-0" data-testid="legend-held">
-              <div className="seat held w-5 h-5 flex-shrink-0 text-[9px] flex items-center justify-center">H</div>
-              <span className="truncate">On Hold</span>
-            </div>
+        
+        {/* Row 2: Booked states */}
+        <div className="flex items-center justify-center gap-2 py-1.5 px-3 bg-muted/20 rounded-lg text-xs">
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-orange-500 flex items-center justify-center text-[8px] font-bold text-white">B</div>
+            <span>Booking</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-orange-400 flex items-center justify-center text-[8px] font-bold text-white">T</div>
+            <span>Book.Trn</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-red-500 flex items-center justify-center text-[8px] font-bold text-white">P</div>
+            <span>Paid</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-blue-500 flex items-center justify-center text-[8px] font-bold text-white">T</div>
+            <span>Paid.Trn</span>
           </div>
         </div>
+      </div>
 
-        {/* Driver Area */}
-        <div className="text-center mb-3">
-          <div className="inline-flex items-center space-x-1 text-xs text-muted-foreground">
-            <Car className="w-3 h-3" />
-            <span>Driver</span>
-          </div>
-        </div>
+      {/* Bus Front Indicator */}
+      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <div className="flex-1 h-px bg-border" />
+        <Car className="w-4 h-4" />
+        <span>Depan</span>
+        <div className="flex-1 h-px bg-border" />
+      </div>
 
-        {/* Seat Grid */}
-        <div className="seat-grid mx-auto mb-4" data-testid="seat-grid">
-          {seatMapLayout.map(seat => {
-            const seatClass = getSeatClass(seat.seat_no);
-            const holdTTL = getHoldTTL(seat.seat_no);
-            
-            return (
-              <div
-                key={seat.seat_no}
-                className={seatClass}
-                onClick={() => handleSeatClick(seat.seat_no)}
-                data-testid={`seat-${seat.seat_no}`}
-                title={
-                  holdTTL > 0 
-                    ? `Held - expires in ${formatTTL(holdTTL)}`
-                    : seat.disabled 
-                    ? 'Disabled' 
-                    : seat.seat_no
-                }
-              >
-                {seat.seat_no}
-              </div>
-            );
-          })}
-        </div>
+      {/* Seat Grid */}
+      <div className="seat-grid mx-auto">
+        {seatMapLayout.map(seat => {
+          const seatClass = getSeatClass(seat.seat_no);
+          const holdTTL = getHoldTTL(seat.seat_no);
+          const isLoading = seatLoading === seat.seat_no;
+          
+          return (
+            <button
+              key={seat.seat_no}
+              className={`${seatClass} ${isLoading ? 'opacity-50' : ''} focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1`}
+              onClick={() => !isLoading && handleSeatClick(seat.seat_no)}
+              title={holdTTL > 0 ? `Dipegang - ${formatTTL(holdTTL)} tersisa` : seat.seat_no}
+              disabled={isLoading}
+            >
+              {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : seat.seat_no}
+            </button>
+          );
+        })}
+      </div>
 
-        {/* Selected Seats Info */}
-        {localSelectedSeats.size > 0 && (
-          <div className="bg-primary/10 border border-primary/20 rounded-lg p-3" data-testid="selected-seats-info">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Selected Seats</span>
-              <span className="font-mono text-sm font-bold text-primary">
-                {Array.from(localSelectedSeats).join(', ')}
-              </span>
+      {/* Selected Seats Panel with Timer */}
+      {localSelectedSeats.size > 0 && (
+        <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium">Kursi Terpilih</span>
             </div>
-            {Array.from(localSelectedSeats).map(seatNo => {
-              const ttl = getHoldTTL(seatNo);
-              return ttl > 0 ? (
-                <div key={seatNo} className="text-xs text-muted-foreground">
-                  Seat {seatNo} expires in: <span className="font-mono text-accent">{formatTTL(ttl)}</span>
+            <div className="font-mono text-sm font-bold text-primary">
+              {Array.from(localSelectedSeats).sort().join(', ')}
+            </div>
+          </div>
+          
+          {/* Timer Progress Bar */}
+          {minTTL > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  <Timer className="w-3 h-3" />
+                  <span>Waktu pegang</span>
                 </div>
-              ) : null;
-            })}
-          </div>
-        )}
-
-        {/* Seat Interaction Info */}
-        <div className="bg-muted/50 border border-border rounded-lg p-3 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1 mb-1">
-            <Info className="w-3 h-3" />
-            <span className="font-medium">Tip:</span>
-          </div>
-          <p>Klik kursi yang sudah terbooked untuk melihat detail penumpang</p>
+                <span className={`font-mono font-medium ${minTTL < 60 ? 'text-destructive' : 'text-primary'}`}>
+                  {formatTTL(minTTL)}
+                </span>
+              </div>
+              <Progress 
+                value={holdProgress} 
+                className={`h-1.5 ${minTTL < 60 ? '[&>div]:bg-destructive' : ''}`}
+              />
+            </div>
+          )}
         </div>
+      )}
 
-        {/* Refresh Button */}
-        <div className="mt-3 text-center">
-          <Button 
-            onClick={() => refetch()} 
-            variant="outline" 
-            size="sm"
-            data-testid="refresh-availability"
-          >
-            <RotateCcw className="w-3 h-3 mr-1" />
-            Refresh Availability
-          </Button>
-        </div>
-      </CardContent>
+      {/* Auto-refresh indicator */}
+      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <div className={`w-2 h-2 rounded-full ${autoRefreshEnabled ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+        <span>Auto-refresh {autoRefreshEnabled ? 'aktif' : 'nonaktif'}</span>
+        <button 
+          onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+          className="text-primary hover:underline"
+        >
+          {autoRefreshEnabled ? 'Matikan' : 'Aktifkan'}
+        </button>
+      </div>
 
       {/* Passenger Detail Modal */}
       <PassengerDetailModal
@@ -391,6 +460,6 @@ export default function SeatMap({
         isError={passengerDetailsMutation.isError}
         selectedSeatNo={selectedSeatForDetails}
       />
-    </Card>
+    </div>
   );
 }

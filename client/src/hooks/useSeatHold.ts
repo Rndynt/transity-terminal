@@ -16,6 +16,13 @@ export function useSeatHold() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const intervalRef = useRef<NodeJS.Timeout>();
+  // Use a ref to store holds for immediate access
+  const holdsRef = useRef<Map<string, SeatHold>>(new Map());
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    holdsRef.current = holds;
+  }, [holds]);
 
   // Start TTL countdown for all holds
   useEffect(() => {
@@ -76,30 +83,34 @@ export function useSeatHold() {
           destinationSeq
         };
 
+        // Update both state and ref immediately
+        holdsRef.current.set(seatNo, hold);
         setHolds(current => new Map(current.set(seatNo, hold)));
 
+        console.log('[useSeatHold] Hold created:', { seatNo, holdRef: response.holdRef });
+
         toast({
-          title: "Seat Reserved",
-          description: `Seat ${seatNo} reserved for ${Math.floor(ttlSeconds / 60)}m ${ttlSeconds % 60}s`
+          title: "Kursi Dipegang",
+          description: `Kursi ${seatNo} dipegang selama ${Math.floor(ttlSeconds / 60)} menit`
         });
 
         return response.holdRef;
       } else if (response.ownedByYou) {
         // Seat already held by this operator (idempotent success)
         toast({
-          title: "Seat Already Reserved",
-          description: `Seat ${seatNo} is already held by you`,
+          title: "Kursi Sudah Dipegang",
+          description: `Kursi ${seatNo} sudah dipegang oleh Anda`,
           variant: "default"
         });
-        return null; // No new hold created, but operation successful
+        return null;
       }
 
       return response.holdRef;
     } catch (error) {
-      console.error('Failed to hold seat:', error);
+      console.error('[useSeatHold] Failed to create hold:', error);
       toast({
-        title: "Failed to Reserve Seat",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
+        title: "Gagal Mempengang Kursi",
+        description: error instanceof Error ? error.message : "Terjadi kesalahan",
         variant: "destructive"
       });
       throw error;
@@ -109,11 +120,29 @@ export function useSeatHold() {
   }, [toast]);
 
   const releaseHold = useCallback(async (seatNo: string) => {
-    const hold = holds.get(seatNo);
-    if (!hold) return;
+    // Use ref for immediate access
+    const hold = holdsRef.current.get(seatNo);
+    
+    console.log('[useSeatHold] Release hold requested for:', seatNo);
+    console.log('[useSeatHold] Current holds:', Array.from(holdsRef.current.entries()).map(([k, v]) => ({ seatNo: k, holdRef: v.holdRef })));
+    
+    if (!hold) {
+      console.error('[useSeatHold] No hold found for seat:', seatNo);
+      toast({
+        title: "Tidak Dapat Melepas",
+        description: `Kursi ${seatNo} tidak ditemukan dalam daftar hold`,
+        variant: "destructive"
+      });
+      return false;
+    }
+
+    console.log('[useSeatHold] Releasing hold:', hold.holdRef);
 
     try {
       await holdsApi.release(hold.holdRef);
+      
+      // Update both ref and state
+      holdsRef.current.delete(seatNo);
       setHolds(current => {
         const newHolds = new Map(current);
         newHolds.delete(seatNo);
@@ -121,33 +150,48 @@ export function useSeatHold() {
       });
 
       toast({
-        title: "Hold Released",
-        description: `Seat ${seatNo} is now available`
+        title: "Kursi Dilepas",
+        description: `Kursi ${seatNo} sekarang tersedia`
       });
+      
+      return true;
     } catch (error) {
+      console.error('[useSeatHold] Failed to release hold:', error);
       toast({
-        title: "Failed to Release Hold",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
+        title: "Gagal Melepas Kursi",
+        description: error instanceof Error ? error.message : "Terjadi kesalahan",
         variant: "destructive"
       });
+      return false;
     }
-  }, [holds, toast]);
+  }, [toast]);
 
   const releaseAllHolds = useCallback(async () => {
-    const releasePromises = Array.from(holds.keys()).map(seatNo => releaseHold(seatNo));
-    await Promise.allSettled(releasePromises);
-  }, [holds, releaseHold]);
+    const holdEntries = Array.from(holdsRef.current.entries());
+    console.log('[useSeatHold] Releasing all holds:', holdEntries.length);
+    
+    for (const [seatNo, hold] of holdEntries) {
+      try {
+        await holdsApi.release(hold.holdRef);
+        holdsRef.current.delete(seatNo);
+      } catch (error) {
+        console.error('[useSeatHold] Failed to release hold for seat:', seatNo, error);
+      }
+    }
+    
+    setHolds(new Map());
+  }, []);
 
   const getHoldTTL = useCallback((seatNo: string): number => {
-    const hold = holds.get(seatNo);
+    const hold = holdsRef.current.get(seatNo);
     if (!hold) return 0;
     return Math.max(0, Math.floor((hold.expiresAt - Date.now()) / 1000));
-  }, [holds]);
+  }, []);
 
   const isHeld = useCallback((seatNo: string): boolean => {
-    const hold = holds.get(seatNo);
+    const hold = holdsRef.current.get(seatNo);
     return hold ? hold.expiresAt > Date.now() : false;
-  }, [holds]);
+  }, []);
 
   return {
     holds: Array.from(holds.values()),

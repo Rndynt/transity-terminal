@@ -5,8 +5,8 @@ export interface AppConfig {
 }
 
 export const config: AppConfig = {
-  holdTtlShortSeconds: parseInt(process.env.HOLD_TTL_SHORT_SECONDS || '60'),
-  holdTtlLongSeconds: parseInt(process.env.HOLD_TTL_LONG_SECONDS || '1200'), // 20 minutes
+  holdTtlShortSeconds: parseInt(process.env.HOLD_TTL_SHORT_SECONDS || '300'), // 5 minutes
+  holdTtlLongSeconds: parseInt(process.env.HOLD_TTL_LONG_SECONDS || '1800'), // 30 minutes
   pendingBookingAutoRelease: process.env.PENDING_BOOKING_AUTO_RELEASE !== 'false'
 };
 
