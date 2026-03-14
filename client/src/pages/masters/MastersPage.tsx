@@ -55,18 +55,18 @@ export default function MastersPage() {
 
       <Card>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="border-b border-border px-3 lg:px-6">
-            <TabsList className="flex h-auto p-0 bg-transparent overflow-x-auto scrollbar-hide">
+          <div className="border-b border-border overflow-x-auto">
+            <TabsList className="inline-flex h-auto p-0 bg-transparent w-max min-w-full">
               {tabs.map(tab => {
                 const Icon = tab.icon;
                 return (
                   <TabsTrigger
                     key={tab.id}
                     value={tab.id}
-                    className="flex items-center gap-2 h-auto py-3 lg:py-4 px-3 lg:px-4 min-w-0 flex-shrink-0 data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none"
+                    className="flex items-center gap-2 h-auto py-3 px-3 lg:px-4 flex-shrink-0 data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none data-[state=active]:shadow-none"
                     data-testid={`tab-${tab.id}`}
                   >
-                    <Icon className="h-4 w-4 lg:h-5 lg:w-5 flex-shrink-0" />
+                    <Icon className="h-4 w-4 flex-shrink-0" />
                     <span className="text-xs lg:text-sm font-medium whitespace-nowrap">{tab.label}</span>
                   </TabsTrigger>
                 );

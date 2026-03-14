@@ -59,7 +59,7 @@ export function useSeatHold() {
     seatNo: string,
     originSeq: number,
     destinationSeq: number,
-    ttlSeconds: number = 120
+    ttlSeconds: number = 300
   ) => {
     setLoading(true);
     try {
@@ -89,9 +89,12 @@ export function useSeatHold() {
 
         console.log('[useSeatHold] Hold created:', { seatNo, holdRef: response.holdRef });
 
+        const minutes = Math.floor(ttlSeconds / 60);
+        const seconds = ttlSeconds % 60;
+        const durationLabel = seconds > 0 ? `${minutes} menit ${seconds} detik` : `${minutes} menit`;
         toast({
           title: "Kursi Dipegang",
-          description: `Kursi ${seatNo} dipegang selama ${Math.floor(ttlSeconds / 60)} menit`
+          description: `Kursi ${seatNo} dipegang selama ${durationLabel}`
         });
 
         return response.holdRef;

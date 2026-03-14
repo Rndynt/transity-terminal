@@ -311,7 +311,8 @@ export class DeterministicBookingService {
           };
         }
 
-        // Create booking
+        const bookingStatus = (payment && payment.amount > 0) ? 'paid' : 'pending';
+
         const [booking] = await tx.insert(bookings).values({
           tripId,
           originStopId: request.originStopId,
@@ -322,8 +323,7 @@ export class DeterministicBookingService {
           channel: request.channel,
           totalAmount: expectedTotal.toString(),
           createdBy: request.createdBy,
-          status: 'pending',
-          // Store idempotency key in metadata or separate field if needed
+          status: bookingStatus,
         }).returning();
 
         // Create passengers

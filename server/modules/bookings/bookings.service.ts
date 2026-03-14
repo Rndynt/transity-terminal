@@ -5,8 +5,9 @@ import { DeterministicBookingService } from "./deterministicBooking.service";
 import { PricingService } from "../pricing/pricing.service";
 import { PrintService } from "../printing/print.service";
 import { db } from "../../db";
-import { seatHolds, seatInventory } from "@shared/schema";
-import { eq, and, inArray, gt } from "drizzle-orm";
+import { bookings as bookingsTable, seatHolds, seatInventory } from "@shared/schema";
+import { eq, and, inArray, gt, lt } from "drizzle-orm";
+import { webSocketService } from "../../realtime/ws";
 
 export class BookingsService {
   private holdsService: HoldsService;
@@ -385,41 +386,68 @@ export class BookingsService {
       throw new Error(`Booking ${bookingId} is not in pending status`);
     }
 
-    // Release holds associated with this booking
+    const passengers = await this.storage.getPassengers(bookingId);
+    const legIndexes: number[] = [];
+    for (let i = booking.originSeq; i < booking.destinationSeq; i++) {
+      legIndexes.push(i);
+    }
+
+    for (const passenger of passengers) {
+      await db
+        .update(seatInventory)
+        .set({ booked: false, holdRef: null })
+        .where(and(
+          eq(seatInventory.tripId, booking.tripId),
+          eq(seatInventory.seatNo, passenger.seatNo),
+          inArray(seatInventory.legIndex, legIndexes)
+        ));
+    }
+
     await this.holdsService.releaseHoldsByOwner(operatorId, bookingId);
 
-    // Cancel the booking
     await this.storage.updateBooking(bookingId, { status: 'canceled' });
+
+    for (const passenger of passengers) {
+      webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
+    }
   }
 
-  // Auto-cleanup method for expired pending bookings
   async cleanupExpiredPendingBookings(): Promise<void> {
     const now = new Date();
-    const allBookings = await this.storage.getBookings();
-    
-    const expiredPendingBookings = allBookings.filter(b => 
-      b.status === 'pending' && 
-      b.pendingExpiresAt && 
-      new Date(b.pendingExpiresAt) <= now
-    );
+
+    const expiredPendingBookings = await db
+      .select()
+      .from(bookingsTable)
+      .where(and(
+        eq(bookingsTable.status, 'pending'),
+        lt(bookingsTable.pendingExpiresAt, now)
+      ));
 
     for (const booking of expiredPendingBookings) {
       try {
-        // Release holds associated with this booking
-        // We don't have operatorId here, so we'll release by booking ID
         const passengers = await this.storage.getPassengers(booking.id);
-        for (const passenger of passengers) {
-          const legIndexes = [];
-          for (let i = booking.originSeq; i < booking.destinationSeq; i++) {
-            legIndexes.push(i);
-          }
-          await this.holdsService.releaseSeatHold(booking.tripId, passenger.seatNo, legIndexes);
+        const legIndexes: number[] = [];
+        for (let i = booking.originSeq; i < booking.destinationSeq; i++) {
+          legIndexes.push(i);
         }
 
-        // Cancel the booking
+        for (const passenger of passengers) {
+          await db
+            .update(seatInventory)
+            .set({ booked: false, holdRef: null })
+            .where(and(
+              eq(seatInventory.tripId, booking.tripId),
+              eq(seatInventory.seatNo, passenger.seatNo),
+              inArray(seatInventory.legIndex, legIndexes)
+            ));
+
+          webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
+        }
+
         await this.storage.updateBooking(booking.id, { status: 'canceled' });
+        console.log(`[CLEANUP] Expired pending booking ${booking.id} canceled and seats released`);
       } catch (error) {
-        console.error(`Failed to cleanup expired booking ${booking.id}:`, error);
+        console.error(`[CLEANUP] Failed to cleanup expired booking ${booking.id}:`, error);
       }
     }
   }

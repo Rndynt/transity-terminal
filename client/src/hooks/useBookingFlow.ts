@@ -90,8 +90,14 @@ export function useBookingFlow() {
   }, [state]);
 
   const calculateTotalAmount = useCallback(async (): Promise<number> => {
+    const legCount = (state.originSeq !== undefined && state.destinationSeq !== undefined)
+      ? Math.max(state.destinationSeq - state.originSeq, 1)
+      : 1;
+    const fallbackPerLeg = 25000;
+    const fallbackTotal = state.selectedSeats.length * legCount * fallbackPerLeg;
+
     if (!state.trip?.id || state.originSeq === undefined || state.destinationSeq === undefined || state.selectedSeats.length === 0) {
-      return state.selectedSeats.length * 25000;
+      return fallbackTotal;
     }
 
     try {
@@ -104,7 +110,7 @@ export function useBookingFlow() {
       return fareQuote.totalForAllPassengers;
     } catch (error) {
       console.error('Failed to calculate dynamic pricing, using fallback:', error);
-      return state.selectedSeats.length * 25000;
+      return fallbackTotal;
     }
   }, [state.trip?.id, state.originSeq, state.destinationSeq, state.selectedSeats.length]);
 
