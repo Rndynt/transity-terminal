@@ -1,20 +1,22 @@
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import {
   MapPin, Calendar, Clock, Bus, Users, CreditCard, Printer,
-  ChevronRight, ChevronDown, Check, Timer, ArrowRight,
+  ChevronRight, Check, Timer, ArrowRight, ArrowDown,
   Armchair, RotateCcw, QrCode, Banknote, Wallet, Building2,
-  Plus, CircleDot, Circle, AlertCircle, Store, Ticket,
-  CheckCircle2, X
+  Plus, Circle, Store, Ticket,
+  CheckCircle2, type LucideProps
 } from "lucide-react";
 
+type LucideIcon = ComponentType<LucideProps>;
+
 const MOCK_TRIPS = [
-  { id: "1", route: "Jakarta → Bandung", depart: "06:00", arrive: "09:30", vehicle: "BUS-001", seats: 32, available: 24, status: "active" as const, stops: ["Jakarta", "Purwakarta", "Bandung"] },
-  { id: "2", route: "Jakarta → Bandung", depart: "08:30", arrive: "12:00", vehicle: "BUS-003", seats: 40, available: 8, status: "active" as const, stops: ["Jakarta", "Purwakarta", "Bandung"] },
-  { id: "3", route: "Jakarta → Semarang", depart: "07:00", arrive: "14:00", vehicle: "BUS-005", seats: 40, available: 36, status: "active" as const, stops: ["Jakarta", "Cirebon", "Pekalongan", "Semarang"] },
-  { id: "4", route: "Jakarta → Semarang", depart: "20:00", arrive: "03:00", vehicle: "TBD", seats: 40, available: 40, status: "virtual" as const, stops: ["Jakarta", "Cirebon", "Pekalongan", "Semarang"] },
+  { id: "1", route: "Jakarta \u2192 Bandung", depart: "06:00", arrive: "09:30", vehicle: "BUS-001", seats: 32, available: 24, status: "active" as const, stops: ["Jakarta", "Purwakarta", "Bandung"] },
+  { id: "2", route: "Jakarta \u2192 Bandung", depart: "08:30", arrive: "12:00", vehicle: "BUS-003", seats: 40, available: 8, status: "active" as const, stops: ["Jakarta", "Purwakarta", "Bandung"] },
+  { id: "3", route: "Jakarta \u2192 Semarang", depart: "07:00", arrive: "14:00", vehicle: "BUS-005", seats: 40, available: 36, status: "active" as const, stops: ["Jakarta", "Cirebon", "Pekalongan", "Semarang"] },
+  { id: "4", route: "Jakarta \u2192 Semarang", depart: "20:00", arrive: "03:00", vehicle: "TBD", seats: 40, available: 40, status: "virtual" as const, stops: ["Jakarta", "Cirebon", "Pekalongan", "Semarang"] },
 ];
 
-const SEAT_LAYOUT = [
+const SEAT_LAYOUT: (string | null)[][] = [
   ["1A","1B",null,"1C","1D"],
   ["2A","2B",null,"2C","2D"],
   ["3A","3B",null,"3C","3D"],
@@ -23,27 +25,28 @@ const SEAT_LAYOUT = [
   ["6A","6B",null,"6C","6D"],
   ["7A","7B",null,"7C","7D"],
   ["8A","8B",null,"8C","8D"],
-  ["9A","9B","9C","9D","9E"],
+  ["9A","9B",null,"9C","9D"],
+  ["10A","10B",null,"10C","10D"],
 ];
 
-const BOOKED_SEATS = new Set(["1A","2C","3B","4D","5A","5B","7C","8D","9C"]);
+const BOOKED_SEATS = new Set(["1A","2C","3B","4D","5A","5B","7C","8D","9C","10A"]);
 const HELD_SEATS = new Set(["2A","6D"]);
+const HELD_SEAT_TIMERS: Record<string, number> = { "2A": 182, "6D": 47 };
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
-const STEPS = [
-  { id: 1 as Step, label: "Jadwal", icon: Calendar },
-  { id: 2 as Step, label: "Rute", icon: MapPin },
-  { id: 3 as Step, label: "Kursi", icon: Armchair },
-  { id: 4 as Step, label: "Penumpang", icon: Users },
-  { id: 5 as Step, label: "Bayar", icon: CreditCard },
-  { id: 6 as Step, label: "Tiket", icon: Ticket },
+const STEPS: { id: Step; label: string; icon: LucideIcon }[] = [
+  { id: 1, label: "Jadwal", icon: Calendar },
+  { id: 2, label: "Rute", icon: MapPin },
+  { id: 3, label: "Kursi", icon: Armchair },
+  { id: 4, label: "Penumpang", icon: Users },
+  { id: 5, label: "Bayar", icon: CreditCard },
+  { id: 6, label: "Tiket", icon: Ticket },
 ];
 
 function StepIndicator({ step, currentStep, onClick }: { step: typeof STEPS[0]; currentStep: Step; onClick: () => void }) {
   const isActive = step.id === currentStep;
   const isCompleted = step.id < currentStep;
-  const isPending = step.id > currentStep;
   const Icon = step.icon;
 
   return (
@@ -127,9 +130,23 @@ function SummaryRow({ label, value, highlight }: { label: string; value: string;
   );
 }
 
-function TripSelectorPanel({ onSelect, selectedId }: { onSelect: (t: typeof MOCK_TRIPS[0]) => void; selectedId?: string }) {
-  const [outlet, setOutlet] = useState("Jakarta Terminal");
+function StopsMiniTimeline({ stops }: { stops: string[] }) {
+  return (
+    <div className="flex items-center gap-0.5 mt-2">
+      {stops.map((stop, i) => (
+        <div key={stop} className="flex items-center">
+          <div className="flex flex-col items-center">
+            <div className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-emerald-400" : i === stops.length - 1 ? "bg-rose-400" : "bg-slate-500"}`} />
+            <span className="text-[9px] text-slate-500 mt-0.5 max-w-[50px] truncate text-center leading-tight">{stop}</span>
+          </div>
+          {i < stops.length - 1 && <div className="w-4 h-px bg-slate-600 mx-0.5 -mt-3" />}
+        </div>
+      ))}
+    </div>
+  );
+}
 
+function TripSelectorPanel({ onSelect, selectedId }: { onSelect: (t: typeof MOCK_TRIPS[0]) => void; selectedId?: string }) {
   return (
     <div className="space-y-5">
       <div>
@@ -143,7 +160,7 @@ function TripSelectorPanel({ onSelect, selectedId }: { onSelect: (t: typeof MOCK
             <Store className="w-3 h-3" /> Outlet
           </label>
           <div className="h-10 bg-slate-700/50 border border-slate-600/50 rounded-lg px-3 flex items-center text-sm text-slate-200">
-            {outlet}
+            Jakarta Terminal
           </div>
         </div>
         <div className="space-y-1.5">
@@ -182,7 +199,7 @@ function TripSelectorPanel({ onSelect, selectedId }: { onSelect: (t: typeof MOCK
                     <span className="text-sm text-slate-400 font-mono">{trip.arrive}</span>
                   </div>
                   {trip.status === "virtual" ? (
-                    <span className="px-2 py-0.5 bg-blue-500/15 text-blue-400 rounded-md text-[10px] font-medium">Virtual</span>
+                    <span className="px-2 py-0.5 bg-blue-500/15 text-blue-400 rounded-md text-[10px] font-medium">Jadwal Virtual</span>
                   ) : (
                     <span className="px-2 py-0.5 bg-emerald-500/15 text-emerald-400 rounded-md text-[10px] font-medium">Aktif</span>
                   )}
@@ -202,6 +219,7 @@ function TripSelectorPanel({ onSelect, selectedId }: { onSelect: (t: typeof MOCK
                     </div>
                   </div>
                 </div>
+                <StopsMiniTimeline stops={trip.stops} />
                 <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
                   <div className={`h-full rounded-full transition-all ${seatPct > 50 ? "bg-emerald-500" : seatPct > 20 ? "bg-amber-500" : "bg-red-500"}`}
                     style={{ width: `${seatPct}%` }} />
@@ -222,6 +240,11 @@ function RouteTimelinePanel({
   onOriginSelect: (s: string) => void; onDestinationSelect: (s: string) => void;
 }) {
   const times = ["06:00", "07:15", "08:00", "09:30"];
+  const distances = ["85 km", "45 km", "120 km"];
+
+  const originIdx = origin ? stops.indexOf(origin) : -1;
+  const destIdx = destination ? stops.indexOf(destination) : -1;
+  const legCount = originIdx >= 0 && destIdx > originIdx ? destIdx - originIdx : 0;
 
   return (
     <div className="space-y-5">
@@ -243,46 +266,57 @@ function RouteTimelinePanel({
           const isOrigin = origin === stop;
           const isDestination = destination === stop;
           const time = times[i] || "--:--";
+          const distance = distances[i];
 
           return (
-            <div key={stop} className="relative flex items-start gap-4 pb-6 last:pb-0">
-              <div className={`absolute left-[-13px] w-6 h-6 rounded-full flex items-center justify-center z-10 ${
-                isOrigin ? "bg-emerald-500 ring-4 ring-emerald-500/20" :
-                isDestination ? "bg-rose-500 ring-4 ring-rose-500/20" :
-                isFirst ? "bg-emerald-500/80" :
-                isLast ? "bg-rose-500/80" :
-                "bg-slate-600 border-2 border-slate-500"
-              }`}>
-                {isOrigin || isDestination ? <Check className="w-3 h-3 text-white" /> :
-                  <Circle className="w-2.5 h-2.5 text-slate-400" />}
-              </div>
+            <div key={stop}>
+              <div className="relative flex items-start gap-4 pb-2">
+                <div className={`absolute left-[-13px] w-6 h-6 rounded-full flex items-center justify-center z-10 ${
+                  isOrigin ? "bg-emerald-500 ring-4 ring-emerald-500/20" :
+                  isDestination ? "bg-rose-500 ring-4 ring-rose-500/20" :
+                  isFirst ? "bg-emerald-500/80" :
+                  isLast ? "bg-rose-500/80" :
+                  "bg-slate-600 border-2 border-slate-500"
+                }`}>
+                  {isOrigin || isDestination ? <Check className="w-3 h-3 text-white" /> :
+                    <Circle className="w-2.5 h-2.5 text-slate-400" />}
+                </div>
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <p className={`font-semibold ${isOrigin || isDestination ? "text-slate-100" : "text-slate-300"}`}>{stop}</p>
-                    <p className="text-xs text-slate-500 font-mono">{time}</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className={`font-semibold ${isOrigin || isDestination ? "text-slate-100" : "text-slate-300"}`}>{stop}</p>
+                      <p className="text-xs text-slate-500 font-mono">{time}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {!isLast && (
+                      <button onClick={() => onOriginSelect(stop)}
+                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                          isOrigin ? "bg-emerald-500 text-white" : "bg-slate-700/50 text-slate-400 hover:bg-emerald-500/20 hover:text-emerald-400"
+                        }`}>
+                        {isOrigin ? "Naik \u2713" : "Naik"}
+                      </button>
+                    )}
+                    {!isFirst && (
+                      <button onClick={() => onDestinationSelect(stop)}
+                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                          isDestination ? "bg-rose-500 text-white" : "bg-slate-700/50 text-slate-400 hover:bg-rose-500/20 hover:text-rose-400"
+                        }`}>
+                        {isDestination ? "Turun \u2713" : "Turun"}
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  {!isLast && (
-                    <button onClick={() => onOriginSelect(stop)}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
-                        isOrigin ? "bg-emerald-500 text-white" : "bg-slate-700/50 text-slate-400 hover:bg-emerald-500/20 hover:text-emerald-400"
-                      }`}>
-                      {isOrigin ? "Naik ✓" : "Naik"}
-                    </button>
-                  )}
-                  {!isFirst && (
-                    <button onClick={() => onDestinationSelect(stop)}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
-                        isDestination ? "bg-rose-500 text-white" : "bg-slate-700/50 text-slate-400 hover:bg-rose-500/20 hover:text-rose-400"
-                      }`}>
-                      {isDestination ? "Turun ✓" : "Turun"}
-                    </button>
-                  )}
-                </div>
               </div>
+              {!isLast && distance && (
+                <div className="flex items-center gap-1.5 ml-6 mb-3 text-[10px] text-slate-500">
+                  <ArrowDown className="w-2.5 h-2.5" />
+                  <span>{distance}</span>
+                  <span className="text-slate-600">\u00b7</span>
+                  <span>1 leg</span>
+                </div>
+              )}
             </div>
           );
         })}
@@ -295,10 +329,13 @@ function RouteTimelinePanel({
               <p className="text-[10px] text-slate-500 uppercase">Dari</p>
               <p className="font-bold text-slate-100">{origin}</p>
             </div>
-            <div className="flex items-center gap-2 px-3">
-              <div className="h-px w-8 bg-slate-600" />
-              <Clock className="w-4 h-4 text-amber-400" />
-              <div className="h-px w-8 bg-slate-600" />
+            <div className="flex flex-col items-center gap-1 px-3">
+              <div className="flex items-center gap-2">
+                <div className="h-px w-6 bg-slate-600" />
+                <Clock className="w-4 h-4 text-amber-400" />
+                <div className="h-px w-6 bg-slate-600" />
+              </div>
+              <span className="text-[10px] text-amber-400 font-medium">{legCount} leg</span>
             </div>
             <div className="text-center">
               <p className="text-[10px] text-slate-500 uppercase">Ke</p>
@@ -329,8 +366,10 @@ function SeatMapPanel({
     available: "bg-slate-700/50 border-slate-600 text-slate-300 hover:bg-indigo-500/20 hover:border-indigo-400/50 hover:text-indigo-300 cursor-pointer",
     selected: "bg-amber-500 border-amber-400 text-slate-900 shadow-lg shadow-amber-500/20 cursor-pointer",
     booked: "bg-red-500/20 border-red-500/30 text-red-400/60 cursor-not-allowed",
-    held: "bg-yellow-500/20 border-yellow-500/30 text-yellow-400/60 cursor-pointer",
+    held: "bg-yellow-500/20 border-yellow-500/30 text-yellow-500 cursor-pointer",
   };
+
+  const formatSeatTimer = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 
   const available = SEAT_LAYOUT.flat().filter(s => s && !BOOKED_SEATS.has(s) && !HELD_SEATS.has(s)).length;
   const total = SEAT_LAYOUT.flat().filter(Boolean).length;
@@ -368,11 +407,22 @@ function SeatMapPanel({
               {row.map((seat, ci) => {
                 if (seat === null) return <div key={`gap-${ci}`} className="w-10 h-10" />;
                 const status = getSeatStatus(seat);
+                const isHeld = HELD_SEATS.has(seat);
+                const heldTimer = HELD_SEAT_TIMERS[seat];
                 return (
-                  <button key={seat} onClick={() => status !== "booked" && onToggle(seat)}
-                    className={`w-10 h-10 rounded-lg border text-xs font-bold font-mono transition-all duration-150 ${seatColors[status]}`}>
-                    {seat}
-                  </button>
+                  <div key={seat} className="relative">
+                    <button onClick={() => status !== "booked" && onToggle(seat)}
+                      className={`w-10 h-10 rounded-lg border text-xs font-bold font-mono transition-all duration-150 ${seatColors[status]}`}>
+                      {seat}
+                    </button>
+                    {isHeld && heldTimer !== undefined && (
+                      <span className={`absolute -top-1.5 -right-1.5 px-1 py-px rounded text-[8px] font-mono font-bold z-10 ${
+                        heldTimer < 60 ? "bg-red-500 text-white animate-pulse" : "bg-yellow-500 text-slate-900"
+                      }`}>
+                        {formatSeatTimer(heldTimer)}
+                      </span>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -426,19 +476,39 @@ function LegendItem({ color, label }: { color: string; label: string }) {
   );
 }
 
+type PassengerField = "name" | "phone" | "id";
+
 function PassengerFormPanel({
-  seats, onBack
-}: { seats: string[]; onBack: () => void }) {
+  seats,
+}: { seats: string[] }) {
   const [passengers, setPassengers] = useState(
     seats.map(s => ({ seatNo: s, name: "", phone: "", id: "" }))
   );
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
-  const update = (i: number, field: string, val: string) => {
+  const update = (i: number, field: PassengerField, val: string) => {
     setPassengers(prev => {
       const next = [...prev];
       next[i] = { ...next[i], [field]: val };
       return next;
     });
+  };
+
+  const markTouched = (key: string) => {
+    setTouched(prev => ({ ...prev, [key]: true }));
+  };
+
+  const getNameError = (name: string, key: string): string | null => {
+    if (!touched[key]) return null;
+    if (!name.trim()) return "Nama wajib diisi";
+    if (name.trim().length < 3) return "Minimal 3 karakter";
+    return null;
+  };
+
+  const getPhoneError = (phone: string, key: string): string | null => {
+    if (!touched[key] || !phone) return null;
+    if (!/^0[0-9]{9,12}$/.test(phone)) return "Format: 08xxxxxxxxxx";
+    return null;
   };
 
   return (
@@ -449,43 +519,60 @@ function PassengerFormPanel({
       </div>
 
       <div className="space-y-3">
-        {passengers.map((p, i) => (
-          <div key={p.seatNo} className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-amber-500/20 flex items-center justify-center">
-                  <span className="text-xs font-bold text-amber-400">{i + 1}</span>
+        {passengers.map((p, i) => {
+          const nameKey = `name-${i}`;
+          const phoneKey = `phone-${i}`;
+          const nameError = getNameError(p.name, nameKey);
+          const phoneError = getPhoneError(p.phone, phoneKey);
+
+          return (
+            <div key={p.seatNo} className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-md bg-amber-500/20 flex items-center justify-center">
+                    <span className="text-xs font-bold text-amber-400">{i + 1}</span>
+                  </div>
+                  <span className="text-sm font-medium text-slate-200">Penumpang {i + 1}</span>
                 </div>
-                <span className="text-sm font-medium text-slate-200">Penumpang {i + 1}</span>
+                <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded text-xs font-mono font-bold">
+                  {p.seatNo}
+                </span>
               </div>
-              <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded text-xs font-mono font-bold">
-                {p.seatNo}
-              </span>
-            </div>
-            <div className="space-y-2.5">
-              <div>
-                <label className="text-[11px] text-slate-500 uppercase tracking-wider mb-1 block">Nama Lengkap *</label>
-                <input value={p.name} onChange={e => update(i, "name", e.target.value)}
-                  placeholder="Nama lengkap penumpang"
-                  className="w-full h-9 px-3 bg-slate-700/40 border border-slate-600/50 rounded-lg text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2.5">
                 <div>
-                  <label className="text-[11px] text-slate-500 uppercase tracking-wider mb-1 block">No. Telepon</label>
-                  <input value={p.phone} onChange={e => update(i, "phone", e.target.value)}
-                    placeholder="08xxxxxxxxxx"
-                    className="w-full h-9 px-3 bg-slate-700/40 border border-slate-600/50 rounded-lg text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20" />
+                  <label className="text-[11px] text-slate-500 uppercase tracking-wider mb-1 block">Nama Lengkap *</label>
+                  <input value={p.name}
+                    onChange={e => update(i, "name", e.target.value)}
+                    onBlur={() => markTouched(nameKey)}
+                    placeholder="Nama lengkap penumpang"
+                    className={`w-full h-9 px-3 bg-slate-700/40 border rounded-lg text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 ${
+                      nameError ? "border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20" : "border-slate-600/50 focus:border-amber-500/50 focus:ring-amber-500/20"
+                    }`} />
+                  {nameError && <p className="text-[10px] text-red-400 mt-1">{nameError}</p>}
                 </div>
-                <div>
-                  <label className="text-[11px] text-slate-500 uppercase tracking-wider mb-1 block">No. Identitas</label>
-                  <input value={p.id} onChange={e => update(i, "id", e.target.value)}
-                    placeholder="KTP/Paspor"
-                    className="w-full h-9 px-3 bg-slate-700/40 border border-slate-600/50 rounded-lg text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-slate-500 uppercase tracking-wider mb-1 block">No. Telepon</label>
+                    <input value={p.phone}
+                      onChange={e => update(i, "phone", e.target.value)}
+                      onBlur={() => markTouched(phoneKey)}
+                      placeholder="08xxxxxxxxxx"
+                      className={`w-full h-9 px-3 bg-slate-700/40 border rounded-lg text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 ${
+                        phoneError ? "border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20" : "border-slate-600/50 focus:border-amber-500/50 focus:ring-amber-500/20"
+                      }`} />
+                    {phoneError && <p className="text-[10px] text-red-400 mt-1">{phoneError}</p>}
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-500 uppercase tracking-wider mb-1 block">No. Identitas</label>
+                    <input value={p.id} onChange={e => update(i, "id", e.target.value)}
+                      placeholder="KTP/Paspor"
+                      className="w-full h-9 px-3 bg-slate-700/40 border border-slate-600/50 rounded-lg text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20" />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -496,11 +583,11 @@ function PaymentPanelContent({ total }: { total: number }) {
   const [cashInput, setCashInput] = useState("");
   const fmt = (n: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
 
-  const methods = [
-    { id: "cash", label: "Tunai", icon: Banknote, color: "emerald" },
-    { id: "qris", label: "QRIS", icon: QrCode, color: "blue" },
-    { id: "ewallet", label: "E-Wallet", icon: Wallet, color: "purple" },
-    { id: "bank", label: "Transfer", icon: Building2, color: "cyan" },
+  const methods: { id: string; label: string; icon: LucideIcon }[] = [
+    { id: "cash", label: "Tunai", icon: Banknote },
+    { id: "qris", label: "QRIS", icon: QrCode },
+    { id: "ewallet", label: "E-Wallet", icon: Wallet },
+    { id: "bank", label: "Transfer", icon: Building2 },
   ];
 
   const cashReceived = parseFloat(cashInput) || 0;
@@ -663,7 +750,7 @@ function PrintPreviewPanel() {
   );
 }
 
-function InfoCell({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
+function InfoCell({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <div className="flex items-start gap-2">
       <Icon className="w-3.5 h-3.5 text-slate-500 mt-0.5 flex-shrink-0" />
@@ -728,7 +815,7 @@ export function TransitPro() {
         <div className="px-4 py-5 border-b border-slate-800/50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <Bus className="w-4.5 h-4.5 text-slate-900" />
+              <Bus className="w-4 h-4 text-slate-900" />
             </div>
             <div>
               <h1 className="text-sm font-bold text-slate-100 tracking-tight">Transity</h1>
@@ -794,7 +881,7 @@ export function TransitPro() {
               />
             )}
             {step === 3 && <SeatMapPanel selectedSeats={selectedSeats} onToggle={toggleSeat} />}
-            {step === 4 && <PassengerFormPanel seats={seats} onBack={goBack} />}
+            {step === 4 && <PassengerFormPanel seats={seats} />}
             {step === 5 && <PaymentPanelContent total={total} />}
             {step === 6 && <PrintPreviewPanel />}
 
