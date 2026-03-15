@@ -196,9 +196,10 @@ function TripCard({ trip, isSelected, onSelect }: {
   );
 }
 
-function RouteTimeline({ stops, origin, destination, onOriginSelect, onDestinationSelect }: {
+function RouteTimeline({ stops, origin, destination, onOriginSelect, onDestinationSelect, onProceed }: {
   stops: string[]; origin?: string; destination?: string;
   onOriginSelect: (s: string) => void; onDestinationSelect: (s: string) => void;
+  onProceed?: () => void;
 }) {
   const stopMeta: Record<string, { time: string; dist?: string; dur?: string }> = {
     "Jakarta Terminal": { time: "06:00" },
@@ -316,8 +317,8 @@ function RouteTimeline({ stops, origin, destination, onOriginSelect, onDestinati
       </div>
 
       {origin && destination && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-          <div className="flex items-center gap-4">
+        <div className="bg-white border-2 border-blue-200 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-4 mb-3">
             <div className="flex-1">
               <p className="text-[9px] text-gray-400 uppercase font-semibold tracking-wider mb-0.5">Naik</p>
               <p className="text-sm font-bold text-gray-900">{origin.replace(" Terminal", "")}</p>
@@ -346,6 +347,13 @@ function RouteTimeline({ stops, origin, destination, onOriginSelect, onDestinati
               <p className="text-[11px] text-gray-400 font-mono">{stopMeta[destination]?.time}</p>
             </div>
           </div>
+
+          {onProceed && (
+            <button onClick={onProceed} data-testid="btn-proceed-from-route"
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold transition-colors shadow-sm flex items-center justify-center gap-2">
+              Lanjut Pilih Kursi <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -770,7 +778,6 @@ export function TransitPro() {
   const handleDestinationSelect = (s: string) => {
     if (origin && s !== origin) {
       setDestination(s);
-      setTimeout(() => setPhase("book"), 300);
     }
   };
 
@@ -855,16 +862,16 @@ export function TransitPro() {
         </div>
       ) : (
         <>
-          {phase === "select" && selectedTrip && origin && destination && (
+          {phase === "book" && selectedTrip && origin && destination && (
             <div className="bg-blue-50 border-b border-blue-100 px-5 py-2 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-3 text-xs text-gray-600">
                 <span className="font-semibold text-blue-700">{selectedTrip.depart}</span>
                 <span>{origin} &rarr; {destination}</span>
                 <span className="text-gray-400">{selectedTrip.vehicle}</span>
               </div>
-              <button onClick={() => setPhase("book")} data-testid="btn-proceed-book"
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5">
-                Lanjut Pilih Kursi <ChevronRight className="w-3.5 h-3.5" />
+              <button onClick={() => { setPhase("select"); setSelectedSeats(new Set()); }} data-testid="btn-change-route"
+                className="px-3 py-1.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5">
+                <ChevronLeft className="w-3.5 h-3.5" /> Ubah Rute
               </button>
             </div>
           )}
@@ -960,6 +967,7 @@ export function TransitPro() {
                       destination={destination}
                       onOriginSelect={handleOriginSelect}
                       onDestinationSelect={handleDestinationSelect}
+                      onProceed={() => setPhase("book")}
                     />
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-gray-300">
