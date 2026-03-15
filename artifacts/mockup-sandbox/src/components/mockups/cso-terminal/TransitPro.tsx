@@ -10,11 +10,31 @@ import {
 
 type LucideIcon = ComponentType<LucideProps>;
 
+type StopInfo = { name: string; canBoard: boolean; canAlight: boolean };
+
 const MOCK_TRIPS = [
-  { id: "1", route: "Jakarta \u2192 Bandung", depart: "06:00", arrive: "09:30", vehicle: "BUS-001", seats: 32, available: 24, status: "active" as const, stops: ["Jakarta Terminal", "Purwakarta", "Bandung Terminal"], price: 75000 },
-  { id: "2", route: "Jakarta \u2192 Bandung", depart: "08:30", arrive: "12:00", vehicle: "BUS-003", seats: 40, available: 8, status: "active" as const, stops: ["Jakarta Terminal", "Purwakarta", "Bandung Terminal"], price: 75000 },
-  { id: "3", route: "Jakarta \u2192 Semarang", depart: "07:00", arrive: "14:00", vehicle: "BUS-005", seats: 40, available: 36, status: "active" as const, stops: ["Jakarta Terminal", "Cirebon", "Pekalongan", "Semarang"], price: 120000 },
-  { id: "4", route: "Jakarta \u2192 Semarang", depart: "20:00", arrive: "03:00", vehicle: "TBD", seats: 40, available: 40, status: "virtual" as const, stops: ["Jakarta Terminal", "Cirebon", "Pekalongan", "Semarang"], price: 120000 },
+  { id: "1", route: "Jakarta \u2192 Bandung", depart: "06:00", arrive: "09:30", vehicle: "BUS-001", seats: 32, available: 24, status: "active" as const, stops: [
+    { name: "Jakarta Terminal", canBoard: true, canAlight: false },
+    { name: "Purwakarta", canBoard: true, canAlight: true },
+    { name: "Bandung Terminal", canBoard: false, canAlight: true },
+  ] as StopInfo[], price: 75000 },
+  { id: "2", route: "Jakarta \u2192 Bandung", depart: "08:30", arrive: "12:00", vehicle: "BUS-003", seats: 40, available: 8, status: "active" as const, stops: [
+    { name: "Jakarta Terminal", canBoard: true, canAlight: false },
+    { name: "Purwakarta", canBoard: true, canAlight: true },
+    { name: "Bandung Terminal", canBoard: false, canAlight: true },
+  ] as StopInfo[], price: 75000 },
+  { id: "3", route: "Jakarta \u2192 Semarang", depart: "07:00", arrive: "14:00", vehicle: "BUS-005", seats: 40, available: 36, status: "active" as const, stops: [
+    { name: "Jakarta Terminal", canBoard: true, canAlight: false },
+    { name: "Cirebon", canBoard: true, canAlight: true },
+    { name: "Pekalongan", canBoard: false, canAlight: true },
+    { name: "Semarang", canBoard: false, canAlight: true },
+  ] as StopInfo[], price: 120000 },
+  { id: "4", route: "Jakarta \u2192 Semarang", depart: "20:00", arrive: "03:00", vehicle: "TBD", seats: 40, available: 40, status: "virtual" as const, stops: [
+    { name: "Jakarta Terminal", canBoard: true, canAlight: false },
+    { name: "Cirebon", canBoard: true, canAlight: true },
+    { name: "Pekalongan", canBoard: false, canAlight: true },
+    { name: "Semarang", canBoard: false, canAlight: true },
+  ] as StopInfo[], price: 120000 },
 ];
 
 const SEAT_LAYOUT: (string | null)[][] = [
@@ -171,10 +191,10 @@ function TripCard({ trip, isSelected, onSelect }: {
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1">
           {trip.stops.map((s, i) => (
-            <span key={s} className="flex items-center gap-1">
+            <span key={s.name} className="flex items-center gap-1">
               <span className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-emerald-500" : i === trip.stops.length - 1 ? "bg-rose-500" : "bg-gray-400"}`} />
-              <span className="text-[10px] text-gray-500 max-w-[55px] truncate">{s.replace(" Terminal", "")}</span>
-              {i < trip.stops.length - 1 && <span className="text-gray-300 text-[10px] mx-0.5">\u203a</span>}
+              <span className="text-[10px] text-gray-500 max-w-[55px] truncate">{s.name.replace(" Terminal", "")}</span>
+              {i < trip.stops.length - 1 && <span className="text-gray-300 text-[10px] mx-0.5">{"\u203A"}</span>}
             </span>
           ))}
         </div>
@@ -197,7 +217,7 @@ function TripCard({ trip, isSelected, onSelect }: {
 }
 
 function RouteTimeline({ stops, origin, destination, onOriginSelect, onDestinationSelect, onProceed }: {
-  stops: string[]; origin?: string; destination?: string;
+  stops: StopInfo[]; origin?: string; destination?: string;
   onOriginSelect: (s: string) => void; onDestinationSelect: (s: string) => void;
   onProceed?: () => void;
 }) {
@@ -210,8 +230,9 @@ function RouteTimeline({ stops, origin, destination, onOriginSelect, onDestinati
     "Semarang": { time: "14:00", dist: "80 km", dur: "2j 30m" },
   };
 
-  const originIdx = origin ? stops.indexOf(origin) : -1;
-  const destIdx = destination ? stops.indexOf(destination) : -1;
+  const stopNames = stops.map(s => s.name);
+  const originIdx = origin ? stopNames.indexOf(origin) : -1;
+  const destIdx = destination ? stopNames.indexOf(destination) : -1;
   const legCount = originIdx >= 0 && destIdx > originIdx ? destIdx - originIdx : 0;
 
   const isInSelectedRange = (i: number) => {
@@ -230,17 +251,17 @@ function RouteTimeline({ stops, origin, destination, onOriginSelect, onDestinati
         {stops.map((stop, i) => {
           const isFirst = i === 0;
           const isLast = i === stops.length - 1;
-          const isOrigin = origin === stop;
-          const isDest = destination === stop;
-          const meta = stopMeta[stop] || { time: "--:--" };
+          const isOrigin = origin === stop.name;
+          const isDest = destination === stop.name;
+          const meta = stopMeta[stop.name] || { time: "--:--" };
           const inRange = isInSelectedRange(i);
-          const nextMeta = !isLast ? stopMeta[stops[i + 1]] : undefined;
+          const nextMeta = !isLast ? stopMeta[stops[i + 1].name] : undefined;
 
           return (
-            <div key={stop}>
+            <div key={stop.name}>
               <div className={`flex items-center px-4 py-3 transition-colors ${
                 isOrigin ? "bg-emerald-50" : isDest ? "bg-rose-50" : inRange ? "bg-blue-50/40" : "hover:bg-gray-50"
-              } ${!isLast ? "" : ""}`}>
+              }`}>
                 <div className="flex flex-col items-center mr-4 self-stretch">
                   {!isFirst && (
                     <div className={`w-0.5 flex-1 ${inRange || isOrigin ? "bg-blue-300" : "bg-gray-200"}`} />
@@ -263,10 +284,17 @@ function RouteTimeline({ stops, origin, destination, onOriginSelect, onDestinati
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className={`text-sm font-semibold ${isOrigin || isDest ? "text-gray-900" : "text-gray-700"}`}>{stop}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className={`text-sm font-semibold ${isOrigin || isDest ? "text-gray-900" : "text-gray-700"}`}>{stop.name}</p>
                     {isOrigin && <span className="px-1.5 py-px bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold uppercase">Naik</span>}
                     {isDest && <span className="px-1.5 py-px bg-rose-100 text-rose-700 rounded text-[9px] font-bold uppercase">Turun</span>}
+                    {!isOrigin && !isDest && (
+                      <div className="flex gap-1">
+                        {stop.canBoard && <span className="px-1 py-px bg-emerald-50 text-emerald-500 rounded text-[8px] font-medium border border-emerald-100">Pickup</span>}
+                        {stop.canAlight && <span className="px-1 py-px bg-rose-50 text-rose-400 rounded text-[8px] font-medium border border-rose-100">Drop</span>}
+                        {!stop.canBoard && !stop.canAlight && <span className="px-1 py-px bg-gray-100 text-gray-400 rounded text-[8px] font-medium">Transit</span>}
+                      </div>
+                    )}
                   </div>
                   <p className="text-[11px] text-gray-400 font-mono mt-0.5">
                     <Clock className="w-3 h-3 inline -mt-px mr-0.5" />{meta.time}
@@ -276,8 +304,8 @@ function RouteTimeline({ stops, origin, destination, onOriginSelect, onDestinati
                 </div>
 
                 <div className="flex gap-1.5 flex-shrink-0">
-                  {!isLast && (
-                    <button onClick={() => onOriginSelect(stop)} data-testid={`naik-${i}`}
+                  {stop.canBoard && !isLast && (
+                    <button onClick={() => onOriginSelect(stop.name)} data-testid={`naik-${i}`}
                       className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                         isOrigin
                           ? "bg-emerald-500 text-white shadow-sm shadow-emerald-200"
@@ -286,8 +314,13 @@ function RouteTimeline({ stops, origin, destination, onOriginSelect, onDestinati
                       {isOrigin ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Naik</> : "Naik"}
                     </button>
                   )}
-                  {!isFirst && (
-                    <button onClick={() => onDestinationSelect(stop)} data-testid={`turun-${i}`}
+                  {!stop.canBoard && !isLast && (
+                    <span className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed" title="Tidak bisa naik di titik ini">
+                      Naik
+                    </span>
+                  )}
+                  {stop.canAlight && !isFirst && (
+                    <button onClick={() => onDestinationSelect(stop.name)} data-testid={`turun-${i}`}
                       className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                         isDest
                           ? "bg-rose-500 text-white shadow-sm shadow-rose-200"
@@ -295,6 +328,11 @@ function RouteTimeline({ stops, origin, destination, onOriginSelect, onDestinati
                       }`}>
                       {isDest ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Turun</> : "Turun"}
                     </button>
+                  )}
+                  {!stop.canAlight && !isFirst && (
+                    <span className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed" title="Tidak bisa turun di titik ini">
+                      Turun
+                    </span>
                   )}
                 </div>
               </div>
@@ -804,7 +842,7 @@ export function TransitPro() {
     const q = tripSearch.toLowerCase();
     return t.route.toLowerCase().includes(q)
       || t.vehicle.toLowerCase().includes(q)
-      || t.stops.some(s => s.toLowerCase().includes(q));
+      || t.stops.some(s => s.name.toLowerCase().includes(q));
   });
 
   const groupedTrips = Object.entries(
