@@ -3,6 +3,24 @@ import { Check, CreditCard, Clock, Loader2, Banknote, QrCode, Wallet, Building2 
 
 interface PassengerData { fullName: string; phone?: string; idNumber?: string; seatNo: string }
 
+function generateCashPresets(total: number): number[] {
+  if (total <= 0) return [];
+  const denominations = [1000, 2000, 5000, 10000, 20000, 50000, 100000];
+  const roundUp = (val: number, denom: number) => Math.ceil(val / denom) * denom;
+  const presets = new Set<number>();
+  for (const d of denominations) {
+    const rounded = roundUp(total, d);
+    if (rounded >= total && rounded <= total * 3) presets.add(rounded);
+  }
+  const nextRound = [50000, 100000, 200000, 500000, 1000000];
+  for (const n of nextRound) {
+    if (n >= total && n <= total * 3) presets.add(n);
+  }
+  const sorted = Array.from(presets).sort((a, b) => a - b);
+  if (sorted.length > 5) return sorted.slice(0, 5);
+  return sorted;
+}
+
 interface PassengerFormProps {
   selectedSeats: string[];
   passengers: Array<PassengerData>;
@@ -264,24 +282,55 @@ export default function PassengerForm({
         </div>
 
         {selectedMethod === 'cash' && (
-          <div className="flex gap-2 items-start">
-            <div className="flex-1">
-              <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Uang Diterima</label>
-              <input
-                type="number"
-                value={cashReceived}
-                onChange={(e) => setCashReceived(e.target.value)}
-                placeholder="Masukkan jumlah..."
-                className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm font-mono text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
-                data-testid="input-cash"
-              />
-            </div>
-            {parseFloat(cashReceived) >= totalAmount && (
-              <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-center">
-                <span className="text-[10px] text-gray-500 block">Kembalian</span>
-                <span className="text-lg font-black text-emerald-600 font-mono">{fmt(cashChange)}</span>
+          <div className="space-y-2">
+            <div className="flex gap-2 items-start">
+              <div className="flex-1">
+                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Uang Diterima</label>
+                <input
+                  type="number"
+                  value={cashReceived}
+                  onChange={(e) => setCashReceived(e.target.value)}
+                  placeholder="Masukkan jumlah..."
+                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm font-mono text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+                  data-testid="input-cash"
+                />
               </div>
-            )}
+              {parseFloat(cashReceived) >= totalAmount && (
+                <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-center">
+                  <span className="text-[10px] text-gray-500 block">Kembalian</span>
+                  <span className="text-lg font-black text-emerald-600 font-mono">{fmt(cashChange)}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {generateCashPresets(totalAmount).map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setCashReceived(String(preset))}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold border transition-colors ${
+                    cashReceived === String(preset)
+                      ? 'bg-blue-50 border-blue-300 text-blue-700'
+                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 hover:border-gray-300'
+                  }`}
+                  data-testid={`cash-preset-${preset}`}
+                >
+                  {fmt(preset)}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setCashReceived(String(totalAmount))}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                  cashReceived === String(totalAmount)
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100 hover:border-emerald-300'
+                }`}
+                data-testid="cash-preset-exact"
+              >
+                Uang Pas
+              </button>
+            </div>
           </div>
         )}
       </div>

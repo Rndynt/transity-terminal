@@ -272,7 +272,7 @@ export default function SeatMap({
                       onClick={() => !isLoading && handleSeatClick(seat.seat_no)}
                       disabled={isLoading}
                       data-testid={`seat-${seat.seat_no}`}
-                      className={`w-9 h-9 rounded-lg border text-[10px] font-bold font-mono transition-all duration-100 ${seatColors[status]} ${isLoading ? 'opacity-50' : ''}`}
+                      className={`w-9 h-9 rounded-lg border text-[10px] font-bold font-mono transition-all duration-100 flex items-center justify-center ${seatColors[status]} ${isLoading ? 'opacity-50' : ''}`}
                     >
                       {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : seat.seat_no}
                     </button>
