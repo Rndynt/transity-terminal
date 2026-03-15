@@ -724,18 +724,42 @@ export function TransitPro() {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-5 flex-shrink-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <Ticket className="w-4 h-4 text-blue-600" />
             <span className="text-sm font-bold text-gray-800">CSO Booking Terminal</span>
-            <span className="text-gray-300 mx-1">/</span>
-            <span className="text-xs text-gray-500">{showPrint ? "Tiket" : phase === "select" ? "Jadwal & Rute" : "Kursi & Penumpang"}</span>
+
+            <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5" />
+            {showPrint ? (
+              <>
+                <button onClick={() => setShowPrint(false)} data-testid="breadcrumb-back-book"
+                  className="text-xs text-blue-600 hover:underline">Kursi & Penumpang</button>
+                <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5" />
+                <span className="text-xs text-gray-500">Tiket</span>
+              </>
+            ) : phase === "book" ? (
+              <>
+                <button onClick={() => { setPhase("select"); setSelectedSeats(new Set()); }} data-testid="breadcrumb-back-select"
+                  className="text-xs text-blue-600 hover:underline">Jadwal & Rute</button>
+                <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5" />
+                <span className="text-xs text-gray-500">Kursi & Penumpang</span>
+              </>
+            ) : (
+              <span className="text-xs text-gray-500">Jadwal & Rute</span>
+            )}
           </div>
           <div className="flex items-center gap-4">
-            {phase === "book" && !showPrint && (
+            {(phase === "book" && !showPrint) && (
               <button onClick={() => { setPhase("select"); setSelectedSeats(new Set()); }}
                 data-testid="btn-back-select"
-                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors">
-                <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Ubah Jadwal/Rute
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors border border-gray-200">
+                <ChevronLeft className="w-3.5 h-3.5" /> Kembali
+              </button>
+            )}
+            {showPrint && (
+              <button onClick={() => setShowPrint(false)}
+                data-testid="btn-back-booking"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors border border-gray-200">
+                <ChevronLeft className="w-3.5 h-3.5" /> Kembali
               </button>
             )}
             <div className="flex items-center gap-3 text-xs text-gray-400">
