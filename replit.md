@@ -10,22 +10,24 @@ A comprehensive production-grade MVP for a multi-stop bus travel ticketing syste
 - **UI**: Tailwind CSS + shadcn/ui components
 
 ## Recent Changes
+**Date: 2026-03-15**
+- Implemented TransitPro mockup design into production CSO booking terminal
+- CsoPage.tsx rewritten with 2-phase layout: select phase (TripSelector + RouteTimeline) and book phase (SeatMap + PassengerForm with inline payment)
+- Replaced stepper-based 3-column layout with breadcrumb navigation + 2-panel split
+- PassengerForm updated: compact horizontal row layout, max 4 visible with scroll, green highlight when filled, inline payment section with method selection
+- TripSelector updated: search filtering by route/vehicle, collapsible route groups
+- useBookingFlow hook updated: uses stateRef for latest state access, booking functions accept optional overrides to prevent race conditions
+- PaymentPanel no longer used directly from CsoPage (payment integrated into PassengerForm)
+- Both booking paths functional: "Booking Saja" (pending) and "Bayar & Cetak" (paid)
+
 **Date: 2025-09-27**
 - Fresh GitHub import successfully reconfigured for Replit environment
 - PostgreSQL database provisioned and connected via Replit database integration
 - Database schema applied successfully using `npm run db:push`
-- Database seeded with comprehensive sample data via `curl -X POST /api/seed`:
-  * 5 stops: Jakarta Terminal, Purwakarta, Bandung Terminal, Bandung Pasteur, Semarang
-  * 4 outlets: Jakarta Terminal, Bandung Terminal, Bandung Pasteur, Semarang
-  * 1 layout (12-seat configuration), 1 vehicle (BUS-001), 1 trip pattern
-  * Complete trip with schedules and seat inventory
+- Database seeded with comprehensive sample data
 - Workflow "Start application" configured to run `npm run dev` on port 5000 with webview output
-- Express server properly configured with host 0.0.0.0 for Replit proxy compatibility
-- Vite development server pre-configured with `allowedHosts: true` for iframe proxy
-- Database connection verified working (200/304 status codes on API calls)
 - Application running successfully with all features functional
-- Deployment configuration set up for autoscale target with `npm run build` and `npm run start`
-- Import process completed and verified successfully
+- Deployment configuration set up for autoscale target
 
 ## Project Architecture
 - **Client**: `/client` directory with React frontend and Vite configuration

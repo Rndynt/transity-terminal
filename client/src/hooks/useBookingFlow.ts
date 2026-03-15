@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { bookingsApi, pricingApi } from '@/lib/api';
 import type { BookingFlowState, BookingStep, CreateBookingRequest } from '@/types';
@@ -20,6 +20,9 @@ export function useBookingFlow() {
   });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  const stateRef = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
 
   const updateState = useCallback((updates: Partial<BookingFlowState>) => {
     setState(current => ({ ...current, ...updates }));
@@ -114,44 +117,46 @@ export function useBookingFlow() {
     }
   }, [state.trip?.id, state.originSeq, state.destinationSeq, state.selectedSeats.length]);
 
-  const validateBookingData = useCallback(() => {
+  const validateBookingData = useCallback((overrides?: { passengers?: any[]; payment?: any }) => {
+    const s = { ...stateRef.current, ...overrides };
     const validationErrors = [];
     
-    if (!state.trip) validationErrors.push('Trip not selected');
-    if (!state.originStop) validationErrors.push('Origin stop not selected');
-    if (!state.destinationStop) validationErrors.push('Destination stop not selected');
-    if (!state.originSeq && state.originSeq !== 0) validationErrors.push('Origin sequence not set');
-    if (!state.destinationSeq && state.destinationSeq !== 0) validationErrors.push('Destination sequence not set');
-    if (!state.selectedSeats || state.selectedSeats.length === 0) validationErrors.push('No seats selected');
-    if (!state.passengers || state.passengers.length === 0) validationErrors.push('No passengers added');
-    if (state.passengers.length !== state.selectedSeats.length) validationErrors.push('Passenger count does not match seat count');
+    if (!s.trip) validationErrors.push('Trip not selected');
+    if (!s.originStop) validationErrors.push('Origin stop not selected');
+    if (!s.destinationStop) validationErrors.push('Destination stop not selected');
+    if (!s.originSeq && s.originSeq !== 0) validationErrors.push('Origin sequence not set');
+    if (!s.destinationSeq && s.destinationSeq !== 0) validationErrors.push('Destination sequence not set');
+    if (!s.selectedSeats || s.selectedSeats.length === 0) validationErrors.push('No seats selected');
+    if (!s.passengers || s.passengers.length === 0) validationErrors.push('No passengers added');
+    if (s.passengers.length !== s.selectedSeats.length) validationErrors.push('Passenger count does not match seat count');
     
-    if (state.originSeq !== undefined && state.destinationSeq !== undefined && state.originSeq >= state.destinationSeq) {
+    if (s.originSeq !== undefined && s.destinationSeq !== undefined && s.originSeq >= s.destinationSeq) {
       validationErrors.push('Origin sequence must be less than destination sequence');
     }
     
-    const uniqueSeats = new Set(state.selectedSeats);
-    if (uniqueSeats.size !== state.selectedSeats.length) {
+    const uniqueSeats = new Set(s.selectedSeats);
+    if (uniqueSeats.size !== s.selectedSeats.length) {
       validationErrors.push('Duplicate seats are not allowed');
     }
     
-    state.selectedSeats.forEach((seat, index) => {
+    s.selectedSeats.forEach((seat: string, index: number) => {
       if (!seat || !seat.trim()) {
         validationErrors.push(`Seat ${index + 1} number cannot be empty`);
       }
     });
     
-    state.passengers.forEach((passenger, index) => {
+    s.passengers.forEach((passenger: any, index: number) => {
       if (!passenger.fullName || !passenger.fullName.trim()) {
         validationErrors.push(`Passenger ${index + 1} name is required`);
       }
     });
 
     return validationErrors;
-  }, [state]);
+  }, []);
 
-  const createPendingBooking = useCallback(async (): Promise<{ booking: any; printPayload: any }> => {
-    const validationErrors = validateBookingData();
+  const createPendingBooking = useCallback(async (overrides?: { passengers?: any[] }): Promise<{ booking: any; printPayload: any }> => {
+    const s = { ...stateRef.current, ...overrides };
+    const validationErrors = validateBookingData(overrides);
 
     if (validationErrors.length > 0) {
       const errorMessage = `Booking validation failed: ${validationErrors.join(', ')}`;
@@ -164,20 +169,20 @@ export function useBookingFlow() {
       const totalAmount = await calculateTotalAmount();
       
       const bookingData = {
-        tripId: state.trip!.id,
-        outletId: state.outlet?.id,
-        originStopId: state.originStop!.id,
-        destinationStopId: state.destinationStop!.id,
-        originSeq: state.originSeq!,
-        destinationSeq: state.destinationSeq!,
+        tripId: s.trip!.id,
+        outletId: s.outlet?.id,
+        originStopId: s.originStop!.id,
+        destinationStopId: s.destinationStop!.id,
+        originSeq: s.originSeq!,
+        destinationSeq: s.destinationSeq!,
         totalAmount: totalAmount,
         channel: 'CSO' as const,
         createdBy: 'CSO User',
-        passengers: state.passengers.map((passenger, index) => ({
+        passengers: s.passengers.map((passenger: any, index: number) => ({
           fullName: passenger.fullName,
           phone: passenger.phone || undefined,
           idNumber: passenger.idNumber || undefined,
-          seatNo: state.selectedSeats[index]
+          seatNo: s.selectedSeats[index]
         }))
       };
 
@@ -218,16 +223,17 @@ export function useBookingFlow() {
     } finally {
       setLoading(false);
     }
-  }, [state, toast, calculateTotalAmount, validateBookingData]);
+  }, [toast, calculateTotalAmount, validateBookingData]);
 
-  const createBooking = useCallback(async (): Promise<{ booking: any; printPayload: any }> => {
-    const validationErrors = validateBookingData();
+  const createBooking = useCallback(async (overrides?: { passengers?: any[]; payment?: any }): Promise<{ booking: any; printPayload: any }> => {
+    const s = { ...stateRef.current, ...overrides };
+    const validationErrors = validateBookingData(overrides);
     
-    if (!state.payment) validationErrors.push('Payment information not provided');
+    if (!s.payment) validationErrors.push('Payment information not provided');
     
-    if (state.payment) {
+    if (s.payment) {
       const validMethods = ['cash', 'qr', 'ewallet', 'bank'];
-      if (!validMethods.includes(state.payment.method)) {
+      if (!validMethods.includes(s.payment.method)) {
         validationErrors.push('Invalid payment method');
       }
     }
@@ -242,27 +248,27 @@ export function useBookingFlow() {
     try {
       const totalAmount = await calculateTotalAmount();
       
-      if (state.payment && state.payment.amount < totalAmount) {
-        throw new Error(`Payment amount (${state.payment.amount}) is less than total amount (${totalAmount})`);
+      if (s.payment && s.payment.amount < totalAmount) {
+        throw new Error(`Payment amount (${s.payment.amount}) is less than total amount (${totalAmount})`);
       }
       
       const bookingData: CreateBookingRequest = {
-        tripId: state.trip!.id,
-        outletId: state.outlet?.id,
-        originStopId: state.originStop!.id,
-        destinationStopId: state.destinationStop!.id,
-        originSeq: state.originSeq!,
-        destinationSeq: state.destinationSeq!,
+        tripId: s.trip!.id,
+        outletId: s.outlet?.id,
+        originStopId: s.originStop!.id,
+        destinationStopId: s.destinationStop!.id,
+        originSeq: s.originSeq!,
+        destinationSeq: s.destinationSeq!,
         totalAmount: totalAmount,
         channel: 'CSO',
         createdBy: 'CSO User',
-        passengers: state.passengers.map((passenger, index) => ({
+        passengers: s.passengers.map((passenger: any, index: number) => ({
           fullName: passenger.fullName,
           phone: passenger.phone || undefined,
           idNumber: passenger.idNumber || undefined,
-          seatNo: state.selectedSeats[index]
+          seatNo: s.selectedSeats[index]
         })),
-        payment: state.payment!
+        payment: s.payment!
       };
 
       const idempotencyKey = `booking-${Date.now()}-${Math.random()}`;
@@ -286,7 +292,7 @@ export function useBookingFlow() {
     } finally {
       setLoading(false);
     }
-  }, [state, toast, calculateTotalAmount, validateBookingData]);
+  }, [toast, calculateTotalAmount, validateBookingData]);
 
   const resetFlow = useCallback(() => {
     setState({
