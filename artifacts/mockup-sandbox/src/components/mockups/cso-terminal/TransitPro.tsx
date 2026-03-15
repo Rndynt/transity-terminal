@@ -1,10 +1,10 @@
 import { useState, type ComponentType } from "react";
 import {
   MapPin, Calendar, Clock, Bus, Users, CreditCard, Printer,
-  ChevronRight, Check, Timer, ArrowRight, ArrowDown,
+  ChevronRight, ChevronLeft, Check, Timer, ArrowRight, ArrowDown,
   Armchair, RotateCcw, QrCode, Banknote, Wallet, Building2,
   Circle, Store, Ticket, CheckCircle2, X, List,
-  LayoutGrid, Route, DollarSign, Truck,
+  LayoutGrid, Route, DollarSign, Truck, PanelLeftClose, PanelLeftOpen,
   type LucideProps
 } from "lucide-react";
 
@@ -62,34 +62,60 @@ const NAV_SECTIONS: { title: string; items: { name: string; icon: LucideIcon; ac
   },
 ];
 
-function AppSidebar() {
+function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   return (
-    <div className="w-52 bg-white border-r border-gray-200 flex flex-col flex-shrink-0 h-full">
-      <div className="px-4 py-4 border-b border-gray-100">
+    <div className={`bg-white border-r border-gray-200 flex flex-col flex-shrink-0 h-full transition-all duration-200 ${collapsed ? "w-14" : "w-52"}`}>
+      <div className={`py-4 border-b border-gray-100 flex items-center ${collapsed ? "px-3 justify-center" : "px-4 justify-between"}`}>
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
+          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
             <Bus className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <h1 className="text-sm font-bold text-gray-800 leading-tight">Transity</h1>
-            <p className="text-[10px] text-gray-400">Multi-Stop Travel System</p>
-          </div>
+          {!collapsed && (
+            <div>
+              <h1 className="text-sm font-bold text-gray-800 leading-tight">Transity</h1>
+              <p className="text-[10px] text-gray-400">Multi-Stop Travel System</p>
+            </div>
+          )}
         </div>
+        {!collapsed && (
+          <button onClick={onToggle} className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" data-testid="btn-collapse-sidebar">
+            <PanelLeftClose className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
-      <nav className="flex-1 px-3 py-3 overflow-y-auto">
+      {collapsed && (
+        <div className="px-2 pt-3 pb-1">
+          <button onClick={onToggle} className="w-full flex items-center justify-center p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" data-testid="btn-expand-sidebar">
+            <PanelLeftOpen className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <nav className={`flex-1 py-3 overflow-y-auto ${collapsed ? "px-2" : "px-3"}`}>
         {NAV_SECTIONS.map(section => (
           <div key={section.title} className="mb-4">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1.5">{section.title}</p>
+            {!collapsed && <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1.5">{section.title}</p>}
+            {collapsed && <div className="h-px bg-gray-100 mx-1 mb-2" />}
             <div className="space-y-0.5">
               {section.items.map(item => {
                 const Icon = item.icon;
-                return (
+                return collapsed ? (
+                  <div key={item.name} className="relative group">
+                    <button
+                      className={`w-full flex items-center justify-center p-2 rounded-lg transition-colors ${
+                        item.active ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+                      }`}>
+                      <Icon className="w-4 h-4" />
+                    </button>
+                    <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                      {item.name}
+                    </div>
+                  </div>
+                ) : (
                   <button key={item.name}
                     className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors ${
-                      item.active
-                        ? "bg-blue-50 text-blue-700 font-semibold"
-                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-800"
+                      item.active ? "bg-blue-50 text-blue-700 font-semibold" : "text-gray-600 hover:bg-gray-50 hover:text-gray-800"
                     }`}>
                     <Icon className={`w-4 h-4 flex-shrink-0 ${item.active ? "text-blue-600" : "text-gray-400"}`} />
                     <span>{item.name}</span>
@@ -101,9 +127,19 @@ function AppSidebar() {
         ))}
       </nav>
 
-      <div className="px-3 py-3 border-t border-gray-100">
-        <p className="text-[10px] text-gray-400 px-2">Demo Transport</p>
-        <p className="text-[10px] text-gray-300 px-2">Version: 1.0.0-MVP</p>
+      <div className={`py-3 border-t border-gray-100 ${collapsed ? "px-2" : "px-3"}`}>
+        {collapsed ? (
+          <div className="flex justify-center">
+            <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center">
+              <span className="text-[8px] font-bold text-gray-400">v1</span>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="text-[10px] text-gray-400 px-2">Demo Transport</p>
+            <p className="text-[10px] text-gray-300 px-2">Version: 1.0.0-MVP</p>
+          </>
+        )}
       </div>
     </div>
   );
@@ -642,6 +678,7 @@ export function TransitPro() {
   const [destination, setDestination] = useState<string>();
   const [selectedSeats, setSelectedSeats] = useState<Set<string>>(new Set());
   const [showPrint, setShowPrint] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const handleTripSelect = (t: typeof MOCK_TRIPS[0]) => {
     setSelectedTrip(t);
@@ -683,7 +720,7 @@ export function TransitPro() {
 
   return (
     <div className="flex h-screen bg-gray-50 font-['Inter',sans-serif]">
-      <AppSidebar />
+      <AppSidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(c => !c)} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-5 flex-shrink-0">
