@@ -3,7 +3,8 @@ import {
   MapPin, Calendar, Clock, Bus, Users, CreditCard, Printer,
   ChevronRight, Check, Timer, ArrowRight, ArrowDown,
   Armchair, RotateCcw, QrCode, Banknote, Wallet, Building2,
-  Circle, Store, Ticket, CheckCircle2, X,
+  Circle, Store, Ticket, CheckCircle2, X, List,
+  LayoutGrid, Route, DollarSign, Truck,
   type LucideProps
 } from "lucide-react";
 
@@ -37,6 +38,75 @@ type Phase = "select" | "book";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
+}
+
+const NAV_SECTIONS: { title: string; items: { name: string; icon: LucideIcon; active?: boolean }[] }[] = [
+  {
+    title: "OPERATIONS",
+    items: [
+      { name: "Reservasi", icon: Ticket, active: true },
+      { name: "All Bookings", icon: List },
+    ],
+  },
+  {
+    title: "MASTERS",
+    items: [
+      { name: "Stops", icon: MapPin },
+      { name: "Outlets", icon: Store },
+      { name: "Vehicles", icon: Truck },
+      { name: "Layouts", icon: LayoutGrid },
+      { name: "Trip Patterns", icon: Route },
+      { name: "Trips", icon: Calendar },
+      { name: "Price Rules", icon: DollarSign },
+    ],
+  },
+];
+
+function AppSidebar() {
+  return (
+    <div className="w-52 bg-white border-r border-gray-200 flex flex-col flex-shrink-0 h-full">
+      <div className="px-4 py-4 border-b border-gray-100">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
+            <Bus className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h1 className="text-sm font-bold text-gray-800 leading-tight">Transity</h1>
+            <p className="text-[10px] text-gray-400">Multi-Stop Travel System</p>
+          </div>
+        </div>
+      </div>
+
+      <nav className="flex-1 px-3 py-3 overflow-y-auto">
+        {NAV_SECTIONS.map(section => (
+          <div key={section.title} className="mb-4">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1.5">{section.title}</p>
+            <div className="space-y-0.5">
+              {section.items.map(item => {
+                const Icon = item.icon;
+                return (
+                  <button key={item.name}
+                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors ${
+                      item.active
+                        ? "bg-blue-50 text-blue-700 font-semibold"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-800"
+                    }`}>
+                    <Icon className={`w-4 h-4 flex-shrink-0 ${item.active ? "text-blue-600" : "text-gray-400"}`} />
+                    <span>{item.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      <div className="px-3 py-3 border-t border-gray-100">
+        <p className="text-[10px] text-gray-400 px-2">Demo Transport</p>
+        <p className="text-[10px] text-gray-300 px-2">Version: 1.0.0-MVP</p>
+      </div>
+    </div>
+  );
 }
 
 function TripCard({ trip, isSelected, onSelect }: {
@@ -611,174 +681,150 @@ export function TransitPro() {
 
   const seats = Array.from(selectedSeats).sort();
 
-  if (showPrint) {
-    return (
-      <div className="h-screen bg-gray-50 font-['Inter',sans-serif] overflow-y-auto">
-        <div className="h-12 bg-white border-b border-gray-200 flex items-center px-5 flex-shrink-0">
+  return (
+    <div className="flex h-screen bg-gray-50 font-['Inter',sans-serif]">
+      <AppSidebar />
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-5 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
-              <Bus className="w-4 h-4 text-white" />
+            <Ticket className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-bold text-gray-800">CSO Booking Terminal</span>
+            <span className="text-gray-300 mx-1">/</span>
+            <span className="text-xs text-gray-500">{showPrint ? "Tiket" : phase === "select" ? "Jadwal & Rute" : "Kursi & Penumpang"}</span>
+          </div>
+          <div className="flex items-center gap-4">
+            {phase === "book" && !showPrint && (
+              <button onClick={() => { setPhase("select"); setSelectedSeats(new Set()); }}
+                data-testid="btn-back-select"
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors">
+                <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Ubah Jadwal/Rute
+              </button>
+            )}
+            <div className="flex items-center gap-3 text-xs text-gray-400">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span>Online</span>
+              </div>
+              <span>CSO User</span>
+              <span className="font-mono">15/3/2026</span>
             </div>
-            <span className="text-sm font-bold text-gray-800">Transity</span>
-            <span className="text-gray-300 mx-1">|</span>
-            <span className="text-xs text-gray-500">Booking Terminal</span>
           </div>
         </div>
-        <div className="p-6">
+
+      {showPrint ? (
+        <div className="flex-1 overflow-y-auto p-6">
           <PrintPreviewPanel onNewBooking={resetAll} />
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col h-screen bg-gray-50 font-['Inter',sans-serif]">
-      <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-5 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
-            <Bus className="w-4 h-4 text-white" />
-          </div>
-          <span className="text-sm font-bold text-gray-800">Transity</span>
-          <span className="text-gray-300 mx-1">|</span>
-          <span className="text-xs text-gray-500">Booking Terminal</span>
-        </div>
-        <div className="flex items-center gap-4">
-          {phase === "book" && (
-            <button onClick={() => { setPhase("select"); setSelectedSeats(new Set()); }}
-              data-testid="btn-back-select"
-              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors">
-              <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Ubah Jadwal/Rute
-            </button>
-          )}
-          <div className="flex items-center gap-3 text-xs text-gray-400">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span>Online</span>
-            </div>
-            <span>CSO User</span>
-            <span className="font-mono">15/3/2026</span>
-          </div>
-        </div>
-      </div>
-
-      {phase === "select" && selectedTrip && origin && destination && (
-        <div className="bg-blue-50 border-b border-blue-100 px-5 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-3 text-xs text-gray-600">
-            <span className="font-semibold text-blue-700">{selectedTrip.depart}</span>
-            <span>{origin} \u2192 {destination}</span>
-            <span className="text-gray-400">{selectedTrip.vehicle}</span>
-          </div>
-          <button onClick={() => setPhase("book")} data-testid="btn-proceed-book"
-            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5">
-            Lanjut Pilih Kursi <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
-      <div className="flex-1 flex overflow-hidden">
-        {phase === "select" && (
-          <>
-            <div className="flex-1 border-r border-gray-200 overflow-y-auto p-5">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-gray-800">Pilih Jadwal</h3>
-                  <span className="text-[10px] text-gray-400">{MOCK_TRIPS.length} jadwal</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                      <Store className="w-3 h-3" /> Outlet
-                    </label>
-                    <div className="h-9 bg-white border border-gray-200 rounded-lg px-3 flex items-center text-sm text-gray-700">
-                      Jakarta Terminal
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                      <Calendar className="w-3 h-3" /> Tanggal
-                    </label>
-                    <div className="h-9 bg-white border border-gray-200 rounded-lg px-3 flex items-center text-sm text-gray-700">
-                      15 Mar 2026
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {MOCK_TRIPS.map(trip => (
-                    <TripCard key={trip.id} trip={trip} isSelected={selectedTrip?.id === trip.id} onSelect={() => handleTripSelect(trip)} />
-                  ))}
-                </div>
+      ) : (
+        <>
+          {phase === "select" && selectedTrip && origin && destination && (
+            <div className="bg-blue-50 border-b border-blue-100 px-5 py-2 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3 text-xs text-gray-600">
+                <span className="font-semibold text-blue-700">{selectedTrip.depart}</span>
+                <span>{origin} &rarr; {destination}</span>
+                <span className="text-gray-400">{selectedTrip.vehicle}</span>
               </div>
+              <button onClick={() => setPhase("book")} data-testid="btn-proceed-book"
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5">
+                Lanjut Pilih Kursi <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
+          )}
+          <div className="flex-1 flex overflow-hidden">
+            {phase === "select" && (
+              <>
+                <div className="flex-1 border-r border-gray-200 overflow-y-auto p-5">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-gray-800">Pilih Jadwal</h3>
+                      <span className="text-[10px] text-gray-400">{MOCK_TRIPS.length} jadwal</span>
+                    </div>
 
-            <div className="flex-1 overflow-y-auto p-5">
-              {selectedTrip ? (
-                <RouteTimeline
-                  stops={selectedTrip.stops}
-                  origin={origin}
-                  destination={destination}
-                  onOriginSelect={handleOriginSelect}
-                  onDestinationSelect={handleDestinationSelect}
-                />
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-gray-300">
-                  <MapPin className="w-12 h-12 mb-3" />
-                  <p className="text-sm font-medium text-gray-400">Pilih jadwal di sebelah kiri</p>
-                  <p className="text-xs text-gray-300 mt-1">Rute akan muncul di sini</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                          <Store className="w-3 h-3" /> Outlet
+                        </label>
+                        <div className="h-9 bg-white border border-gray-200 rounded-lg px-3 flex items-center text-sm text-gray-700">
+                          Jakarta Terminal
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                          <Calendar className="w-3 h-3" /> Tanggal
+                        </label>
+                        <div className="h-9 bg-white border border-gray-200 rounded-lg px-3 flex items-center text-sm text-gray-700">
+                          15 Mar 2026
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {MOCK_TRIPS.map(trip => (
+                        <TripCard key={trip.id} trip={trip} isSelected={selectedTrip?.id === trip.id} onSelect={() => handleTripSelect(trip)} />
+                      ))}
+                    </div>
+                  </div>
                 </div>
+
+                <div className="flex-1 overflow-y-auto p-5">
+                  {selectedTrip ? (
+                    <RouteTimeline
+                      stops={selectedTrip.stops}
+                      origin={origin}
+                      destination={destination}
+                      onOriginSelect={handleOriginSelect}
+                      onDestinationSelect={handleDestinationSelect}
+                    />
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-300">
+                      <MapPin className="w-12 h-12 mb-3" />
+                      <p className="text-sm font-medium text-gray-400">Pilih jadwal di sebelah kiri</p>
+                      <p className="text-xs text-gray-300 mt-1">Rute akan muncul di sini</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {phase === "book" && (
+              <>
+                <div className="flex-1 border-r border-gray-200 overflow-y-auto p-5">
+                  <SeatMapPanel selectedSeats={selectedSeats} onToggle={toggleSeat} />
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-5 flex flex-col">
+                  {seats.length > 0 ? (
+                    <PassengerFormPanel seats={seats} price={selectedTrip?.price ?? 75000} />
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-300">
+                      <Armchair className="w-12 h-12 mb-3" />
+                      <p className="text-sm font-medium text-gray-400">Pilih kursi di sebelah kiri</p>
+                      <p className="text-xs text-gray-300 mt-1">Form penumpang akan muncul di sini</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="h-8 bg-white border-t border-gray-200 flex items-center justify-between px-5 flex-shrink-0">
+            <div className="flex items-center gap-4 text-[10px] text-gray-400">
+              <span className="flex items-center gap-1"><Ticket className="w-3 h-3" /> Transity v1.0</span>
+              {selectedTrip && <span>Jadwal: <span className="font-semibold text-gray-600">{selectedTrip.depart} {selectedTrip.route}</span></span>}
+            </div>
+            <div className="flex items-center gap-3 text-[10px] text-gray-400">
+              {origin && <span>Naik: <span className="font-semibold text-emerald-600">{origin.replace(" Terminal", "")}</span></span>}
+              {destination && <span>Turun: <span className="font-semibold text-rose-600">{destination.replace(" Terminal", "")}</span></span>}
+              {seats.length > 0 && (
+                <span>Kursi: <span className="font-semibold text-blue-600">{seats.join(", ")}</span> | Total: <span className="font-bold text-blue-700">{fmt(seats.length * (selectedTrip?.price ?? 75000))}</span></span>
               )}
             </div>
-          </>
-        )}
-
-        {phase === "book" && (
-          <>
-            <div className="flex-1 border-r border-gray-200 overflow-y-auto p-5">
-              <SeatMapPanel selectedSeats={selectedSeats} onToggle={toggleSeat} />
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-5 flex flex-col">
-              {seats.length > 0 ? (
-                <PassengerFormPanel seats={seats} price={selectedTrip?.price ?? 75000} />
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-gray-300">
-                  <Armchair className="w-12 h-12 mb-3" />
-                  <p className="text-sm font-medium text-gray-400">Pilih kursi di sebelah kiri</p>
-                  <p className="text-xs text-gray-300 mt-1">Form penumpang akan muncul di sini</p>
-                </div>
-              )}
-            </div>
-          </>
-        )}
+          </div>
+        </>
+      )}
       </div>
-
-      {phase === "select" && (
-        <div className="h-8 bg-white border-t border-gray-200 flex items-center justify-between px-5 flex-shrink-0">
-          <div className="flex items-center gap-4 text-[10px] text-gray-400">
-            <span className="flex items-center gap-1"><Ticket className="w-3 h-3" /> Transity v1.0</span>
-          </div>
-          <div className="flex items-center gap-3 text-[10px] text-gray-400">
-            {selectedTrip && <span>Jadwal: <span className="font-semibold text-gray-600">{selectedTrip.depart} {selectedTrip.route}</span></span>}
-            {origin && <span>Naik: <span className="font-semibold text-emerald-600">{origin.replace(" Terminal", "")}</span></span>}
-            {destination && <span>Turun: <span className="font-semibold text-rose-600">{destination.replace(" Terminal", "")}</span></span>}
-          </div>
-        </div>
-      )}
-
-      {phase === "book" && (
-        <div className="h-8 bg-white border-t border-gray-200 flex items-center justify-between px-5 flex-shrink-0">
-          <div className="flex items-center gap-3 text-[10px] text-gray-400">
-            <span>{selectedTrip?.depart} {selectedTrip?.route}</span>
-            <span className="text-emerald-600">{origin?.replace(" Terminal", "")}</span>
-            <ArrowRight className="w-2.5 h-2.5" />
-            <span className="text-rose-600">{destination?.replace(" Terminal", "")}</span>
-          </div>
-          <div className="text-[10px] text-gray-400">
-            {seats.length > 0 && <span>Kursi: <span className="font-semibold text-blue-600">{seats.join(", ")}</span> | Total: <span className="font-bold text-blue-700">{fmt(seats.length * (selectedTrip?.price ?? 75000))}</span></span>}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
