@@ -3,8 +3,8 @@ import {
   MapPin, Calendar, Clock, Bus, Users, CreditCard, Printer,
   ChevronRight, ChevronLeft, Check, Timer, ArrowRight, ArrowDown,
   Armchair, RotateCcw, QrCode, Banknote, Wallet, Building2,
-  Circle, Store, Ticket, CheckCircle2, X, List,
-  LayoutGrid, Route, DollarSign, Truck, PanelLeftClose, PanelLeftOpen,
+  Circle, Store, Ticket, CheckCircle2, X, List, Search,
+  LayoutGrid, Route, DollarSign, Truck, PanelLeftClose, PanelLeftOpen, ChevronDown,
   type LucideProps
 } from "lucide-react";
 
@@ -679,6 +679,23 @@ export function TransitPro() {
   const [selectedSeats, setSelectedSeats] = useState<Set<string>>(new Set());
   const [showPrint, setShowPrint] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [tripSearch, setTripSearch] = useState("");
+  const [collapsedRoutes, setCollapsedRoutes] = useState<Set<string>>(new Set());
+
+  const filteredTrips = MOCK_TRIPS.filter(t => {
+    if (!tripSearch.trim()) return true;
+    const q = tripSearch.toLowerCase();
+    return t.route.toLowerCase().includes(q)
+      || t.vehicle.toLowerCase().includes(q)
+      || t.stops.some(s => s.toLowerCase().includes(q));
+  });
+
+  const groupedTrips = Object.entries(
+    filteredTrips.reduce<Record<string, typeof MOCK_TRIPS>>((acc, trip) => {
+      (acc[trip.route] ??= []).push(trip);
+      return acc;
+    }, {})
+  ).map(([route, trips]) => ({ route, trips }));
 
   const handleTripSelect = (t: typeof MOCK_TRIPS[0]) => {
     setSelectedTrip(t);
@@ -799,7 +816,7 @@ export function TransitPro() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <h3 className="text-sm font-bold text-gray-800">Pilih Jadwal</h3>
-                      <span className="text-[10px] text-gray-400">{MOCK_TRIPS.length} jadwal</span>
+                      <span className="text-[10px] text-gray-400">{filteredTrips.length} jadwal</span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
@@ -821,10 +838,57 @@ export function TransitPro() {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      {MOCK_TRIPS.map(trip => (
-                        <TripCard key={trip.id} trip={trip} isSelected={selectedTrip?.id === trip.id} onSelect={() => handleTripSelect(trip)} />
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        value={tripSearch}
+                        onChange={e => setTripSearch(e.target.value)}
+                        placeholder="Cari rute, kota, atau kode kendaraan..."
+                        data-testid="input-trip-search"
+                        className="w-full h-9 pl-9 pr-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+                      />
+                      {tripSearch && (
+                        <button onClick={() => setTripSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-4">
+                      {groupedTrips.map(group => (
+                        <div key={group.route}>
+                          <button
+                            onClick={() => setCollapsedRoutes(prev => {
+                              const next = new Set(prev);
+                              if (next.has(group.route)) next.delete(group.route); else next.add(group.route);
+                              return next;
+                            })}
+                            className="w-full flex items-center justify-between py-1.5 mb-1.5 group"
+                            data-testid={`route-group-${group.route}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Route className="w-3.5 h-3.5 text-blue-500" />
+                              <span className="text-xs font-bold text-gray-700">{group.route}</span>
+                              <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{group.trips.length} jadwal</span>
+                            </div>
+                            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${collapsedRoutes.has(group.route) ? "-rotate-90" : ""}`} />
+                          </button>
+                          {!collapsedRoutes.has(group.route) && (
+                            <div className="space-y-2">
+                              {group.trips.map(trip => (
+                                <TripCard key={trip.id} trip={trip} isSelected={selectedTrip?.id === trip.id} onSelect={() => handleTripSelect(trip)} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ))}
+                      {groupedTrips.length === 0 && (
+                        <div className="text-center py-6 text-gray-400">
+                          <Search className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                          <p className="text-sm">Tidak ada jadwal ditemukan</p>
+                          <p className="text-xs text-gray-300 mt-0.5">Coba ubah kata kunci pencarian</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
