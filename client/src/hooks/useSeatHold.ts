@@ -14,25 +14,26 @@ interface SeatHold {
 export function useSeatHold() {
   const [holds, setHolds] = useState<Map<string, SeatHold>>(new Map());
   const [loading, setLoading] = useState(false);
+  const [tick, setTick] = useState(0);
   const { toast } = useToast();
   const intervalRef = useRef<NodeJS.Timeout>();
-  // Use a ref to store holds for immediate access
   const holdsRef = useRef<Map<string, SeatHold>>(new Map());
 
-  // Keep ref in sync with state
   useEffect(() => {
     holdsRef.current = holds;
   }, [holds]);
 
-  // Start TTL countdown for all holds
   useEffect(() => {
     intervalRef.current = setInterval(() => {
       const now = Date.now();
+
+      setTick(t => t + 1);
+
       setHolds(currentHolds => {
         const newHolds = new Map(currentHolds);
         let hasChanges = false;
 
-        const expiredSeats = Array.from(newHolds.entries()).filter(([seatNo, hold]) => hold.expiresAt <= now);
+        const expiredSeats = Array.from(newHolds.entries()).filter(([, hold]) => hold.expiresAt <= now);
         for (const [seatNo] of expiredSeats) {
           newHolds.delete(seatNo);
           hasChanges = true;
@@ -186,15 +187,17 @@ export function useSeatHold() {
   }, []);
 
   const getHoldTTL = useCallback((seatNo: string): number => {
+    void tick;
     const hold = holdsRef.current.get(seatNo);
     if (!hold) return 0;
     return Math.max(0, Math.floor((hold.expiresAt - Date.now()) / 1000));
-  }, []);
+  }, [tick]);
 
   const isHeld = useCallback((seatNo: string): boolean => {
+    void tick;
     const hold = holdsRef.current.get(seatNo);
     return hold ? hold.expiresAt > Date.now() : false;
-  }, []);
+  }, [tick]);
 
   return {
     holds: Array.from(holds.values()),
@@ -203,6 +206,7 @@ export function useSeatHold() {
     releaseHold,
     releaseAllHolds,
     getHoldTTL,
-    isHeld
+    isHeld,
+    tick
   };
 }
