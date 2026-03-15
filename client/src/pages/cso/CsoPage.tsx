@@ -14,6 +14,7 @@ import {
 import type { Stop, Outlet, CsoAvailableTrip } from '@/types';
 
 type Phase = 'select' | 'book';
+type MobilePanel = 'left' | 'right';
 
 const formatTime = (isoString: string | null | undefined): string => {
   if (!isoString) return '--:--';
@@ -35,6 +36,7 @@ const fmt = (n: number) =>
 
 export default function CsoPage() {
   const [phase, setPhase] = useState<Phase>('select');
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>('left');
   const [bookingResult, setBookingResult] = useState<{ booking: any; printPayload: any } | null>(null);
   const [showPrint, setShowPrint] = useState(false);
   const [totalAmount, setTotalAmount] = useState<number>(0);
@@ -84,6 +86,7 @@ export default function CsoPage() {
     });
     setSelectedCsoTrip(undefined);
     setPhase('select');
+    setMobilePanel('left');
     setShowPrint(false);
     setBookingResult(null);
     releaseAllHolds();
@@ -113,6 +116,7 @@ export default function CsoPage() {
       passengers: []
     });
     setCurrentStep(2);
+    setMobilePanel('right');
   };
 
   const handleOriginSelect = (stop: Stop, sequence: number) => {
@@ -137,11 +141,13 @@ export default function CsoPage() {
     if (state.originStop && state.destinationStop) {
       setPhase('book');
       setCurrentStep(3);
+      setMobilePanel('left');
     }
   };
 
   const handleBackToSelect = () => {
     setPhase('select');
+    setMobilePanel('left');
     updateState({ selectedSeats: [], passengers: [], payment: undefined });
     releaseAllHolds();
   };
@@ -183,6 +189,7 @@ export default function CsoPage() {
     setSelectedCsoTrip(undefined);
     setShowPrint(false);
     setPhase('select');
+    setMobilePanel('left');
     updateState({
       trip: undefined,
       originStop: undefined,
@@ -205,73 +212,76 @@ export default function CsoPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="cso-page">
-      <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-5 flex-shrink-0">
-        <div className="flex items-center gap-1.5">
-          <Ticket className="w-4 h-4 text-blue-600" />
-          <span className="text-sm font-bold text-gray-800">CSO Booking Terminal</span>
+      <div className="bg-white border-b border-gray-200 flex-shrink-0">
+        <div className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Ticket className="w-4 h-4 text-blue-600 flex-shrink-0" />
+            <span className="text-sm font-bold text-gray-800 truncate hidden sm:inline">CSO Booking Terminal</span>
+            <span className="text-sm font-bold text-gray-800 sm:hidden">CSO</span>
 
-          <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5" />
-          {showPrint ? (
-            <>
-              <button
-                onClick={handleBackFromPrint}
-                className="text-xs text-blue-600 hover:underline"
-                data-testid="breadcrumb-back-book"
-              >
-                Kursi & Penumpang
-              </button>
-              <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5" />
-              <span className="text-xs text-gray-500">Tiket</span>
-            </>
-          ) : phase === 'book' ? (
-            <>
+            <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5 flex-shrink-0" />
+            {showPrint ? (
+              <>
+                <button
+                  onClick={handleBackFromPrint}
+                  className="text-xs text-blue-600 hover:underline whitespace-nowrap"
+                  data-testid="breadcrumb-back-book"
+                >
+                  Kursi
+                </button>
+                <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5 flex-shrink-0" />
+                <span className="text-xs text-gray-500">Tiket</span>
+              </>
+            ) : phase === 'book' ? (
+              <>
+                <button
+                  onClick={handleBackToSelect}
+                  className="text-xs text-blue-600 hover:underline whitespace-nowrap"
+                  data-testid="breadcrumb-back-select"
+                >
+                  Jadwal
+                </button>
+                <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5 flex-shrink-0" />
+                <span className="text-xs text-gray-500 whitespace-nowrap">Kursi & Penumpang</span>
+              </>
+            ) : (
+              <span className="text-xs text-gray-500 whitespace-nowrap">Jadwal & Rute</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 md:gap-4 flex-shrink-0 ml-2">
+            {phase === 'book' && !showPrint && (
               <button
                 onClick={handleBackToSelect}
-                className="text-xs text-blue-600 hover:underline"
-                data-testid="breadcrumb-back-select"
+                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors border border-gray-200"
+                data-testid="btn-back-select"
               >
-                Jadwal & Rute
+                <ChevronLeft className="w-3.5 h-3.5" /> Kembali
               </button>
-              <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5" />
-              <span className="text-xs text-gray-500">Kursi & Penumpang</span>
-            </>
-          ) : (
-            <span className="text-xs text-gray-500">Jadwal & Rute</span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-4">
-          {phase === 'book' && !showPrint && (
-            <button
-              onClick={handleBackToSelect}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors border border-gray-200"
-              data-testid="btn-back-select"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" /> Kembali
-            </button>
-          )}
-          {showPrint && (
-            <button
-              onClick={handleBackFromPrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors border border-gray-200"
-              data-testid="btn-back-booking"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" /> Kembali
-            </button>
-          )}
-          <div className="flex items-center gap-3 text-xs text-gray-400">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span>Online</span>
+            )}
+            {showPrint && (
+              <button
+                onClick={handleBackFromPrint}
+                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors border border-gray-200"
+                data-testid="btn-back-booking"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Kembali
+              </button>
+            )}
+            <div className="flex items-center gap-1.5 md:gap-3 text-[10px] md:text-xs text-gray-400">
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-emerald-400" />
+                <span className="hidden sm:inline">Online</span>
+              </div>
+              <span className="hidden md:inline">CSO User</span>
+              <span className="font-mono">{nowDate}</span>
             </div>
-            <span>CSO User</span>
-            <span className="font-mono">{nowDate}</span>
           </div>
         </div>
       </div>
 
       {showPrint ? (
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-lg mx-auto">
             {bookingResult ? (
               <PrintPreview
@@ -291,28 +301,55 @@ export default function CsoPage() {
       ) : (
         <>
           {phase === 'book' && selectedCsoTrip && state.originStop && state.destinationStop && (
-            <div className="bg-blue-50 border-b border-blue-100 px-5 py-2 flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-3 text-xs text-gray-600">
+            <div className="bg-blue-50 border-b border-blue-100 px-3 md:px-5 py-2 flex items-center justify-between flex-shrink-0 gap-2">
+              <div className="flex items-center gap-2 md:gap-3 text-xs text-gray-600 min-w-0 flex-wrap">
                 <span className="font-semibold text-blue-700">{formatTime(selectedCsoTrip.departAtAtOutlet)}</span>
-                <span>{state.originStop.name} <ArrowRight className="w-3 h-3 inline" /> {state.destinationStop.name}</span>
+                <span className="truncate">{state.originStop.name} <ArrowRight className="w-3 h-3 inline" /> {state.destinationStop.name}</span>
                 {selectedCsoTrip.vehicle?.code && (
-                  <span className="text-gray-400">{selectedCsoTrip.vehicle.code}</span>
+                  <span className="text-gray-400 hidden sm:inline">{selectedCsoTrip.vehicle.code}</span>
                 )}
               </div>
               <button
                 onClick={handleBackToSelect}
-                className="px-3 py-1.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
+                className="px-2 md:px-3 py-1.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
                 data-testid="btn-change-route"
               >
-                <ChevronLeft className="w-3.5 h-3.5" /> Ubah Rute
+                <ChevronLeft className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Ubah Rute</span><span className="sm:hidden">Ubah</span>
               </button>
             </div>
           )}
 
-          <div className="flex-1 flex overflow-hidden">
-            {phase === 'select' && (
-              <>
-                <div className="flex-1 border-r border-gray-200 overflow-y-auto p-5" data-testid="panel-trip-selector">
+          {phase === 'select' && (
+            <>
+              <div className="md:hidden flex-shrink-0 bg-white border-b border-gray-200">
+                <div className="flex">
+                  <button
+                    onClick={() => setMobilePanel('left')}
+                    className={`flex-1 py-2.5 text-xs font-semibold text-center transition-colors ${
+                      mobilePanel === 'left'
+                        ? 'text-blue-700 border-b-2 border-blue-600 bg-blue-50/50'
+                        : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                    data-testid="mobile-tab-trips"
+                  >
+                    Pilih Jadwal
+                  </button>
+                  <button
+                    onClick={() => setMobilePanel('right')}
+                    className={`flex-1 py-2.5 text-xs font-semibold text-center transition-colors ${
+                      mobilePanel === 'right'
+                        ? 'text-blue-700 border-b-2 border-blue-600 bg-blue-50/50'
+                        : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                    data-testid="mobile-tab-route"
+                  >
+                    Pilih Rute
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 flex overflow-hidden">
+                <div className={`flex-1 border-r border-gray-200 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'left' ? 'block' : 'hidden md:block'}`} data-testid="panel-trip-selector">
                   <TripSelector
                     selectedOutlet={state.outlet}
                     selectedTrip={selectedCsoTrip}
@@ -321,7 +358,7 @@ export default function CsoPage() {
                   />
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-5" data-testid="panel-route-timeline">
+                <div className={`flex-1 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'right' ? 'block' : 'hidden md:block'}`} data-testid="panel-route-timeline">
                   {state.trip?.id ? (
                     <RouteTimeline
                       trip={state.trip}
@@ -332,19 +369,48 @@ export default function CsoPage() {
                       onProceed={handleProceedToBook}
                     />
                   ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-300">
-                      <MapPin className="w-12 h-12 mb-3" />
-                      <p className="text-sm font-medium text-gray-400">Pilih jadwal di sebelah kiri</p>
+                    <div className="h-full flex flex-col items-center justify-center text-gray-300 py-12 md:py-0">
+                      <MapPin className="w-10 h-10 md:w-12 md:h-12 mb-3" />
+                      <p className="text-sm font-medium text-gray-400">Pilih jadwal terlebih dahulu</p>
                       <p className="text-xs text-gray-300 mt-1">Rute akan muncul di sini</p>
                     </div>
                   )}
                 </div>
-              </>
-            )}
+              </div>
+            </>
+          )}
 
-            {phase === 'book' && (
-              <>
-                <div className="flex-1 border-r border-gray-200 overflow-y-auto p-5" data-testid="panel-seat-map">
+          {phase === 'book' && (
+            <>
+              <div className="md:hidden flex-shrink-0 bg-white border-b border-gray-200">
+                <div className="flex">
+                  <button
+                    onClick={() => setMobilePanel('left')}
+                    className={`flex-1 py-2.5 text-xs font-semibold text-center transition-colors ${
+                      mobilePanel === 'left'
+                        ? 'text-blue-700 border-b-2 border-blue-600 bg-blue-50/50'
+                        : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                    data-testid="mobile-tab-seats"
+                  >
+                    Pilih Kursi {selectedSeats.length > 0 && `(${selectedSeats.length})`}
+                  </button>
+                  <button
+                    onClick={() => setMobilePanel('right')}
+                    className={`flex-1 py-2.5 text-xs font-semibold text-center transition-colors ${
+                      mobilePanel === 'right'
+                        ? 'text-blue-700 border-b-2 border-blue-600 bg-blue-50/50'
+                        : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                    data-testid="mobile-tab-passenger"
+                  >
+                    Data & Bayar {totalAmount > 0 && `(${fmt(totalAmount)})`}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 flex overflow-hidden">
+                <div className={`flex-1 border-r border-gray-200 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'left' ? 'block' : 'hidden md:block'}`} data-testid="panel-seat-map">
                   {state.trip?.id && state.originSeq !== undefined && state.destinationSeq !== undefined ? (
                     <SeatMap
                       trip={state.trip}
@@ -360,9 +426,19 @@ export default function CsoPage() {
                       <p className="text-sm font-medium text-gray-400">Data kursi tidak tersedia</p>
                     </div>
                   )}
+
+                  {selectedSeats.length > 0 && (
+                    <button
+                      onClick={() => setMobilePanel('right')}
+                      className="md:hidden w-full mt-3 h-10 bg-blue-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+                      data-testid="mobile-btn-to-passenger"
+                    >
+                      Lanjut Isi Data <ChevronRight className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-5 flex flex-col" data-testid="panel-passenger-payment">
+                <div className={`flex-1 overflow-y-auto p-3 md:p-5 flex flex-col ${mobilePanel === 'right' ? 'block' : 'hidden md:block'}`} data-testid="panel-passenger-payment">
                   {selectedSeats.length > 0 ? (
                     <PassengerForm
                       selectedSeats={selectedSeats}
@@ -377,31 +453,36 @@ export default function CsoPage() {
                       loading={isProcessing}
                     />
                   ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-300">
-                      <Armchair className="w-12 h-12 mb-3" />
-                      <p className="text-sm font-medium text-gray-400">Pilih kursi di sebelah kiri</p>
+                    <div className="h-full flex flex-col items-center justify-center text-gray-300 py-12 md:py-0">
+                      <Armchair className="w-10 h-10 md:w-12 md:h-12 mb-3" />
+                      <p className="text-sm font-medium text-gray-400">Pilih kursi terlebih dahulu</p>
                       <p className="text-xs text-gray-300 mt-1">Form penumpang akan muncul di sini</p>
                     </div>
                   )}
                 </div>
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          )}
 
-          <div className="h-8 bg-white border-t border-gray-200 flex items-center justify-between px-5 flex-shrink-0">
-            <div className="flex items-center gap-4 text-[10px] text-gray-400">
-              <span className="flex items-center gap-1"><Ticket className="w-3 h-3" /> Transity v1.0</span>
+          <div className="bg-white border-t border-gray-200 flex items-center justify-between px-3 md:px-5 py-1.5 md:py-0 md:h-8 flex-shrink-0">
+            <div className="flex items-center gap-2 md:gap-4 text-[10px] text-gray-400">
+              <span className="flex items-center gap-1"><Ticket className="w-3 h-3" /> <span className="hidden sm:inline">Transity</span> v1.0</span>
               {selectedCsoTrip && (
-                <span>Jadwal: <span className="font-semibold text-gray-600">
+                <span className="hidden lg:inline">Jadwal: <span className="font-semibold text-gray-600">
                   {formatTime(selectedCsoTrip.departAtAtOutlet)} {selectedCsoTrip.patternPath}
                 </span></span>
               )}
             </div>
-            <div className="flex items-center gap-3 text-[10px] text-gray-400">
-              {state.originStop && <span>Naik: <span className="font-semibold text-emerald-600">{state.originStop.name}</span></span>}
-              {state.destinationStop && <span>Turun: <span className="font-semibold text-rose-600">{state.destinationStop.name}</span></span>}
+            <div className="flex items-center gap-2 md:gap-3 text-[10px] text-gray-400">
+              {state.originStop && <span>Naik: <span className="font-semibold text-emerald-600 hidden sm:inline">{state.originStop.name}</span><span className="font-semibold text-emerald-600 sm:hidden">{state.originStop.code || state.originStop.name.slice(0, 3)}</span></span>}
+              {state.destinationStop && <span>Turun: <span className="font-semibold text-rose-600 hidden sm:inline">{state.destinationStop.name}</span><span className="font-semibold text-rose-600 sm:hidden">{state.destinationStop.code || state.destinationStop.name.slice(0, 3)}</span></span>}
               {sortedSeats.length > 0 && (
-                <span>Kursi: <span className="font-semibold text-blue-600">{sortedSeats.join(', ')}</span> | Total: <span className="font-bold text-blue-700">{fmt(totalAmount)}</span></span>
+                <span>
+                  <span className="hidden sm:inline">Kursi: </span>
+                  <span className="font-semibold text-blue-600">{sortedSeats.join(', ')}</span>
+                  <span className="mx-0.5">|</span>
+                  <span className="font-bold text-blue-700">{fmt(totalAmount)}</span>
+                </span>
               )}
             </div>
           </div>

@@ -339,16 +339,17 @@ export default function PassengerForm({
         <button
           onClick={handleBookOnly}
           disabled={!isPassengerValid || loading}
-          className="flex-1 h-10 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 h-10 md:h-10 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs md:text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
           data-testid="btn-book-only"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
-          Booking Saja
+          <span className="hidden sm:inline">Booking Saja</span>
+          <span className="sm:hidden">Booking</span>
         </button>
         <button
           onClick={handlePayAndPrint}
           disabled={!isPassengerValid || !isPaymentValid() || loading}
-          className="flex-1 h-10 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 h-10 md:h-10 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs md:text-sm font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           data-testid="btn-pay-confirm"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CreditCard className="w-3.5 h-3.5" />}
