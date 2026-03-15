@@ -235,8 +235,8 @@ export default function TripSelector({
                       return new Date(a.departAtAtOutlet).getTime() - new Date(b.departAtAtOutlet).getTime();
                     })
                     .map(trip => {
-                      const isSelected = selectedTrip?.tripId === trip.tripId ||
-                        (trip.isVirtual && selectedTrip?.baseId === trip.baseId);
+                      const isSelected = (trip.tripId && selectedTrip?.tripId === trip.tripId) ||
+                        (trip.isVirtual && trip.baseId && selectedTrip?.baseId === trip.baseId);
                       const isDisabled = trip.status === 'closed' || trip.status === 'canceled';
                       const isMaterializing = materializingBaseId === trip.baseId;
                       const seatCount = trip.availableSeats ?? trip.capacity ?? 0;
