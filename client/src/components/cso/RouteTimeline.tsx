@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { tripsApi, stopsApi } from '@/lib/api';
-import { Route, Circle, Clock, ArrowDown, MapPin } from 'lucide-react';
+import {
+  Clock, ArrowDown, MapPin, ArrowRight, Check, ChevronRight, Loader2
+} from 'lucide-react';
 import type { Trip, Stop } from '@/types';
 
 interface RouteTimelineProps {
@@ -11,37 +11,31 @@ interface RouteTimelineProps {
   selectedDestination?: Stop;
   onOriginSelect: (stop: Stop, sequence: number) => void;
   onDestinationSelect: (stop: Stop, sequence: number) => void;
+  onProceed?: () => void;
 }
 
-// Safe time formatting with null checks
 const formatTime = (timestamp: string | Date | null | undefined): string => {
   if (!timestamp) return '--:--';
   try {
     const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
     if (isNaN(date.getTime())) return '--:--';
-    return date.toLocaleTimeString('id-ID', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-      timeZone: 'Asia/Jakarta'
-    });
-  } catch {
-    return '--:--';
-  }
+    return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' });
+  } catch { return '--:--'; }
 };
 
-// Safe duration calculation
 const calculateDuration = (depart: Date | string | null | undefined, arrive: Date | string | null | undefined): number | null => {
   if (!depart || !arrive) return null;
   try {
     const departDate = depart instanceof Date ? depart : new Date(depart);
     const arriveDate = arrive instanceof Date ? arrive : new Date(arrive);
     if (isNaN(departDate.getTime()) || isNaN(arriveDate.getTime())) return null;
-    const diffMs = arriveDate.getTime() - departDate.getTime();
-    return Math.round(diffMs / (1000 * 60));
-  } catch {
-    return null;
-  }
+    return Math.round((arriveDate.getTime() - departDate.getTime()) / (1000 * 60));
+  } catch { return null; }
+};
+
+const formatDuration = (mins: number): string => {
+  if (mins >= 60) return `${Math.floor(mins / 60)}j ${mins % 60}m`;
+  return `${mins}m`;
 };
 
 export default function RouteTimeline({
@@ -49,9 +43,10 @@ export default function RouteTimeline({
   selectedOrigin,
   selectedDestination,
   onOriginSelect,
-  onDestinationSelect
+  onDestinationSelect,
+  onProceed
 }: RouteTimelineProps) {
-  const { data: stopTimes = [] } = useQuery({
+  const { data: stopTimes = [], isLoading } = useQuery({
     queryKey: ['/api/trips', trip.id, 'stop-times', 'effective'],
     queryFn: () => tripsApi.getStopTimesWithEffectiveFlags(trip.id),
     enabled: !!trip.id
@@ -65,30 +60,32 @@ export default function RouteTimeline({
   const getStopById = (stopId: string) => stops.find(s => s.id === stopId);
   const sortedStopTimes = [...stopTimes].sort((a: any, b: any) => a.stopSequence - b.stopSequence);
 
-  // Calculate journey duration
-  const getJourneyDuration = (): string => {
-    if (sortedStopTimes.length < 2) return '--';
-    const first = sortedStopTimes[0];
-    const last = sortedStopTimes[sortedStopTimes.length - 1];
-    const duration = calculateDuration(first.departAt, last.arriveAt);
-    if (!duration) return '--';
-    const hours = Math.floor(duration / 60);
-    const minutes = duration % 60;
-    if (hours > 0) return `${hours}j ${minutes}m`;
-    return `${minutes} menit`;
+  const originIdx = selectedOrigin ? sortedStopTimes.findIndex((st: any) => st.stopId === selectedOrigin.id) : -1;
+  const destIdx = selectedDestination ? sortedStopTimes.findIndex((st: any) => st.stopId === selectedDestination.id) : -1;
+  const legCount = originIdx >= 0 && destIdx > originIdx ? destIdx - originIdx : 0;
+
+  const isInSelectedRange = (i: number) => {
+    if (originIdx < 0 || destIdx < 0) return false;
+    return i >= originIdx && i <= destIdx;
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-500 mb-2" />
+        <p className="text-xs text-gray-400">Memuat rute...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3">
-      {/* Instructions */}
-      <div className="text-sm text-muted-foreground bg-blue-50 border border-blue-100 rounded-lg p-2.5">
-        <p>Pilih <strong>titik keberangkatan</strong> dan <strong>tujuan</strong>:</p>
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-sm font-bold text-gray-800 mb-0.5">Pilih Rute</h3>
+        <p className="text-[11px] text-gray-400">Tentukan titik naik dan turun penumpang</p>
       </div>
 
-      {/* Timeline */}
-      <div className="relative">
-        <div className="absolute left-[19px] top-6 bottom-6 w-0.5 bg-border"></div>
-        
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         {sortedStopTimes.map((stopTime: any, index: number) => {
           const stop = getStopById(stopTime.stopId);
           if (!stop) return null;
@@ -96,136 +93,159 @@ export default function RouteTimeline({
           const isFirst = index === 0;
           const isLast = index === sortedStopTimes.length - 1;
           const isOrigin = selectedOrigin?.id === stop.id;
-          const isDestination = selectedDestination?.id === stop.id;
+          const isDest = selectedDestination?.id === stop.id;
           const canBoard = stopTime.effectiveBoardingAllowed !== false;
           const canAlight = stopTime.effectiveAlightingAllowed !== false;
+          const inRange = isInSelectedRange(index);
 
-          // Calculate leg duration
           const nextStopTime = sortedStopTimes[index + 1];
-          const legDuration = nextStopTime 
-            ? calculateDuration(stopTime.departAt, nextStopTime.arriveAt) 
-            : null;
+          const legDuration = nextStopTime ? calculateDuration(stopTime.departAt, nextStopTime.arriveAt) : null;
 
           return (
-            <div key={stopTime.id} className="relative flex items-start gap-3 pb-3 last:pb-0">
-              {/* Timeline dot */}
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center relative z-10 flex-shrink-0 ${
-                isFirst ? 'bg-primary text-primary-foreground' :
-                isLast ? 'bg-red-500 text-white' :
-                'bg-muted text-muted-foreground'
+            <div key={stopTime.id}>
+              <div className={`flex items-center px-4 py-3 transition-colors ${
+                isOrigin ? 'bg-emerald-50' : isDest ? 'bg-rose-50' : inRange ? 'bg-blue-50/40' : 'hover:bg-gray-50'
               }`}>
-                <MapPin className="w-4 h-4" />
-              </div>
-              
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <div>
-                    <p className="font-medium">{stop.name}</p>
-                    <p className="text-xs text-muted-foreground">{stop.code}</p>
+                <div className="flex flex-col items-center mr-4 self-stretch">
+                  {!isFirst && (
+                    <div className={`w-0.5 flex-1 ${inRange || isOrigin ? 'bg-blue-300' : 'bg-gray-200'}`} />
+                  )}
+                  {isFirst && <div className="flex-1" />}
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+                    isOrigin ? 'bg-emerald-500 ring-[3px] ring-emerald-200 shadow-sm' :
+                    isDest ? 'bg-rose-500 ring-[3px] ring-rose-200 shadow-sm' :
+                    inRange ? 'bg-blue-400 border-2 border-blue-300' :
+                    'bg-white border-2 border-gray-300'
+                  }`}>
+                    {isOrigin && <ArrowRight className="w-2.5 h-2.5 text-white" />}
+                    {isDest && <MapPin className="w-2.5 h-2.5 text-white" />}
+                    {inRange && !isOrigin && !isDest && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                   </div>
-                  
-                  {/* Time */}
-                  <div className="text-right">
-                    {isFirst ? (
-                      <div>
-                        <span className="text-[10px] text-muted-foreground">Berangkat</span>
-                        <p className="font-mono font-bold text-sm">{formatTime(stopTime.departAt)}</p>
-                      </div>
-                    ) : isLast ? (
-                      <div>
-                        <span className="text-[10px] text-muted-foreground">Tiba</span>
-                        <p className="font-mono font-bold text-sm">{formatTime(stopTime.arriveAt)}</p>
-                      </div>
-                    ) : (
-                      <div className="text-xs">
-                        <p className="font-mono">{formatTime(stopTime.arriveAt)}</p>
-                        <p className="font-mono text-muted-foreground">{formatTime(stopTime.departAt)}</p>
+                  {!isLast && (
+                    <div className={`w-0.5 flex-1 ${inRange && !isDest ? 'bg-blue-300' : 'bg-gray-200'}`} />
+                  )}
+                  {isLast && <div className="flex-1" />}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className={`text-sm font-semibold ${isOrigin || isDest ? 'text-gray-900' : 'text-gray-700'}`}>{stop.name}</p>
+                    {isOrigin && <span className="px-1.5 py-px bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold uppercase">Naik</span>}
+                    {isDest && <span className="px-1.5 py-px bg-rose-100 text-rose-700 rounded text-[9px] font-bold uppercase">Turun</span>}
+                    {!isOrigin && !isDest && (
+                      <div className="flex gap-1">
+                        {canBoard && !isLast && <span className="px-1 py-px bg-emerald-50 text-emerald-500 rounded text-[8px] font-medium border border-emerald-100">Pickup</span>}
+                        {canAlight && !isFirst && <span className="px-1 py-px bg-rose-50 text-rose-400 rounded text-[8px] font-medium border border-rose-100">Drop</span>}
+                        {!canBoard && !canAlight && <span className="px-1 py-px bg-gray-100 text-gray-400 rounded text-[8px] font-medium">Transit</span>}
                       </div>
                     )}
                   </div>
+                  <p className="text-[11px] text-gray-400 font-mono mt-0.5">
+                    <Clock className="w-3 h-3 inline -mt-px mr-0.5" />
+                    {isFirst ? formatTime(stopTime.departAt) : isLast ? formatTime(stopTime.arriveAt) : formatTime(stopTime.arriveAt)}
+                    {isFirst && <span className="text-gray-300 ml-1.5">&middot; Keberangkatan</span>}
+                    {isLast && <span className="text-gray-300 ml-1.5">&middot; Tujuan akhir</span>}
+                  </p>
                 </div>
 
-                {/* Pickup/Drop badges */}
-                <div className="flex gap-1 mb-2">
-                  {canBoard && !isLast && (
-                    <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700">Naik ✓</Badge>
-                  )}
-                  {canAlight && !isFirst && (
-                    <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700">Turun ✓</Badge>
-                  )}
-                  {!canBoard && !isLast && (
-                    <Badge variant="outline" className="text-[10px] bg-gray-100 text-gray-500">No Naik</Badge>
-                  )}
-                  {!canAlight && !isFirst && (
-                    <Badge variant="outline" className="text-[10px] bg-gray-100 text-gray-500">No Turun</Badge>
-                  )}
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-2">
-                  {!isLast && (
-                    <Button
-                      size="sm"
-                      variant={isOrigin ? "default" : "outline"}
-                      onClick={() => canBoard && onOriginSelect(stop, stopTime.stopSequence)}
-                      disabled={!canBoard}
-                      className="h-7 text-xs px-2"
+                <div className="flex gap-1.5 flex-shrink-0">
+                  {canBoard && !isLast ? (
+                    <button
+                      onClick={() => onOriginSelect(stop, stopTime.stopSequence)}
+                      data-testid={`naik-${index}`}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                        isOrigin
+                          ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-200'
+                          : 'bg-white border border-gray-200 text-gray-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'
+                      }`}
                     >
-                      {isOrigin ? '✓ Terpilih' : 'Keberangkatan'}
-                    </Button>
-                  )}
-                  
-                  {!isFirst && (
-                    <Button
-                      size="sm"
-                      variant={isDestination ? "default" : "outline"}
-                      onClick={() => canAlight && onDestinationSelect(stop, stopTime.stopSequence)}
-                      disabled={!canAlight}
-                      className="h-7 text-xs px-2"
-                    >
-                      {isDestination ? '✓ Terpilih' : 'Tujuan'}
-                    </Button>
-                  )}
-                </div>
-
-                {/* Leg Duration */}
-                {legDuration && !isLast && (
-                  <div className="flex items-center gap-1 mt-2 text-[10px] text-muted-foreground">
-                    <ArrowDown className="w-2.5 h-2.5" />
-                    <span>
-                      {legDuration >= 60 
-                        ? `${Math.floor(legDuration / 60)}j ${legDuration % 60}m` 
-                        : `${legDuration}m`
-                      }
+                      {isOrigin ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Naik</> : 'Naik'}
+                    </button>
+                  ) : !isLast ? (
+                    <span className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">
+                      Naik
                     </span>
-                  </div>
-                )}
+                  ) : null}
+                  {canAlight && !isFirst ? (
+                    <button
+                      onClick={() => onDestinationSelect(stop, stopTime.stopSequence)}
+                      data-testid={`turun-${index}`}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                        isDest
+                          ? 'bg-rose-500 text-white shadow-sm shadow-rose-200'
+                          : 'bg-white border border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-600 hover:bg-rose-50'
+                      }`}
+                    >
+                      {isDest ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Turun</> : 'Turun'}
+                    </button>
+                  ) : !isFirst ? (
+                    <span className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">
+                      Turun
+                    </span>
+                  ) : null}
+                </div>
               </div>
+
+              {!isLast && legDuration && (
+                <div className="flex items-center px-4 py-0">
+                  <div className="flex flex-col items-center mr-4 w-5">
+                    <div className={`w-0.5 h-6 ${(inRange && !isDest) ? 'bg-blue-300' : 'bg-gray-200'}`} />
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-gray-400 -my-1">
+                    <span className="flex items-center gap-1"><ArrowDown className="w-2.5 h-2.5" />{formatDuration(legDuration)}</span>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* Journey Summary */}
       {selectedOrigin && selectedDestination && (
-        <div className="mt-3 p-3 bg-primary/5 border border-primary/20 rounded-lg">
-          <div className="flex items-center justify-between text-sm">
-            <div>
-              <span className="text-muted-foreground text-xs">Dari</span>
-              <p className="font-medium">{selectedOrigin.name}</p>
+        <div className="bg-white border-2 border-blue-200 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-4 mb-3">
+            <div className="flex-1">
+              <p className="text-[9px] text-gray-400 uppercase font-semibold tracking-wider mb-0.5">Naik</p>
+              <p className="text-sm font-bold text-gray-900">{selectedOrigin.name}</p>
+              {originIdx >= 0 && (
+                <p className="text-[11px] text-gray-400 font-mono">
+                  {formatTime(sortedStopTimes[originIdx]?.departAt)}
+                </p>
+              )}
             </div>
-            <div className="text-center">
-              <Badge variant="outline" className="text-xs">
-                <Clock className="w-3 h-3 mr-1" />
-                {getJourneyDuration()}
-              </Badge>
+
+            <div className="flex flex-col items-center gap-1 px-3">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <div className="h-px w-8 bg-blue-400" />
+                <div className="px-2 py-0.5 bg-blue-100 rounded-full">
+                  <span className="text-[10px] font-bold text-blue-700">{legCount} leg</span>
+                </div>
+                <div className="h-px w-8 bg-blue-400" />
+                <div className="w-2 h-2 rounded-full bg-rose-400" />
+              </div>
             </div>
-            <div className="text-right">
-              <span className="text-muted-foreground text-xs">Ke</span>
-              <p className="font-medium">{selectedDestination.name}</p>
+
+            <div className="flex-1 text-right">
+              <p className="text-[9px] text-gray-400 uppercase font-semibold tracking-wider mb-0.5">Turun</p>
+              <p className="text-sm font-bold text-gray-900">{selectedDestination.name}</p>
+              {destIdx >= 0 && (
+                <p className="text-[11px] text-gray-400 font-mono">
+                  {formatTime(sortedStopTimes[destIdx]?.arriveAt)}
+                </p>
+              )}
             </div>
           </div>
+
+          {onProceed && (
+            <button
+              onClick={onProceed}
+              data-testid="btn-proceed-from-route"
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold transition-colors shadow-sm flex items-center justify-center gap-2"
+            >
+              Lanjut Pilih Kursi <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
       )}
     </div>

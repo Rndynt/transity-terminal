@@ -9,7 +9,7 @@ import { useBookingFlow } from '@/hooks/useBookingFlow';
 import { useSeatHold } from '@/hooks/useSeatHold';
 import {
   ChevronRight, ChevronLeft, Loader2, MapPin,
-  Armchair, ArrowRight
+  Armchair, ArrowRight, Ticket
 } from 'lucide-react';
 import type { Stop, Outlet, CsoAvailableTrip } from '@/types';
 
@@ -29,6 +29,9 @@ const formatTime = (isoString: string | null | undefined): string => {
     return '--:--';
   }
 };
+
+const fmt = (n: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
 
 export default function CsoPage() {
   const [phase, setPhase] = useState<Phase>('select');
@@ -128,7 +131,6 @@ export default function CsoPage() {
 
   const handleSeatSelect = (seatNo: string) => addSeat(seatNo);
   const handleSeatDeselect = (seatNo: string) => removeSeat(seatNo);
-
   const handlePassengersUpdate = (passengers: any[]) => updatePassengers(passengers);
 
   const handleProceedToBook = () => {
@@ -195,68 +197,82 @@ export default function CsoPage() {
     releaseAllHolds();
   };
 
-  const handleBackFromPrint = () => {
-    setShowPrint(false);
-  };
+  const handleBackFromPrint = () => setShowPrint(false);
+
+  const selectedSeats = state.selectedSeats;
+  const sortedSeats = [...selectedSeats].sort();
+  const nowDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'numeric', year: 'numeric', timeZone: 'Asia/Jakarta' });
 
   return (
-    <div className="flex flex-col h-full -m-3 lg:-m-6" data-testid="cso-page">
-      <div className="h-10 bg-card border-b border-border flex items-center justify-between px-5 flex-shrink-0">
+    <div className="flex-1 flex flex-col overflow-hidden" data-testid="cso-page">
+      <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-5 flex-shrink-0">
         <div className="flex items-center gap-1.5">
+          <Ticket className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-bold text-gray-800">CSO Booking Terminal</span>
+
+          <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5" />
           {showPrint ? (
             <>
               <button
                 onClick={handleBackFromPrint}
-                className="text-xs text-primary hover:underline"
+                className="text-xs text-blue-600 hover:underline"
                 data-testid="breadcrumb-back-book"
               >
                 Kursi & Penumpang
               </button>
-              <ChevronRight className="w-3 h-3 text-muted-foreground/40 mx-0.5" />
-              <span className="text-xs text-muted-foreground">Tiket</span>
+              <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5" />
+              <span className="text-xs text-gray-500">Tiket</span>
             </>
           ) : phase === 'book' ? (
             <>
               <button
                 onClick={handleBackToSelect}
-                className="text-xs text-primary hover:underline"
+                className="text-xs text-blue-600 hover:underline"
                 data-testid="breadcrumb-back-select"
               >
                 Jadwal & Rute
               </button>
-              <ChevronRight className="w-3 h-3 text-muted-foreground/40 mx-0.5" />
-              <span className="text-xs text-muted-foreground">Kursi & Penumpang</span>
+              <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5" />
+              <span className="text-xs text-gray-500">Kursi & Penumpang</span>
             </>
           ) : (
-            <span className="text-xs text-muted-foreground">Jadwal & Rute</span>
+            <span className="text-xs text-gray-500">Jadwal & Rute</span>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           {phase === 'book' && !showPrint && (
             <button
               onClick={handleBackToSelect}
-              className="px-3 py-1.5 bg-card border border-border hover:border-primary/30 hover:bg-primary/5 text-muted-foreground hover:text-primary rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
-              data-testid="btn-back-to-select"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors border border-gray-200"
+              data-testid="btn-back-select"
             >
-              <ChevronLeft className="w-3.5 h-3.5" /> Ubah Rute
+              <ChevronLeft className="w-3.5 h-3.5" /> Kembali
             </button>
           )}
           {showPrint && (
             <button
               onClick={handleBackFromPrint}
-              className="px-3 py-1.5 bg-card border border-border hover:border-primary/30 hover:bg-primary/5 text-muted-foreground hover:text-primary rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
-              data-testid="btn-back-from-print"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors border border-gray-200"
+              data-testid="btn-back-booking"
             >
               <ChevronLeft className="w-3.5 h-3.5" /> Kembali
             </button>
           )}
+          <div className="flex items-center gap-3 text-xs text-gray-400">
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span>Online</span>
+            </div>
+            <span>CSO User</span>
+            <span className="font-mono">{nowDate}</span>
+          </div>
         </div>
       </div>
 
       {showPrint ? (
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-lg mx-auto">
             {bookingResult ? (
               <PrintPreview
                 booking={bookingResult.booking}
@@ -275,9 +291,9 @@ export default function CsoPage() {
       ) : (
         <>
           {phase === 'book' && selectedCsoTrip && state.originStop && state.destinationStop && (
-            <div className="bg-primary/5 border-b border-primary/10 px-5 py-2 flex items-center justify-between flex-shrink-0">
+            <div className="bg-blue-50 border-b border-blue-100 px-5 py-2 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-3 text-xs text-gray-600">
-                <span className="font-semibold text-primary">{formatTime(selectedCsoTrip.departAtAtOutlet)}</span>
+                <span className="font-semibold text-blue-700">{formatTime(selectedCsoTrip.departAtAtOutlet)}</span>
                 <span>{state.originStop.name} <ArrowRight className="w-3 h-3 inline" /> {state.destinationStop.name}</span>
                 {selectedCsoTrip.vehicle?.code && (
                   <span className="text-gray-400">{selectedCsoTrip.vehicle.code}</span>
@@ -285,7 +301,7 @@ export default function CsoPage() {
               </div>
               <button
                 onClick={handleBackToSelect}
-                className="px-3 py-1.5 bg-white border border-gray-200 hover:border-primary/30 hover:bg-primary/5 text-gray-600 hover:text-primary rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
+                className="px-3 py-1.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
                 data-testid="btn-change-route"
               >
                 <ChevronLeft className="w-3.5 h-3.5" /> Ubah Rute
@@ -307,25 +323,14 @@ export default function CsoPage() {
 
                 <div className="flex-1 overflow-y-auto p-5" data-testid="panel-route-timeline">
                   {state.trip?.id ? (
-                    <div className="space-y-4">
-                      <RouteTimeline
-                        trip={state.trip}
-                        selectedOrigin={state.originStop}
-                        selectedDestination={state.destinationStop}
-                        onOriginSelect={handleOriginSelect}
-                        onDestinationSelect={handleDestinationSelect}
-                      />
-
-                      {state.originStop && state.destinationStop && (
-                        <button
-                          onClick={handleProceedToBook}
-                          className="w-full py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-bold transition-colors shadow-sm flex items-center justify-center gap-2"
-                          data-testid="btn-proceed-book"
-                        >
-                          Lanjut Pilih Kursi <ChevronRight className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
+                    <RouteTimeline
+                      trip={state.trip}
+                      selectedOrigin={state.originStop}
+                      selectedDestination={state.destinationStop}
+                      onOriginSelect={handleOriginSelect}
+                      onDestinationSelect={handleDestinationSelect}
+                      onProceed={handleProceedToBook}
+                    />
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-gray-300">
                       <MapPin className="w-12 h-12 mb-3" />
@@ -358,9 +363,9 @@ export default function CsoPage() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-5 flex flex-col" data-testid="panel-passenger-payment">
-                  {state.selectedSeats.length > 0 ? (
+                  {selectedSeats.length > 0 ? (
                     <PassengerForm
-                      selectedSeats={state.selectedSeats}
+                      selectedSeats={selectedSeats}
                       passengers={state.passengers}
                       onPassengersUpdate={handlePassengersUpdate}
                       totalAmount={totalAmount}
@@ -382,13 +387,31 @@ export default function CsoPage() {
               </>
             )}
           </div>
+
+          <div className="h-8 bg-white border-t border-gray-200 flex items-center justify-between px-5 flex-shrink-0">
+            <div className="flex items-center gap-4 text-[10px] text-gray-400">
+              <span className="flex items-center gap-1"><Ticket className="w-3 h-3" /> Transity v1.0</span>
+              {selectedCsoTrip && (
+                <span>Jadwal: <span className="font-semibold text-gray-600">
+                  {formatTime(selectedCsoTrip.departAtAtOutlet)} {selectedCsoTrip.patternPath}
+                </span></span>
+              )}
+            </div>
+            <div className="flex items-center gap-3 text-[10px] text-gray-400">
+              {state.originStop && <span>Naik: <span className="font-semibold text-emerald-600">{state.originStop.name}</span></span>}
+              {state.destinationStop && <span>Turun: <span className="font-semibold text-rose-600">{state.destinationStop.name}</span></span>}
+              {sortedSeats.length > 0 && (
+                <span>Kursi: <span className="font-semibold text-blue-600">{sortedSeats.join(', ')}</span> | Total: <span className="font-bold text-blue-700">{fmt(totalAmount)}</span></span>
+              )}
+            </div>
+          </div>
         </>
       )}
 
       {isProcessing && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg flex items-center gap-3 shadow-xl">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
             <span className="text-gray-700">Memproses booking...</span>
           </div>
         </div>

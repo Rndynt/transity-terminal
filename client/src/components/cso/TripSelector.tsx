@@ -1,11 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Store, Calendar, Bus, Loader2, MapPin, ChevronRight, Armchair, Search, ChevronDown } from 'lucide-react';
+import {
+  Store, Calendar, Bus, Loader2, Search, ChevronDown,
+  ArrowRight, Armchair, Route, X
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, outletsApi } from '@/lib/api';
 import type { Outlet, CsoAvailableTrip } from '@/types';
@@ -16,6 +14,9 @@ interface TripSelectorProps {
   onOutletSelect: (outlet: Outlet) => void;
   onTripSelect: (trip: CsoAvailableTrip) => void;
 }
+
+const fmt = (n: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
 
 export default function TripSelector({
   selectedOutlet,
@@ -48,12 +49,10 @@ export default function TripSelector({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ baseId, serviceDate: selectedDate })
       });
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to materialize trip');
       }
-
       return await response.json();
     },
     onSuccess: (data) => {
@@ -77,12 +76,8 @@ export default function TripSelector({
       toast({ title: "Trip Ditutup", description: "Trip ini sudah ditutup", variant: "destructive" });
       return;
     }
-
     if (trip.isVirtual && trip.baseId) {
-      try {
-        await materializeMutation.mutateAsync(trip.baseId);
-      } catch {
-      }
+      try { await materializeMutation.mutateAsync(trip.baseId); } catch {}
     } else {
       onTripSelect(trip);
     }
@@ -93,15 +88,17 @@ export default function TripSelector({
     try {
       const date = new Date(isoString);
       if (isNaN(date.getTime())) return '--:--';
-      return date.toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: 'Asia/Jakarta'
-      });
-    } catch {
-      return '--:--';
-    }
+      return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' });
+    } catch { return '--:--'; }
+  };
+
+  const formatArriveTime = (trip: CsoAvailableTrip): string => {
+    if (!trip.finalArrivalAt) return '--:--';
+    try {
+      const date = new Date(trip.finalArrivalAt);
+      if (isNaN(date.getTime())) return '--:--';
+      return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' });
+    } catch { return '--:--'; }
   };
 
   const filteredTrips = useMemo(() => {
@@ -114,198 +111,208 @@ export default function TripSelector({
   }, [trips, searchQuery]);
 
   const groupedTrips = useMemo(() => {
-    return filteredTrips.reduce((groups: Record<string, CsoAvailableTrip[]>, trip) => {
+    const groups: Record<string, CsoAvailableTrip[]> = {};
+    for (const trip of filteredTrips) {
       const routeName = trip.patternPath || 'Unknown Route';
-      if (!groups[routeName]) groups[routeName] = [];
-      groups[routeName].push(trip);
-      return groups;
-    }, {});
+      (groups[routeName] ??= []).push(trip);
+    }
+    return Object.entries(groups).map(([route, trips]) => ({ route, trips }));
   }, [filteredTrips]);
 
   const toggleRouteCollapse = (routeName: string) => {
     setCollapsedRoutes(prev => {
       const next = new Set(prev);
-      if (next.has(routeName)) next.delete(routeName);
-      else next.add(routeName);
+      if (next.has(routeName)) next.delete(routeName); else next.add(routeName);
       return next;
     });
   };
 
-  const totalTrips = filteredTrips.length;
+  const formatDate = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch { return dateStr; }
+  };
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <Store className="w-3 h-3" /> Outlet
-            </Label>
-            <Select
-              value={selectedOutlet?.id}
-              onValueChange={(value) => {
-                const outlet = outlets.find(o => o.id === value);
-                if (outlet) onOutletSelect(outlet);
-              }}
-            >
-              <SelectTrigger className="h-9 text-sm" data-testid="select-outlet">
-                <SelectValue placeholder="Pilih outlet..." />
-              </SelectTrigger>
-              <SelectContent>
-                {outlets.map(outlet => (
-                  <SelectItem key={outlet.id} value={outlet.id}>
-                    {outlet.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-gray-800">Pilih Jadwal</h3>
+        <span className="text-[10px] text-gray-400">{filteredTrips.length} jadwal</span>
+      </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <Calendar className="w-3 h-3" /> Tanggal
-            </Label>
-            <Input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="h-9 text-sm"
-              data-testid="input-date"
-            />
-          </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+            <Store className="w-3 h-3" /> Outlet
+          </label>
+          <select
+            value={selectedOutlet?.id || ''}
+            onChange={(e) => {
+              const outlet = outlets.find(o => o.id === e.target.value);
+              if (outlet) onOutletSelect(outlet);
+            }}
+            className="w-full h-9 bg-white border border-gray-200 rounded-lg px-3 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+            data-testid="select-outlet"
+          >
+            <option value="">Pilih outlet...</option>
+            {outlets.map(outlet => (
+              <option key={outlet.id} value={outlet.id}>{outlet.name}</option>
+            ))}
+          </select>
         </div>
-
-        {selectedOutlet && (trips || []).length > 0 && (
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari rute, kota, kendaraan..."
-              className="h-8 pl-8 text-sm"
-              data-testid="input-search-trip"
-            />
-          </div>
-        )}
-
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <Bus className="w-3 h-3" /> Jadwal Keberangkatan
-            </Label>
-            {totalTrips > 0 && (
-              <span className="text-[10px] text-muted-foreground">{totalTrips} jadwal</span>
-            )}
-          </div>
-
-          <div className="border rounded-lg overflow-hidden">
-            {!selectedOutlet ? (
-              <div className="p-6 text-center">
-                <Store className="w-8 h-8 text-muted-foreground/30 mx-auto mb-1.5" />
-                <p className="text-xs text-muted-foreground">Pilih outlet terlebih dahulu</p>
-              </div>
-            ) : tripsLoading ? (
-              <div className="p-6 text-center">
-                <Loader2 className="w-5 h-5 animate-spin mx-auto text-primary" />
-                <p className="text-xs text-muted-foreground mt-1.5">Memuat jadwal...</p>
-              </div>
-            ) : Object.keys(groupedTrips).length === 0 ? (
-              <div className="p-6 text-center">
-                <Bus className="w-8 h-8 text-muted-foreground/30 mx-auto mb-1.5" />
-                <p className="text-xs text-muted-foreground">Tidak ada jadwal tersedia</p>
-              </div>
-            ) : (
-              <div className="divide-y">
-                {Object.entries(groupedTrips).map(([routeName, routeTrips]) => (
-                  <div key={routeName}>
-                    <button
-                      onClick={() => toggleRouteCollapse(routeName)}
-                      className="w-full px-3 py-1.5 bg-muted/40 flex items-center gap-1.5 cursor-pointer hover:bg-muted/60 transition-colors"
-                      data-testid={`route-header-${routeName.slice(0, 10)}`}
-                    >
-                      <ChevronDown className={`w-3 h-3 text-muted-foreground flex-shrink-0 transition-transform ${collapsedRoutes.has(routeName) ? '-rotate-90' : ''}`} />
-                      <MapPin className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                      <span className="text-[11px] font-medium text-muted-foreground truncate flex-1 min-w-0 text-left">{routeName}</span>
-                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 flex-shrink-0">{routeTrips.length} jadwal</Badge>
-                    </button>
-
-                    {!collapsedRoutes.has(routeName) ? (
-                      <div className="divide-y divide-dashed">
-                        {routeTrips
-                          .sort((a, b) => {
-                            if (!a.departAtAtOutlet && !b.departAtAtOutlet) return 0;
-                            if (!a.departAtAtOutlet) return 1;
-                            if (!b.departAtAtOutlet) return -1;
-                            return new Date(a.departAtAtOutlet).getTime() - new Date(b.departAtAtOutlet).getTime();
-                          })
-                          .map(trip => {
-                            const isSelected = selectedTrip?.tripId === trip.tripId ||
-                              (trip.isVirtual && selectedTrip?.baseId === trip.baseId);
-                            const isDisabled = trip.status === 'closed' || trip.status === 'canceled';
-                            const isMaterializing = materializingBaseId === trip.baseId;
-                            const seatCount = trip.availableSeats ?? trip.capacity ?? 0;
-                            const seatsFull = typeof trip.availableSeats === 'number' && trip.availableSeats <= 0;
-
-                            return (
-                              <button
-                                key={trip.tripId || trip.baseId}
-                                onClick={() => !isDisabled && !isMaterializing && handleTripSelect(trip)}
-                                disabled={isDisabled || isMaterializing}
-                                data-testid={`trip-row-${trip.tripId || trip.baseId}`}
-                                className={`w-full h-11 px-3 flex items-center gap-2 text-left transition-colors ${
-                                  isDisabled
-                                    ? 'opacity-40 cursor-not-allowed bg-muted/20'
-                                    : isSelected
-                                      ? 'bg-primary/10 border-l-2 border-l-primary'
-                                      : 'hover:bg-muted/40'
-                                }`}
-                              >
-                                <div className="w-12 flex-shrink-0">
-                                  {isMaterializing ? (
-                                    <Loader2 className="w-4 h-4 animate-spin mx-auto" />
-                                  ) : (
-                                    <span className="text-sm font-bold tabular-nums">{formatDepartTime(trip.departAtAtOutlet)}</span>
-                                  )}
-                                </div>
-
-                                <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden">
-                                  {trip.isVirtual ? (
-                                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-blue-50 text-blue-600 border-blue-200 flex-shrink-0">
-                                      Virtual
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-green-50 text-green-600 border-green-200 flex-shrink-0">
-                                      Aktif
-                                    </Badge>
-                                  )}
-                                  {trip.status === 'closed' && (
-                                    <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4 flex-shrink-0">Tutup</Badge>
-                                  )}
-                                  <span className="text-[11px] text-muted-foreground truncate">
-                                    {trip.vehicle ? trip.vehicle.code : 'TBD'}
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-1 flex-shrink-0">
-                                  <Armchair className="w-3 h-3 text-muted-foreground" />
-                                  <span className={`text-xs font-medium tabular-nums ${seatsFull ? 'text-red-500' : 'text-green-600'}`}>
-                                    {seatCount}
-                                  </span>
-                                </div>
-
-                                <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 ${isSelected ? 'text-primary' : 'text-muted-foreground/40'}`} />
-                              </button>
-                            );
-                          })}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+            <Calendar className="w-3 h-3" /> Tanggal
+          </label>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="w-full h-9 bg-white border border-gray-200 rounded-lg px-3 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+            data-testid="input-date"
+          />
         </div>
       </div>
-    </TooltipProvider>
+
+      {selectedOutlet && (trips || []).length > 0 && (
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cari rute, kota, atau kode kendaraan..."
+            className="w-full h-9 pl-9 pr-8 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+            data-testid="input-search-trip"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {!selectedOutlet ? (
+          <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-100">
+            <Store className="w-8 h-8 text-gray-300 mx-auto mb-1.5" />
+            <p className="text-xs text-gray-400">Pilih outlet terlebih dahulu</p>
+          </div>
+        ) : tripsLoading ? (
+          <div className="text-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin mx-auto text-blue-500" />
+            <p className="text-xs text-gray-400 mt-1.5">Memuat jadwal...</p>
+          </div>
+        ) : groupedTrips.length === 0 ? (
+          <div className="text-center py-6 text-gray-400">
+            <Search className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+            <p className="text-sm">Tidak ada jadwal ditemukan</p>
+            <p className="text-xs text-gray-300 mt-0.5">Coba ubah kata kunci pencarian</p>
+          </div>
+        ) : (
+          groupedTrips.map(group => (
+            <div key={group.route}>
+              <button
+                onClick={() => toggleRouteCollapse(group.route)}
+                className="w-full flex items-center justify-between py-1.5 mb-1.5 group"
+                data-testid={`route-group-${group.route.slice(0, 15)}`}
+              >
+                <div className="flex items-center gap-2">
+                  <Route className="w-3.5 h-3.5 text-blue-500" />
+                  <span className="text-xs font-bold text-gray-700">{group.route}</span>
+                  <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{group.trips.length} jadwal</span>
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${collapsedRoutes.has(group.route) ? '-rotate-90' : ''}`} />
+              </button>
+              {!collapsedRoutes.has(group.route) && (
+                <div className="space-y-2">
+                  {group.trips
+                    .sort((a, b) => {
+                      if (!a.departAtAtOutlet && !b.departAtAtOutlet) return 0;
+                      if (!a.departAtAtOutlet) return 1;
+                      if (!b.departAtAtOutlet) return -1;
+                      return new Date(a.departAtAtOutlet).getTime() - new Date(b.departAtAtOutlet).getTime();
+                    })
+                    .map(trip => {
+                      const isSelected = selectedTrip?.tripId === trip.tripId ||
+                        (trip.isVirtual && selectedTrip?.baseId === trip.baseId);
+                      const isDisabled = trip.status === 'closed' || trip.status === 'canceled';
+                      const isMaterializing = materializingBaseId === trip.baseId;
+                      const seatCount = trip.availableSeats ?? trip.capacity ?? 0;
+                      const totalSeats = trip.capacity ?? 40;
+                      const seatPct = totalSeats > 0 ? Math.round((seatCount / totalSeats) * 100) : 0;
+
+                      return (
+                        <button
+                          key={trip.tripId || trip.baseId}
+                          onClick={() => !isDisabled && !isMaterializing && handleTripSelect(trip)}
+                          disabled={isDisabled || isMaterializing}
+                          data-testid={`trip-card-${trip.tripId || trip.baseId}`}
+                          className={`w-full text-left p-3 rounded-xl border transition-all duration-150 ${
+                            isDisabled
+                              ? 'opacity-40 cursor-not-allowed bg-gray-50 border-gray-200'
+                              : isSelected
+                                ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-200'
+                                : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2">
+                              {isMaterializing ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                              ) : (
+                                <>
+                                  <span className="text-lg font-bold text-gray-900 font-mono tracking-tight">
+                                    {formatDepartTime(trip.departAtAtOutlet)}
+                                  </span>
+                                  <ArrowRight className="w-3.5 h-3.5 text-gray-400" />
+                                  <span className="text-sm text-gray-500 font-mono">
+                                    {formatArriveTime(trip)}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                            {trip.isVirtual ? (
+                              <span className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded-md text-[10px] font-semibold">Jadwal Virtual</span>
+                            ) : trip.status === 'closed' ? (
+                              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-md text-[10px] font-semibold">Ditutup</span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-md text-[10px] font-semibold">Aktif</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 text-[11px] text-gray-400">
+                              <span className="flex items-center gap-1"><Bus className="w-3 h-3" />{trip.vehicle?.code || 'TBD'}</span>
+                              <span className={`flex items-center gap-1 font-medium ${
+                                seatCount > 10 ? 'text-emerald-600' : seatCount > 0 ? 'text-amber-600' : 'text-red-600'
+                              }`}>
+                                <Armchair className="w-3 h-3" />{seatCount}/{totalSeats}
+                              </span>
+                            </div>
+                            {(trip as any).pricePerSeat != null && (
+                              <span className="text-xs font-bold text-gray-700 font-mono">{fmt((trip as any).pricePerSeat)}</span>
+                            )}
+                          </div>
+
+                          <div className="mt-2 h-1 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                seatPct > 50 ? 'bg-emerald-400' : seatPct > 20 ? 'bg-amber-400' : 'bg-red-400'
+                              }`}
+                              style={{ width: `${seatPct}%` }}
+                            />
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
