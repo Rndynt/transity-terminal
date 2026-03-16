@@ -204,7 +204,7 @@ export default function DashboardPage() {
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
-            <CardTitle className="text-lg">Booking Terbaru</Card>
+            <CardTitle className="text-lg">Booking Terbaru</CardTitle>
             <Button 
               variant="ghost" 
               size="sm"

@@ -22,6 +22,7 @@ export default function CargoRatesManager() {
   const [editId, setEditId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [filterTypeId, setFilterTypeId] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [form, setForm] = useState({
     cargoTypeId: '', scope: 'global' as string, scopeRefId: '',
     originStopId: '', destinationStopId: '',
@@ -380,7 +381,7 @@ export default function CargoRatesManager() {
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => { if (confirm('Hapus tarif ini?')) deleteMutation.mutate(cr.id); }}
+                    onClick={() => setDeleteConfirmId(cr.id)}
                     className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
                     data-testid={`btn-del-cargo-rate-${cr.id}`}
                   >
@@ -390,6 +391,36 @@ export default function CargoRatesManager() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" data-testid="dialog-delete-rate">
+          <div className="bg-white rounded-xl p-5 shadow-xl max-w-sm w-full mx-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 className="w-4 h-4 text-red-600" />
+              </div>
+              <h3 className="text-sm font-bold text-gray-800">Hapus Tarif Kargo</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">Apakah Anda yakin ingin menghapus tarif ini? Tindakan ini tidak dapat dibatalkan.</p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="h-8 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                data-testid="btn-cancel-delete-rate"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => { deleteMutation.mutate(deleteConfirmId); setDeleteConfirmId(null); }}
+                className="h-8 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium transition-colors"
+                data-testid="btn-confirm-delete-rate"
+              >
+                Hapus
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
