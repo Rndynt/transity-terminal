@@ -184,24 +184,22 @@ export const pricingApi = {
 export const cargoTypesApi = {
   getAll: () => fetch('/api/cargo-types').then(res => res.json()),
   getById: (id: string) => fetch(`/api/cargo-types/${id}`).then(res => res.json()),
-  create: (data: any) => apiRequest('POST', '/api/cargo-types', data).then(res => res.json()),
-  update: (id: string, data: any) => apiRequest('PUT', `/api/cargo-types/${id}`, data).then(res => res.json()),
+  create: (data: Record<string, unknown>) => apiRequest('POST', '/api/cargo-types', data).then(res => res.json()),
+  update: (id: string, data: Record<string, unknown>) => apiRequest('PUT', `/api/cargo-types/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/cargo-types/${id}`)
 };
 
-// Cargo Rates API
 export const cargoRatesApi = {
   getAll: (cargoTypeId?: string) => {
     const qs = cargoTypeId ? `?cargoTypeId=${cargoTypeId}` : '';
     return fetch(`/api/cargo-rates${qs}`).then(res => res.json());
   },
   getById: (id: string) => fetch(`/api/cargo-rates/${id}`).then(res => res.json()),
-  create: (data: any) => apiRequest('POST', '/api/cargo-rates', data).then(res => res.json()),
-  update: (id: string, data: any) => apiRequest('PUT', `/api/cargo-rates/${id}`, data).then(res => res.json()),
+  create: (data: Record<string, unknown>) => apiRequest('POST', '/api/cargo-rates', data).then(res => res.json()),
+  update: (id: string, data: Record<string, unknown>) => apiRequest('PUT', `/api/cargo-rates/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/cargo-rates/${id}`)
 };
 
-// Cargo Shipments API
 export const cargoApi = {
   getAll: (filters?: { tripId?: string; status?: string; outletId?: string }) => {
     const params = new URLSearchParams();
@@ -213,8 +211,8 @@ export const cargoApi = {
   },
   getById: (id: string) => fetch(`/api/cargo/${id}`).then(res => res.json()),
   getByWaybill: (waybillNumber: string) => fetch(`/api/cargo/waybill/${waybillNumber}`).then(res => res.json()),
-  create: (data: any) => apiRequest('POST', '/api/cargo', data).then(res => res.json()),
-  update: (id: string, data: any) => apiRequest('PUT', `/api/cargo/${id}`, data).then(res => res.json()),
+  create: (data: Record<string, unknown>) => apiRequest('POST', '/api/cargo', data).then(res => res.json()),
+  update: (id: string, data: Record<string, unknown>) => apiRequest('PUT', `/api/cargo/${id}`, data).then(res => res.json()),
   updateStatus: (id: string, status: string) => apiRequest('PATCH', `/api/cargo/${id}/status`, { status }).then(res => res.json()),
   quoteTariff: (cargoTypeId: string, originStopId: string, destinationStopId: string, weightKg: number) => {
     const params = new URLSearchParams({ cargoTypeId, originStopId, destinationStopId, weightKg: String(weightKg) });

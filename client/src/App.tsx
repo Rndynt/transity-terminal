@@ -8,8 +8,6 @@ import AppLayout from "@/components/layout/AppLayout";
 import MastersPage from "@/pages/masters/MastersPage";
 import CsoPage from "@/pages/cso/CsoPage";
 import CargoListPage from "@/pages/cargo/CargoListPage";
-import CargoTypesPage from "@/pages/cargo/CargoTypesPage";
-import CargoRatesPage from "@/pages/cargo/CargoRatesPage";
 
 function Router() {
   return (
@@ -18,8 +16,6 @@ function Router() {
         <Route path="/" component={CsoPage} />
         <Route path="/cso" component={CsoPage} />
         <Route path="/cargo" component={CargoListPage} />
-        <Route path="/cargo-types" component={CargoTypesPage} />
-        <Route path="/cargo-rates" component={CargoRatesPage} />
         <Route path="/masters" component={MastersPage} />
         <Route component={NotFound} />
       </Switch>

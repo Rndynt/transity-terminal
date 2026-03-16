@@ -135,7 +135,7 @@ export interface IStorage {
   findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string): Promise<CargoRate | undefined>;
 
   // Cargo Shipments
-  getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<any[]>;
+  getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]>;
   getCargoShipmentById(id: string): Promise<CargoShipment | undefined>;
   getCargoShipmentByWaybill(waybillNumber: string): Promise<CargoShipment | undefined>;
   createCargoShipment(data: InsertCargoShipment): Promise<CargoShipment>;

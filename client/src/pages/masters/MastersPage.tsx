@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MapPin, Store, Bus, LayoutGrid, Route, CalendarPlus, CalendarDays, DollarSign } from 'lucide-react';
+import { MapPin, Store, Bus, LayoutGrid, Route, CalendarPlus, CalendarDays, DollarSign, Tag, Package } from 'lucide-react';
 import StopsManager from '@/components/masters/StopsManager';
 import OutletsManager from '@/components/masters/OutletsManager';
 import VehiclesManager from '@/components/masters/VehiclesManager';
@@ -11,6 +11,8 @@ import TripPatternsManager from '@/components/masters/TripPatternsManager';
 import TripBasesManager from '@/components/masters/TripBasesManager';
 import TripsManager from '@/components/masters/TripsManager';
 import PriceRulesManager from '@/components/masters/PriceRulesManager';
+import CargoTypesManager from '@/components/masters/CargoTypesManager';
+import CargoRatesManager from '@/components/masters/CargoRatesManager';
 import type { LucideIcon } from 'lucide-react';
 
 interface TabDef {
@@ -39,7 +41,9 @@ export default function MastersPage() {
     { id: 'patterns', label: 'Trip Patterns', icon: Route, component: TripPatternsManager },
     { id: 'trip-bases', label: 'Trip Bases', icon: CalendarPlus, component: TripBasesManager },
     { id: 'trips', label: 'Trips', icon: CalendarDays, component: TripsManager },
-    { id: 'pricing', label: 'Price Rules', icon: DollarSign, component: PriceRulesManager }
+    { id: 'pricing', label: 'Price Rules', icon: DollarSign, component: PriceRulesManager },
+    { id: 'cargo-types', label: 'Jenis Kargo', icon: Tag, component: CargoTypesManager },
+    { id: 'cargo-rates', label: 'Tarif Kargo', icon: Package, component: CargoRatesManager }
   ];
 
   return (

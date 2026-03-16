@@ -25,8 +25,8 @@ const NAV_SECTIONS = [
       { name: "Trip Patterns", path: "/masters?tab=patterns", icon: Route },
       { name: "Trips", path: "/masters?tab=trips", icon: Calendar },
       { name: "Price Rules", path: "/masters?tab=pricing", icon: DollarSign },
-      { name: "Cargo Types", path: "/cargo-types", icon: Tag },
-      { name: "Cargo Rates", path: "/cargo-rates", icon: DollarSign },
+      { name: "Jenis Kargo", path: "/masters?tab=cargo-types", icon: Tag },
+      { name: "Tarif Kargo", path: "/masters?tab=cargo-rates", icon: Package },
     ]
   }
 ];

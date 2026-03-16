@@ -846,7 +846,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Cargo Shipments
-  async getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<any[]> {
+  async getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]> {
     const originStop = db.select({ id: stops.id, code: stops.code, name: stops.name }).from(stops).as('origin_stop');
     const destStop = db.select({ id: stops.id, code: stops.code, name: stops.name }).from(stops).as('dest_stop');
 

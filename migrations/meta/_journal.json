@@ -8,6 +8,13 @@
       "when": 1773697680593,
       "tag": "0000_keen_franklin_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1773897600000,
+      "tag": "0001_cargo_tables",
+      "breakpoints": true
     }
   ]
 }

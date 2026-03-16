@@ -37,7 +37,7 @@ export class CargoService {
     return { pricePerKg, minCharge, calculatedAmount };
   }
 
-  async getAllShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<any[]> {
+  async getAllShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]> {
     return await this.storage.getCargoShipments(filters);
   }
 

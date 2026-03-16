@@ -8,7 +8,7 @@ import {
   Banknote, QrCode, Wallet, Building2, Loader2,
   ArrowRight, Ruler, ShieldCheck
 } from 'lucide-react';
-import type { Stop, CsoAvailableTrip, CargoType } from '@/types';
+import type { Stop, CsoAvailableTrip, CargoType, CargoShipment } from '@/types';
 
 interface CargoFormProps {
   trip: { id: string };
@@ -16,7 +16,7 @@ interface CargoFormProps {
   destinationStop?: Stop;
   outletId?: string;
   csoTrip?: CsoAvailableTrip;
-  onSuccess: (shipment: any) => void;
+  onSuccess: (shipment: CargoShipment) => void;
 }
 
 const PAYMENT_METHODS = [
@@ -81,7 +81,7 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
   }, [cargoTypeId, actualOriginId, actualDestId, weightKg]);
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => cargoApi.create(data),
+    mutationFn: (data: Record<string, unknown>) => cargoApi.create(data),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['/api/cargo'] });
       toast({ title: 'Berhasil', description: `Resi ${result.waybillNumber} berhasil dibuat` });

@@ -3,16 +3,26 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { cargoApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import type { CargoShipment } from '@shared/schema';
 import {
   Package, Search, X, Loader2, ArrowRight,
   Phone, Clock, CheckCircle2, Truck, XCircle, Eye,
-  Download, Upload, RotateCcw
+  Download, Upload, RotateCcw, Calendar, AlertTriangle
 } from 'lucide-react';
+
+type CargoShipmentWithStops = CargoShipment & {
+  originStopName?: string;
+  originStopCode?: string;
+  destinationStopName?: string;
+  destinationStopCode?: string;
+};
 
 const fmt = (amount: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
 
-const STATUS_MAP: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+type StatusKey = 'pending' | 'received' | 'loaded' | 'in_transit' | 'arrived' | 'delivered' | 'returned' | 'canceled';
+
+const STATUS_MAP: Record<StatusKey, { label: string; color: string; bg: string; icon: typeof Clock }> = {
   pending: { label: 'Menunggu', color: 'text-amber-700', bg: 'bg-amber-100', icon: Clock },
   received: { label: 'Diterima', color: 'text-orange-700', bg: 'bg-orange-100', icon: Download },
   loaded: { label: 'Dimuat', color: 'text-indigo-700', bg: 'bg-indigo-100', icon: Upload },
@@ -23,7 +33,7 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string; ico
   canceled: { label: 'Dibatalkan', color: 'text-red-700', bg: 'bg-red-100', icon: XCircle }
 };
 
-const STATUS_TRANSITIONS: Record<string, string[]> = {
+const STATUS_TRANSITIONS: Record<StatusKey, StatusKey[]> = {
   pending: ['received', 'canceled'],
   received: ['loaded', 'canceled'],
   loaded: ['in_transit', 'canceled'],
@@ -37,34 +47,45 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
 export default function CargoListPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [selectedShipment, setSelectedShipment] = useState<any | null>(null);
+  const [dateFilter, setDateFilter] = useState('');
+  const [selectedShipment, setSelectedShipment] = useState<CargoShipmentWithStops | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ id: string; status: StatusKey; label: string } | null>(null);
   const { toast } = useToast();
 
-  const { data: shipments = [], isLoading } = useQuery<any[]>({
+  const { data: shipments = [], isLoading } = useQuery<CargoShipmentWithStops[]>({
     queryKey: ['/api/cargo', statusFilter],
     queryFn: () => cargoApi.getAll(statusFilter ? { status: statusFilter } : undefined)
   });
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => cargoApi.updateStatus(id, status),
-    onSuccess: (result) => {
+    onSuccess: (result: CargoShipmentWithStops) => {
       queryClient.invalidateQueries({ queryKey: ['/api/cargo'] });
       setSelectedShipment(result);
+      setConfirmAction(null);
       toast({ title: 'Status Diperbarui', description: `Resi ${result.waybillNumber} diperbarui` });
     },
     onError: (error: Error) => {
+      setConfirmAction(null);
       toast({ title: 'Gagal', description: error.message, variant: 'destructive' });
     }
   });
 
-  const filteredShipments = searchQuery.trim()
-    ? shipments.filter(s =>
-        s.waybillNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.senderName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.recipientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.itemDescription.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : shipments;
+  const filteredShipments = shipments.filter(s => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const match = s.waybillNumber.toLowerCase().includes(q) ||
+        s.senderName.toLowerCase().includes(q) ||
+        s.recipientName.toLowerCase().includes(q) ||
+        s.itemDescription.toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    if (dateFilter && s.createdAt) {
+      const shipmentDate = new Date(s.createdAt).toISOString().slice(0, 10);
+      if (shipmentDate !== dateFilter) return false;
+    }
+    return true;
+  });
 
   const formatDate = (date: string) => {
     try {
@@ -80,6 +101,16 @@ export default function CargoListPage() {
         hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta'
       });
     } catch { return '-'; }
+  };
+
+  const handleStatusClick = (id: string, nextStatus: StatusKey) => {
+    const s = STATUS_MAP[nextStatus];
+    setConfirmAction({ id, status: nextStatus, label: s.label });
+  };
+
+  const confirmStatusChange = () => {
+    if (!confirmAction) return;
+    updateStatusMutation.mutate({ id: confirmAction.id, status: confirmAction.status });
   };
 
   return (
@@ -99,23 +130,40 @@ export default function CargoListPage() {
       <div className="flex-1 flex overflow-hidden">
         <div className={`${selectedShipment ? 'hidden md:flex' : 'flex'} flex-1 flex-col overflow-hidden border-r border-gray-200`}>
           <div className="p-3 md:p-4 space-y-3 flex-shrink-0 bg-white border-b border-gray-100">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari resi, pengirim, penerima..."
-                className="w-full h-9 pl-9 pr-8 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
-                data-testid="input-search-cargo"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari resi, pengirim, penerima..."
+                  className="w-full h-9 pl-9 pr-8 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                  data-testid="input-search-cargo"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <Calendar className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  type="date"
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="h-9 pl-9 pr-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                  data-testid="input-date-filter"
+                />
+                {dateFilter && (
+                  <button onClick={() => setDateFilter('')} className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex gap-1.5 overflow-x-auto">
-              {[
+              {([
                 { value: '', label: 'Semua' },
                 { value: 'pending', label: 'Menunggu' },
                 { value: 'received', label: 'Diterima' },
@@ -125,7 +173,7 @@ export default function CargoListPage() {
                 { value: 'delivered', label: 'Terkirim' },
                 { value: 'returned', label: 'Kembali' },
                 { value: 'canceled', label: 'Batal' }
-              ].map(f => (
+              ] as const).map(f => (
                 <button
                   key={f.value}
                   onClick={() => setStatusFilter(f.value)}
@@ -155,7 +203,8 @@ export default function CargoListPage() {
               </div>
             ) : (
               filteredShipments.map(shipment => {
-                const s = STATUS_MAP[shipment.status || 'pending'] || STATUS_MAP.pending;
+                const status = (shipment.status || 'pending') as StatusKey;
+                const s = STATUS_MAP[status] || STATUS_MAP.pending;
                 const StatusIcon = s.icon;
                 const isSelected = selectedShipment?.id === shipment.id;
                 return (
@@ -193,7 +242,7 @@ export default function CargoListPage() {
                       <span className="font-mono font-semibold text-gray-600">{fmt(parseFloat(shipment.totalAmount))}</span>
                     </div>
                     <div className="text-[10px] text-gray-300 mt-1">
-                      {formatDate(shipment.createdAt!)} {formatTime(shipment.createdAt!)}
+                      {shipment.createdAt ? formatDate(String(shipment.createdAt)) : '-'} {shipment.createdAt ? formatTime(String(shipment.createdAt)) : ''}
                     </div>
                   </button>
                 );
@@ -220,7 +269,8 @@ export default function CargoListPage() {
                     <span className="text-white font-bold">{selectedShipment.waybillNumber}</span>
                   </div>
                   {(() => {
-                    const s = STATUS_MAP[selectedShipment.status || 'pending'] || STATUS_MAP.pending;
+                    const status = (selectedShipment.status || 'pending') as StatusKey;
+                    const s = STATUS_MAP[status] || STATUS_MAP.pending;
                     return (
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/20 text-white/90">
                         {s.label.toUpperCase()}
@@ -294,17 +344,17 @@ export default function CargoListPage() {
                 </div>
               </div>
 
-              {(STATUS_TRANSITIONS[selectedShipment.status || 'pending'] || []).length > 0 && (
+              {(STATUS_TRANSITIONS[(selectedShipment.status || 'pending') as StatusKey] || []).length > 0 && (
                 <div className="space-y-2">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Ubah Status</p>
                   <div className="flex gap-2 flex-wrap">
-                    {(STATUS_TRANSITIONS[selectedShipment.status || 'pending'] || []).map(nextStatus => {
+                    {(STATUS_TRANSITIONS[(selectedShipment.status || 'pending') as StatusKey] || []).map(nextStatus => {
                       const s = STATUS_MAP[nextStatus] || STATUS_MAP.pending;
                       const Icon = s.icon;
                       return (
                         <button
                           key={nextStatus}
-                          onClick={() => updateStatusMutation.mutate({ id: selectedShipment.id, status: nextStatus })}
+                          onClick={() => handleStatusClick(selectedShipment.id, nextStatus)}
                           disabled={updateStatusMutation.isPending}
                           className={`flex-1 min-w-[100px] h-9 ${s.bg} ${s.color} rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-transparent hover:opacity-90 transition-opacity disabled:opacity-50`}
                           data-testid={`btn-status-${nextStatus}`}
@@ -330,6 +380,43 @@ export default function CargoListPage() {
           )}
         </div>
       </div>
+
+      {confirmAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" data-testid="confirm-status-dialog">
+          <div className="bg-white rounded-2xl shadow-xl p-5 max-w-sm w-full mx-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">Konfirmasi Perubahan Status</h3>
+                <p className="text-xs text-gray-500">Tindakan ini tidak dapat dibatalkan</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Ubah status pengiriman menjadi <strong className="text-gray-800">{confirmAction.label}</strong>?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirmAction(null)}
+                className="h-9 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                data-testid="btn-cancel-confirm"
+              >
+                Batal
+              </button>
+              <button
+                onClick={confirmStatusChange}
+                disabled={updateStatusMutation.isPending}
+                className="h-9 px-4 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                data-testid="btn-confirm-status"
+              >
+                {updateStatusMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Ya, Ubah
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

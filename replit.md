@@ -17,11 +17,12 @@ A comprehensive production-grade MVP for a multi-stop bus travel ticketing syste
 - Backend: `server/modules/cargo/` (service + controller), IStorage interface + DatabaseStorage with cargo types/rates/shipments CRUD
 - Cargo service: waybill generation with collision-safe retry (TRN-YYYYMMDD-XXXXX), server-side tariff calculation (rate * weight, min charge), status transition validation using enum values
 - Cargo types/rates: CRUD APIs for managing cargo categories and per-route pricing; tariff quote endpoint for real-time pricing preview
-- Frontend: CargoForm.tsx (with cargo type selector, dimensions, declared value, auto-tariff from rates), CargoWaybillPreview.tsx, CargoListPage.tsx (with stop names via joined query)
-- Masters: CargoTypesPage.tsx and CargoRatesPage.tsx for managing cargo types and route-based tariffs
+- Frontend: CargoForm.tsx (with cargo type selector, dimensions, declared value, auto-tariff from rates), CargoWaybillPreview.tsx, CargoListPage.tsx (with stop names, date filter, status change confirmation dialog)
+- Masters tabs in MastersPage.tsx: CargoTypesManager and CargoRatesManager as "Jenis Kargo" and "Tarif Kargo" tabs (no standalone routes)
 - CsoPage: Penumpang/Kargo mode switcher in book phase
-- Sidebar: Kargo under OPERATIONS; Cargo Types & Cargo Rates under MASTERS
+- Sidebar: Kargo under OPERATIONS; Jenis Kargo & Tarif Kargo under MASTERS (pointing to /masters?tab=cargo-types and cargo-rates)
 - API routes: cargo-types, cargo-rates, cargo (shipments), cargo/quote-tariff
+- Migration: migrations/0001_cargo_tables.sql covers all cargo tables + enum
 
 **Date: 2026-03-15**
 - Implemented TransitPro mockup design into production CSO booking terminal
