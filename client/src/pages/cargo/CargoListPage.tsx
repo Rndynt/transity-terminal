@@ -5,36 +5,42 @@ import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import {
   Package, Search, X, Loader2, ArrowRight,
-  Phone, Clock, CheckCircle2, Truck, XCircle, Eye
+  Phone, Clock, CheckCircle2, Truck, XCircle, Eye,
+  Download, Upload, RotateCcw
 } from 'lucide-react';
-import type { CargoShipment } from '@/types';
 
 const fmt = (amount: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   pending: { label: 'Menunggu', color: 'text-amber-700', bg: 'bg-amber-100', icon: Clock },
+  received: { label: 'Diterima', color: 'text-orange-700', bg: 'bg-orange-100', icon: Download },
+  loaded: { label: 'Dimuat', color: 'text-indigo-700', bg: 'bg-indigo-100', icon: Upload },
   in_transit: { label: 'Dalam Perjalanan', color: 'text-blue-700', bg: 'bg-blue-100', icon: Truck },
   arrived: { label: 'Tiba', color: 'text-emerald-700', bg: 'bg-emerald-100', icon: CheckCircle2 },
   delivered: { label: 'Terkirim', color: 'text-emerald-700', bg: 'bg-emerald-100', icon: CheckCircle2 },
+  returned: { label: 'Dikembalikan', color: 'text-purple-700', bg: 'bg-purple-100', icon: RotateCcw },
   canceled: { label: 'Dibatalkan', color: 'text-red-700', bg: 'bg-red-100', icon: XCircle }
 };
 
 const STATUS_TRANSITIONS: Record<string, string[]> = {
-  pending: ['in_transit', 'canceled'],
+  pending: ['received', 'canceled'],
+  received: ['loaded', 'canceled'],
+  loaded: ['in_transit', 'canceled'],
   in_transit: ['arrived', 'canceled'],
-  arrived: ['delivered'],
+  arrived: ['delivered', 'returned'],
   delivered: [],
+  returned: [],
   canceled: []
 };
 
 export default function CargoListPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [selectedShipment, setSelectedShipment] = useState<CargoShipment | null>(null);
+  const [selectedShipment, setSelectedShipment] = useState<any | null>(null);
   const { toast } = useToast();
 
-  const { data: shipments = [], isLoading } = useQuery<CargoShipment[]>({
+  const { data: shipments = [], isLoading } = useQuery<any[]>({
     queryKey: ['/api/cargo', statusFilter],
     queryFn: () => cargoApi.getAll(statusFilter ? { status: statusFilter } : undefined)
   });
@@ -112,9 +118,12 @@ export default function CargoListPage() {
               {[
                 { value: '', label: 'Semua' },
                 { value: 'pending', label: 'Menunggu' },
+                { value: 'received', label: 'Diterima' },
+                { value: 'loaded', label: 'Dimuat' },
                 { value: 'in_transit', label: 'Perjalanan' },
                 { value: 'arrived', label: 'Tiba' },
                 { value: 'delivered', label: 'Terkirim' },
+                { value: 'returned', label: 'Kembali' },
                 { value: 'canceled', label: 'Batal' }
               ].map(f => (
                 <button
@@ -146,7 +155,7 @@ export default function CargoListPage() {
               </div>
             ) : (
               filteredShipments.map(shipment => {
-                const s = STATUS_MAP[shipment.status || 'pending'];
+                const s = STATUS_MAP[shipment.status || 'pending'] || STATUS_MAP.pending;
                 const StatusIcon = s.icon;
                 const isSelected = selectedShipment?.id === shipment.id;
                 return (
@@ -172,6 +181,13 @@ export default function CargoListPage() {
                       <ArrowRight className="w-3 h-3 text-gray-300" />
                       <span className="font-medium text-gray-700">{shipment.recipientName}</span>
                     </div>
+                    {(shipment.originStopName || shipment.destinationStopName) && (
+                      <div className="flex items-center gap-2 text-[10px] text-gray-400 mb-1">
+                        <span>{shipment.originStopName || '?'}</span>
+                        <ArrowRight className="w-2.5 h-2.5 text-gray-300" />
+                        <span>{shipment.destinationStopName || '?'}</span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between text-[10px] text-gray-400">
                       <span>{shipment.itemDescription}</span>
                       <span className="font-mono font-semibold text-gray-600">{fmt(parseFloat(shipment.totalAmount))}</span>
@@ -204,9 +220,9 @@ export default function CargoListPage() {
                     <span className="text-white font-bold">{selectedShipment.waybillNumber}</span>
                   </div>
                   {(() => {
-                    const s = STATUS_MAP[selectedShipment.status || 'pending'];
+                    const s = STATUS_MAP[selectedShipment.status || 'pending'] || STATUS_MAP.pending;
                     return (
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/20 text-white/90`}>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/20 text-white/90">
                         {s.label.toUpperCase()}
                       </span>
                     );
@@ -214,6 +230,26 @@ export default function CargoListPage() {
                 </div>
 
                 <div className="p-5 space-y-4">
+                  {(selectedShipment.originStopName || selectedShipment.destinationStopName) && (
+                    <div className="flex items-center justify-between text-center">
+                      <div>
+                        <p className="text-lg font-black text-gray-900 tracking-wider">{selectedShipment.originStopCode || 'ORI'}</p>
+                        <p className="text-[10px] text-gray-400">{selectedShipment.originStopName || 'Asal'}</p>
+                      </div>
+                      <div className="flex-1 mx-4 flex items-center">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <div className="flex-1 border-t-2 border-dashed border-gray-300 mx-1" />
+                        <Package className="w-4 h-4 text-amber-500" />
+                        <div className="flex-1 border-t-2 border-dashed border-gray-300 mx-1" />
+                        <div className="w-2 h-2 rounded-full bg-rose-500" />
+                      </div>
+                      <div>
+                        <p className="text-lg font-black text-gray-900 tracking-wider">{selectedShipment.destinationStopCode || 'DST'}</p>
+                        <p className="text-[10px] text-gray-400">{selectedShipment.destinationStopName || 'Tujuan'}</p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-[9px] text-gray-400 uppercase tracking-wider">Pengirim</p>
@@ -234,10 +270,16 @@ export default function CargoListPage() {
                   <div className="border-t border-dashed border-gray-200 pt-3">
                     <p className="text-[9px] text-gray-400 uppercase tracking-wider mb-1">Barang</p>
                     <p className="text-sm font-medium text-gray-700">{selectedShipment.itemDescription}</p>
-                    <div className="flex gap-3 text-[11px] text-gray-500 mt-1">
+                    <div className="flex gap-3 text-[11px] text-gray-500 mt-1 flex-wrap">
                       <span>Qty: {selectedShipment.quantity}</span>
                       {selectedShipment.weightKg && <span>Berat: {selectedShipment.weightKg} kg</span>}
+                      {(selectedShipment.lengthCm || selectedShipment.widthCm || selectedShipment.heightCm) && (
+                        <span>Dimensi: {selectedShipment.lengthCm || '-'}x{selectedShipment.widthCm || '-'}x{selectedShipment.heightCm || '-'} cm</span>
+                      )}
                     </div>
+                    {selectedShipment.declaredValue && (
+                      <p className="text-[11px] text-gray-500 mt-0.5">Nilai barang: {fmt(parseFloat(selectedShipment.declaredValue))}</p>
+                    )}
                     {selectedShipment.notes && (
                       <p className="text-[10px] text-gray-400 mt-1 italic">{selectedShipment.notes}</p>
                     )}
@@ -252,19 +294,19 @@ export default function CargoListPage() {
                 </div>
               </div>
 
-              {STATUS_TRANSITIONS[selectedShipment.status || 'pending']?.length > 0 && (
+              {(STATUS_TRANSITIONS[selectedShipment.status || 'pending'] || []).length > 0 && (
                 <div className="space-y-2">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Ubah Status</p>
-                  <div className="flex gap-2">
-                    {STATUS_TRANSITIONS[selectedShipment.status || 'pending'].map(nextStatus => {
-                      const s = STATUS_MAP[nextStatus];
+                  <div className="flex gap-2 flex-wrap">
+                    {(STATUS_TRANSITIONS[selectedShipment.status || 'pending'] || []).map(nextStatus => {
+                      const s = STATUS_MAP[nextStatus] || STATUS_MAP.pending;
                       const Icon = s.icon;
                       return (
                         <button
                           key={nextStatus}
                           onClick={() => updateStatusMutation.mutate({ id: selectedShipment.id, status: nextStatus })}
                           disabled={updateStatusMutation.isPending}
-                          className={`flex-1 h-9 ${s.bg} ${s.color} rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-transparent hover:opacity-90 transition-opacity disabled:opacity-50`}
+                          className={`flex-1 min-w-[100px] h-9 ${s.bg} ${s.color} rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-transparent hover:opacity-90 transition-opacity disabled:opacity-50`}
                           data-testid={`btn-status-${nextStatus}`}
                         >
                           {updateStatusMutation.isPending ? (

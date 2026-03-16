@@ -1,14 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
-import { cargoApi, stopsApi } from '@/lib/api';
+import { cargoApi, cargoTypesApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import {
-  Package, User, Phone, FileText, Weight, Hash,
+  Package, User, Phone, Weight, Hash,
   Banknote, QrCode, Wallet, Building2, Loader2,
-  ArrowRight, Check
+  ArrowRight, Ruler, ShieldCheck
 } from 'lucide-react';
-import type { Stop, CsoAvailableTrip } from '@/types';
+import type { Stop, CsoAvailableTrip, CargoType } from '@/types';
 
 interface CargoFormProps {
   trip: { id: string };
@@ -38,18 +38,47 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
   const [itemDescription, setItemDescription] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [weightKg, setWeightKg] = useState('');
+  const [lengthCm, setLengthCm] = useState('');
+  const [widthCm, setWidthCm] = useState('');
+  const [heightCm, setHeightCm] = useState('');
+  const [declaredValue, setDeclaredValue] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
+  const [cargoTypeId, setCargoTypeId] = useState('');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [tariffQuote, setTariffQuote] = useState<{ found: boolean; calculatedAmount: number; pricePerKg?: number; minCharge?: number } | null>(null);
 
   const { data: allStops = [] } = useQuery({
     queryKey: ['/api/stops'],
     queryFn: stopsApi.getAll
   });
 
+  const { data: cargoTypes = [] } = useQuery<CargoType[]>({
+    queryKey: ['/api/cargo-types'],
+    queryFn: cargoTypesApi.getAll
+  });
+
   const [selectedOriginId, setSelectedOriginId] = useState(originStop?.id || '');
   const [selectedDestId, setSelectedDestId] = useState(destinationStop?.id || '');
+
+  const actualOriginId = selectedOriginId || originStop?.id;
+  const actualDestId = selectedDestId || destinationStop?.id;
+
+  useEffect(() => {
+    if (cargoTypeId && actualOriginId && actualDestId && parseFloat(weightKg) > 0) {
+      cargoApi.quoteTariff(cargoTypeId, actualOriginId, actualDestId, parseFloat(weightKg))
+        .then(result => {
+          setTariffQuote(result);
+          if (result.found) {
+            setTotalAmount(String(result.calculatedAmount));
+          }
+        })
+        .catch(() => setTariffQuote(null));
+    } else {
+      setTariffQuote(null);
+    }
+  }, [cargoTypeId, actualOriginId, actualDestId, weightKg]);
 
   const createMutation = useMutation({
     mutationFn: (data: any) => cargoApi.create(data),
@@ -79,9 +108,6 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
     return null;
   };
 
-  const actualOriginId = selectedOriginId || originStop?.id;
-  const actualDestId = selectedDestId || destinationStop?.id;
-
   const isValid =
     senderName.trim().length >= 2 &&
     senderPhone.trim().length >= 10 &&
@@ -101,6 +127,7 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
       originStopId: actualOriginId,
       destinationStopId: actualDestId,
       outletId: outletId || null,
+      cargoTypeId: cargoTypeId || null,
       senderName: senderName.trim(),
       senderPhone: senderPhone.trim(),
       recipientName: recipientName.trim(),
@@ -108,6 +135,10 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
       itemDescription: itemDescription.trim(),
       quantity: parseInt(quantity),
       weightKg: weightKg ? weightKg : null,
+      lengthCm: lengthCm ? lengthCm : null,
+      widthCm: widthCm ? widthCm : null,
+      heightCm: heightCm ? heightCm : null,
+      declaredValue: declaredValue ? declaredValue : null,
       totalAmount: totalAmount,
       paymentMethod: paymentMethod,
       paidAt: new Date().toISOString(),
@@ -118,6 +149,7 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
 
   const originStopName = originStop?.name || allStops.find(s => s.id === selectedOriginId)?.name;
   const destStopName = destinationStop?.name || allStops.find(s => s.id === selectedDestId)?.name;
+  const activeCargoTypes = cargoTypes.filter((ct: CargoType) => ct.isActive !== false);
 
   return (
     <div className="h-full flex flex-col gap-0">
@@ -245,6 +277,22 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
             <span className="text-xs font-semibold text-gray-700">Detail Barang</span>
           </div>
           <div className="space-y-2">
+            {activeCargoTypes.length > 0 && (
+              <div>
+                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Jenis Kargo</label>
+                <select
+                  value={cargoTypeId}
+                  onChange={(e) => setCargoTypeId(e.target.value)}
+                  className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+                  data-testid="select-cargo-type"
+                >
+                  <option value="">Pilih jenis...</option>
+                  {activeCargoTypes.map((ct: CargoType) => (
+                    <option key={ct.id} value={ct.id}>{ct.name} ({ct.code})</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <input
                 value={itemDescription}
@@ -288,6 +336,59 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
                 </div>
               </div>
             </div>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <div className="relative">
+                  <Ruler className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={lengthCm}
+                    onChange={(e) => setLengthCm(e.target.value)}
+                    placeholder="P (cm)"
+                    className="w-full h-8 pl-7 pr-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+                    data-testid="input-length"
+                  />
+                </div>
+              </div>
+              <div className="flex-1">
+                <input
+                  type="number"
+                  step="0.1"
+                  value={widthCm}
+                  onChange={(e) => setWidthCm(e.target.value)}
+                  placeholder="L (cm)"
+                  className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+                  data-testid="input-width"
+                />
+              </div>
+              <div className="flex-1">
+                <input
+                  type="number"
+                  step="0.1"
+                  value={heightCm}
+                  onChange={(e) => setHeightCm(e.target.value)}
+                  placeholder="T (cm)"
+                  className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+                  data-testid="input-height"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <div className="relative">
+                  <ShieldCheck className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="number"
+                    value={declaredValue}
+                    onChange={(e) => setDeclaredValue(e.target.value)}
+                    placeholder="Nilai barang (Rp)"
+                    className="w-full h-8 pl-7 pr-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+                    data-testid="input-declared-value"
+                  />
+                </div>
+              </div>
+            </div>
             <div>
               <textarea
                 value={notes}
@@ -306,6 +407,13 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-gray-800">Biaya Pengiriman</h3>
         </div>
+
+        {tariffQuote?.found && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-[11px] text-emerald-700">
+            Tarif otomatis: {fmt(tariffQuote.pricePerKg || 0)}/kg
+            {tariffQuote.minCharge && parseFloat(String(tariffQuote.minCharge)) > 0 ? ` (min. ${fmt(tariffQuote.minCharge)})` : ''}
+          </div>
+        )}
 
         <div className="flex gap-2 items-end">
           <div className="flex-1">

@@ -10,11 +10,12 @@ import {
   type Stop, type Outlet, type Vehicle, type Layout, type TripPattern, 
   type PatternStop, type TripBase, type Trip, type TripWithDetails, type TripStopTime, type TripLeg, 
   type SeatInventory, type PriceRule, type Booking, type Passenger, 
-  type Payment, type PrintJob, type CargoShipment,
+  type Payment, type PrintJob, type CargoShipment, type CargoType, type CargoRate,
   type InsertStop, type InsertOutlet, type InsertVehicle, type InsertLayout,
   type InsertTripPattern, type InsertPatternStop, type InsertTripBase, type InsertTrip,
   type InsertTripStopTime, type InsertPriceRule, type InsertBooking,
   type InsertPassenger, type InsertPayment, type InsertPrintJob, type InsertCargoShipment,
+  type InsertCargoType, type InsertCargoRate,
   type CsoAvailableTrip
 } from "@shared/schema";
 
@@ -118,8 +119,23 @@ export interface IStorage {
   // Print Jobs
   createPrintJob(data: InsertPrintJob): Promise<PrintJob>;
 
+  // Cargo Types
+  getCargoTypes(): Promise<CargoType[]>;
+  getCargoTypeById(id: string): Promise<CargoType | undefined>;
+  createCargoType(data: InsertCargoType): Promise<CargoType>;
+  updateCargoType(id: string, data: Partial<InsertCargoType>): Promise<CargoType>;
+  deleteCargoType(id: string): Promise<void>;
+
+  // Cargo Rates
+  getCargoRates(cargoTypeId?: string): Promise<CargoRate[]>;
+  getCargoRateById(id: string): Promise<CargoRate | undefined>;
+  createCargoRate(data: InsertCargoRate): Promise<CargoRate>;
+  updateCargoRate(id: string, data: Partial<InsertCargoRate>): Promise<CargoRate>;
+  deleteCargoRate(id: string): Promise<void>;
+  findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string): Promise<CargoRate | undefined>;
+
   // Cargo Shipments
-  getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]>;
+  getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<any[]>;
   getCargoShipmentById(id: string): Promise<CargoShipment | undefined>;
   getCargoShipmentByWaybill(waybillNumber: string): Promise<CargoShipment | undefined>;
   createCargoShipment(data: InsertCargoShipment): Promise<CargoShipment>;
@@ -271,10 +287,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/bookings/:bookingId/payments', asyncHandler(paymentsController.getByBooking.bind(paymentsController)));
   app.post('/api/payments', asyncHandler(paymentsController.create.bind(paymentsController)));
 
-  // Cargo routes
+  // Cargo types routes
+  app.get('/api/cargo-types', asyncHandler(cargoController.getCargoTypes.bind(cargoController)));
+  app.get('/api/cargo-types/:id', asyncHandler(cargoController.getCargoTypeById.bind(cargoController)));
+  app.post('/api/cargo-types', asyncHandler(cargoController.createCargoType.bind(cargoController)));
+  app.put('/api/cargo-types/:id', asyncHandler(cargoController.updateCargoType.bind(cargoController)));
+  app.delete('/api/cargo-types/:id', asyncHandler(cargoController.deleteCargoType.bind(cargoController)));
+
+  // Cargo rates routes
+  app.get('/api/cargo-rates', asyncHandler(cargoController.getCargoRates.bind(cargoController)));
+  app.get('/api/cargo-rates/:id', asyncHandler(cargoController.getCargoRateById.bind(cargoController)));
+  app.post('/api/cargo-rates', asyncHandler(cargoController.createCargoRate.bind(cargoController)));
+  app.put('/api/cargo-rates/:id', asyncHandler(cargoController.updateCargoRate.bind(cargoController)));
+  app.delete('/api/cargo-rates/:id', asyncHandler(cargoController.deleteCargoRate.bind(cargoController)));
+
+  // Cargo tariff quote
+  app.get('/api/cargo/quote-tariff', asyncHandler(cargoController.quoteTariff.bind(cargoController)));
+
+  // Cargo shipment routes
   app.get('/api/cargo', asyncHandler(cargoController.getAll.bind(cargoController)));
-  app.get('/api/cargo/:id', asyncHandler(cargoController.getById.bind(cargoController)));
   app.get('/api/cargo/waybill/:waybillNumber', asyncHandler(cargoController.getByWaybill.bind(cargoController)));
+  app.get('/api/cargo/:id', asyncHandler(cargoController.getById.bind(cargoController)));
   app.post('/api/cargo', asyncHandler(cargoController.create.bind(cargoController)));
   app.put('/api/cargo/:id', asyncHandler(cargoController.update.bind(cargoController)));
   app.patch('/api/cargo/:id/status', asyncHandler(cargoController.updateStatus.bind(cargoController)));

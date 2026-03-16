@@ -1,14 +1,17 @@
 import { IStorage } from "../../routes";
-import { InsertCargoShipment, CargoShipment } from "@shared/schema";
+import { InsertCargoShipment, CargoShipment, cargoStatusEnum } from "@shared/schema";
 
-const VALID_STATUSES = ['pending', 'in_transit', 'arrived', 'delivered', 'canceled'] as const;
+const VALID_STATUSES = cargoStatusEnum.enumValues;
 type CargoStatus = typeof VALID_STATUSES[number];
 
 const ALLOWED_TRANSITIONS: Record<CargoStatus, CargoStatus[]> = {
-  pending: ['in_transit', 'canceled'],
+  pending: ['received', 'canceled'],
+  received: ['loaded', 'canceled'],
+  loaded: ['in_transit', 'canceled'],
   in_transit: ['arrived', 'canceled'],
-  arrived: ['delivered'],
+  arrived: ['delivered', 'returned'],
   delivered: [],
+  returned: [],
   canceled: []
 };
 
@@ -22,7 +25,19 @@ export class CargoService {
     return `TRN-${datePart}-${randomPart}`;
   }
 
-  async getAllShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]> {
+  async calculateTariff(cargoTypeId: string, originStopId: string, destinationStopId: string, weightKg: number): Promise<{ pricePerKg: number; minCharge: number; calculatedAmount: number } | null> {
+    const rate = await this.storage.findCargoRate(cargoTypeId, originStopId, destinationStopId);
+    if (!rate) return null;
+
+    const pricePerKg = parseFloat(rate.pricePerKg);
+    const minCharge = parseFloat(rate.minCharge);
+    const calculated = pricePerKg * weightKg;
+    const calculatedAmount = Math.max(calculated, minCharge);
+
+    return { pricePerKg, minCharge, calculatedAmount };
+  }
+
+  async getAllShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<any[]> {
     return await this.storage.getCargoShipments(filters);
   }
 
@@ -72,8 +87,10 @@ export class CargoService {
       throw new Error(`Cannot transition from '${currentStatus}' to '${newStatus}'. Allowed: ${allowed.join(', ') || 'none'}`);
     }
 
-    const updates: Partial<InsertCargoShipment> = { status: newStatus as any };
-    if (newStatus === 'delivered') {
+    const updates: Partial<InsertCargoShipment> = {};
+    const statusVal = newStatus as CargoStatus;
+    updates.status = statusVal;
+    if (statusVal === 'delivered') {
       updates.paidAt = new Date();
     }
     return await this.storage.updateCargoShipment(id, updates);

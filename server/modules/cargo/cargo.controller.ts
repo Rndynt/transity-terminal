@@ -1,13 +1,15 @@
 import { Request, Response } from "express";
 import { CargoService } from "./cargo.service";
 import { IStorage } from "../../routes";
-import { insertCargoShipmentSchema } from "@shared/schema";
+import { insertCargoShipmentSchema, insertCargoTypeSchema, insertCargoRateSchema } from "@shared/schema";
 
 export class CargoController {
   private cargoService: CargoService;
+  private storage: IStorage;
 
   constructor(storage: IStorage) {
     this.cargoService = new CargoService(storage);
+    this.storage = storage;
   }
 
   async getAll(req: Request, res: Response) {
@@ -60,5 +62,85 @@ export class CargoController {
       }
       throw error;
     }
+  }
+
+  async quoteTariff(req: Request, res: Response) {
+    const { cargoTypeId, originStopId, destinationStopId, weightKg } = req.query;
+    if (!cargoTypeId || !originStopId || !destinationStopId || !weightKg) {
+      return res.status(400).json({ error: 'cargoTypeId, originStopId, destinationStopId, weightKg are required' });
+    }
+    const result = await this.cargoService.calculateTariff(
+      cargoTypeId as string,
+      originStopId as string,
+      destinationStopId as string,
+      parseFloat(weightKg as string)
+    );
+    if (!result) {
+      return res.json({ found: false, calculatedAmount: 0 });
+    }
+    res.json({ found: true, ...result });
+  }
+
+  async getCargoTypes(_req: Request, res: Response) {
+    const types = await this.storage.getCargoTypes();
+    res.json(types);
+  }
+
+  async getCargoTypeById(req: Request, res: Response) {
+    const { id } = req.params;
+    const ct = await this.storage.getCargoTypeById(id);
+    if (!ct) return res.status(404).json({ error: 'Cargo type not found' });
+    res.json(ct);
+  }
+
+  async createCargoType(req: Request, res: Response) {
+    const validated = insertCargoTypeSchema.parse(req.body);
+    const ct = await this.storage.createCargoType(validated);
+    res.status(201).json(ct);
+  }
+
+  async updateCargoType(req: Request, res: Response) {
+    const { id } = req.params;
+    const validated = insertCargoTypeSchema.partial().parse(req.body);
+    const ct = await this.storage.updateCargoType(id, validated);
+    res.json(ct);
+  }
+
+  async deleteCargoType(req: Request, res: Response) {
+    const { id } = req.params;
+    await this.storage.deleteCargoType(id);
+    res.status(204).send();
+  }
+
+  async getCargoRates(req: Request, res: Response) {
+    const { cargoTypeId } = req.query;
+    const rates = await this.storage.getCargoRates(cargoTypeId as string);
+    res.json(rates);
+  }
+
+  async getCargoRateById(req: Request, res: Response) {
+    const { id } = req.params;
+    const cr = await this.storage.getCargoRateById(id);
+    if (!cr) return res.status(404).json({ error: 'Cargo rate not found' });
+    res.json(cr);
+  }
+
+  async createCargoRate(req: Request, res: Response) {
+    const validated = insertCargoRateSchema.parse(req.body);
+    const cr = await this.storage.createCargoRate(validated);
+    res.status(201).json(cr);
+  }
+
+  async updateCargoRate(req: Request, res: Response) {
+    const { id } = req.params;
+    const validated = insertCargoRateSchema.partial().parse(req.body);
+    const cr = await this.storage.updateCargoRate(id, validated);
+    res.json(cr);
+  }
+
+  async deleteCargoRate(req: Request, res: Response) {
+    const { id } = req.params;
+    await this.storage.deleteCargoRate(id);
+    res.status(204).send();
   }
 }

@@ -2,16 +2,17 @@ import { IStorage } from "./routes";
 import { 
   stops, outlets, vehicles, layouts, tripPatterns, patternStops, tripBases,
   trips, tripStopTimes, tripLegs, seatInventory, seatHolds, priceRules, 
-  bookings, passengers, payments, printJobs, cargoShipments,
+  bookings, passengers, payments, printJobs, cargoShipments, cargoTypes, cargoRates,
   type Stop, type Outlet, type Vehicle, type Layout, type TripPattern, 
   type PatternStop, type TripBase, type Trip, type TripWithDetails, type TripStopTime, type TripLeg, 
   type SeatInventory, type PriceRule, type Booking, type Passenger, 
-  type Payment, type PrintJob, type CargoShipment, type CsoAvailableTrip,
+  type Payment, type PrintJob, type CargoShipment, type CargoType, type CargoRate, type CsoAvailableTrip,
   type InsertStop, type InsertOutlet, type InsertVehicle, type InsertLayout,
   type InsertTripPattern, type InsertPatternStop, type InsertTripBase, type InsertTrip,
   type InsertTripStopTime, type InsertTripLeg, type InsertSeatInventory,
   type InsertPriceRule, type InsertBooking, type InsertPassenger,
-  type InsertPayment, type InsertPrintJob, type InsertCargoShipment
+  type InsertPayment, type InsertPrintJob, type InsertCargoShipment,
+  type InsertCargoType, type InsertCargoRate
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
@@ -773,17 +774,128 @@ export class DatabaseStorage implements IStorage {
       .where(eq(seatHolds.tripId, tripId));
   }
 
+  // Cargo Types
+  async getCargoTypes(): Promise<CargoType[]> {
+    return await db.select().from(cargoTypes).orderBy(cargoTypes.name);
+  }
+
+  async getCargoTypeById(id: string): Promise<CargoType | undefined> {
+    const [ct] = await db.select().from(cargoTypes).where(eq(cargoTypes.id, id));
+    return ct;
+  }
+
+  async createCargoType(data: InsertCargoType): Promise<CargoType> {
+    const [ct] = await db.insert(cargoTypes).values(data).returning();
+    return ct;
+  }
+
+  async updateCargoType(id: string, data: Partial<InsertCargoType>): Promise<CargoType> {
+    const [ct] = await db.update(cargoTypes).set(data).where(eq(cargoTypes.id, id)).returning();
+    return ct;
+  }
+
+  async deleteCargoType(id: string): Promise<void> {
+    await db.delete(cargoTypes).where(eq(cargoTypes.id, id));
+  }
+
+  // Cargo Rates
+  async getCargoRates(cargoTypeId?: string): Promise<CargoRate[]> {
+    if (cargoTypeId) {
+      return await db.select().from(cargoRates).where(eq(cargoRates.cargoTypeId, cargoTypeId)).orderBy(desc(cargoRates.createdAt));
+    }
+    return await db.select().from(cargoRates).orderBy(desc(cargoRates.createdAt));
+  }
+
+  async getCargoRateById(id: string): Promise<CargoRate | undefined> {
+    const [cr] = await db.select().from(cargoRates).where(eq(cargoRates.id, id));
+    return cr;
+  }
+
+  async createCargoRate(data: InsertCargoRate): Promise<CargoRate> {
+    const [cr] = await db.insert(cargoRates).values(data).returning();
+    return cr;
+  }
+
+  async updateCargoRate(id: string, data: Partial<InsertCargoRate>): Promise<CargoRate> {
+    const [cr] = await db.update(cargoRates).set(data).where(eq(cargoRates.id, id)).returning();
+    return cr;
+  }
+
+  async deleteCargoRate(id: string): Promise<void> {
+    await db.delete(cargoRates).where(eq(cargoRates.id, id));
+  }
+
+  async findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string): Promise<CargoRate | undefined> {
+    const [specific] = await db.select().from(cargoRates).where(
+      and(
+        eq(cargoRates.cargoTypeId, cargoTypeId),
+        eq(cargoRates.originStopId, originStopId),
+        eq(cargoRates.destinationStopId, destinationStopId),
+        eq(cargoRates.isActive, true)
+      )
+    );
+    if (specific) return specific;
+
+    const [fallback] = await db.select().from(cargoRates).where(
+      and(
+        eq(cargoRates.cargoTypeId, cargoTypeId),
+        eq(cargoRates.isActive, true)
+      )
+    ).limit(1);
+    return fallback;
+  }
+
   // Cargo Shipments
-  async getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]> {
+  async getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<any[]> {
+    const originStop = db.select({ id: stops.id, code: stops.code, name: stops.name }).from(stops).as('origin_stop');
+    const destStop = db.select({ id: stops.id, code: stops.code, name: stops.name }).from(stops).as('dest_stop');
+
     const conditions = [];
     if (filters?.tripId) conditions.push(eq(cargoShipments.tripId, filters.tripId));
-    if (filters?.status) conditions.push(eq(cargoShipments.status, filters.status as any));
+    if (filters?.status) conditions.push(sql`${cargoShipments.status} = ${filters.status}`);
     if (filters?.outletId) conditions.push(eq(cargoShipments.outletId, filters.outletId));
-    
+
+    const baseQuery = db
+      .select({
+        id: cargoShipments.id,
+        waybillNumber: cargoShipments.waybillNumber,
+        tripId: cargoShipments.tripId,
+        originStopId: cargoShipments.originStopId,
+        destinationStopId: cargoShipments.destinationStopId,
+        outletId: cargoShipments.outletId,
+        cargoTypeId: cargoShipments.cargoTypeId,
+        senderName: cargoShipments.senderName,
+        senderPhone: cargoShipments.senderPhone,
+        recipientName: cargoShipments.recipientName,
+        recipientPhone: cargoShipments.recipientPhone,
+        itemDescription: cargoShipments.itemDescription,
+        quantity: cargoShipments.quantity,
+        weightKg: cargoShipments.weightKg,
+        lengthCm: cargoShipments.lengthCm,
+        widthCm: cargoShipments.widthCm,
+        heightCm: cargoShipments.heightCm,
+        declaredValue: cargoShipments.declaredValue,
+        totalAmount: cargoShipments.totalAmount,
+        status: cargoShipments.status,
+        channel: cargoShipments.channel,
+        paymentMethod: cargoShipments.paymentMethod,
+        paidAt: cargoShipments.paidAt,
+        notes: cargoShipments.notes,
+        createdBy: cargoShipments.createdBy,
+        createdAt: cargoShipments.createdAt,
+        originStopCode: originStop.code,
+        originStopName: originStop.name,
+        destinationStopCode: destStop.code,
+        destinationStopName: destStop.name
+      })
+      .from(cargoShipments)
+      .leftJoin(originStop, eq(cargoShipments.originStopId, originStop.id))
+      .leftJoin(destStop, eq(cargoShipments.destinationStopId, destStop.id));
+
     if (conditions.length > 0) {
-      return await db.select().from(cargoShipments).where(and(...conditions)).orderBy(desc(cargoShipments.createdAt));
+      return await baseQuery.where(and(...conditions)).orderBy(desc(cargoShipments.createdAt));
     }
-    return await db.select().from(cargoShipments).orderBy(desc(cargoShipments.createdAt));
+    return await baseQuery.orderBy(desc(cargoShipments.createdAt));
   }
 
   async getCargoShipmentById(id: string): Promise<CargoShipment | undefined> {

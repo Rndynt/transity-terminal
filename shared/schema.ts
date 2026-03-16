@@ -476,8 +476,45 @@ export type InsertPassenger = z.infer<typeof insertPassengerSchema>;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type InsertPrintJob = z.infer<typeof insertPrintJobSchema>;
 
-// 16. Cargo Shipments
-export const cargoStatusEnum = pgEnum('cargo_status', ['pending', 'in_transit', 'arrived', 'delivered', 'canceled']);
+// 16. Cargo Types
+export const cargoTypes = pgTable("cargo_types", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  maxWeightKg: numeric("max_weight_kg", { precision: 8, scale: 2 }),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+});
+
+export const insertCargoTypeSchema = createInsertSchema(cargoTypes).omit({ id: true, createdAt: true });
+export type CargoType = typeof cargoTypes.$inferSelect;
+export type InsertCargoType = z.infer<typeof insertCargoTypeSchema>;
+
+// 17. Cargo Rates
+export const cargoRates = pgTable("cargo_rates", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  cargoTypeId: uuid("cargo_type_id").notNull().references(() => cargoTypes.id),
+  originStopId: uuid("origin_stop_id").references(() => stops.id),
+  destinationStopId: uuid("destination_stop_id").references(() => stops.id),
+  pricePerKg: numeric("price_per_kg", { precision: 12, scale: 2 }).notNull(),
+  minCharge: numeric("min_charge", { precision: 12, scale: 2 }).notNull().default('0'),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+});
+
+export const cargoRatesRelations = relations(cargoRates, ({ one }) => ({
+  cargoType: one(cargoTypes, { fields: [cargoRates.cargoTypeId], references: [cargoTypes.id] }),
+  originStop: one(stops, { fields: [cargoRates.originStopId], references: [stops.id], relationName: "cargoRateOriginStop" }),
+  destinationStop: one(stops, { fields: [cargoRates.destinationStopId], references: [stops.id], relationName: "cargoRateDestinationStop" })
+}));
+
+export const insertCargoRateSchema = createInsertSchema(cargoRates).omit({ id: true, createdAt: true });
+export type CargoRate = typeof cargoRates.$inferSelect;
+export type InsertCargoRate = z.infer<typeof insertCargoRateSchema>;
+
+// 18. Cargo Shipments
+export const cargoStatusEnum = pgEnum('cargo_status', ['pending', 'received', 'loaded', 'in_transit', 'arrived', 'delivered', 'returned', 'canceled']);
 
 export const cargoShipments = pgTable("cargo_shipments", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -486,6 +523,7 @@ export const cargoShipments = pgTable("cargo_shipments", {
   originStopId: uuid("origin_stop_id").notNull().references(() => stops.id),
   destinationStopId: uuid("destination_stop_id").notNull().references(() => stops.id),
   outletId: uuid("outlet_id").references(() => outlets.id),
+  cargoTypeId: uuid("cargo_type_id").references(() => cargoTypes.id),
   senderName: text("sender_name").notNull(),
   senderPhone: text("sender_phone").notNull(),
   recipientName: text("recipient_name").notNull(),
@@ -493,6 +531,10 @@ export const cargoShipments = pgTable("cargo_shipments", {
   itemDescription: text("item_description").notNull(),
   quantity: integer("quantity").notNull().default(1),
   weightKg: numeric("weight_kg", { precision: 8, scale: 2 }),
+  lengthCm: numeric("length_cm", { precision: 8, scale: 2 }),
+  widthCm: numeric("width_cm", { precision: 8, scale: 2 }),
+  heightCm: numeric("height_cm", { precision: 8, scale: 2 }),
+  declaredValue: numeric("declared_value", { precision: 12, scale: 2 }),
   totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
   status: cargoStatusEnum("status").default('pending'),
   channel: channelEnum("channel").default('CSO'),
@@ -507,7 +549,8 @@ export const cargoShipmentsRelations = relations(cargoShipments, ({ one }) => ({
   trip: one(trips, { fields: [cargoShipments.tripId], references: [trips.id] }),
   originStop: one(stops, { fields: [cargoShipments.originStopId], references: [stops.id], relationName: "cargoOriginStop" }),
   destinationStop: one(stops, { fields: [cargoShipments.destinationStopId], references: [stops.id], relationName: "cargoDestinationStop" }),
-  outlet: one(outlets, { fields: [cargoShipments.outletId], references: [outlets.id] })
+  outlet: one(outlets, { fields: [cargoShipments.outletId], references: [outlets.id] }),
+  cargoType: one(cargoTypes, { fields: [cargoShipments.cargoTypeId], references: [cargoTypes.id] })
 }));
 
 export const insertCargoShipmentSchema = createInsertSchema(cargoShipments).omit({ id: true, createdAt: true });

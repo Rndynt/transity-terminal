@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   MapPin, Store, Truck, LayoutGrid, Route, Calendar, DollarSign,
-  Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package
+  Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag
 } from "lucide-react";
 
 const NAV_SECTIONS = [
@@ -25,6 +25,8 @@ const NAV_SECTIONS = [
       { name: "Trip Patterns", path: "/masters?tab=patterns", icon: Route },
       { name: "Trips", path: "/masters?tab=trips", icon: Calendar },
       { name: "Price Rules", path: "/masters?tab=pricing", icon: DollarSign },
+      { name: "Cargo Types", path: "/cargo-types", icon: Tag },
+      { name: "Cargo Rates", path: "/cargo-rates", icon: DollarSign },
     ]
   }
 ];

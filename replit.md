@@ -12,13 +12,16 @@ A comprehensive production-grade MVP for a multi-stop bus travel ticketing syste
 ## Recent Changes
 **Date: 2026-03-16**
 - TransityTerminal Cargo Terminal (Pengiriman Paket) fully implemented
-- Database: `cargo_status` enum + `cargo_shipments` table with waybill_number unique constraint
-- Backend: `server/modules/cargo/` (service + controller), IStorage interface + DatabaseStorage updated
-- Cargo service: waybill generation with collision-safe retry (TRN-YYYYMMDD-XXXXX format), status transition validation (pending→in_transit→arrived→delivered, any→canceled)
-- Frontend: CargoForm.tsx (sender/recipient/item/payment form), CargoWaybillPreview.tsx (printable waybill receipt), CargoListPage.tsx (list + status management with filters)
-- CsoPage: Penumpang/Kargo mode switcher in book phase — toggle between passenger booking and cargo shipment
-- Sidebar: Kargo nav item added under OPERATIONS
-- API routes: GET/POST /api/cargo, GET /api/cargo/:id, GET /api/cargo/waybill/:waybillNumber, PUT /api/cargo/:id, PATCH /api/cargo/:id/status
+- Database: `cargo_types` + `cargo_rates` + `cargo_shipments` tables; `cargo_status` enum with full lifecycle (pending→received→loaded→in_transit→arrived→delivered/returned, any→canceled)
+- Schema: cargo_shipments includes dimensions (length/width/height_cm), declaredValue, cargoTypeId FK
+- Backend: `server/modules/cargo/` (service + controller), IStorage interface + DatabaseStorage with cargo types/rates/shipments CRUD
+- Cargo service: waybill generation with collision-safe retry (TRN-YYYYMMDD-XXXXX), server-side tariff calculation (rate * weight, min charge), status transition validation using enum values
+- Cargo types/rates: CRUD APIs for managing cargo categories and per-route pricing; tariff quote endpoint for real-time pricing preview
+- Frontend: CargoForm.tsx (with cargo type selector, dimensions, declared value, auto-tariff from rates), CargoWaybillPreview.tsx, CargoListPage.tsx (with stop names via joined query)
+- Masters: CargoTypesPage.tsx and CargoRatesPage.tsx for managing cargo types and route-based tariffs
+- CsoPage: Penumpang/Kargo mode switcher in book phase
+- Sidebar: Kargo under OPERATIONS; Cargo Types & Cargo Rates under MASTERS
+- API routes: cargo-types, cargo-rates, cargo (shipments), cargo/quote-tariff
 
 **Date: 2026-03-15**
 - Implemented TransitPro mockup design into production CSO booking terminal
