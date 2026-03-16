@@ -492,12 +492,17 @@ export type CargoType = typeof cargoTypes.$inferSelect;
 export type InsertCargoType = z.infer<typeof insertCargoTypeSchema>;
 
 // 17. Cargo Rates
+export const cargoRateScopeEnum = pgEnum('cargo_rate_scope', ['global', 'pattern', 'trip']);
+
 export const cargoRates = pgTable("cargo_rates", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   cargoTypeId: uuid("cargo_type_id").notNull().references(() => cargoTypes.id),
+  scope: cargoRateScopeEnum("scope").notNull().default('global'),
+  scopeRefId: uuid("scope_ref_id"),
   originStopId: uuid("origin_stop_id").references(() => stops.id),
   destinationStopId: uuid("destination_stop_id").references(() => stops.id),
   pricePerKg: numeric("price_per_kg", { precision: 12, scale: 2 }).notNull(),
+  pricePerLeg: numeric("price_per_leg", { precision: 12, scale: 2 }).notNull().default('0'),
   minCharge: numeric("min_charge", { precision: 12, scale: 2 }).notNull().default('0'),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
@@ -536,7 +541,7 @@ export const cargoShipments = pgTable("cargo_shipments", {
   heightCm: numeric("height_cm", { precision: 8, scale: 2 }),
   declaredValue: numeric("declared_value", { precision: 12, scale: 2 }),
   totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
-  status: cargoStatusEnum("status").default('pending'),
+  status: cargoStatusEnum("status").default('received'),
   channel: channelEnum("channel").default('CSO'),
   paymentMethod: paymentMethodEnum("payment_method"),
   paidAt: timestamp("paid_at", { withTimezone: true }),

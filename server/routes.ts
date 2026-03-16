@@ -132,7 +132,7 @@ export interface IStorage {
   createCargoRate(data: InsertCargoRate): Promise<CargoRate>;
   updateCargoRate(id: string, data: Partial<InsertCargoRate>): Promise<CargoRate>;
   deleteCargoRate(id: string): Promise<void>;
-  findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string): Promise<CargoRate | undefined>;
+  findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string, tripId?: string): Promise<CargoRate | undefined>;
 
   // Cargo Shipments
   getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]>;

@@ -15,7 +15,7 @@ import {
   type InsertCargoType, type InsertCargoRate
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, isNull } from "drizzle-orm";
 import { fromZonedHHMMToUtc } from "./utils/timezone";
 
 export class DatabaseStorage implements IStorage {
@@ -825,24 +825,65 @@ export class DatabaseStorage implements IStorage {
     await db.delete(cargoRates).where(eq(cargoRates.id, id));
   }
 
-  async findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string): Promise<CargoRate | undefined> {
-    const [specific] = await db.select().from(cargoRates).where(
+  async findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string, tripId?: string): Promise<CargoRate | undefined> {
+    const findBestInScope = async (scope: string, scopeRefId: string): Promise<CargoRate | undefined> => {
+      const [routeSpecific] = await db.select().from(cargoRates).where(
+        and(
+          eq(cargoRates.cargoTypeId, cargoTypeId),
+          eq(cargoRates.scope, scope),
+          eq(cargoRates.scopeRefId, scopeRefId),
+          eq(cargoRates.originStopId, originStopId),
+          eq(cargoRates.destinationStopId, destinationStopId),
+          eq(cargoRates.isActive, true)
+        )
+      );
+      if (routeSpecific) return routeSpecific;
+
+      const [scopeFallback] = await db.select().from(cargoRates).where(
+        and(
+          eq(cargoRates.cargoTypeId, cargoTypeId),
+          eq(cargoRates.scope, scope),
+          eq(cargoRates.scopeRefId, scopeRefId),
+          isNull(cargoRates.originStopId),
+          isNull(cargoRates.destinationStopId),
+          eq(cargoRates.isActive, true)
+        )
+      );
+      return scopeFallback;
+    };
+
+    if (tripId) {
+      const tripRate = await findBestInScope('trip', tripId);
+      if (tripRate) return tripRate;
+
+      const trip = await this.getTripById(tripId);
+      if (trip?.patternId) {
+        const patternRate = await findBestInScope('pattern', trip.patternId);
+        if (patternRate) return patternRate;
+      }
+    }
+
+    const [globalRouteSpecific] = await db.select().from(cargoRates).where(
       and(
         eq(cargoRates.cargoTypeId, cargoTypeId),
+        eq(cargoRates.scope, 'global'),
         eq(cargoRates.originStopId, originStopId),
         eq(cargoRates.destinationStopId, destinationStopId),
         eq(cargoRates.isActive, true)
       )
     );
-    if (specific) return specific;
+    if (globalRouteSpecific) return globalRouteSpecific;
 
-    const [fallback] = await db.select().from(cargoRates).where(
+    const [globalFallback] = await db.select().from(cargoRates).where(
       and(
         eq(cargoRates.cargoTypeId, cargoTypeId),
+        eq(cargoRates.scope, 'global'),
+        isNull(cargoRates.originStopId),
+        isNull(cargoRates.destinationStopId),
         eq(cargoRates.isActive, true)
       )
-    ).limit(1);
-    return fallback;
+    );
+    return globalFallback;
   }
 
   // Cargo Shipments

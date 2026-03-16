@@ -214,8 +214,9 @@ export const cargoApi = {
   create: (data: Record<string, unknown>) => apiRequest('POST', '/api/cargo', data).then(res => res.json()),
   update: (id: string, data: Record<string, unknown>) => apiRequest('PUT', `/api/cargo/${id}`, data).then(res => res.json()),
   updateStatus: (id: string, status: string) => apiRequest('PATCH', `/api/cargo/${id}/status`, { status }).then(res => res.json()),
-  quoteTariff: (cargoTypeId: string, originStopId: string, destinationStopId: string, weightKg: number) => {
+  quoteTariff: (cargoTypeId: string, originStopId: string, destinationStopId: string, weightKg: number, tripId?: string) => {
     const params = new URLSearchParams({ cargoTypeId, originStopId, destinationStopId, weightKg: String(weightKg) });
+    if (tripId) params.set('tripId', tripId);
     return fetch(`/api/cargo/quote-tariff?${params}`).then(res => res.json());
   }
 };

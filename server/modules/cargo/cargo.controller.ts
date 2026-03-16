@@ -65,7 +65,7 @@ export class CargoController {
   }
 
   async quoteTariff(req: Request, res: Response) {
-    const { cargoTypeId, originStopId, destinationStopId, weightKg } = req.query;
+    const { cargoTypeId, originStopId, destinationStopId, weightKg, tripId } = req.query;
     if (!cargoTypeId || !originStopId || !destinationStopId || !weightKg) {
       return res.status(400).json({ error: 'cargoTypeId, originStopId, destinationStopId, weightKg are required' });
     }
@@ -73,7 +73,8 @@ export class CargoController {
       cargoTypeId as string,
       originStopId as string,
       destinationStopId as string,
-      parseFloat(weightKg as string)
+      parseFloat(weightKg as string),
+      tripId as string | undefined
     );
     if (!result) {
       return res.json({ found: false, calculatedAmount: 0 });
@@ -127,6 +128,9 @@ export class CargoController {
 
   async createCargoRate(req: Request, res: Response) {
     const validated = insertCargoRateSchema.parse(req.body);
+    if (validated.scope && validated.scope !== 'global' && !validated.scopeRefId) {
+      return res.status(400).json({ message: 'scopeRefId is required when scope is pattern or trip' });
+    }
     const cr = await this.storage.createCargoRate(validated);
     res.status(201).json(cr);
   }
@@ -134,6 +138,13 @@ export class CargoController {
   async updateCargoRate(req: Request, res: Response) {
     const { id } = req.params;
     const validated = insertCargoRateSchema.partial().parse(req.body);
+    const existing = await this.storage.getCargoRateById(id);
+    if (!existing) return res.status(404).json({ error: 'Cargo rate not found' });
+    const effectiveScope = validated.scope ?? existing.scope ?? 'global';
+    const effectiveRefId = validated.scopeRefId !== undefined ? validated.scopeRefId : existing.scopeRefId;
+    if (effectiveScope !== 'global' && !effectiveRefId) {
+      return res.status(400).json({ message: 'scopeRefId is required when scope is pattern or trip' });
+    }
     const cr = await this.storage.updateCargoRate(id, validated);
     res.json(cr);
   }

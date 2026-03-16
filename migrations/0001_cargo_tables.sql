@@ -1,4 +1,5 @@
 CREATE TYPE "public"."cargo_status" AS ENUM('pending', 'received', 'loaded', 'in_transit', 'arrived', 'delivered', 'returned', 'canceled');--> statement-breakpoint
+CREATE TYPE "public"."cargo_rate_scope" AS ENUM('global', 'pattern', 'trip');--> statement-breakpoint
 CREATE TABLE "cargo_types" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"code" text NOT NULL,
@@ -11,9 +12,12 @@ CREATE TABLE "cargo_types" (
 CREATE TABLE "cargo_rates" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"cargo_type_id" uuid NOT NULL,
+	"scope" "cargo_rate_scope" DEFAULT 'global' NOT NULL,
+	"scope_ref_id" uuid,
 	"origin_stop_id" uuid,
 	"destination_stop_id" uuid,
 	"price_per_kg" numeric(12, 2) NOT NULL,
+	"price_per_leg" numeric(12, 2) DEFAULT '0' NOT NULL,
 	"min_charge" numeric(12, 2) DEFAULT '0' NOT NULL,
 	"is_active" boolean DEFAULT true,
 	"created_at" timestamp with time zone DEFAULT now()
@@ -38,7 +42,7 @@ CREATE TABLE "cargo_shipments" (
 	"height_cm" numeric(8, 2),
 	"declared_value" numeric(12, 2),
 	"total_amount" numeric(12, 2) NOT NULL,
-	"status" "cargo_status" DEFAULT 'pending',
+	"status" "cargo_status" DEFAULT 'received',
 	"channel" "channel" DEFAULT 'CSO',
 	"payment_method" "payment_method",
 	"paid_at" timestamp with time zone,

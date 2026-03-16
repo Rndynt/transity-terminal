@@ -25,16 +25,43 @@ export class CargoService {
     return `TRN-${datePart}-${randomPart}`;
   }
 
-  async calculateTariff(cargoTypeId: string, originStopId: string, destinationStopId: string, weightKg: number): Promise<{ pricePerKg: number; minCharge: number; calculatedAmount: number } | null> {
-    const rate = await this.storage.findCargoRate(cargoTypeId, originStopId, destinationStopId);
+  async countLegsBetweenStops(tripId: string, originStopId: string, destinationStopId: string): Promise<number> {
+    const stopTimes = await this.storage.getTripStopTimes(tripId);
+    if (!stopTimes || stopTimes.length === 0) return 1;
+
+    const originSeq = stopTimes.find(st => st.stopId === originStopId)?.stopSequence;
+    const destSeq = stopTimes.find(st => st.stopId === destinationStopId)?.stopSequence;
+
+    if (originSeq === undefined || destSeq === undefined) return 1;
+    const legCount = Math.abs(destSeq - originSeq);
+    return Math.max(legCount, 1);
+  }
+
+  async calculateTariff(
+    cargoTypeId: string,
+    originStopId: string,
+    destinationStopId: string,
+    weightKg: number,
+    tripId?: string
+  ): Promise<{ pricePerKg: number; pricePerLeg: number; minCharge: number; legCount: number; calculatedAmount: number } | null> {
+    const rate = await this.storage.findCargoRate(cargoTypeId, originStopId, destinationStopId, tripId);
     if (!rate) return null;
 
     const pricePerKg = parseFloat(rate.pricePerKg);
+    const pricePerLeg = parseFloat(rate.pricePerLeg || '0');
     const minCharge = parseFloat(rate.minCharge);
-    const calculated = pricePerKg * weightKg;
+
+    let legCount = 1;
+    if (tripId) {
+      legCount = await this.countLegsBetweenStops(tripId, originStopId, destinationStopId);
+    }
+
+    const weightCost = pricePerKg * weightKg;
+    const legCost = pricePerLeg * legCount;
+    const calculated = weightCost + legCost;
     const calculatedAmount = Math.max(calculated, minCharge);
 
-    return { pricePerKg, minCharge, calculatedAmount };
+    return { pricePerKg, pricePerLeg, minCharge, legCount, calculatedAmount };
   }
 
   async getAllShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]> {
@@ -59,8 +86,9 @@ export class CargoService {
       const waybillNumber = this.generateWaybillNumber();
       try {
         return await this.storage.createCargoShipment({ ...data, waybillNumber });
-      } catch (error: any) {
-        if (error?.code === '23505' && error?.constraint?.includes('waybill')) {
+      } catch (error: unknown) {
+        const dbErr = error as { code?: string; constraint?: string };
+        if (dbErr?.code === '23505' && dbErr?.constraint?.includes('waybill')) {
           continue;
         }
         throw error;
@@ -80,7 +108,7 @@ export class CargoService {
     }
 
     const shipment = await this.getShipmentById(id);
-    const currentStatus = (shipment.status || 'pending') as CargoStatus;
+    const currentStatus = (shipment.status || 'received') as CargoStatus;
     const allowed = ALLOWED_TRANSITIONS[currentStatus] || [];
 
     if (!allowed.includes(newStatus as CargoStatus)) {

@@ -3,11 +3,11 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { cargoApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import type { CargoShipment } from '@shared/schema';
+import type { CargoShipment, Trip } from '@shared/schema';
 import {
   Package, Search, X, Loader2, ArrowRight,
   Phone, Clock, CheckCircle2, Truck, XCircle, Eye,
-  Download, Upload, RotateCcw, Calendar, AlertTriangle
+  Download, Upload, RotateCcw, Calendar, AlertTriangle, Bus
 } from 'lucide-react';
 
 type CargoShipmentWithStops = CargoShipment & {
@@ -48,13 +48,24 @@ export default function CargoListPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
+  const [tripFilter, setTripFilter] = useState('');
   const [selectedShipment, setSelectedShipment] = useState<CargoShipmentWithStops | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ id: string; status: StatusKey; label: string } | null>(null);
   const { toast } = useToast();
 
+  const { data: trips = [] } = useQuery<Trip[]>({
+    queryKey: ['/api/trips'],
+    queryFn: () => fetch('/api/trips').then(r => r.json())
+  });
+
   const { data: shipments = [], isLoading } = useQuery<CargoShipmentWithStops[]>({
-    queryKey: ['/api/cargo', statusFilter],
-    queryFn: () => cargoApi.getAll(statusFilter ? { status: statusFilter } : undefined)
+    queryKey: ['/api/cargo', statusFilter, tripFilter],
+    queryFn: () => {
+      const filters: { status?: string; tripId?: string } = {};
+      if (statusFilter) filters.status = statusFilter;
+      if (tripFilter) filters.tripId = tripFilter;
+      return cargoApi.getAll(Object.keys(filters).length > 0 ? filters : undefined);
+    }
   });
 
   const updateStatusMutation = useMutation({
@@ -147,6 +158,20 @@ export default function CargoListPage() {
                 )}
               </div>
               <div className="relative">
+                <Bus className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <select
+                  value={tripFilter}
+                  onChange={(e) => setTripFilter(e.target.value)}
+                  className="h-9 pl-9 pr-6 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 appearance-none"
+                  data-testid="select-trip-filter"
+                >
+                  <option value="">Semua Trip</option>
+                  {trips.map(t => (
+                    <option key={t.id} value={t.id}>{t.id.slice(0,8)}...</option>
+                  ))}
+                </select>
+              </div>
+              <div className="relative">
                 <Calendar className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 <input
                   type="date"
@@ -165,7 +190,6 @@ export default function CargoListPage() {
             <div className="flex gap-1.5 overflow-x-auto">
               {([
                 { value: '', label: 'Semua' },
-                { value: 'pending', label: 'Menunggu' },
                 { value: 'received', label: 'Diterima' },
                 { value: 'loaded', label: 'Dimuat' },
                 { value: 'in_transit', label: 'Perjalanan' },
