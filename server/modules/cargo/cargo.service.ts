@@ -81,6 +81,19 @@ export class CargoService {
   }
 
   async createShipment(data: Omit<InsertCargoShipment, 'waybillNumber'>): Promise<CargoShipment> {
+    if (data.cargoTypeId && data.originStopId && data.destinationStopId && data.weightKg) {
+      const weight = parseFloat(String(data.weightKg));
+      if (weight > 0) {
+        const tariff = await this.calculateTariff(
+          data.cargoTypeId, data.originStopId, data.destinationStopId,
+          weight, data.tripId || undefined
+        );
+        if (tariff) {
+          data = { ...data, totalAmount: String(tariff.calculatedAmount) };
+        }
+      }
+    }
+
     const maxRetries = 5;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const waybillNumber = this.generateWaybillNumber();

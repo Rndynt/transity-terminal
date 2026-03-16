@@ -2,9 +2,10 @@ import {
   CheckCircle2, Printer, RotateCcw, Package,
   User, Phone, MapPin, Bus, Calendar, FileText, QrCode
 } from 'lucide-react';
+import type { CargoShipmentWithStops } from '@/types';
 
 interface CargoWaybillPreviewProps {
-  shipment: any;
+  shipment: CargoShipmentWithStops;
   onNewShipment: () => void;
   onPrint: () => void;
 }

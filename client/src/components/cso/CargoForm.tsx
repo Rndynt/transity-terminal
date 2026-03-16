@@ -8,7 +8,7 @@ import {
   Banknote, QrCode, Wallet, Building2, Loader2,
   ArrowRight, Ruler, ShieldCheck
 } from 'lucide-react';
-import type { Stop, CsoAvailableTrip, CargoType, CargoShipment } from '@/types';
+import type { Stop, CsoAvailableTrip, CargoType, CargoShipmentWithStops } from '@/types';
 
 interface CargoFormProps {
   trip: { id: string };
@@ -16,7 +16,7 @@ interface CargoFormProps {
   destinationStop?: Stop;
   outletId?: string;
   csoTrip?: CsoAvailableTrip;
-  onSuccess: (shipment: CargoShipment) => void;
+  onSuccess: (shipment: CargoShipmentWithStops) => void;
 }
 
 const PAYMENT_METHODS = [
@@ -67,7 +67,7 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
 
   useEffect(() => {
     if (cargoTypeId && actualOriginId && actualDestId && parseFloat(weightKg) > 0) {
-      cargoApi.quoteTariff(cargoTypeId, actualOriginId, actualDestId, parseFloat(weightKg))
+      cargoApi.quoteTariff(cargoTypeId, actualOriginId, actualDestId, parseFloat(weightKg), trip.id)
         .then(result => {
           setTariffQuote(result);
           if (result.found) {

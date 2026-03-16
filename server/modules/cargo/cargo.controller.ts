@@ -56,9 +56,10 @@ export class CargoController {
     try {
       const shipment = await this.cargoService.updateShipmentStatus(id, status);
       res.json(shipment);
-    } catch (error: any) {
-      if (error.message?.includes('Invalid status') || error.message?.includes('Cannot transition')) {
-        return res.status(400).json({ error: error.message });
+    } catch (error: unknown) {
+      const err = error as Error;
+      if (err.message?.includes('Invalid status') || err.message?.includes('Cannot transition')) {
+        return res.status(400).json({ error: err.message });
       }
       throw error;
     }

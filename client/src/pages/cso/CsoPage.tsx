@@ -13,7 +13,7 @@ import {
   ChevronRight, ChevronLeft, Loader2, MapPin,
   Armchair, ArrowRight, Ticket, Package
 } from 'lucide-react';
-import type { Stop, Outlet, CsoAvailableTrip } from '@/types';
+import type { Stop, Outlet, CsoAvailableTrip, CargoShipmentWithStops } from '@/types';
 
 type Phase = 'select' | 'book';
 type MobilePanel = 'left' | 'right';
@@ -46,7 +46,7 @@ export default function CsoPage() {
   const [selectedCsoTrip, setSelectedCsoTrip] = useState<CsoAvailableTrip | undefined>();
   const [isProcessing, setIsProcessing] = useState(false);
   const [csoMode, setCsoMode] = useState<CsoMode>('penumpang');
-  const [cargoResult, setCargoResult] = useState<any>(null);
+  const [cargoResult, setCargoResult] = useState<CargoShipmentWithStops | null>(null);
   const [showCargoWaybill, setShowCargoWaybill] = useState(false);
 
   const {
@@ -221,7 +221,7 @@ export default function CsoPage() {
     setShowCargoWaybill(false);
   };
 
-  const handleCargoSuccess = (shipment: any) => {
+  const handleCargoSuccess = (shipment: CargoShipmentWithStops) => {
     setCargoResult(shipment);
     setShowCargoWaybill(true);
   };

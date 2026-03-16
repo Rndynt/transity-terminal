@@ -3,19 +3,13 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { cargoApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import type { CargoShipment, Trip } from '@shared/schema';
+import type { Trip } from '@shared/schema';
+import type { CargoShipmentWithStops } from '@/types';
 import {
   Package, Search, X, Loader2, ArrowRight,
   Phone, Clock, CheckCircle2, Truck, XCircle, Eye,
   Download, Upload, RotateCcw, Calendar, AlertTriangle, Bus
 } from 'lucide-react';
-
-type CargoShipmentWithStops = CargoShipment & {
-  originStopName?: string;
-  originStopCode?: string;
-  destinationStopName?: string;
-  destinationStopCode?: string;
-};
 
 const fmt = (amount: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);

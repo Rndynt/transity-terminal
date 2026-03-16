@@ -12,6 +12,13 @@ export type {
   CargoType, CargoRate
 };
 
+export type CargoShipmentWithStops = CargoShipment & {
+  originStopName?: string;
+  originStopCode?: string;
+  destinationStopName?: string;
+  destinationStopCode?: string;
+};
+
 export interface BookingStep {
   id: number;
   name: string;
