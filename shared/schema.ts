@@ -476,6 +476,44 @@ export type InsertPassenger = z.infer<typeof insertPassengerSchema>;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type InsertPrintJob = z.infer<typeof insertPrintJobSchema>;
 
+// 16. Cargo Shipments
+export const cargoStatusEnum = pgEnum('cargo_status', ['pending', 'in_transit', 'arrived', 'delivered', 'canceled']);
+
+export const cargoShipments = pgTable("cargo_shipments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  waybillNumber: text("waybill_number").notNull().unique(),
+  tripId: uuid("trip_id").notNull().references(() => trips.id),
+  originStopId: uuid("origin_stop_id").notNull().references(() => stops.id),
+  destinationStopId: uuid("destination_stop_id").notNull().references(() => stops.id),
+  outletId: uuid("outlet_id").references(() => outlets.id),
+  senderName: text("sender_name").notNull(),
+  senderPhone: text("sender_phone").notNull(),
+  recipientName: text("recipient_name").notNull(),
+  recipientPhone: text("recipient_phone").notNull(),
+  itemDescription: text("item_description").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  weightKg: numeric("weight_kg", { precision: 8, scale: 2 }),
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
+  status: cargoStatusEnum("status").default('pending'),
+  channel: channelEnum("channel").default('CSO'),
+  paymentMethod: paymentMethodEnum("payment_method"),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  notes: text("notes"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+});
+
+export const cargoShipmentsRelations = relations(cargoShipments, ({ one }) => ({
+  trip: one(trips, { fields: [cargoShipments.tripId], references: [trips.id] }),
+  originStop: one(stops, { fields: [cargoShipments.originStopId], references: [stops.id], relationName: "cargoOriginStop" }),
+  destinationStop: one(stops, { fields: [cargoShipments.destinationStopId], references: [stops.id], relationName: "cargoDestinationStop" }),
+  outlet: one(outlets, { fields: [cargoShipments.outletId], references: [outlets.id] })
+}));
+
+export const insertCargoShipmentSchema = createInsertSchema(cargoShipments).omit({ id: true, createdAt: true });
+export type CargoShipment = typeof cargoShipments.$inferSelect;
+export type InsertCargoShipment = z.infer<typeof insertCargoShipmentSchema>;
+
 // Keep existing user schema for compatibility (can be removed later)
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -2,16 +2,16 @@ import { IStorage } from "./routes";
 import { 
   stops, outlets, vehicles, layouts, tripPatterns, patternStops, tripBases,
   trips, tripStopTimes, tripLegs, seatInventory, seatHolds, priceRules, 
-  bookings, passengers, payments, printJobs,
+  bookings, passengers, payments, printJobs, cargoShipments,
   type Stop, type Outlet, type Vehicle, type Layout, type TripPattern, 
   type PatternStop, type TripBase, type Trip, type TripWithDetails, type TripStopTime, type TripLeg, 
   type SeatInventory, type PriceRule, type Booking, type Passenger, 
-  type Payment, type PrintJob, type CsoAvailableTrip,
+  type Payment, type PrintJob, type CargoShipment, type CsoAvailableTrip,
   type InsertStop, type InsertOutlet, type InsertVehicle, type InsertLayout,
   type InsertTripPattern, type InsertPatternStop, type InsertTripBase, type InsertTrip,
   type InsertTripStopTime, type InsertTripLeg, type InsertSeatInventory,
   type InsertPriceRule, type InsertBooking, type InsertPassenger,
-  type InsertPayment, type InsertPrintJob
+  type InsertPayment, type InsertPrintJob, type InsertCargoShipment
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
@@ -764,15 +764,46 @@ export class DatabaseStorage implements IStorage {
 
   // Release all holds for a trip (used when closing a trip)
   async releaseHoldsForTrip(tripId: string): Promise<void> {
-    // Update seat inventory to remove hold references
     await db.update(seatInventory)
       .set({ holdRef: null })
       .where(eq(seatInventory.tripId, tripId));
     
-    // Mark holds as expired (soft delete)
     await db.update(seatHolds)
       .set({ expiresAt: new Date() })
       .where(eq(seatHolds.tripId, tripId));
+  }
+
+  // Cargo Shipments
+  async getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]> {
+    const conditions = [];
+    if (filters?.tripId) conditions.push(eq(cargoShipments.tripId, filters.tripId));
+    if (filters?.status) conditions.push(eq(cargoShipments.status, filters.status as any));
+    if (filters?.outletId) conditions.push(eq(cargoShipments.outletId, filters.outletId));
+    
+    if (conditions.length > 0) {
+      return await db.select().from(cargoShipments).where(and(...conditions)).orderBy(desc(cargoShipments.createdAt));
+    }
+    return await db.select().from(cargoShipments).orderBy(desc(cargoShipments.createdAt));
+  }
+
+  async getCargoShipmentById(id: string): Promise<CargoShipment | undefined> {
+    const [shipment] = await db.select().from(cargoShipments).where(eq(cargoShipments.id, id));
+    return shipment;
+  }
+
+  async getCargoShipmentByWaybill(waybillNumber: string): Promise<CargoShipment | undefined> {
+    const [shipment] = await db.select().from(cargoShipments).where(eq(cargoShipments.waybillNumber, waybillNumber));
+    return shipment;
+  }
+
+  async createCargoShipment(data: InsertCargoShipment): Promise<CargoShipment> {
+    const [shipment] = await db.insert(cargoShipments).values(data).returning();
+    return shipment;
+  }
+
+  async updateCargoShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment> {
+    const [shipment] = await db.update(cargoShipments).set(data).where(eq(cargoShipments.id, id)).returning();
+    return shipment;
   }
 }
 

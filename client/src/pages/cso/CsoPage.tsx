@@ -4,17 +4,20 @@ import RouteTimeline from '@/components/cso/RouteTimeline';
 import SeatMap from '@/components/cso/SeatMap';
 import PassengerForm from '@/components/cso/PassengerForm';
 import PrintPreview from '@/components/cso/PrintPreview';
+import CargoForm from '@/components/cso/CargoForm';
+import CargoWaybillPreview from '@/components/cso/CargoWaybillPreview';
 
 import { useBookingFlow } from '@/hooks/useBookingFlow';
 import { useSeatHold } from '@/hooks/useSeatHold';
 import {
   ChevronRight, ChevronLeft, Loader2, MapPin,
-  Armchair, ArrowRight, Ticket
+  Armchair, ArrowRight, Ticket, Package
 } from 'lucide-react';
 import type { Stop, Outlet, CsoAvailableTrip } from '@/types';
 
 type Phase = 'select' | 'book';
 type MobilePanel = 'left' | 'right';
+type CsoMode = 'penumpang' | 'kargo';
 
 const formatTime = (isoString: string | null | undefined): string => {
   if (!isoString) return '--:--';
@@ -42,6 +45,9 @@ export default function CsoPage() {
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [selectedCsoTrip, setSelectedCsoTrip] = useState<CsoAvailableTrip | undefined>();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [csoMode, setCsoMode] = useState<CsoMode>('penumpang');
+  const [cargoResult, setCargoResult] = useState<any>(null);
+  const [showCargoWaybill, setShowCargoWaybill] = useState(false);
 
   const {
     state,
@@ -89,6 +95,9 @@ export default function CsoPage() {
     setMobilePanel('left');
     setShowPrint(false);
     setBookingResult(null);
+    setCsoMode('penumpang');
+    setCargoResult(null);
+    setShowCargoWaybill(false);
     releaseAllHolds();
   };
 
@@ -190,6 +199,9 @@ export default function CsoPage() {
     setShowPrint(false);
     setPhase('select');
     setMobilePanel('left');
+    setCsoMode('penumpang');
+    setCargoResult(null);
+    setShowCargoWaybill(false);
     updateState({
       trip: undefined,
       originStop: undefined,
@@ -204,7 +216,20 @@ export default function CsoPage() {
     releaseAllHolds();
   };
 
-  const handleBackFromPrint = () => setShowPrint(false);
+  const handleBackFromPrint = () => {
+    setShowPrint(false);
+    setShowCargoWaybill(false);
+  };
+
+  const handleCargoSuccess = (shipment: any) => {
+    setCargoResult(shipment);
+    setShowCargoWaybill(true);
+  };
+
+  const handleNewCargo = () => {
+    setCargoResult(null);
+    setShowCargoWaybill(false);
+  };
 
   const selectedSeats = state.selectedSeats;
   const sortedSeats = [...selectedSeats].sort();
@@ -220,7 +245,19 @@ export default function CsoPage() {
             <span className="text-sm font-bold text-gray-800 sm:hidden">CSO</span>
 
             <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5 flex-shrink-0" />
-            {showPrint ? (
+            {showCargoWaybill ? (
+              <>
+                <button
+                  onClick={handleBackFromPrint}
+                  className="text-xs text-blue-600 hover:underline whitespace-nowrap"
+                  data-testid="breadcrumb-back-cargo"
+                >
+                  Kargo
+                </button>
+                <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5 flex-shrink-0" />
+                <span className="text-xs text-gray-500">Resi</span>
+              </>
+            ) : showPrint ? (
               <>
                 <button
                   onClick={handleBackFromPrint}
@@ -280,7 +317,17 @@ export default function CsoPage() {
         </div>
       </div>
 
-      {showPrint ? (
+      {showCargoWaybill ? (
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          <div className="max-w-lg mx-auto">
+            <CargoWaybillPreview
+              shipment={cargoResult}
+              onNewShipment={handleNewCargo}
+              onPrint={() => window.print()}
+            />
+          </div>
+        </div>
+      ) : showPrint ? (
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-lg mx-auto">
             {bookingResult ? (
@@ -309,13 +356,41 @@ export default function CsoPage() {
                   <span className="text-gray-400 hidden sm:inline">{selectedCsoTrip.vehicle.code}</span>
                 )}
               </div>
-              <button
-                onClick={handleBackToSelect}
-                className="px-2 md:px-3 py-1.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
-                data-testid="btn-change-route"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Ubah Rute</span><span className="sm:hidden">Ubah</span>
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex bg-white rounded-lg border border-gray-200 p-0.5">
+                  <button
+                    onClick={() => setCsoMode('penumpang')}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-colors flex items-center gap-1 ${
+                      csoMode === 'penumpang'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                    data-testid="mode-penumpang"
+                  >
+                    <Ticket className="w-3 h-3" />
+                    <span className="hidden sm:inline">Penumpang</span>
+                  </button>
+                  <button
+                    onClick={() => setCsoMode('kargo')}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-colors flex items-center gap-1 ${
+                      csoMode === 'kargo'
+                        ? 'bg-amber-600 text-white shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                    data-testid="mode-kargo"
+                  >
+                    <Package className="w-3 h-3" />
+                    <span className="hidden sm:inline">Kargo</span>
+                  </button>
+                </div>
+                <button
+                  onClick={handleBackToSelect}
+                  className="px-2 md:px-3 py-1.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap"
+                  data-testid="btn-change-route"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Ubah Rute</span><span className="sm:hidden">Ubah</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -380,7 +455,7 @@ export default function CsoPage() {
             </>
           )}
 
-          {phase === 'book' && (
+          {phase === 'book' && csoMode === 'penumpang' && (
             <>
               <div className="md:hidden flex-shrink-0 bg-white border-b border-gray-200">
                 <div className="flex">
@@ -462,6 +537,28 @@ export default function CsoPage() {
                 </div>
               </div>
             </>
+          )}
+
+          {phase === 'book' && csoMode === 'kargo' && (
+            <div className="flex-1 overflow-y-auto p-3 md:p-5">
+              <div className="max-w-2xl mx-auto">
+                {state.trip?.id ? (
+                  <CargoForm
+                    trip={state.trip}
+                    originStop={state.originStop}
+                    destinationStop={state.destinationStop}
+                    outletId={state.outlet?.id}
+                    csoTrip={selectedCsoTrip}
+                    onSuccess={handleCargoSuccess}
+                  />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-gray-300 py-12">
+                    <Package className="w-12 h-12 mb-3" />
+                    <p className="text-sm font-medium text-gray-400">Data trip tidak tersedia</p>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           <div className="bg-white border-t border-gray-200 flex items-center justify-between px-3 md:px-5 py-1.5 md:py-0 md:h-8 flex-shrink-0">

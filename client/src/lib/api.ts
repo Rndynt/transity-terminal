@@ -180,6 +180,23 @@ export const pricingApi = {
   }
 };
 
+// Cargo API
+export const cargoApi = {
+  getAll: (filters?: { tripId?: string; status?: string; outletId?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.tripId) params.set('tripId', filters.tripId);
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.outletId) params.set('outletId', filters.outletId);
+    const qs = params.toString();
+    return fetch(`/api/cargo${qs ? `?${qs}` : ''}`).then(res => res.json());
+  },
+  getById: (id: string) => fetch(`/api/cargo/${id}`).then(res => res.json()),
+  getByWaybill: (waybillNumber: string) => fetch(`/api/cargo/waybill/${waybillNumber}`).then(res => res.json()),
+  create: (data: any) => apiRequest('POST', '/api/cargo', data).then(res => res.json()),
+  update: (id: string, data: any) => apiRequest('PUT', `/api/cargo/${id}`, data).then(res => res.json()),
+  updateStatus: (id: string, status: string) => apiRequest('PATCH', `/api/cargo/${id}/status`, { status }).then(res => res.json())
+};
+
 // Seed API
 export const seedApi = {
   run: () => apiRequest('POST', '/api/seed').then(res => res.json())

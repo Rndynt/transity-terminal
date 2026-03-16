@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import AppLayout from "@/components/layout/AppLayout";
 import MastersPage from "@/pages/masters/MastersPage";
 import CsoPage from "@/pages/cso/CsoPage";
+import CargoListPage from "@/pages/cargo/CargoListPage";
 
 function Router() {
   return (
@@ -14,6 +15,7 @@ function Router() {
       <Switch>
         <Route path="/" component={CsoPage} />
         <Route path="/cso" component={CsoPage} />
+        <Route path="/cargo" component={CargoListPage} />
         <Route path="/masters" component={MastersPage} />
         <Route component={NotFound} />
       </Switch>

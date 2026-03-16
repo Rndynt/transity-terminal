@@ -6,15 +6,15 @@ import {
   insertStopSchema, insertOutletSchema, insertVehicleSchema, insertLayoutSchema,
   insertTripPatternSchema, insertPatternStopSchema, insertTripBaseSchema, insertTripSchema,
   insertTripStopTimeSchema, insertPriceRuleSchema, insertBookingSchema,
-  insertPassengerSchema, insertPaymentSchema,
+  insertPassengerSchema, insertPaymentSchema, insertCargoShipmentSchema,
   type Stop, type Outlet, type Vehicle, type Layout, type TripPattern, 
   type PatternStop, type TripBase, type Trip, type TripWithDetails, type TripStopTime, type TripLeg, 
   type SeatInventory, type PriceRule, type Booking, type Passenger, 
-  type Payment, type PrintJob,
+  type Payment, type PrintJob, type CargoShipment,
   type InsertStop, type InsertOutlet, type InsertVehicle, type InsertLayout,
   type InsertTripPattern, type InsertPatternStop, type InsertTripBase, type InsertTrip,
   type InsertTripStopTime, type InsertPriceRule, type InsertBooking,
-  type InsertPassenger, type InsertPayment, type InsertPrintJob,
+  type InsertPassenger, type InsertPayment, type InsertPrintJob, type InsertCargoShipment,
   type CsoAvailableTrip
 } from "@shared/schema";
 
@@ -118,6 +118,13 @@ export interface IStorage {
   // Print Jobs
   createPrintJob(data: InsertPrintJob): Promise<PrintJob>;
 
+  // Cargo Shipments
+  getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]>;
+  getCargoShipmentById(id: string): Promise<CargoShipment | undefined>;
+  getCargoShipmentByWaybill(waybillNumber: string): Promise<CargoShipment | undefined>;
+  createCargoShipment(data: InsertCargoShipment): Promise<CargoShipment>;
+  updateCargoShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment>;
+
   // Utility
   tripHasBookings(tripId: string): Promise<boolean>;
   getTripByBaseAndDate(baseId: string, serviceDate: string): Promise<Trip | undefined>;
@@ -138,6 +145,7 @@ import { TripLegsController } from "./modules/tripLegs/tripLegs.controller";
 import { PriceRulesController } from "./modules/priceRules/priceRules.controller";
 import { BookingsController } from "./modules/bookings/bookings.controller";
 import { PaymentsController } from "./modules/payments/payments.controller";
+import { CargoController } from "./modules/cargo/cargo.controller";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize controllers
@@ -156,6 +164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const pricingController = new (await import('./modules/pricing/pricing.controller')).PricingController(storage);
   const bookingsController = new BookingsController(storage);
   const paymentsController = new PaymentsController(storage);
+  const cargoController = new CargoController(storage);
 
   // Error handler middleware
   const asyncHandler = (fn: Function) => (req: any, res: any, next: any) => {
@@ -261,6 +270,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Payments routes
   app.get('/api/bookings/:bookingId/payments', asyncHandler(paymentsController.getByBooking.bind(paymentsController)));
   app.post('/api/payments', asyncHandler(paymentsController.create.bind(paymentsController)));
+
+  // Cargo routes
+  app.get('/api/cargo', asyncHandler(cargoController.getAll.bind(cargoController)));
+  app.get('/api/cargo/:id', asyncHandler(cargoController.getById.bind(cargoController)));
+  app.get('/api/cargo/waybill/:waybillNumber', asyncHandler(cargoController.getByWaybill.bind(cargoController)));
+  app.post('/api/cargo', asyncHandler(cargoController.create.bind(cargoController)));
+  app.put('/api/cargo/:id', asyncHandler(cargoController.update.bind(cargoController)));
+  app.patch('/api/cargo/:id/status', asyncHandler(cargoController.updateStatus.bind(cargoController)));
 
   // Seed data
   app.post('/api/seed', asyncHandler(async (req: any, res: any) => {
