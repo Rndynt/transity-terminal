@@ -15,6 +15,13 @@
       "when": 1773897600000,
       "tag": "0001_cargo_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773984000000,
+      "tag": "0002_app_users_reviews",
+      "breakpoints": true
     }
   ]
 }

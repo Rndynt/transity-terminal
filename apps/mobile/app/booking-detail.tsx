@@ -31,7 +31,7 @@ export default function BookingDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['booking-detail', id] });
       queryClient.invalidateQueries({ queryKey: ['my-bookings'] });
     },
-    onError: (err: any) => Alert.alert('Gagal', err.message),
+    onError: (err: Error) => Alert.alert('Gagal', err.message),
   });
 
   const { data: paymentStatus } = useQuery({
@@ -108,7 +108,7 @@ export default function BookingDetailScreen() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Penumpang</Text>
-          {booking.passengers?.map((p: any, i: number) => (
+          {booking.passengers?.map((p: { id: string; fullName: string; phone?: string | null; seatNo: string; fareAmount?: string | null }, i: number) => (
             <View key={p.id} style={[styles.paxRow, i > 0 && styles.paxDivider]}>
               <View style={styles.paxSeat}>
                 <Text style={styles.paxSeatText}>{p.seatNo}</Text>
@@ -128,7 +128,7 @@ export default function BookingDetailScreen() {
             <Text style={styles.totalLabel}>Total</Text>
             <Text style={styles.totalAmount}>Rp {Number(booking.totalAmount || 0).toLocaleString('id-ID')}</Text>
           </View>
-          {booking.payments?.map((p: any) => (
+          {booking.payments?.map((p: { id: string; method: string; status: string | null }) => (
             <View key={p.id} style={styles.paymentRow}>
               <Text style={styles.paymentMethod}>{p.method.toUpperCase()}</Text>
               <Text style={styles.paymentStatus}>{p.status}</Text>

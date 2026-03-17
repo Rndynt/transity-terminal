@@ -231,8 +231,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body: Record<string, unknown>) => request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
-  patch: <T>(path: string, body: Record<string, unknown>) => request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
+  post: <T, B extends Record<string, unknown> = Record<string, unknown>>(path: string, body: B) => request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+  patch: <T, B extends Record<string, unknown> = Record<string, unknown>>(path: string, body: B) => request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
 };
 
 export const authApi = {
@@ -263,7 +263,7 @@ export const tripsApi = {
 };
 
 export const bookingsApi = {
-  create: (data: CreateBookingData) => api.post<BookingDetail>('/api/app/bookings', data as unknown as Record<string, unknown>),
+  create: (data: CreateBookingData) => api.post<BookingDetail, CreateBookingData>('/api/app/bookings', data),
   list: () => api.get<BookingListItem[]>('/api/app/bookings'),
   getDetail: (id: string) => api.get<BookingDetail>(`/api/app/bookings/${id}`),
   getPaymentStatus: (id: string) => api.get<PaymentStatusResponse>(`/api/app/bookings/${id}/payment-status`),
@@ -272,10 +272,10 @@ export const bookingsApi = {
 
 export const reviewsApi = {
   create: (data: { tripId: string; bookingId?: string; rating: number; comment?: string }) =>
-    api.post<ReviewItem>('/api/app/reviews', data as unknown as Record<string, unknown>),
+    api.post<ReviewItem, typeof data>('/api/app/reviews', data),
 };
 
 export const cargoApi = {
   track: (waybillNumber: string) => api.get<CargoTrackResult>(`/api/app/cargo/track/${waybillNumber}`),
-  create: (data: CreateCargoData) => api.post<Record<string, unknown>>('/api/app/cargo', data as unknown as Record<string, unknown>),
+  create: (data: CreateCargoData) => api.post<Record<string, unknown>, CreateCargoData>('/api/app/cargo', data),
 };

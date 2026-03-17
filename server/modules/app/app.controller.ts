@@ -210,7 +210,7 @@ export class AppController {
     }
   }
 
-  async paymentWebhook(req: Request, res: Response) {
+  async paymentWebhook(req: Request & { rawBody?: Buffer }, res: Response) {
     try {
       const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET;
       if (!webhookSecret) {
@@ -226,11 +226,13 @@ export class AppController {
       }
 
       const crypto = await import('crypto');
+      const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body));
       const expectedSig = crypto.createHmac('sha256', webhookSecret)
-        .update(JSON.stringify(req.body))
+        .update(rawBody)
         .digest('hex');
 
-      if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
+      if (signature.length !== expectedSig.length ||
+          !crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expectedSig, 'hex'))) {
         res.status(401).json({ error: "Invalid webhook signature" });
         return;
       }

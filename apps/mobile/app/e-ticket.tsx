@@ -35,9 +35,9 @@ export default function ETicketScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {(booking.qrData || booking.passengers)?.map((item: any, i: number) => {
+      {(booking.qrData || booking.passengers)?.map((item: { passengerId?: string; qrPayload?: string; qrToken?: string; id?: string; seatNo?: string; fullName?: string }, i: number) => {
         const pax = booking.qrData
-          ? booking.passengers?.find((p: any) => p.id === item.passengerId) || item
+          ? booking.passengers?.find((p: { id: string }) => p.id === item.passengerId) || item
           : item;
         const qrPayload = item.qrPayload || JSON.stringify({ bookingId: booking.id, passengerId: pax.id, seatNo: pax.seatNo });
         const qrToken = item.qrToken || '';

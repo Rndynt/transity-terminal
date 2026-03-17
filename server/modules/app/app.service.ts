@@ -349,19 +349,19 @@ export class AppService {
       this.storage.getTripStopTimesWithEffectiveFlags(tripId)
     ]);
 
-    const stopsData = await Promise.all(
-      stopTimes.map(async (st: any) => {
+    const stopsData: TripDetailResponse['stops'] = await Promise.all(
+      stopTimes.map(async (st: { stopId: string; stopName?: string; stopCode?: string; stopSequence: number; arriveAt: string | null; departAt: string | null; effectiveBoardingAllowed: boolean; effectiveAlightingAllowed: boolean }) => {
         const stop = await this.storage.getStopById(st.stopId);
         return {
-          stopId: st.stopId,
-          name: stop?.name || st.stopName,
-          code: stop?.code || st.stopCode,
-          city: stop?.city,
-          sequence: st.stopSequence,
-          arriveAt: st.arriveAt,
-          departAt: st.departAt,
-          boardingAllowed: st.effectiveBoardingAllowed,
-          alightingAllowed: st.effectiveAlightingAllowed
+          stopId: st.stopId as string,
+          name: (stop?.name || st.stopName || '') as string,
+          code: (stop?.code || st.stopCode || '') as string,
+          city: stop?.city ?? null,
+          sequence: st.stopSequence as number,
+          arriveAt: st.arriveAt as string | null,
+          departAt: st.departAt as string | null,
+          boardingAllowed: Boolean(st.effectiveBoardingAllowed),
+          alightingAllowed: Boolean(st.effectiveAlightingAllowed)
         };
       })
     );
@@ -379,7 +379,7 @@ export class AppService {
         FROM seat_inventory
         WHERE trip_id = ${tripId} AND booked = true
       `);
-      seatsSold = soldResult.rows[0]?.sold || 0;
+      seatsSold = Number(soldResult.rows[0]?.sold || 0);
     } catch {}
 
     return {
@@ -399,7 +399,7 @@ export class AppService {
       },
       stops: stopsData,
       reviews: {
-        count: reviewStats.rows[0]?.count || 0,
+        count: Number(reviewStats.rows[0]?.count || 0),
         avgRating: Number(reviewStats.rows[0]?.avg_rating || 0)
       }
     };
@@ -708,8 +708,8 @@ export class AppService {
       patternName: pattern?.name,
       origin: origin ? { stopId: origin.id, name: origin.name, code: origin.code, city: origin.city } : null,
       destination: dest ? { stopId: dest.id, name: dest.name, code: dest.code, city: dest.city } : null,
-      departAt,
-      arriveAt,
+      departAt: departAt ? String(departAt) : null,
+      arriveAt: arriveAt ? String(arriveAt) : null,
       status: booking.status,
       totalAmount: booking.totalAmount,
       channel: booking.channel,
