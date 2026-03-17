@@ -162,6 +162,8 @@ import { PriceRulesController } from "./modules/priceRules/priceRules.controller
 import { BookingsController } from "./modules/bookings/bookings.controller";
 import { PaymentsController } from "./modules/payments/payments.controller";
 import { CargoController } from "./modules/cargo/cargo.controller";
+import { AppController } from "./modules/app/app.controller";
+import { appAuthMiddleware, optionalAuthMiddleware } from "./modules/app/app.auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize controllers
@@ -318,6 +320,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await seedData();
     res.json({ message: 'Seed data created successfully' });
   }));
+
+  // ── Mobile App API (/api/app/) ──────────────────────────────────
+  const appController = new AppController(storage);
+
+  // Auth (public)
+  app.post('/api/app/auth/register', asyncHandler(appController.register.bind(appController)));
+  app.post('/api/app/auth/login', asyncHandler(appController.login.bind(appController)));
+
+  // Profile (authed)
+  app.get('/api/app/profile', appAuthMiddleware, asyncHandler(appController.getProfile.bind(appController)));
+  app.patch('/api/app/profile', appAuthMiddleware, asyncHandler(appController.updateProfile.bind(appController)));
+
+  // Public discovery
+  app.get('/api/app/cities', asyncHandler(appController.getCities.bind(appController)));
+  app.get('/api/app/trips/search', asyncHandler(appController.searchTrips.bind(appController)));
+  app.get('/api/app/trips/:id', asyncHandler(appController.getTripDetail.bind(appController)));
+  app.get('/api/app/trips/:id/seatmap', asyncHandler(appController.getSeatmap.bind(appController)));
+  app.get('/api/app/trips/:tripId/reviews', asyncHandler(appController.getTripReviews.bind(appController)));
+
+  // Bookings (authed)
+  app.post('/api/app/bookings', appAuthMiddleware, asyncHandler(appController.createBooking.bind(appController)));
+  app.get('/api/app/bookings', appAuthMiddleware, asyncHandler(appController.getMyBookings.bind(appController)));
+  app.get('/api/app/bookings/:id', appAuthMiddleware, asyncHandler(appController.getBookingDetail.bind(appController)));
+  app.post('/api/app/bookings/:id/cancel', appAuthMiddleware, asyncHandler(appController.cancelBooking.bind(appController)));
+
+  // Reviews (authed)
+  app.post('/api/app/reviews', appAuthMiddleware, asyncHandler(appController.createReview.bind(appController)));
+
+  // Cargo (public tracking, authed creation)
+  app.get('/api/app/cargo/track/:waybillNumber', asyncHandler(appController.trackCargo.bind(appController)));
+  app.post('/api/app/cargo', appAuthMiddleware, asyncHandler(appController.createCargo.bind(appController)));
 
   const httpServer = createServer(app);
   

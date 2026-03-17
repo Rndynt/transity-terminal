@@ -10,6 +10,15 @@ A comprehensive production-grade MVP for a multi-stop bus travel ticketing syste
 - **UI**: Tailwind CSS + shadcn/ui components
 
 ## Recent Changes
+**Date: 2026-03-17**
+- Transity Mobile App (B2C marketplace) — Expo React Native app scaffolded in `apps/mobile/`
+- Schema: `app_users` table (email, passwordHash, name, phone, avatar), `reviews` table (appUserId, tripId, rating, comment), `appUserId` column added to `bookings`
+- Backend: `/api/app/` namespace with JWT auth (bcryptjs + jsonwebtoken), AppService (register/login/profile, city search, trip search, seatmap, bookings CRUD, reviews, cargo tracking), AppController with Zod validation
+- Mobile app architecture: Expo Router v4 (file-based routing), TanStack Query v5, Zustand auth store with SecureStore
+- Screens: Home (search widget + popular cities), SearchResults, TripDetail (route timeline + reviews), SelectSeats (interactive seatmap), BookingConfirm (passenger data + payment method), BookingDetail (status tracking), ETicket (QR code per passenger), MyTrips, Cargo (waybill tracking with progress stepper), Profile (edit profile + menu)
+- Auth flow: Login/Register screens with JWT token persistence via expo-secure-store
+- API client: `apps/mobile/src/lib/api.ts` with auth/trips/bookings/reviews/cargo modules
+
 **Date: 2026-03-16**
 - TransityTerminal Cargo Terminal (Pengiriman Paket) fully implemented
 - Database: `cargo_types` + `cargo_rates` + `cargo_shipments` tables; `cargo_status` enum with full lifecycle (pending→received→loaded→in_transit→arrived→delivered/returned, any→canceled)
@@ -44,10 +53,11 @@ A comprehensive production-grade MVP for a multi-stop bus travel ticketing syste
 - Deployment configuration set up for autoscale target
 
 ## Project Architecture
-- **Client**: `/client` directory with React frontend and Vite configuration
+- **Client**: `/client` directory with React frontend (CSO/admin) and Vite configuration
 - **Server**: `/server` directory with Express backend, routes, and services
 - **Shared**: `/shared` directory containing common TypeScript schemas
 - **Database**: Neon PostgreSQL with Drizzle ORM migrations
+- **Mobile**: `/apps/mobile` directory with Expo React Native app (B2C customer-facing)
 
 ## Key Features
 - Multi-stop bus route management

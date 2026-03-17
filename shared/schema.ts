@@ -216,6 +216,7 @@ export const bookings = pgTable("bookings", {
   status: bookingStatusEnum("status").default('pending'),
   totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
   currency: text("currency").default('IDR'),
+  appUserId: uuid("app_user_id").references(() => appUsers.id),
   createdBy: text("created_by"),
   pendingExpiresAt: timestamp("pending_expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
@@ -337,9 +338,11 @@ export const bookingsRelations = relations(bookings, ({ one, many }) => ({
   originStop: one(stops, { fields: [bookings.originStopId], references: [stops.id], relationName: "originStop" }),
   destinationStop: one(stops, { fields: [bookings.destinationStopId], references: [stops.id], relationName: "destinationStop" }),
   outlet: one(outlets, { fields: [bookings.outletId], references: [outlets.id] }),
+  appUser: one(appUsers, { fields: [bookings.appUserId], references: [appUsers.id] }),
   passengers: many(passengers),
   payments: many(payments),
-  printJobs: many(printJobs)
+  printJobs: many(printJobs),
+  reviews: many(reviews)
 }));
 
 export const passengersRelations = relations(passengers, ({ one }) => ({
@@ -561,6 +564,48 @@ export const cargoShipmentsRelations = relations(cargoShipments, ({ one }) => ({
 export const insertCargoShipmentSchema = createInsertSchema(cargoShipments).omit({ id: true, createdAt: true });
 export type CargoShipment = typeof cargoShipments.$inferSelect;
 export type InsertCargoShipment = z.infer<typeof insertCargoShipmentSchema>;
+
+// 19. App Users (B2C mobile customers)
+export const appUsers = pgTable("app_users", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  avatar: text("avatar"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+});
+
+export const appUsersRelations = relations(appUsers, ({ many }) => ({
+  bookings: many(bookings),
+  reviews: many(reviews)
+}));
+
+export const insertAppUserSchema = createInsertSchema(appUsers).omit({ id: true, createdAt: true });
+export type AppUser = typeof appUsers.$inferSelect;
+export type InsertAppUser = z.infer<typeof insertAppUserSchema>;
+
+// 20. Reviews
+export const reviews = pgTable("reviews", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  appUserId: uuid("app_user_id").notNull().references(() => appUsers.id),
+  tripId: uuid("trip_id").notNull().references(() => trips.id),
+  bookingId: uuid("booking_id").references(() => bookings.id),
+  rating: integer("rating").notNull(),
+  comment: text("comment"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+});
+
+export const reviewsRelations = relations(reviews, ({ one }) => ({
+  appUser: one(appUsers, { fields: [reviews.appUserId], references: [appUsers.id] }),
+  trip: one(trips, { fields: [reviews.tripId], references: [trips.id] }),
+  booking: one(bookings, { fields: [reviews.bookingId], references: [bookings.id] })
+}));
+
+export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true });
+export type Review = typeof reviews.$inferSelect;
+export type InsertReview = z.infer<typeof insertReviewSchema>;
 
 // Keep existing user schema for compatibility (can be removed later)
 export const users = pgTable("users", {
