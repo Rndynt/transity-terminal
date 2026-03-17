@@ -561,7 +561,11 @@ export const cargoShipmentsRelations = relations(cargoShipments, ({ one }) => ({
   cargoType: one(cargoTypes, { fields: [cargoShipments.cargoTypeId], references: [cargoTypes.id] })
 }));
 
-export const insertCargoShipmentSchema = createInsertSchema(cargoShipments).omit({ id: true, createdAt: true });
+export const insertCargoShipmentSchema = createInsertSchema(cargoShipments)
+  .omit({ id: true, createdAt: true })
+  .extend({
+    paidAt: z.union([z.date(), z.string().transform(s => new Date(s))]).optional().nullable()
+  });
 export type CargoShipment = typeof cargoShipments.$inferSelect;
 export type InsertCargoShipment = z.infer<typeof insertCargoShipmentSchema>;
 

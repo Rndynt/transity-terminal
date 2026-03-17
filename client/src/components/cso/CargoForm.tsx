@@ -86,7 +86,18 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['/api/cargo'] });
       toast({ title: 'Berhasil', description: `Resi ${result.waybillNumber} berhasil dibuat` });
-      onSuccess(result);
+
+      const enriched: CargoShipmentWithStops = {
+        ...result,
+        originStopName: originStop?.name || allStops.find((s: any) => s.id === result.originStopId)?.name,
+        originStopCode: originStop?.code || allStops.find((s: any) => s.id === result.originStopId)?.code,
+        destinationStopName: destinationStop?.name || allStops.find((s: any) => s.id === result.destinationStopId)?.name,
+        destinationStopCode: destinationStop?.code || allStops.find((s: any) => s.id === result.destinationStopId)?.code,
+        outletName: outlet?.name,
+        vehiclePlate: csoTrip?.vehicle?.plate || undefined,
+        tripDepartAt: csoTrip?.departAtAtOutlet || undefined,
+      };
+      onSuccess(enriched);
     },
     onError: (error: Error) => {
       toast({ title: 'Gagal', description: error.message, variant: 'destructive' });
