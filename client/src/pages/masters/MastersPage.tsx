@@ -77,7 +77,7 @@ export default function MastersPage() {
             </TabsList>
           </div>
 
-          <CardContent className="p-6">
+          <CardContent className="p-2 sm:p-4 md:p-6">
             {tabs.map(tab => (
               <TabsContent 
                 key={tab.id} 
@@ -85,7 +85,9 @@ export default function MastersPage() {
                 className="mt-0"
                 data-testid={`content-${tab.id}`}
               >
-                <tab.component />
+                <div className="overflow-x-auto w-full">
+                  <tab.component />
+                </div>
               </TabsContent>
             ))}
           </CardContent>
