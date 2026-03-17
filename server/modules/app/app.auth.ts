@@ -1,7 +1,16 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "transity-app-secret-change-in-production";
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.warn("[app.auth] JWT_SECRET env var not set, using development fallback. Set JWT_SECRET in production!");
+    return "transity-dev-secret-" + (process.env.REPL_ID || "local");
+  }
+  return secret;
+}
+
+const JWT_SECRET = getJwtSecret();
 
 export interface AppUserPayload {
   userId: string;

@@ -39,9 +39,14 @@ export const authApi = {
     api.post<{ user: any; token: string }>('/api/app/auth/register', data),
   login: (data: { email: string; password: string }) =>
     api.post<{ user: any; token: string }>('/api/app/auth/login', data),
+  getMe: () => api.get<any>('/api/app/auth/me'),
   getProfile: () => api.get<any>('/api/app/profile'),
   updateProfile: (data: { name?: string; phone?: string }) =>
     api.patch<any>('/api/app/profile', data),
+};
+
+export const operatorsApi = {
+  list: () => api.get<any[]>('/api/app/operators'),
 };
 
 export const tripsApi = {

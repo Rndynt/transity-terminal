@@ -115,9 +115,23 @@ export class AppController {
     }
   }
 
+  async getMe(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = await this.service.getProfile(req.appUser!.userId);
+      res.json(user);
+    } catch (e: any) {
+      res.status(404).json({ error: e.message });
+    }
+  }
+
   async getCities(_req: AuthenticatedRequest, res: Response) {
     const cities = await this.service.getCities();
     res.json(cities);
+  }
+
+  async getOperators(_req: AuthenticatedRequest, res: Response) {
+    const operators = await this.service.getOperators();
+    res.json(operators);
   }
 
   async searchTrips(req: AuthenticatedRequest, res: Response) {

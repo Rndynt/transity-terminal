@@ -32,7 +32,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const token = await SecureStore.getItemAsync('auth_token');
       if (token) {
         const { authApi } = await import('../lib/api');
-        const user = await authApi.getProfile();
+        const user = await authApi.getMe();
         set({ user, token, isAuthenticated: true, isLoading: false });
       } else {
         set({ isLoading: false });

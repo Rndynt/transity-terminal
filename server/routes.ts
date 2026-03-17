@@ -327,6 +327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth (public)
   app.post('/api/app/auth/register', asyncHandler(appController.register.bind(appController)));
   app.post('/api/app/auth/login', asyncHandler(appController.login.bind(appController)));
+  app.get('/api/app/auth/me', appAuthMiddleware, asyncHandler(appController.getMe.bind(appController)));
 
   // Profile (authed)
   app.get('/api/app/profile', appAuthMiddleware, asyncHandler(appController.getProfile.bind(appController)));
@@ -334,6 +335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Public discovery
   app.get('/api/app/cities', asyncHandler(appController.getCities.bind(appController)));
+  app.get('/api/app/operators', asyncHandler(appController.getOperators.bind(appController)));
   app.get('/api/app/trips/search', asyncHandler(appController.searchTrips.bind(appController)));
   app.get('/api/app/trips/:id', asyncHandler(appController.getTripDetail.bind(appController)));
   app.get('/api/app/trips/:id/seatmap', asyncHandler(appController.getSeatmap.bind(appController)));

@@ -71,6 +71,21 @@ export class AppService {
     return safeUser;
   }
 
+  async getOperators(): Promise<any[]> {
+    const result = await db.select({
+      id: tripPatterns.id,
+      code: tripPatterns.code,
+      name: tripPatterns.name,
+      vehicleClass: tripPatterns.vehicleClass,
+      active: tripPatterns.active,
+    })
+    .from(tripPatterns)
+    .where(eq(tripPatterns.active, true))
+    .orderBy(tripPatterns.name);
+
+    return result;
+  }
+
   async getCities(): Promise<{ city: string; stopCount: number }[]> {
     const result = await db.execute(sql`
       SELECT city, COUNT(*)::int as stop_count
@@ -107,6 +122,7 @@ export class AppService {
       patternId: trips.patternId,
       patternCode: tripPatterns.code,
       patternName: tripPatterns.name,
+      vehicleClass: tripPatterns.vehicleClass,
       vehicleCode: vehicles.code,
       capacity: trips.capacity,
       status: trips.status,
@@ -158,6 +174,8 @@ export class AppService {
         patternCode: trip.patternCode,
         patternName: trip.patternName,
         vehicleCode: trip.vehicleCode,
+        vehicleClass: trip.vehicleClass,
+        operatorName: trip.patternName,
         origin: { stopId: originST.stopId, name: originST.stopName, code: originST.stopCode, sequence: originST.stopSequence, departAt: originST.departAt },
         destination: { stopId: destST.stopId, name: destST.stopName, code: destST.stopCode, sequence: destST.stopSequence, arriveAt: destST.arriveAt },
         availableSeats,
@@ -250,6 +268,8 @@ export class AppService {
       serviceDate: trip.serviceDate,
       patternCode: pattern?.code,
       patternName: pattern?.name,
+      vehicleClass: pattern?.vehicleClass,
+      operatorName: pattern?.name,
       capacity: trip.capacity,
       status: trip.status,
       stops: stopsData,
@@ -313,65 +333,69 @@ export class AppService {
     const legIndexes: number[] = [];
     for (let i = params.originSeq; i < params.destinationSeq; i++) legIndexes.push(i);
 
-    for (const pax of params.passengers) {
-      const inv = await db.select().from(seatInventory).where(
-        and(
-          eq(seatInventory.tripId, params.tripId),
-          eq(seatInventory.seatNo, pax.seatNo),
-          inArray(seatInventory.legIndex, legIndexes)
-        )
-      );
-      const booked = inv.some(r => r.booked);
-      if (booked) throw new Error(`Seat ${pax.seatNo} is already booked`);
-    }
+    const bookingId = await db.transaction(async (tx) => {
+      for (const pax of params.passengers) {
+        const inv = await tx.select().from(seatInventory).where(
+          and(
+            eq(seatInventory.tripId, params.tripId),
+            eq(seatInventory.seatNo, pax.seatNo),
+            inArray(seatInventory.legIndex, legIndexes)
+          )
+        );
+        const booked = inv.some(r => r.booked);
+        if (booked) throw new Error(`Seat ${pax.seatNo} is already booked`);
+      }
 
-    const booking = await this.storage.createBooking({
-      tripId: params.tripId,
-      originStopId: params.originStopId,
-      destinationStopId: params.destinationStopId,
-      originSeq: params.originSeq,
-      destinationSeq: params.destinationSeq,
-      appUserId: params.userId,
-      channel: 'APP',
-      status: 'confirmed',
-      totalAmount: totalAmount.toString(),
-      createdBy: `app:${params.userId}`
-    });
+      const [booking] = await tx.insert(bookings).values({
+        tripId: params.tripId,
+        originStopId: params.originStopId,
+        destinationStopId: params.destinationStopId,
+        originSeq: params.originSeq,
+        destinationSeq: params.destinationSeq,
+        appUserId: params.userId,
+        channel: 'APP',
+        status: 'confirmed',
+        totalAmount: totalAmount.toString(),
+        createdBy: `app:${params.userId}`
+      }).returning({ id: bookings.id });
 
-    for (const pax of params.passengers) {
-      await this.storage.createPassenger({
+      for (const pax of params.passengers) {
+        await tx.insert(passengers).values({
+          bookingId: booking.id,
+          fullName: pax.fullName,
+          phone: pax.phone,
+          idNumber: pax.idNumber,
+          seatNo: pax.seatNo,
+          fareAmount: fareQuote.perPassenger.toString(),
+          fareBreakdown: fareQuote.breakdown
+        });
+
+        await tx.update(seatInventory)
+          .set({ booked: true, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, params.tripId),
+            eq(seatInventory.seatNo, pax.seatNo),
+            inArray(seatInventory.legIndex, legIndexes)
+          ));
+
+        await tx.delete(seatHolds)
+          .where(and(
+            eq(seatHolds.tripId, params.tripId),
+            eq(seatHolds.seatNo, pax.seatNo)
+          ));
+      }
+
+      await tx.insert(payments).values({
         bookingId: booking.id,
-        fullName: pax.fullName,
-        phone: pax.phone,
-        idNumber: pax.idNumber,
-        seatNo: pax.seatNo,
-        fareAmount: fareQuote.perPassenger.toString(),
-        fareBreakdown: fareQuote.breakdown
+        method: params.paymentMethod,
+        amount: totalAmount.toString(),
+        status: 'pending'
       });
 
-      await db.update(seatInventory)
-        .set({ booked: true, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, params.tripId),
-          eq(seatInventory.seatNo, pax.seatNo),
-          inArray(seatInventory.legIndex, legIndexes)
-        ));
-
-      await db.delete(seatHolds)
-        .where(and(
-          eq(seatHolds.tripId, params.tripId),
-          eq(seatHolds.seatNo, pax.seatNo)
-        ));
-    }
-
-    await this.storage.createPayment({
-      bookingId: booking.id,
-      method: params.paymentMethod,
-      amount: totalAmount.toString(),
-      status: 'pending'
+      return booking.id;
     });
 
-    return this.getBookingDetail(booking.id);
+    return this.getBookingDetail(bookingId);
   }
 
   async getUserBookings(userId: string): Promise<any[]> {
