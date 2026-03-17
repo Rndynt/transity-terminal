@@ -1,14 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { cargoApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import type { Trip } from '@shared/schema';
+import type { TripWithDetails } from '@shared/schema';
 import type { CargoShipmentWithStops } from '@/types';
 import {
   Package, Search, X, Loader2, ArrowRight,
   Phone, Clock, CheckCircle2, Truck, XCircle, Eye,
-  Download, Upload, RotateCcw, Calendar, AlertTriangle, Bus
+  Download, Upload, RotateCcw, Calendar, AlertTriangle, Bus, ChevronDown, Check
 } from 'lucide-react';
 
 const fmt = (amount: number) =>
@@ -38,6 +38,106 @@ const STATUS_TRANSITIONS: Record<StatusKey, StatusKey[]> = {
   canceled: []
 };
 
+function TripCombobox({
+  trips,
+  value,
+  onChange
+}: {
+  trips: TripWithDetails[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  const selected = trips.find(t => t.id === value);
+
+  const filtered = trips.filter(t => {
+    const q = search.toLowerCase();
+    if (!q) return true;
+    const label = [t.patternCode, t.patternName, t.vehiclePlate, t.vehicleCode, t.serviceDate].join(' ').toLowerCase();
+    return label.includes(q);
+  });
+
+  const tripLabel = (t: TripWithDetails) => {
+    const route = t.patternCode || t.patternName || 'Trip';
+    const plate = t.vehiclePlate || t.vehicleCode || '';
+    const date = t.serviceDate ? new Date(t.serviceDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : '';
+    return `${route}${plate ? ' · ' + plate : ''}${date ? ' (' + date + ')' : ''}`;
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="h-9 pl-3 pr-7 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 flex items-center gap-1.5 min-w-[140px] max-w-[200px] relative"
+        data-testid="select-trip-filter"
+      >
+        <Bus className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+        <span className="truncate flex-1 text-left">
+          {selected ? tripLabel(selected) : 'Semua Trip'}
+        </span>
+        <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2" />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+          <div className="p-2 border-b border-gray-100">
+            <div className="relative">
+              <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                autoFocus
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Cari rute, plat, tanggal..."
+                className="w-full h-8 pl-7 pr-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-200"
+                data-testid="input-trip-search"
+              />
+            </div>
+          </div>
+          <div className="max-h-52 overflow-y-auto">
+            <button
+              onClick={() => { onChange(''); setOpen(false); setSearch(''); }}
+              className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-gray-50 transition-colors ${!value ? 'text-blue-700 font-semibold' : 'text-gray-600'}`}
+            >
+              {!value && <Check className="w-3 h-3 flex-shrink-0" />}
+              <span className={!value ? '' : 'pl-5'}>Semua Trip</span>
+            </button>
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-xs text-gray-400 text-center">Trip tidak ditemukan</div>
+            ) : (
+              filtered.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => { onChange(t.id); setOpen(false); setSearch(''); }}
+                  className={`w-full text-left px-3 py-2 text-xs flex items-start gap-2 hover:bg-gray-50 transition-colors ${value === t.id ? 'bg-amber-50 text-amber-700' : 'text-gray-700'}`}
+                >
+                  {value === t.id && <Check className="w-3 h-3 flex-shrink-0 mt-0.5 text-amber-600" />}
+                  <div className={value === t.id ? '' : 'pl-5'}>
+                    <div className="font-semibold">{t.patternCode || 'Trip'}</div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">
+                      {t.vehiclePlate || t.vehicleCode || 'Kendaraan'} · {t.serviceDate ? new Date(t.serviceDate).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CargoListPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -47,7 +147,7 @@ export default function CargoListPage() {
   const [confirmAction, setConfirmAction] = useState<{ id: string; status: StatusKey; label: string } | null>(null);
   const { toast } = useToast();
 
-  const { data: trips = [] } = useQuery<Trip[]>({
+  const { data: trips = [] } = useQuery<TripWithDetails[]>({
     queryKey: ['/api/trips'],
     queryFn: () => fetch('/api/trips').then(r => r.json())
   });
@@ -151,20 +251,11 @@ export default function CargoListPage() {
                   </button>
                 )}
               </div>
-              <div className="relative">
-                <Bus className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                <select
-                  value={tripFilter}
-                  onChange={(e) => setTripFilter(e.target.value)}
-                  className="h-9 pl-9 pr-6 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 appearance-none"
-                  data-testid="select-trip-filter"
-                >
-                  <option value="">Semua Trip</option>
-                  {trips.map(t => (
-                    <option key={t.id} value={t.id}>{t.id.slice(0,8)}...</option>
-                  ))}
-                </select>
-              </div>
+              <TripCombobox
+                trips={trips}
+                value={tripFilter}
+                onChange={setTripFilter}
+              />
               <div className="relative">
                 <Calendar className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 <input
