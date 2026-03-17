@@ -52,3 +52,12 @@ outputType = "webview"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[userenv]
+
+[userenv.shared]
+PORT = "5000"
+NODE_ENV = "development"
+HOLD_TTL_SHORT_SECONDS = "60"
+HOLD_TTL_LONG_SECONDS = "1200"
+PENDING_BOOKING_AUTO_RELEASE = "true"
