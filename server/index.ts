@@ -13,6 +13,23 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false }));
 
+const SENSITIVE_PATHS = ['/api/app/auth/login', '/api/app/auth/register', '/api/app/payments/webhook'];
+const SENSITIVE_KEYS = new Set(['token', 'password', 'passwordHash', 'providerRef', 'authorization']);
+
+function redactSensitive(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (SENSITIVE_KEYS.has(key.toLowerCase())) {
+      result[key] = '[REDACTED]';
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      result[key] = redactSensitive(value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -28,8 +45,10 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      if (capturedJsonResponse && !SENSITIVE_PATHS.includes(path)) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      } else if (capturedJsonResponse && SENSITIVE_PATHS.includes(path)) {
+        logLine += ` :: ${JSON.stringify(redactSensitive(capturedJsonResponse))}`;
       }
 
       if (logLine.length > 80) {
