@@ -264,6 +264,17 @@ export class AppService {
       FROM reviews WHERE trip_id = ${tripId}
     `);
 
+    const totalSeats = trip.capacity || 0;
+    let seatsSold = 0;
+    try {
+      const soldResult = await db.execute(sql`
+        SELECT COUNT(DISTINCT seat_no)::int as sold
+        FROM seat_inventory
+        WHERE trip_id = ${tripId} AND booked = true
+      `);
+      seatsSold = soldResult.rows[0]?.sold || 0;
+    } catch {}
+
     return {
       tripId: trip.id,
       serviceDate: trip.serviceDate,
@@ -274,6 +285,11 @@ export class AppService {
       operatorLogo: null,
       capacity: trip.capacity,
       status: trip.status,
+      seatAvailability: {
+        total: totalSeats,
+        sold: seatsSold,
+        available: totalSeats - seatsSold,
+      },
       stops: stopsData,
       reviews: {
         count: reviewStats.rows[0]?.count || 0,
@@ -335,6 +351,9 @@ export class AppService {
     const legIndexes: number[] = [];
     for (let i = params.originSeq; i < params.destinationSeq; i++) legIndexes.push(i);
 
+    const HOLD_TTL_MINUTES = 15;
+    const holdExpiresAt = new Date(Date.now() + HOLD_TTL_MINUTES * 60 * 1000);
+
     const bookingId = await db.transaction(async (tx) => {
       for (const pax of params.passengers) {
         const inv = await tx.select().from(seatInventory).where(
@@ -345,7 +364,9 @@ export class AppService {
           )
         );
         const booked = inv.some(r => r.booked);
+        const held = inv.some(r => !!r.holdRef);
         if (booked) throw new Error(`Seat ${pax.seatNo} is already booked`);
+        if (held) throw new Error(`Seat ${pax.seatNo} is currently held by another user`);
       }
 
       const [booking] = await tx.insert(bookings).values({
@@ -356,12 +377,14 @@ export class AppService {
         destinationSeq: params.destinationSeq,
         appUserId: params.userId,
         channel: 'APP',
-        status: 'confirmed',
+        status: 'pending',
         totalAmount: totalAmount.toString(),
         createdBy: `app:${params.userId}`
       }).returning({ id: bookings.id });
 
       for (const pax of params.passengers) {
+        const holdRef = `app-hold:${booking.id}:${pax.seatNo}`;
+
         await tx.insert(passengers).values({
           bookingId: booking.id,
           fullName: pax.fullName,
@@ -372,18 +395,23 @@ export class AppService {
           fareBreakdown: fareQuote.breakdown
         });
 
+        await tx.insert(seatHolds).values({
+          holdRef,
+          tripId: params.tripId,
+          seatNo: pax.seatNo,
+          legIndexes: legIndexes,
+          ttlClass: 'short',
+          operatorId: params.userId,
+          bookingId: booking.id,
+          expiresAt: holdExpiresAt,
+        });
+
         await tx.update(seatInventory)
-          .set({ booked: true, holdRef: null })
+          .set({ holdRef })
           .where(and(
             eq(seatInventory.tripId, params.tripId),
             eq(seatInventory.seatNo, pax.seatNo),
             inArray(seatInventory.legIndex, legIndexes)
-          ));
-
-        await tx.delete(seatHolds)
-          .where(and(
-            eq(seatHolds.tripId, params.tripId),
-            eq(seatHolds.seatNo, pax.seatNo)
           ));
       }
 
@@ -395,6 +423,45 @@ export class AppService {
       });
 
       return booking.id;
+    });
+
+    return this.getBookingDetail(bookingId);
+  }
+
+  async confirmAppBookingPayment(bookingId: string, userId: string): Promise<any> {
+    const booking = await this.storage.getBookingById(bookingId);
+    if (!booking) throw new Error("Booking not found");
+    if (booking.appUserId !== userId) throw new Error("Unauthorized");
+    if (booking.status !== 'pending') throw new Error("Booking is not in pending status");
+
+    const legIndexes: number[] = [];
+    for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
+
+    await db.transaction(async (tx) => {
+      await tx.update(bookings)
+        .set({ status: 'confirmed' })
+        .where(eq(bookings.id, bookingId));
+
+      const pax = await this.storage.getPassengers(bookingId);
+      for (const p of pax) {
+        await tx.update(seatInventory)
+          .set({ booked: true, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, booking.tripId),
+            eq(seatInventory.seatNo, p.seatNo),
+            inArray(seatInventory.legIndex, legIndexes)
+          ));
+
+        await tx.delete(seatHolds)
+          .where(and(
+            eq(seatHolds.tripId, booking.tripId),
+            eq(seatHolds.seatNo, p.seatNo)
+          ));
+      }
+
+      await tx.update(payments)
+        .set({ status: 'success' })
+        .where(eq(payments.bookingId, bookingId));
     });
 
     return this.getBookingDetail(bookingId);
@@ -464,6 +531,16 @@ export class AppService {
       arriveAt = destST?.arriveAt;
     }
 
+    const pendingPayment = pmts.find(p => p.status === 'pending');
+    let holdExpiry: string | null = null;
+    if (booking.status === 'pending') {
+      const holds = await db.select({ expiresAt: seatHolds.expiresAt })
+        .from(seatHolds)
+        .where(eq(seatHolds.bookingId, bookingId))
+        .limit(1);
+      holdExpiry = holds[0]?.expiresAt?.toISOString() || null;
+    }
+
     return {
       id: booking.id,
       tripId: booking.tripId,
@@ -477,6 +554,20 @@ export class AppService {
       status: booking.status,
       totalAmount: booking.totalAmount,
       channel: booking.channel,
+      holdExpiresAt: holdExpiry,
+      qrData: pax.map(p => ({
+        passengerId: p.id,
+        seatNo: p.seatNo,
+        fullName: p.fullName,
+        qrToken: `TRN-${booking.id.slice(-8).toUpperCase()}-${p.seatNo}`,
+        qrPayload: JSON.stringify({
+          bookingId: booking.id,
+          passengerId: p.id,
+          seatNo: p.seatNo,
+          tripId: booking.tripId,
+          serviceDate: trip?.serviceDate,
+        }),
+      })),
       passengers: pax.map(p => ({
         id: p.id,
         fullName: p.fullName,
@@ -491,6 +582,13 @@ export class AppService {
         status: p.status,
         paidAt: p.paidAt
       })),
+      paymentIntent: pendingPayment ? {
+        paymentId: pendingPayment.id,
+        method: pendingPayment.method,
+        amount: pendingPayment.amount,
+        status: pendingPayment.status,
+        expiresAt: holdExpiry,
+      } : null,
       createdAt: booking.createdAt
     };
   }

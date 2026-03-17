@@ -4,8 +4,11 @@ import jwt from "jsonwebtoken";
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
-    console.warn("[app.auth] JWT_SECRET env var not set, using development fallback. Set JWT_SECRET in production!");
-    return "transity-dev-secret-" + (process.env.REPL_ID || "local");
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("FATAL: JWT_SECRET environment variable is required in production");
+    }
+    console.warn("[app.auth] JWT_SECRET env var not set. Using development fallback. Set JWT_SECRET for production!");
+    return "transity-dev-" + (process.env.REPL_ID || "local-dev-only");
   }
   return secret;
 }

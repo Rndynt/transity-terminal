@@ -35,8 +35,15 @@ export default function ETicketScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {booking.passengers?.map((pax: any, i: number) => (
-        <View key={pax.id} style={styles.ticketCard}>
+      {(booking.qrData || booking.passengers)?.map((item: any, i: number) => {
+        const pax = booking.qrData
+          ? booking.passengers?.find((p: any) => p.id === item.passengerId) || item
+          : item;
+        const qrPayload = item.qrPayload || JSON.stringify({ bookingId: booking.id, passengerId: pax.id, seatNo: pax.seatNo });
+        const qrToken = item.qrToken || '';
+
+        return (
+        <View key={pax.id || i} style={styles.ticketCard}>
           <View style={styles.ticketHeader}>
             <Text style={styles.brandText}>TRANSITY</Text>
             <Text style={styles.ticketLabel}>E-TICKET</Text>
@@ -44,23 +51,19 @@ export default function ETicketScreen() {
 
           <View style={styles.qrSection}>
             <QRCode
-              value={JSON.stringify({
-                bookingId: booking.id,
-                passengerId: pax.id,
-                seatNo: pax.seatNo,
-                trip: booking.tripId,
-              })}
+              value={qrPayload}
               size={160}
               backgroundColor="#fff"
               color="#1F2937"
             />
+            {qrToken ? <Text style={styles.qrTokenText}>{qrToken}</Text> : null}
           </View>
 
           <View style={styles.passengerSection}>
             <Text style={styles.passengerName}>{pax.fullName}</Text>
             <View style={styles.seatDisplay}>
               <Text style={styles.seatLabel}>Kursi</Text>
-              <Text style={styles.seatNumber}>{pax.seatNo}</Text>
+              <Text style={styles.seatNumber}>{pax.seatNo || item.seatNo}</Text>
             </View>
           </View>
 
@@ -103,7 +106,8 @@ export default function ETicketScreen() {
             </View>
           </View>
         </View>
-      ))}
+        );
+      })}
     </ScrollView>
   );
 }
@@ -130,6 +134,7 @@ const styles = StyleSheet.create({
   brandText: { fontSize: 18, fontWeight: '900', color: '#fff', letterSpacing: 2 },
   ticketLabel: { fontSize: 12, fontWeight: '600', color: '#93C5FD', letterSpacing: 1 },
   qrSection: { alignItems: 'center', paddingVertical: 24, backgroundColor: '#fff' },
+  qrTokenText: { marginTop: 8, fontSize: 12, fontWeight: '700', fontFamily: 'monospace', color: '#6B7280', letterSpacing: 1 },
   passengerSection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 16 },
   passengerName: { fontSize: 18, fontWeight: '700', color: '#1F2937', flex: 1 },
   seatDisplay: { alignItems: 'center' },

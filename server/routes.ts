@@ -345,6 +345,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/app/bookings', appAuthMiddleware, asyncHandler(appController.createBooking.bind(appController)));
   app.get('/api/app/bookings', appAuthMiddleware, asyncHandler(appController.getMyBookings.bind(appController)));
   app.get('/api/app/bookings/:id', appAuthMiddleware, asyncHandler(appController.getBookingDetail.bind(appController)));
+  app.post('/api/app/bookings/:id/confirm-payment', appAuthMiddleware, asyncHandler(appController.confirmPayment.bind(appController)));
   app.post('/api/app/bookings/:id/cancel', appAuthMiddleware, asyncHandler(appController.cancelBooking.bind(appController)));
 
   // Reviews (authed)

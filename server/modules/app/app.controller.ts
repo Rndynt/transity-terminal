@@ -193,6 +193,19 @@ export class AppController {
     }
   }
 
+  async confirmPayment(req: AuthenticatedRequest, res: Response) {
+    try {
+      const result = await this.service.confirmAppBookingPayment(req.params.id, req.appUser!.userId);
+      res.json(result);
+    } catch (e: any) {
+      if (e.message === "Unauthorized") {
+        res.status(403).json({ error: e.message });
+      } else {
+        res.status(400).json({ error: e.message });
+      }
+    }
+  }
+
   async cancelBooking(req: AuthenticatedRequest, res: Response) {
     try {
       await this.service.cancelBooking(req.params.id, req.appUser!.userId);
