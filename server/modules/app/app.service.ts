@@ -10,6 +10,113 @@ import bcrypt from "bcryptjs";
 import { signToken, type AppUserPayload } from "./app.auth";
 import { IStorage } from "../../routes";
 
+interface StopInfo {
+  stopId: string;
+  name: string;
+  code: string;
+  city: string | null;
+}
+
+interface QrDataItem {
+  passengerId: string;
+  seatNo: string;
+  fullName: string;
+  qrToken: string;
+  qrPayload: string;
+}
+
+interface PassengerInfo {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  seatNo: string;
+  fareAmount: string | null;
+}
+
+interface PaymentInfo {
+  id: string;
+  method: string;
+  amount: string | null;
+  status: string | null;
+  paidAt: Date | null;
+}
+
+interface PaymentIntentInfo {
+  paymentId: string;
+  method: string;
+  amount: string | null;
+  status: string | null;
+  providerRef: string | null;
+  expiresAt: string | null;
+}
+
+interface BookingDetailResponse {
+  id: string;
+  tripId: string;
+  serviceDate: string | null | undefined;
+  patternCode: string | null | undefined;
+  patternName: string | null | undefined;
+  origin: StopInfo | null;
+  destination: StopInfo | null;
+  departAt: string | null;
+  arriveAt: string | null;
+  status: string | null;
+  totalAmount: string | null;
+  channel: string | null;
+  holdExpiresAt: string | null;
+  qrData: QrDataItem[];
+  passengers: PassengerInfo[];
+  payments: PaymentInfo[];
+  paymentIntent: PaymentIntentInfo | null;
+  createdAt: Date | null;
+}
+
+interface SeatAvailability {
+  total: number;
+  sold: number;
+  available: number;
+}
+
+interface TripDetailResponse {
+  tripId: string;
+  serviceDate: string | null;
+  patternCode: string | null | undefined;
+  patternName: string | null | undefined;
+  vehicleClass: string | null | undefined;
+  operatorName: string | null | undefined;
+  operatorLogo: string | null;
+  capacity: number | null;
+  status: string | null;
+  seatAvailability: SeatAvailability;
+  stops: Array<{
+    stopId: string;
+    name: string;
+    code: string;
+    city: string | null;
+    sequence: number;
+    arriveAt: string | null;
+    departAt: string | null;
+    boardingAllowed: boolean;
+    alightingAllowed: boolean;
+  }>;
+  reviews: { count: number; avgRating: number };
+}
+
+interface PaymentStatusResponse {
+  bookingId: string;
+  bookingStatus: string | null;
+  paymentId: string;
+  paymentStatus: string | null;
+  method: string;
+  amount: string | null;
+  providerRef: string | null;
+}
+
+interface WebhookResult {
+  status: 'success' | 'failed';
+  bookingId: string;
+}
+
 export class AppService {
   constructor(private storage: IStorage) {}
 
@@ -233,7 +340,7 @@ export class AppService {
     }
   }
 
-  async getTripDetail(tripId: string): Promise<any> {
+  async getTripDetail(tripId: string): Promise<TripDetailResponse> {
     const trip = await this.storage.getTripById(tripId);
     if (!trip) throw new Error("Trip not found");
 
@@ -298,7 +405,7 @@ export class AppService {
     };
   }
 
-  async getSeatmap(tripId: string, originSeq: number, destinationSeq: number): Promise<any> {
+  async getSeatmap(tripId: string, originSeq: number, destinationSeq: number): Promise<{ layout: { rows: number | null; cols: number | null; seatMap: unknown }; seatAvailability: Record<string, { available: boolean; held: boolean }> }> {
     const trip = await this.storage.getTripById(tripId);
     if (!trip) throw new Error("Trip not found");
 
@@ -314,7 +421,7 @@ export class AppService {
     const inventory = await this.storage.getSeatInventory(tripId, legIndexes);
 
     const seatAvailability: Record<string, { available: boolean; held: boolean }> = {};
-    const seatMap = layout.seatMap as any[];
+    const seatMap = layout.seatMap as Array<{ seat_no: string; [key: string]: unknown }>;
 
     for (const seat of seatMap) {
       const seatRows = inventory.filter(r => r.seatNo === seat.seat_no);
@@ -341,7 +448,7 @@ export class AppService {
     destinationSeq: number;
     passengers: { fullName: string; phone?: string; idNumber?: string; seatNo: string }[];
     paymentMethod: 'qr' | 'ewallet' | 'bank';
-  }): Promise<any> {
+  }): Promise<BookingDetailResponse> {
     const { PricingService } = await import("../pricing/pricing.service");
     const pricingService = new PricingService(this.storage);
     const fareQuote = await pricingService.quoteFare(params.tripId, params.originSeq, params.destinationSeq);
@@ -356,15 +463,15 @@ export class AppService {
 
     const bookingId = await db.transaction(async (tx) => {
       for (const pax of params.passengers) {
-        const inv = await tx.select().from(seatInventory).where(
-          and(
-            eq(seatInventory.tripId, params.tripId),
-            eq(seatInventory.seatNo, pax.seatNo),
-            inArray(seatInventory.legIndex, legIndexes)
-          )
-        );
-        const booked = inv.some(r => r.booked);
-        const held = inv.some(r => !!r.holdRef);
+        const inv = await tx.execute(sql`
+          SELECT seat_no, booked, hold_ref FROM seat_inventory
+          WHERE trip_id = ${params.tripId}
+            AND seat_no = ${pax.seatNo}
+            AND leg_index = ANY(${legIndexes})
+          FOR UPDATE
+        `);
+        const booked = inv.rows.some((r: Record<string, unknown>) => r.booked === true);
+        const held = inv.rows.some((r: Record<string, unknown>) => !!r.hold_ref);
         if (booked) throw new Error(`Seat ${pax.seatNo} is already booked`);
         if (held) throw new Error(`Seat ${pax.seatNo} is currently held by another user`);
       }
@@ -433,7 +540,7 @@ export class AppService {
     return this.getBookingDetail(bookingId);
   }
 
-  async processPaymentWebhook(providerRef: string, gatewayStatus: 'success' | 'failed'): Promise<any> {
+  async processPaymentWebhook(providerRef: string, gatewayStatus: 'success' | 'failed'): Promise<WebhookResult> {
     const [payment] = await db.select().from(payments).where(eq(payments.providerRef, providerRef)).limit(1);
     if (!payment) throw new Error("Payment not found");
     if (payment.status !== 'pending') throw new Error("Payment already processed");
@@ -499,7 +606,7 @@ export class AppService {
     return { status: 'success', bookingId: booking.id };
   }
 
-  async getPaymentStatus(bookingId: string, userId: string): Promise<any> {
+  async getPaymentStatus(bookingId: string, userId: string): Promise<PaymentStatusResponse> {
     const booking = await this.storage.getBookingById(bookingId);
     if (!booking) throw new Error("Booking not found");
     if (booking.appUserId !== userId) throw new Error("Unauthorized");
@@ -558,7 +665,7 @@ export class AppService {
     return enriched;
   }
 
-  async getBookingDetail(bookingId: string, userId?: string): Promise<any> {
+  async getBookingDetail(bookingId: string, userId?: string): Promise<BookingDetailResponse> {
     const booking = await this.storage.getBookingById(bookingId);
     if (!booking) throw new Error("Booking not found");
     if (userId && booking.appUserId !== userId) throw new Error("Unauthorized");
@@ -707,7 +814,20 @@ export class AppService {
     return result;
   }
 
-  async trackCargo(waybillNumber: string): Promise<any> {
+  async trackCargo(waybillNumber: string): Promise<{
+    waybillNumber: string;
+    status: string | null;
+    origin: { name: string; code: string; city: string | null } | null;
+    destination: { name: string; code: string; city: string | null } | null;
+    serviceDate: string | null | undefined;
+    patternName: string | null | undefined;
+    senderName: string;
+    recipientName: string;
+    itemDescription: string | null;
+    weightKg: string | null;
+    totalAmount: string | null;
+    createdAt: Date | null;
+  }> {
     const shipment = await this.storage.getCargoShipmentByWaybill(waybillNumber);
     if (!shipment) throw new Error("Shipment not found");
 
@@ -752,7 +872,7 @@ export class AppService {
     quantity: number;
     weightKg?: number;
     notes?: string;
-  }): Promise<any> {
+  }): Promise<Record<string, unknown>> {
     const { CargoService } = await import("../cargo/cargo.service");
     const cargoService = new CargoService(this.storage);
 

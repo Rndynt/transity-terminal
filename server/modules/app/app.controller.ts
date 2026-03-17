@@ -66,6 +66,10 @@ const updateProfileSchema = z.object({
   avatar: z.string().optional()
 });
 
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : "Unknown error";
+}
+
 export class AppController {
   private service: AppService;
 
@@ -79,8 +83,8 @@ export class AppController {
     try {
       const result = await this.service.register(parsed.data.email, parsed.data.password, parsed.data.name, parsed.data.phone);
       res.status(201).json(result);
-    } catch (e: any) {
-      res.status(409).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(409).json({ error: errMsg(e) });
     }
   }
 
@@ -90,8 +94,8 @@ export class AppController {
     try {
       const result = await this.service.login(parsed.data.email, parsed.data.password);
       res.json(result);
-    } catch (e: any) {
-      res.status(401).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(401).json({ error: errMsg(e) });
     }
   }
 
@@ -99,8 +103,8 @@ export class AppController {
     try {
       const user = await this.service.getProfile(req.appUser!.userId);
       res.json(user);
-    } catch (e: any) {
-      res.status(404).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(404).json({ error: errMsg(e) });
     }
   }
 
@@ -110,8 +114,8 @@ export class AppController {
     try {
       const user = await this.service.updateProfile(req.appUser!.userId, parsed.data);
       res.json(user);
-    } catch (e: any) {
-      res.status(400).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(400).json({ error: errMsg(e) });
     }
   }
 
@@ -119,8 +123,8 @@ export class AppController {
     try {
       const user = await this.service.getProfile(req.appUser!.userId);
       res.json(user);
-    } catch (e: any) {
-      res.status(404).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(404).json({ error: errMsg(e) });
     }
   }
 
@@ -145,8 +149,8 @@ export class AppController {
     try {
       const detail = await this.service.getTripDetail(req.params.id);
       res.json(detail);
-    } catch (e: any) {
-      res.status(404).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(404).json({ error: errMsg(e) });
     }
   }
 
@@ -156,8 +160,8 @@ export class AppController {
     try {
       const seatmap = await this.service.getSeatmap(req.params.id, Number(originSeq), Number(destinationSeq));
       res.json(seatmap);
-    } catch (e: any) {
-      res.status(404).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(404).json({ error: errMsg(e) });
     }
   }
 
@@ -170,8 +174,8 @@ export class AppController {
         ...parsed.data
       });
       res.status(201).json(result);
-    } catch (e: any) {
-      res.status(400).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(400).json({ error: errMsg(e) });
     }
   }
 
@@ -184,11 +188,11 @@ export class AppController {
     try {
       const detail = await this.service.getBookingDetail(req.params.id, req.appUser!.userId);
       res.json(detail);
-    } catch (e: any) {
-      if (e.message === "Unauthorized") {
-        res.status(403).json({ error: e.message });
+    } catch (e: unknown) {
+      if (errMsg(e) === "Unauthorized") {
+        res.status(403).json({ error: errMsg(e) });
       } else {
-        res.status(404).json({ error: e.message });
+        res.status(404).json({ error: errMsg(e) });
       }
     }
   }
@@ -197,17 +201,40 @@ export class AppController {
     try {
       const result = await this.service.getPaymentStatus(req.params.id, req.appUser!.userId);
       res.json(result);
-    } catch (e: any) {
-      if (e.message === "Unauthorized") {
-        res.status(403).json({ error: e.message });
+    } catch (e: unknown) {
+      if (errMsg(e) === "Unauthorized") {
+        res.status(403).json({ error: errMsg(e) });
       } else {
-        res.status(400).json({ error: e.message });
+        res.status(400).json({ error: errMsg(e) });
       }
     }
   }
 
   async paymentWebhook(req: Request, res: Response) {
     try {
+      const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET;
+      if (!webhookSecret) {
+        console.error("[paymentWebhook] PAYMENT_WEBHOOK_SECRET not configured");
+        res.status(503).json({ error: "Payment webhook not configured" });
+        return;
+      }
+
+      const signature = req.headers['x-webhook-signature'] as string | undefined;
+      if (!signature) {
+        res.status(401).json({ error: "Missing webhook signature" });
+        return;
+      }
+
+      const crypto = await import('crypto');
+      const expectedSig = crypto.createHmac('sha256', webhookSecret)
+        .update(JSON.stringify(req.body))
+        .digest('hex');
+
+      if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
+        res.status(401).json({ error: "Invalid webhook signature" });
+        return;
+      }
+
       const { providerRef, status: gatewayStatus } = req.body;
       if (!providerRef || !['success', 'failed'].includes(gatewayStatus)) {
         res.status(400).json({ error: "Invalid webhook payload: providerRef and status (success|failed) required" });
@@ -215,8 +242,8 @@ export class AppController {
       }
       const result = await this.service.processPaymentWebhook(providerRef, gatewayStatus);
       res.json(result);
-    } catch (e: any) {
-      res.status(400).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(400).json({ error: errMsg(e) });
     }
   }
 
@@ -224,8 +251,8 @@ export class AppController {
     try {
       await this.service.cancelBooking(req.params.id, req.appUser!.userId);
       res.json({ success: true });
-    } catch (e: any) {
-      res.status(400).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(400).json({ error: errMsg(e) });
     }
   }
 
@@ -238,8 +265,8 @@ export class AppController {
         ...parsed.data
       });
       res.status(201).json(review);
-    } catch (e: any) {
-      res.status(400).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(400).json({ error: errMsg(e) });
     }
   }
 
@@ -252,8 +279,8 @@ export class AppController {
     try {
       const result = await this.service.trackCargo(req.params.waybillNumber);
       res.json(result);
-    } catch (e: any) {
-      res.status(404).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(404).json({ error: errMsg(e) });
     }
   }
 
@@ -266,8 +293,8 @@ export class AppController {
         ...parsed.data
       });
       res.status(201).json(result);
-    } catch (e: any) {
-      res.status(400).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(400).json({ error: errMsg(e) });
     }
   }
 }
