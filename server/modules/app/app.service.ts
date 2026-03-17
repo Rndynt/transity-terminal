@@ -485,6 +485,7 @@ export class AppService {
         appUserId: params.userId,
         channel: 'APP',
         status: 'pending',
+        pendingExpiresAt: holdExpiresAt,
         totalAmount: totalAmount.toString(),
         createdBy: `app:${params.userId}`
       }).returning({ id: bookings.id });
@@ -547,15 +548,17 @@ export class AppService {
 
     const booking = await this.storage.getBookingById(payment.bookingId);
     if (!booking) throw new Error("Booking not found");
+    if (booking.status !== 'pending') throw new Error("Booking is no longer pending");
+
+    const pax = await this.storage.getPassengers(booking.id);
+    const legIndexes: number[] = [];
+    for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
 
     if (gatewayStatus === 'failed') {
       await db.transaction(async (tx) => {
         await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
         await tx.update(bookings).set({ status: 'canceled' }).where(eq(bookings.id, booking.id));
 
-        const pax = await this.storage.getPassengers(booking.id);
-        const legIndexes: number[] = [];
-        for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
         for (const p of pax) {
           await tx.update(seatInventory)
             .set({ holdRef: null })
@@ -573,15 +576,52 @@ export class AppService {
       return { status: 'failed', bookingId: booking.id };
     }
 
-    const legIndexes: number[] = [];
-    for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
-
     await db.transaction(async (tx) => {
+      const activeHolds = await tx.select().from(seatHolds)
+        .where(and(
+          eq(seatHolds.bookingId, booking.id),
+          gt(seatHolds.expiresAt, new Date())
+        ));
+
+      if (activeHolds.length === 0) {
+        await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
+        await tx.update(bookings).set({ status: 'canceled' }).where(eq(bookings.id, booking.id));
+        throw new Error("Seat holds have expired. Booking cannot be confirmed.");
+      }
+
+      for (const p of pax) {
+        const seatRows = await tx.execute(sql`
+          SELECT seat_no, booked FROM seat_inventory
+          WHERE trip_id = ${booking.tripId}
+            AND seat_no = ${p.seatNo}
+            AND leg_index = ANY(${legIndexes})
+          FOR UPDATE
+        `);
+        const alreadyBooked = seatRows.rows.some((r: Record<string, unknown>) => r.booked === true);
+        if (alreadyBooked) {
+          await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
+          await tx.update(bookings).set({ status: 'canceled' }).where(eq(bookings.id, booking.id));
+          for (const px of pax) {
+            await tx.update(seatInventory)
+              .set({ holdRef: null })
+              .where(and(
+                eq(seatInventory.tripId, booking.tripId),
+                eq(seatInventory.seatNo, px.seatNo),
+                inArray(seatInventory.legIndex, legIndexes)
+              ));
+            await tx.delete(seatHolds).where(and(
+              eq(seatHolds.tripId, booking.tripId),
+              eq(seatHolds.seatNo, px.seatNo)
+            ));
+          }
+          throw new Error(`Seat ${p.seatNo} is no longer available. Booking canceled.`);
+        }
+      }
+
       await tx.update(bookings)
         .set({ status: 'confirmed' })
         .where(eq(bookings.id, booking.id));
 
-      const pax = await this.storage.getPassengers(booking.id);
       for (const p of pax) {
         await tx.update(seatInventory)
           .set({ booked: true, holdRef: null })
