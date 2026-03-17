@@ -55,7 +55,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
       />
 
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {isMobile && (
           <div className="h-10 bg-white border-b border-gray-200 flex items-center px-3 flex-shrink-0 lg:hidden">
             <button
@@ -69,9 +69,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <span className="text-sm font-semibold text-gray-800">Transity</span>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto min-h-0 min-w-0 flex flex-col">
-          {children}
-        </div>
+        {children}
       </div>
     </div>
   );
