@@ -26,7 +26,7 @@ export class BookingsService {
     return await this.storage.getBookings(tripId);
   }
 
-  async getBookingById(id: string): Promise<Booking & { passengers?: any[]; payments?: any[]; tripDetails?: any; originStop?: any; destinationStop?: any; departAt?: any }> {
+  async getBookingById(id: string): Promise<Booking & { passengers?: any[]; payments?: any[]; tripDetails?: any; originStop?: any; destinationStop?: any; outlet?: any; vehicle?: any; departAt?: any; arriveAt?: any }> {
     const booking = await this.storage.getBookingById(id);
     if (!booking) {
       throw new Error(`Booking with id ${id} not found`);
@@ -41,19 +41,33 @@ export class BookingsService {
     
     let originStop = null;
     let destinationStop = null;
-    
     if (booking.originStopId && booking.destinationStopId) {
       [originStop, destinationStop] = await Promise.all([
         this.storage.getStopById(booking.originStopId),
         this.storage.getStopById(booking.destinationStopId)
       ]);
     }
-    
+
+    let outlet = null;
+    if (booking.outletId) {
+      outlet = await this.storage.getOutletById(booking.outletId);
+    }
+
+    let vehicle = null;
+    if (trip?.vehicleId) {
+      vehicle = await this.storage.getVehicleById(trip.vehicleId);
+    }
+
     let departAt = null;
-    if (tripStopTimes && booking.originSeq) {
-      const originStopTime = tripStopTimes.find(st => st.stopSequence === booking.originSeq);
-      if (originStopTime && originStopTime.departAt) {
-        departAt = originStopTime.departAt;
+    let arriveAt = null;
+    if (tripStopTimes) {
+      if (booking.originSeq) {
+        const originTime = tripStopTimes.find(st => st.stopSequence === booking.originSeq);
+        if (originTime?.departAt) departAt = originTime.departAt;
+      }
+      if (booking.destinationSeq) {
+        const destTime = tripStopTimes.find(st => st.stopSequence === booking.destinationSeq);
+        if (destTime?.arriveAt) arriveAt = destTime.arriveAt;
       }
     }
     
@@ -64,7 +78,10 @@ export class BookingsService {
       tripDetails: trip,
       originStop,
       destinationStop,
-      departAt
+      outlet,
+      vehicle,
+      departAt,
+      arriveAt
     };
   }
 
@@ -348,7 +365,8 @@ export class BookingsService {
       });
     }
 
-    return { booking, pendingExpiresAt };
+    const bookingWithRelations = await this.getBookingById(booking.id);
+    return { booking: bookingWithRelations, pendingExpiresAt };
   }
 
   async getPendingBookings(outletId?: string, operatorId?: string): Promise<Booking[]> {

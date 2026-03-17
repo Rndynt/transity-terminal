@@ -8,13 +8,14 @@ import {
   Banknote, QrCode, Wallet, Building2, Loader2,
   ArrowRight, Ruler, ShieldCheck
 } from 'lucide-react';
-import type { Stop, CsoAvailableTrip, CargoType, CargoShipmentWithStops } from '@/types';
+import type { Stop, Outlet, CsoAvailableTrip, CargoType, CargoShipmentWithStops } from '@/types';
 
 interface CargoFormProps {
   trip: { id: string };
   originStop?: Stop;
   destinationStop?: Stop;
   outletId?: string;
+  outlet?: Outlet;
   csoTrip?: CsoAvailableTrip;
   onSuccess: (shipment: CargoShipmentWithStops) => void;
 }
@@ -29,7 +30,7 @@ const PAYMENT_METHODS = [
 const fmt = (amount: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
 
-export default function CargoForm({ trip, originStop, destinationStop, outletId, csoTrip, onSuccess }: CargoFormProps) {
+export default function CargoForm({ trip, originStop, destinationStop, outletId, outlet, csoTrip, onSuccess }: CargoFormProps) {
   const { toast } = useToast();
   const [senderName, setSenderName] = useState('');
   const [senderPhone, setSenderPhone] = useState('');

@@ -548,6 +548,7 @@ export default function CsoPage() {
                     originStop={state.originStop}
                     destinationStop={state.destinationStop}
                     outletId={state.outlet?.id}
+                    outlet={state.outlet}
                     csoTrip={selectedCsoTrip}
                     onSuccess={handleCargoSuccess}
                   />
