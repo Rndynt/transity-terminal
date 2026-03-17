@@ -17,7 +17,19 @@ const statusLabels: Record<string, string> = {
 
 export default function CargoScreen() {
   const [waybill, setWaybill] = useState('');
-  const [result, setResult] = useState<any>(null);
+  interface CargoTrackResult {
+    waybillNumber: string;
+    status: string;
+    origin: string;
+    destination: string;
+    senderName: string;
+    recipientName: string;
+    createdAt: string;
+    deliveredAt: string | null;
+    weight: string | null;
+    pieces: number | null;
+  }
+  const [result, setResult] = useState<CargoTrackResult | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleTrack = async () => {

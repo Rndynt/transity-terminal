@@ -10,6 +10,64 @@ import bcrypt from "bcryptjs";
 import { signToken, type AppUserPayload } from "./app.auth";
 import { IStorage } from "../../routes";
 
+interface OperatorSummary {
+  id: string;
+  code: string;
+  name: string;
+  vehicleClass: string | null;
+  active: boolean | null;
+}
+
+interface TripStopPoint {
+  stopId: string;
+  name: string;
+  code: string;
+  sequence: number;
+  departAt: string | null;
+  arriveAt: string | null;
+}
+
+interface TripSearchResult {
+  tripId: string;
+  serviceDate: string | null;
+  patternCode: string;
+  patternName: string;
+  vehicleCode: string | null;
+  vehicleClass: string | null;
+  operatorName: string;
+  operatorLogo: string | null;
+  origin: TripStopPoint;
+  destination: TripStopPoint;
+  availableSeats: number;
+  farePerPerson: string | null;
+  stops: TripStopPoint[];
+}
+
+interface UserBookingSummary {
+  id: string;
+  tripId: string;
+  serviceDate: string | null;
+  patternCode: string;
+  patternName: string;
+  originStopId: string | null;
+  destinationStopId: string | null;
+  originSeq: number | null;
+  destinationSeq: number | null;
+  status: string | null;
+  totalAmount: string | null;
+  channel: string | null;
+  createdAt: Date | null;
+}
+
+interface TripReviewItem {
+  id: string;
+  rating: number;
+  comment: string | null;
+  createdAt: Date | null;
+  userName: string;
+  userAvatar: string | null;
+}
+
 interface StopInfo {
   stopId: string;
   name: string;
@@ -167,7 +225,7 @@ export class AppService {
   }
 
   async updateProfile(userId: string, data: { name?: string; phone?: string; avatar?: string }): Promise<Omit<AppUser, "passwordHash">> {
-    const updates: any = {};
+    const updates: Partial<Pick<AppUser, 'name' | 'phone' | 'avatar'>> = {};
     if (data.name !== undefined) updates.name = data.name;
     if (data.phone !== undefined) updates.phone = data.phone;
     if (data.avatar !== undefined) updates.avatar = data.avatar;
@@ -178,7 +236,7 @@ export class AppService {
     return safeUser;
   }
 
-  async getOperators(): Promise<any[]> {
+  async getOperators(): Promise<OperatorSummary[]> {
     const result = await db.select({
       id: tripPatterns.id,
       code: tripPatterns.code,
@@ -201,7 +259,7 @@ export class AppService {
       GROUP BY city
       ORDER BY city
     `);
-    return result.rows.map((r: any) => ({ city: r.city, stopCount: r.stop_count }));
+    return result.rows.map((r: Record<string, unknown>) => ({ city: r.city as string, stopCount: r.stop_count as number }));
   }
 
   async searchTrips(params: {
@@ -209,7 +267,7 @@ export class AppService {
     destinationCity: string;
     date: string;
     passengers?: number;
-  }): Promise<any[]> {
+  }): Promise<TripSearchResult[]> {
     const originStops = await db.select({ id: stops.id, name: stops.name, code: stops.code })
       .from(stops)
       .where(eq(stops.city, params.originCity));
@@ -584,6 +642,19 @@ export class AppService {
         ));
 
       if (activeHolds.length === 0) {
+        for (const p of pax) {
+          await tx.update(seatInventory)
+            .set({ holdRef: null })
+            .where(and(
+              eq(seatInventory.tripId, booking.tripId),
+              eq(seatInventory.seatNo, p.seatNo),
+              inArray(seatInventory.legIndex, legIndexes)
+            ));
+          await tx.delete(seatHolds).where(and(
+            eq(seatHolds.tripId, booking.tripId),
+            eq(seatHolds.seatNo, p.seatNo)
+          ));
+        }
         await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
         await tx.update(bookings).set({ status: 'canceled' }).where(eq(bookings.id, booking.id));
         throw new Error("Seat holds have expired. Booking cannot be confirmed.");
@@ -666,7 +737,7 @@ export class AppService {
     };
   }
 
-  async getUserBookings(userId: string): Promise<any[]> {
+  async getUserBookings(userId: string): Promise<UserBookingSummary[]> {
     const result = await db.select({
       id: bookings.id,
       tripId: bookings.tripId,
@@ -837,7 +908,7 @@ export class AppService {
     return review;
   }
 
-  async getTripReviews(tripId: string): Promise<any[]> {
+  async getTripReviews(tripId: string): Promise<TripReviewItem[]> {
     const result = await db.select({
       id: reviews.id,
       rating: reviews.rating,
