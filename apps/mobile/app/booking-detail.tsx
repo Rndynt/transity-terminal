@@ -1,7 +1,10 @@
+import { type ComponentProps } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
+
+type IoniconsName = ComponentProps<typeof Ionicons>['name'];
 import { bookingsApi } from '../src/lib/api';
 import { format } from 'date-fns';
 
@@ -73,7 +76,7 @@ export default function BookingDetailScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={[styles.statusBar, { backgroundColor: sc.bg }]}>
-          <Ionicons name={sc.icon as any} size={20} color={sc.text} />
+          <Ionicons name={sc.icon as IoniconsName} size={20} color={sc.text} />
           <Text style={[styles.statusText, { color: sc.text }]}>{sc.label}</Text>
         </View>
 

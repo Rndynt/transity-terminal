@@ -1,12 +1,22 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 
+interface AppUser {
+  id: string;
+  email: string;
+  name: string;
+  phone: string | null;
+  avatar: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
 interface AuthState {
-  user: any | null;
+  user: AppUser | null;
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  setAuth: (user: any, token: string) => Promise<void>;
+  setAuth: (user: AppUser, token: string) => Promise<void>;
   logout: () => Promise<void>;
   loadToken: () => Promise<void>;
 }

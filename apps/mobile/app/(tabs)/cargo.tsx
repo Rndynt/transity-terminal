@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { cargoApi } from '../../src/lib/api';
@@ -27,8 +27,9 @@ export default function CargoScreen() {
     try {
       const data = await cargoApi.track(waybill.trim());
       setResult(data);
-    } catch (e: any) {
-      Alert.alert('Tidak Ditemukan', e.message || 'Resi tidak ditemukan');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Resi tidak ditemukan';
+      Alert.alert('Tidak Ditemukan', msg);
     } finally {
       setLoading(false);
     }
@@ -123,11 +124,11 @@ export default function CargoScreen() {
   );
 }
 
-function DetailRow({ icon, label, value }: { icon: string; label: string; value: string }) {
+function DetailRow({ icon, label, value }: { icon: ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
   return (
     <View style={styles.detailRow}>
       <View style={styles.detailLabel}>
-        <Ionicons name={icon as any} size={14} color="#6B7280" />
+        <Ionicons name={icon} size={14} color="#6B7280" />
         <Text style={styles.detailLabelText}>{label}</Text>
       </View>
       <Text style={styles.detailValue}>{value}</Text>

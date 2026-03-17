@@ -18,8 +18,9 @@ export default function LoginScreen() {
       const { user, token } = await authApi.login({ email, password });
       await setAuth(user, token);
       router.replace('/(tabs)');
-    } catch (e: any) {
-      Alert.alert('Login Gagal', e.message || 'Email atau password salah');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Email atau password salah';
+      Alert.alert('Login Gagal', msg);
     } finally {
       setLoading(false);
     }

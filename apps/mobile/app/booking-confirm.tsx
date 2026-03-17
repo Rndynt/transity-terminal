@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
+
+type IoniconsName = ComponentProps<typeof Ionicons>['name'];
 import { bookingsApi } from '../src/lib/api';
 
 export default function BookingConfirmScreen() {
@@ -49,7 +51,7 @@ export default function BookingConfirmScreen() {
       queryClient.invalidateQueries({ queryKey: ['my-bookings'] });
       router.replace({ pathname: '/booking-detail', params: { id: data.id } });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       Alert.alert('Booking Gagal', err.message || 'Gagal membuat booking');
     },
   });
@@ -128,7 +130,7 @@ export default function BookingConfirmScreen() {
               onPress={() => setPaymentMethod(pm.key)}
               testID={`payment-${pm.key}`}
             >
-              <Ionicons name={pm.icon as any} size={20} color={paymentMethod === pm.key ? '#2563EB' : '#6B7280'} />
+              <Ionicons name={pm.icon as IoniconsName} size={20} color={paymentMethod === pm.key ? '#2563EB' : '#6B7280'} />
               <Text style={[styles.paymentLabel, paymentMethod === pm.key && styles.paymentLabelSelected]}>
                 {pm.label}
               </Text>

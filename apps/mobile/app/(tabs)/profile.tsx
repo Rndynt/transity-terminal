@@ -1,3 +1,4 @@
+import { type ComponentProps } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, TextInput, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -111,11 +112,11 @@ export default function ProfileScreen() {
   );
 }
 
-function MenuItem({ icon, label, onPress, danger }: { icon: string; label: string; onPress: () => void; danger?: boolean }) {
+function MenuItem({ icon, label, onPress, danger }: { icon: ComponentProps<typeof Ionicons>['name']; label: string; onPress: () => void; danger?: boolean }) {
   return (
     <TouchableOpacity style={styles.menuItem} onPress={onPress} testID={`menu-${label.toLowerCase().replace(/\s/g, '-')}`}>
       <View style={styles.menuItemLeft}>
-        <Ionicons name={icon as any} size={20} color={danger ? '#EF4444' : '#4B5563'} />
+        <Ionicons name={icon} size={20} color={danger ? '#EF4444' : '#4B5563'} />
         <Text style={[styles.menuItemLabel, danger && { color: '#EF4444' }]}>{label}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />

@@ -59,7 +59,7 @@ export default function TripDetailScreen() {
 
         <View style={styles.stopsCard}>
           <Text style={styles.sectionTitle}>Rute Perjalanan</Text>
-          {trip.stops?.map((stop: any, i: number) => {
+          {trip.stops?.map((stop: { stopId: number; name: string; arriveAt: string | null; departAt: string | null; seq: number }, i: number) => {
             const isOrigin = stop.stopId === originStopId;
             const isDest = stop.stopId === destStopId;
             return (
@@ -103,7 +103,7 @@ export default function TripDetailScreen() {
         {reviews && reviews.length > 0 && (
           <View style={styles.reviewsCard}>
             <Text style={styles.sectionTitle}>Ulasan</Text>
-            {reviews.slice(0, 5).map((r: any) => (
+            {reviews.slice(0, 5).map((r: { id: number; userName: string; rating: number; comment: string | null; createdAt: string }) => (
               <View key={r.id} style={styles.reviewItem}>
                 <View style={styles.reviewHeader}>
                   <Text style={styles.reviewerName}>{r.userName}</Text>

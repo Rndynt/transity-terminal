@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
+
+type IoniconsName = ComponentProps<typeof Ionicons>['name'];
 import { tripsApi } from '../../src/lib/api';
 
 export default function HomeScreen() {
@@ -140,12 +142,12 @@ export default function HomeScreen() {
         <View style={styles.featuresGrid}>
           {[
             { icon: 'ticket', label: 'Tiket Bus', desc: 'Pesan tiket online' },
-            { icon: 'cube', label: 'Kirim Kargo', desc: 'Pengiriman barang' },
-            { icon: 'qr-code', label: 'E-Ticket', desc: 'Tiket digital QR' },
-            { icon: 'star', label: 'Review', desc: 'Ulasan perjalanan' },
+            { icon: 'cube' as IoniconsName, label: 'Kirim Kargo', desc: 'Pengiriman barang' },
+            { icon: 'qr-code' as IoniconsName, label: 'E-Ticket', desc: 'Tiket digital QR' },
+            { icon: 'star' as IoniconsName, label: 'Review', desc: 'Ulasan perjalanan' },
           ].map((f) => (
             <View key={f.label} style={styles.featureCard}>
-              <Ionicons name={f.icon as any} size={28} color="#2563EB" />
+              <Ionicons name={f.icon} size={28} color="#2563EB" />
               <Text style={styles.featureLabel}>{f.label}</Text>
               <Text style={styles.featureDesc}>{f.desc}</Text>
             </View>

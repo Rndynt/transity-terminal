@@ -20,8 +20,9 @@ export default function RegisterScreen() {
       const { user, token } = await authApi.register({ email, password, name, phone: phone || undefined });
       await setAuth(user, token);
       router.replace('/(tabs)');
-    } catch (e: any) {
-      Alert.alert('Registrasi Gagal', e.message || 'Gagal mendaftar');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Gagal mendaftar';
+      Alert.alert('Registrasi Gagal', msg);
     } finally {
       setLoading(false);
     }

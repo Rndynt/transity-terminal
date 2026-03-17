@@ -66,19 +66,32 @@ export default function SelectSeatsScreen() {
     );
   }
 
-  const layout = seatmap.layout;
-  const seatMapData = layout.seatMap as any[];
-  const maxRow = Math.max(...seatMapData.map((s: any) => s.row));
-  const maxCol = Math.max(...seatMapData.map((s: any) => s.col));
+  interface SeatCell {
+    row: number;
+    col: number;
+    seatNo: string;
+    label: string;
+    type: string;
+  }
+  interface SeatStatus {
+    available: boolean;
+    booked: boolean;
+    held: boolean;
+  }
 
-  const grid: (any | null)[][] = [];
+  const layout = seatmap.layout;
+  const seatMapData = layout.seatMap as SeatCell[];
+  const maxRow = Math.max(...seatMapData.map((s) => s.row));
+  const maxCol = Math.max(...seatMapData.map((s) => s.col));
+
+  const grid: (SeatCell | null)[][] = [];
   for (let r = 0; r <= maxRow; r++) {
     grid[r] = [];
     for (let c = 0; c <= maxCol; c++) grid[r][c] = null;
   }
-  seatMapData.forEach((s: any) => { grid[s.row][s.col] = s; });
+  seatMapData.forEach((s) => { grid[s.row][s.col] = s; });
 
-  const availableCount = Object.values(seatmap.seatAvailability).filter((s: any) => s.available).length;
+  const availableCount = Object.values(seatmap.seatAvailability as Record<string, SeatStatus>).filter((s) => s.available).length;
 
   return (
     <View style={styles.container}>
