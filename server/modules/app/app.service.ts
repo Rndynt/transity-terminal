@@ -176,6 +176,7 @@ export class AppService {
         vehicleCode: trip.vehicleCode,
         vehicleClass: trip.vehicleClass,
         operatorName: trip.patternName,
+        operatorLogo: null,
         origin: { stopId: originST.stopId, name: originST.stopName, code: originST.stopCode, sequence: originST.stopSequence, departAt: originST.departAt },
         destination: { stopId: destST.stopId, name: destST.stopName, code: destST.stopCode, sequence: destST.stopSequence, arriveAt: destST.arriveAt },
         availableSeats,
@@ -270,6 +271,7 @@ export class AppService {
       patternName: pattern?.name,
       vehicleClass: pattern?.vehicleClass,
       operatorName: pattern?.name,
+      operatorLogo: null,
       capacity: trip.capacity,
       status: trip.status,
       stops: stopsData,
@@ -440,7 +442,7 @@ export class AppService {
   async getBookingDetail(bookingId: string, userId?: string): Promise<any> {
     const booking = await this.storage.getBookingById(bookingId);
     if (!booking) throw new Error("Booking not found");
-    if (userId && booking.appUserId && booking.appUserId !== userId) throw new Error("Unauthorized");
+    if (userId && booking.appUserId !== userId) throw new Error("Unauthorized");
 
     const [pax, pmts, trip, origin, dest] = await Promise.all([
       this.storage.getPassengers(bookingId),

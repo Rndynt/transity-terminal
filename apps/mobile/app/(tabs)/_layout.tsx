@@ -29,19 +29,27 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="search"
+        options={{
+          title: 'Cari',
+          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />,
+          headerTitle: 'Cari Bus',
+        }}
+      />
+      <Tabs.Screen
         name="my-trips"
         options={{
-          title: 'Tiket Saya',
+          title: 'Perjalanan',
           tabBarIcon: ({ color, size }) => <Ionicons name="ticket" size={size} color={color} />,
-          headerTitle: 'Tiket Saya',
+          headerTitle: 'Perjalanan Saya',
         }}
       />
       <Tabs.Screen
         name="cargo"
         options={{
-          title: 'Kargo',
+          title: 'Kirim Paket',
           tabBarIcon: ({ color, size }) => <Ionicons name="cube" size={size} color={color} />,
-          headerTitle: 'Kargo',
+          headerTitle: 'Kirim Paket',
         }}
       />
       <Tabs.Screen

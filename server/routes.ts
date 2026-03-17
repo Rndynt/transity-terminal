@@ -352,6 +352,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Cargo (public tracking, authed creation)
   app.get('/api/app/cargo/track/:waybillNumber', asyncHandler(appController.trackCargo.bind(appController)));
+  app.get('/api/app/cargo/:waybillNumber', asyncHandler(appController.trackCargo.bind(appController)));
   app.post('/api/app/cargo', appAuthMiddleware, asyncHandler(appController.createCargo.bind(appController)));
 
   const httpServer = createServer(app);
