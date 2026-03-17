@@ -357,7 +357,7 @@ export class AppService {
       };
     }));
 
-    return enriched.filter(Boolean);
+    return enriched.filter((t): t is TripSearchResult => t !== null);
   }
 
   private async getAvailableSeatsCount(tripId: string, originSeq: number, destSeq: number): Promise<number> {
