@@ -29,7 +29,7 @@ interface TripStopPoint {
 
 interface TripSearchResult {
   tripId: string;
-  serviceDate: string | null;
+  serviceDate: string;
   patternCode: string;
   patternName: string;
   vehicleCode: string | null;
@@ -39,7 +39,7 @@ interface TripSearchResult {
   origin: TripStopPoint;
   destination: TripStopPoint;
   availableSeats: number;
-  farePerPerson: string | null;
+  farePerPerson: number;
   stops: TripStopPoint[];
 }
 
@@ -357,7 +357,7 @@ export class AppService {
       };
     }));
 
-    return enriched.filter((t): t is TripSearchResult => t !== null);
+    return enriched.filter((t) => t !== null) as TripSearchResult[];
   }
 
   private async getAvailableSeatsCount(tripId: string, originSeq: number, destSeq: number): Promise<number> {
