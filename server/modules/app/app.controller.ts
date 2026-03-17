@@ -1,4 +1,4 @@
-import { Response } from "express";
+import { Request, Response } from "express";
 import { AppService } from "./app.service";
 import { AuthenticatedRequest } from "./app.auth";
 import { IStorage } from "../../routes";
@@ -193,9 +193,9 @@ export class AppController {
     }
   }
 
-  async confirmPayment(req: AuthenticatedRequest, res: Response) {
+  async getPaymentStatus(req: AuthenticatedRequest, res: Response) {
     try {
-      const result = await this.service.confirmAppBookingPayment(req.params.id, req.appUser!.userId);
+      const result = await this.service.getPaymentStatus(req.params.id, req.appUser!.userId);
       res.json(result);
     } catch (e: any) {
       if (e.message === "Unauthorized") {
@@ -203,6 +203,20 @@ export class AppController {
       } else {
         res.status(400).json({ error: e.message });
       }
+    }
+  }
+
+  async paymentWebhook(req: Request, res: Response) {
+    try {
+      const { providerRef, status: gatewayStatus } = req.body;
+      if (!providerRef || !['success', 'failed'].includes(gatewayStatus)) {
+        res.status(400).json({ error: "Invalid webhook payload: providerRef and status (success|failed) required" });
+        return;
+      }
+      const result = await this.service.processPaymentWebhook(providerRef, gatewayStatus);
+      res.json(result);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
     }
   }
 

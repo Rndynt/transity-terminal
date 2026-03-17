@@ -65,7 +65,7 @@ export const bookingsApi = {
   create: (data: any) => api.post<any>('/api/app/bookings', data),
   list: () => api.get<any[]>('/api/app/bookings'),
   getDetail: (id: string) => api.get<any>(`/api/app/bookings/${id}`),
-  confirmPayment: (id: string) => api.post<any>(`/api/app/bookings/${id}/confirm-payment`, {}),
+  getPaymentStatus: (id: string) => api.get<any>(`/api/app/bookings/${id}/payment-status`),
   cancel: (id: string) => api.post<any>(`/api/app/bookings/${id}/cancel`, {}),
 };
 

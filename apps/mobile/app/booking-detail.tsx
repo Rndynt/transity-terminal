@@ -34,27 +34,17 @@ export default function BookingDetailScreen() {
     onError: (err: any) => Alert.alert('Gagal', err.message),
   });
 
-  const confirmPaymentMutation = useMutation({
-    mutationFn: () => bookingsApi.confirmPayment(id!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['booking-detail', id] });
-      queryClient.invalidateQueries({ queryKey: ['my-bookings'] });
-      Alert.alert('Berhasil', 'Pembayaran dikonfirmasi!');
-    },
-    onError: (err: any) => Alert.alert('Gagal', err.message),
+  const { data: paymentStatus } = useQuery({
+    queryKey: ['payment-status', id],
+    queryFn: () => bookingsApi.getPaymentStatus(id!),
+    enabled: !!id && booking?.status === 'pending',
+    refetchInterval: booking?.status === 'pending' ? 5000 : false,
   });
 
   const handleCancel = () => {
     Alert.alert('Batalkan Booking?', 'Booking yang dibatalkan tidak dapat dikembalikan.', [
       { text: 'Tidak', style: 'cancel' },
       { text: 'Batalkan', style: 'destructive', onPress: () => cancelMutation.mutate() },
-    ]);
-  };
-
-  const handleConfirmPayment = () => {
-    Alert.alert('Konfirmasi Pembayaran?', 'Pembayaran akan diproses.', [
-      { text: 'Batal', style: 'cancel' },
-      { text: 'Bayar', onPress: () => confirmPaymentMutation.mutate() },
     ]);
   };
 
@@ -152,17 +142,19 @@ export default function BookingDetailScreen() {
         </View>
 
         {booking.status === 'pending' && booking.paymentIntent && (
-          <TouchableOpacity
-            style={styles.confirmPayBtn}
-            onPress={handleConfirmPayment}
-            disabled={confirmPaymentMutation.isPending}
-            testID="button-confirm-payment"
-          >
-            <Ionicons name="card" size={20} color="#fff" />
-            <Text style={styles.confirmPayBtnText}>
-              {confirmPaymentMutation.isPending ? 'Memproses...' : 'Konfirmasi Pembayaran'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.pendingPayBanner} testID="banner-payment-pending">
+            <Ionicons name="time" size={20} color="#92400E" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pendingPayTitle}>Menunggu Pembayaran</Text>
+              <Text style={styles.pendingPayDesc}>
+                Selesaikan pembayaran via {booking.paymentIntent.method?.toUpperCase() || 'payment gateway'}.
+                {booking.holdExpiresAt ? ` Batas waktu: ${formatTime(booking.holdExpiresAt)}` : ''}
+              </Text>
+              {paymentStatus?.providerRef && (
+                <Text style={styles.pendingPayRef}>Ref: {paymentStatus.providerRef}</Text>
+              )}
+            </View>
+          </View>
         )}
 
         {['confirmed', 'paid'].includes(booking.status) && (
@@ -221,8 +213,10 @@ const styles = StyleSheet.create({
   paymentMethod: { fontSize: 13, color: '#4B5563' },
   paymentStatus: { fontSize: 13, fontWeight: '600', color: '#059669' },
   bookingId: { fontSize: 13, fontFamily: 'monospace', color: '#6B7280' },
-  confirmPayBtn: { flexDirection: 'row', backgroundColor: '#2563EB', borderRadius: 14, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 },
-  confirmPayBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  pendingPayBanner: { flexDirection: 'row', backgroundColor: '#FEF3C7', borderRadius: 14, padding: 14, alignItems: 'flex-start', gap: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FDE68A' },
+  pendingPayTitle: { fontSize: 14, fontWeight: '700', color: '#92400E' },
+  pendingPayDesc: { fontSize: 12, color: '#92400E', marginTop: 2 },
+  pendingPayRef: { fontSize: 11, fontFamily: 'monospace', color: '#B45309', marginTop: 4 },
   ticketBtn: { flexDirection: 'row', backgroundColor: '#EFF6FF', borderRadius: 14, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 },
   ticketBtnText: { fontSize: 15, fontWeight: '700', color: '#2563EB' },
   cancelBtn: { alignItems: 'center', paddingVertical: 14 },

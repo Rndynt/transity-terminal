@@ -415,11 +415,16 @@ export class AppService {
           ));
       }
 
+      const { randomBytes } = await import('crypto');
+      const paymentRef = `PAY-${randomBytes(12).toString('hex').toUpperCase()}`;
+
       await tx.insert(payments).values({
         bookingId: booking.id,
         method: params.paymentMethod,
         amount: totalAmount.toString(),
-        status: 'pending'
+        status: 'pending',
+        providerRef: paymentRef,
+        paidAt: null,
       });
 
       return booking.id;
@@ -428,11 +433,38 @@ export class AppService {
     return this.getBookingDetail(bookingId);
   }
 
-  async confirmAppBookingPayment(bookingId: string, userId: string): Promise<any> {
-    const booking = await this.storage.getBookingById(bookingId);
+  async processPaymentWebhook(providerRef: string, gatewayStatus: 'success' | 'failed'): Promise<any> {
+    const [payment] = await db.select().from(payments).where(eq(payments.providerRef, providerRef)).limit(1);
+    if (!payment) throw new Error("Payment not found");
+    if (payment.status !== 'pending') throw new Error("Payment already processed");
+
+    const booking = await this.storage.getBookingById(payment.bookingId);
     if (!booking) throw new Error("Booking not found");
-    if (booking.appUserId !== userId) throw new Error("Unauthorized");
-    if (booking.status !== 'pending') throw new Error("Booking is not in pending status");
+
+    if (gatewayStatus === 'failed') {
+      await db.transaction(async (tx) => {
+        await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
+        await tx.update(bookings).set({ status: 'canceled' }).where(eq(bookings.id, booking.id));
+
+        const pax = await this.storage.getPassengers(booking.id);
+        const legIndexes: number[] = [];
+        for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
+        for (const p of pax) {
+          await tx.update(seatInventory)
+            .set({ holdRef: null })
+            .where(and(
+              eq(seatInventory.tripId, booking.tripId),
+              eq(seatInventory.seatNo, p.seatNo),
+              inArray(seatInventory.legIndex, legIndexes)
+            ));
+          await tx.delete(seatHolds).where(and(
+            eq(seatHolds.tripId, booking.tripId),
+            eq(seatHolds.seatNo, p.seatNo)
+          ));
+        }
+      });
+      return { status: 'failed', bookingId: booking.id };
+    }
 
     const legIndexes: number[] = [];
     for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
@@ -440,9 +472,9 @@ export class AppService {
     await db.transaction(async (tx) => {
       await tx.update(bookings)
         .set({ status: 'confirmed' })
-        .where(eq(bookings.id, bookingId));
+        .where(eq(bookings.id, booking.id));
 
-      const pax = await this.storage.getPassengers(bookingId);
+      const pax = await this.storage.getPassengers(booking.id);
       for (const p of pax) {
         await tx.update(seatInventory)
           .set({ booked: true, holdRef: null })
@@ -460,11 +492,31 @@ export class AppService {
       }
 
       await tx.update(payments)
-        .set({ status: 'success' })
-        .where(eq(payments.bookingId, bookingId));
+        .set({ status: 'success', paidAt: new Date() })
+        .where(eq(payments.id, payment.id));
     });
 
-    return this.getBookingDetail(bookingId);
+    return { status: 'success', bookingId: booking.id };
+  }
+
+  async getPaymentStatus(bookingId: string, userId: string): Promise<any> {
+    const booking = await this.storage.getBookingById(bookingId);
+    if (!booking) throw new Error("Booking not found");
+    if (booking.appUserId !== userId) throw new Error("Unauthorized");
+
+    const pmts = await this.storage.getPayments(bookingId);
+    const payment = pmts[0];
+    if (!payment) throw new Error("No payment found");
+
+    return {
+      bookingId: booking.id,
+      bookingStatus: booking.status,
+      paymentId: payment.id,
+      paymentStatus: payment.status,
+      method: payment.method,
+      amount: payment.amount,
+      providerRef: payment.providerRef,
+    };
   }
 
   async getUserBookings(userId: string): Promise<any[]> {
@@ -587,6 +639,7 @@ export class AppService {
         method: pendingPayment.method,
         amount: pendingPayment.amount,
         status: pendingPayment.status,
+        providerRef: pendingPayment.providerRef,
         expiresAt: holdExpiry,
       } : null,
       createdAt: booking.createdAt
