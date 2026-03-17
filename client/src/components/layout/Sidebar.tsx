@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -41,6 +41,7 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen = true, onClose, isMobile = false, isCollapsed = false, onToggleCollapse }: SidebarProps) {
   const [location] = useLocation();
+  const search = useSearch();
 
   const handleLinkClick = () => {
     if (isMobile && onClose) onClose();
@@ -48,7 +49,15 @@ export default function Sidebar({ isOpen = true, onClose, isMobile = false, isCo
 
   const isActive = (path: string) => {
     if (path === '/cso') return location === '/' || location === '/cso';
-    return location === path || location.startsWith(path.split('?')[0]);
+    const [pathBase, pathQuery] = path.split('?');
+    if (location !== pathBase) return false;
+    if (!pathQuery) return true;
+    const pathParams = new URLSearchParams(pathQuery);
+    const currentParams = new URLSearchParams(search);
+    for (const [key, value] of pathParams.entries()) {
+      if (currentParams.get(key) !== value) return false;
+    }
+    return true;
   };
 
   return (

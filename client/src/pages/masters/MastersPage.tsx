@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'wouter';
+import { useSearch } from 'wouter';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MapPin, Store, Bus, LayoutGrid, Route, CalendarPlus, CalendarDays, DollarSign, Tag, Package } from 'lucide-react';
@@ -23,15 +23,14 @@ interface TabDef {
 }
 
 export default function MastersPage() {
-  const [location] = useLocation();
-  const urlParams = new URLSearchParams(location.split('?')[1] || '');
-  const tabFromUrl = urlParams.get('tab') || 'stops';
+  const search = useSearch();
+  const tabFromUrl = new URLSearchParams(search).get('tab') || 'stops';
   const [activeTab, setActiveTab] = useState(tabFromUrl);
-  
+
   useEffect(() => {
-    const newTab = urlParams.get('tab') || 'stops';
+    const newTab = new URLSearchParams(search).get('tab') || 'stops';
     setActiveTab(newTab);
-  }, [location]);
+  }, [search]);
 
   const tabs: TabDef[] = [
     { id: 'stops', label: 'Stops', icon: MapPin, component: StopsManager },
@@ -47,7 +46,7 @@ export default function MastersPage() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6" data-testid="masters-page">
+    <div className="max-w-7xl mx-auto space-y-6 p-4 md:p-6 w-full" data-testid="masters-page">
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-bold text-foreground">Master Data Management</CardTitle>
