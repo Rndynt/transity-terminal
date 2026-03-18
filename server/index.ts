@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { scheduler } from "./scheduler";
+import { existsSync } from "fs";
+import { join } from "path";
 
 const app = express();
 app.use(express.json({
@@ -72,6 +74,16 @@ app.use((req, res, next) => {
     res.status(status).json({ message });
     throw err;
   });
+
+  // Serve mobile web app static build at /mobile
+  const mobileDist = join(process.cwd(), "apps/mobile/dist");
+  if (existsSync(mobileDist)) {
+    app.use("/mobile", express.static(mobileDist));
+    app.get("/mobile/*", (_req: Request, res: Response) => {
+      res.sendFile(join(mobileDist, "index.html"));
+    });
+    log("Mobile web app served at /mobile");
+  }
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
