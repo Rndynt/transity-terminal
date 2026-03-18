@@ -322,6 +322,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // ── Mobile App API (/api/app/) ──────────────────────────────────
+  // CORS middleware for mobile app API (allows cross-origin requests from Expo Web)
+  app.use('/api/app', (req: any, res: any, next: any) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+    next();
+  });
+
   const appController = new AppController(storage);
 
   // Auth (public)

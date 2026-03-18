@@ -4,6 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '../src/store/auth';
 import { View, ActivityIndicator } from 'react-native';
+import { useFonts } from 'expo-font';
+import { Ionicons } from '@expo/vector-icons';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -14,11 +16,15 @@ const queryClient = new QueryClient({
 export default function RootLayout() {
   const { isLoading, loadToken } = useAuthStore();
 
+  const [fontsLoaded] = useFonts({
+    ...Ionicons.font,
+  });
+
   useEffect(() => {
     loadToken();
   }, []);
 
-  if (isLoading) {
+  if (isLoading || !fontsLoaded) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
         <ActivityIndicator size="large" color="#2563EB" />
