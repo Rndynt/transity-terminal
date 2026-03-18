@@ -7,19 +7,13 @@ import {
   Package, Plus, Pencil, Trash2, Loader2, Search, X
 } from 'lucide-react';
 import type { CargoType } from '@shared/schema';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import MasterPageHeader from './MasterPageHeader';
+import MasterFormDialog from './MasterFormDialog';
 
 export default function CargoTypesManager() {
   const { toast } = useToast();
@@ -110,155 +104,112 @@ export default function CargoTypesManager() {
 
   return (
     <div data-testid="cargo-types-manager" className="space-y-4">
-      <div className="space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-semibold text-foreground">Jenis Kargo</h3>
-              <span className="text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
-                {filteredData.length}
-              </span>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            onClick={() => { resetForm(); setShowForm(true); }}
-            data-testid="btn-add-cargo-type"
-          >
+      <MasterPageHeader 
+        title="Jenis Kargo" 
+        description="Kelola jenis dan kategori kargo" 
+        searchValue={searchQuery} 
+        onSearchChange={setSearchQuery} 
+        searchPlaceholder="Cari kode atau nama..." 
+        count={filteredData.length} 
+        action={
+          <Button onClick={() => { resetForm(); setShowForm(true); }} data-testid="btn-add-cargo-type">
             <Plus className="w-4 h-4 mr-2" /> Tambah
           </Button>
-        </div>
+        } 
+      />
 
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Cari kode atau nama..."
-            className="pl-9 pr-9 h-9"
-            data-testid="master-search-input"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              data-testid="master-search-clear"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
-        <DialogContent data-testid="cargo-type-form-dialog">
-          <DialogHeader>
-            <DialogTitle>{editId ? 'Edit Jenis Kargo' : 'Tambah Jenis Kargo'}</DialogTitle>
-            <DialogDescription>
-              Isi informasi jenis kargo di bawah ini.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="code" className="text-right">Kode *</Label>
-              <Input
-                id="code"
-                value={form.code}
-                onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
-                placeholder="PKT"
-                className="col-span-3"
-                data-testid="input-cargo-type-code"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right">Nama *</Label>
-              <Input
-                id="name"
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="Paket Reguler"
-                className="col-span-3"
-                data-testid="input-cargo-type-name"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="description" className="text-right">Deskripsi</Label>
-              <Input
-                id="description"
-                value={form.description}
-                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                placeholder="Paket umum, max 50kg"
-                className="col-span-3"
-                data-testid="input-cargo-type-desc"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="maxWeight" className="text-right">Maks. Berat (kg)</Label>
-              <Input
-                id="maxWeight"
-                type="number"
-                value={form.maxWeightKg}
-                onChange={e => setForm(f => ({ ...f, maxWeightKg: e.target.value }))}
-                placeholder="50"
-                className="col-span-3"
-                data-testid="input-cargo-type-max-weight"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="isActive" className="text-right cursor-pointer">Aktif</Label>
-              <div className="col-span-3">
-                <Checkbox
-                  id="isActive"
-                  checked={form.isActive}
-                  onCheckedChange={checked => setForm(f => ({ ...f, isActive: !!checked }))}
-                  data-testid="input-cargo-type-active"
-                />
-              </div>
-            </div>
+      <MasterFormDialog 
+        open={showForm} 
+        onOpenChange={(open) => !open && resetForm()} 
+        title={editId ? 'Edit Jenis Kargo' : 'Tambah Jenis Kargo'} 
+        description="Isi informasi jenis kargo di bawah ini." 
+        onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} 
+        isPending={isPending}
+        data-testid="cargo-type-form-dialog"
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="code">Kode *</Label>
+            <Input
+              id="code"
+              value={form.code}
+              onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
+              placeholder="PKT"
+              data-testid="input-cargo-type-code"
+            />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={resetForm} data-testid="btn-cancel-cargo-type">
-              Batal
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isPending || !form.code.trim() || !form.name.trim()}
-              data-testid="btn-save-cargo-type"
-            >
-              {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Simpan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div className="space-y-2">
+            <Label htmlFor="name">Nama *</Label>
+            <Input
+              id="name"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="Paket Reguler"
+              data-testid="input-cargo-type-name"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="description">Deskripsi</Label>
+            <Input
+              id="description"
+              value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Paket umum, max 50kg"
+              data-testid="input-cargo-type-desc"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="maxWeight">Maks. Berat (kg)</Label>
+            <Input
+              id="maxWeight"
+              type="number"
+              value={form.maxWeightKg}
+              onChange={e => setForm(f => ({ ...f, maxWeightKg: e.target.value }))}
+              placeholder="50"
+              data-testid="input-cargo-type-max-weight"
+            />
+          </div>
+          <div className="flex items-center justify-between rounded-lg border px-4 py-3 bg-muted/30">
+            <div>
+              <p className="text-sm font-medium">Aktif</p>
+            </div>
+            <Switch
+              id="isActive"
+              checked={form.isActive}
+              onCheckedChange={checked => setForm(f => ({ ...f, isActive: !!checked }))}
+              data-testid="input-cargo-type-active"
+            />
+          </div>
+        </div>
+      </MasterFormDialog>
 
       {isLoading ? (
-        <div className="text-center py-8">
-          <Loader2 className="w-5 h-5 animate-spin mx-auto text-amber-500" />
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       ) : filteredData.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <Package className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+        <div className="text-center py-12 text-muted-foreground">
+          <Package className="w-10 h-10 mx-auto mb-3 text-muted-foreground/60" />
           <p className="text-sm font-medium">
             {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada jenis kargo'}
           </p>
-          {!searchQuery && <p className="text-xs text-gray-300 mt-1">Tambahkan jenis kargo untuk mengelola tarif</p>}
+          {!searchQuery && <p className="text-xs text-muted-foreground/60 mt-1">Tambahkan jenis kargo untuk mengelola tarif</p>}
         </div>
       ) : (
         <div className="space-y-2">
           {filteredData.map((ct: CargoType) => (
             <div
               key={ct.id}
-              className={`bg-white border rounded-xl p-3 flex items-center justify-between ${ct.isActive !== false ? 'border-gray-200' : 'border-gray-100 opacity-60'}`}
+              className={`bg-card border rounded-lg p-3 flex items-center justify-between ${ct.isActive !== false ? 'border-border' : 'border-border/60 opacity-60'}`}
               data-testid={`cargo-type-${ct.id}`}
             >
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">{ct.code}</span>
-                  <span className="text-sm font-medium text-gray-800">{ct.name}</span>
-                  {ct.isActive === false && <span className="text-[10px] text-red-500 font-medium">Nonaktif</span>}
+                  <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{ct.code}</span>
+                  <span className="text-sm font-medium text-foreground">{ct.name}</span>
+                  {ct.isActive === false && <span className="text-[10px] text-destructive font-medium">Nonaktif</span>}
                 </div>
-                <div className="flex gap-3 text-[11px] text-gray-400 mt-0.5">
+                <div className="flex gap-3 text-[11px] text-muted-foreground mt-0.5">
                   {ct.description && <span>{ct.description}</span>}
                   {ct.maxWeightKg && <span>Maks. {ct.maxWeightKg} kg</span>}
                 </div>
@@ -278,7 +229,7 @@ export default function CargoTypesManager() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setDeleteConfirmId(ct.id)}
-                  className="h-7 w-7 p-0 rounded-lg hover:text-red-600 hover:bg-red-50"
+                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 hover:text-destructive"
                   data-testid={`btn-del-cargo-type-${ct.id}`}
                   aria-label="Delete"
                 >

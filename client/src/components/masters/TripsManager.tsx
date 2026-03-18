@@ -5,8 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -16,6 +15,7 @@ import { queryClient } from '@/lib/queryClient';
 import { Plus, Pencil, Trash2, Clock, Route, Grid3X3 } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
+import MasterFormDialog from './MasterFormDialog';
 import type { Trip, TripPattern, Vehicle, Layout } from '@/types';
 import TripScheduleEditor from './TripScheduleEditor';
 
@@ -313,141 +313,119 @@ export default function TripsManager() {
           </Button>
         }
       />
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent data-testid="trip-dialog">
-            <DialogHeader>
-              <DialogTitle>
-                {editingTrip ? 'Edit Trip' : 'Add New Trip'}
-              </DialogTitle>
-              <DialogDescription>
-                {editingTrip ? 'Perbarui informasi trip ini.' : 'Buat trip baru dengan memilih pola perjalanan dan kendaraan.'}
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="patternId">Trip Pattern *</Label>
-                <Select 
-                  value={formData.patternId} 
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, patternId: value }))}
-                  required
-                >
-                  <SelectTrigger data-testid="select-pattern">
-                    <SelectValue placeholder="Select trip pattern" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {patterns.filter(p => p.active).map(pattern => (
-                      <SelectItem key={pattern.id} value={pattern.id}>
-                        {pattern.name} ({pattern.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+      <MasterFormDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        title={editingTrip ? 'Edit Trip' : 'Add New Trip'}
+        description={editingTrip ? 'Perbarui informasi trip ini.' : 'Buat trip baru dengan memilih pola perjalanan dan kendaraan.'}
+        onSubmit={handleSubmit}
+        isPending={createMutation.isPending || updateMutation.isPending}
+        data-testid="trip-dialog"
+      >
+        <div className="space-y-2">
+          <Label htmlFor="patternId">Trip Pattern *</Label>
+          <Select 
+            value={formData.patternId} 
+            onValueChange={(value) => setFormData(prev => ({ ...prev, patternId: value }))}
+            required
+          >
+            <SelectTrigger data-testid="select-pattern">
+              <SelectValue placeholder="Select trip pattern" />
+            </SelectTrigger>
+            <SelectContent>
+              {patterns.filter(p => p.active).map(pattern => (
+                <SelectItem key={pattern.id} value={pattern.id}>
+                  {pattern.name} ({pattern.code})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="serviceDate">Service Date *</Label>
-                <Input
-                  id="serviceDate"
-                  type="date"
-                  value={formData.serviceDate}
-                  onChange={(e) => setFormData(prev => ({ ...prev, serviceDate: e.target.value }))}
-                  required
-                  data-testid="input-service-date"
-                />
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="serviceDate">Service Date *</Label>
+          <Input
+            id="serviceDate"
+            type="date"
+            value={formData.serviceDate}
+            onChange={(e) => setFormData(prev => ({ ...prev, serviceDate: e.target.value }))}
+            required
+            data-testid="input-service-date"
+          />
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="vehicleId">Vehicle *</Label>
-                <Select 
-                  value={formData.vehicleId} 
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, vehicleId: value }))}
-                  required
-                >
-                  <SelectTrigger data-testid="select-vehicle">
-                    <SelectValue placeholder="Select vehicle" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {vehicles.map(vehicle => (
-                      <SelectItem key={vehicle.id} value={vehicle.id}>
-                        {vehicle.code} ({vehicle.plate}) - {vehicle.capacity} seats
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="vehicleId">Vehicle *</Label>
+          <Select 
+            value={formData.vehicleId} 
+            onValueChange={(value) => setFormData(prev => ({ ...prev, vehicleId: value }))}
+            required
+          >
+            <SelectTrigger data-testid="select-vehicle">
+              <SelectValue placeholder="Select vehicle" />
+            </SelectTrigger>
+            <SelectContent>
+              {vehicles.map(vehicle => (
+                <SelectItem key={vehicle.id} value={vehicle.id}>
+                  {vehicle.code} ({vehicle.plate}) - {vehicle.capacity} seats
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="layoutId">Layout Override</Label>
-                <Select 
-                  value={formData.layoutId} 
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, layoutId: value }))}
-                >
-                  <SelectTrigger data-testid="select-layout">
-                    <SelectValue placeholder="Use vehicle default layout" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {layouts.map(layout => (
-                      <SelectItem key={layout.id} value={layout.id}>
-                        {layout.name} ({layout.rows}x{layout.cols})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="layoutId">Layout Override</Label>
+          <Select 
+            value={formData.layoutId} 
+            onValueChange={(value) => setFormData(prev => ({ ...prev, layoutId: value }))}
+          >
+            <SelectTrigger data-testid="select-layout">
+              <SelectValue placeholder="Use vehicle default layout" />
+            </SelectTrigger>
+            <SelectContent>
+              {layouts.map(layout => (
+                <SelectItem key={layout.id} value={layout.id}>
+                  {layout.name} ({layout.rows}x{layout.cols})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="capacity">Capacity *</Label>
-                  <Input
-                    id="capacity"
-                    type="number"
-                    value={formData.capacity}
-                    onChange={(e) => setFormData(prev => ({ ...prev, capacity: e.target.value }))}
-                    placeholder="e.g., 40"
-                    min="1"
-                    required
-                    data-testid="input-capacity"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status *</Label>
-                  <Select 
-                    value={formData.status} 
-                    onValueChange={(value: any) => setFormData(prev => ({ ...prev, status: value }))}
-                    required
-                  >
-                    <SelectTrigger data-testid="select-status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="scheduled">Scheduled</SelectItem>
-                      <SelectItem value="canceled">Canceled</SelectItem>
-                      <SelectItem value="closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <DialogFooter className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                  data-testid="cancel-button"
-                >
-                  Batal
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  data-testid="submit-button"
-                >
-                  {(createMutation.isPending || updateMutation.isPending) ? 'Menyimpan...' : 'Simpan'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-      </Dialog>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="capacity">Capacity *</Label>
+            <Input
+              id="capacity"
+              type="number"
+              value={formData.capacity}
+              onChange={(e) => setFormData(prev => ({ ...prev, capacity: e.target.value }))}
+              placeholder="e.g., 40"
+              min="1"
+              required
+              data-testid="input-capacity"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="status">Status *</Label>
+            <Select 
+              value={formData.status} 
+              onValueChange={(value: any) => setFormData(prev => ({ ...prev, status: value }))}
+              required
+            >
+              <SelectTrigger data-testid="select-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="scheduled">Scheduled</SelectItem>
+                <SelectItem value="canceled">Canceled</SelectItem>
+                <SelectItem value="closed">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </MasterFormDialog>
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
@@ -612,14 +590,17 @@ export default function TripsManager() {
 
       {/* Scheduling Dialog */}
       <Dialog open={isSchedulingDialogOpen} onOpenChange={setIsSchedulingDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto" data-testid="scheduling-dialog">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-4xl max-h-[92vh] flex flex-col p-0 gap-0" data-testid="scheduling-dialog">
+          <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
             <DialogTitle>
               Manage Schedule - {schedulingTrip && getPatternName(schedulingTrip.patternId)}
             </DialogTitle>
+            <DialogDescription>
+              Manage arrival and departure times for each stop in this trip.
+            </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-6">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             {schedulingTrip && (
               <div className="bg-accent/10 border border-accent/20 rounded-lg p-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -649,6 +630,9 @@ export default function TripsManager() {
                 onClose={() => setIsSchedulingDialogOpen(false)}
               />
             )}
+          </div>
+          <div className="px-5 py-4 border-t shrink-0 bg-background flex justify-end">
+            <Button variant="outline" onClick={() => setIsSchedulingDialogOpen(false)}>Tutup</Button>
           </div>
         </DialogContent>
       </Dialog>

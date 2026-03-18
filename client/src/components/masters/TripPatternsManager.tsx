@@ -13,9 +13,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useToast } from '@/hooks/use-toast';
 import { tripPatternsApi, layoutsApi, stopsApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, MapPin } from 'lucide-react';
+import { Plus, Pencil, Trash2, MapPin, Loader2 } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
+import MasterFormDialog from './MasterFormDialog';
 import type { TripPattern, Layout, Stop, PatternStop } from '@/types';
 
 interface TripPatternFormData {
@@ -324,217 +325,195 @@ export default function TripPatternsManager() {
           </Button>
         }
       />
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent data-testid="pattern-dialog">
-            <DialogHeader>
-              <DialogTitle>
-                {editingPattern ? 'Edit Trip Pattern' : 'Add New Trip Pattern'}
-              </DialogTitle>
-              <DialogDescription>
-                {editingPattern ? 'Ubah informasi pola rute perjalanan.' : 'Tambah pola rute perjalanan baru.'}
-              </DialogDescription>
-            </DialogHeader>
-            <form id="pattern-form" onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="code">Pattern Code *</Label>
-                  <Input
-                    id="code"
-                    value={formData.code}
-                    onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
-                    placeholder="e.g., AB_via_C"
-                    required
-                    data-testid="input-code"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="name">Pattern Name *</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g., Jakarta to Bandung via Purwakarta"
-                    required
-                    data-testid="input-name"
-                  />
-                </div>
-              </div>
+      <MasterFormDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        title={editingPattern ? 'Edit Trip Pattern' : 'Add New Trip Pattern'}
+        description={editingPattern ? 'Ubah informasi pola rute perjalanan.' : 'Tambah pola rute perjalanan baru.'}
+        onSubmit={handleSubmit}
+        isPending={createMutation.isPending || updateMutation.isPending}
+        data-testid="pattern-dialog"
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="code">Pattern Code *</Label>
+            <Input
+              id="code"
+              value={formData.code}
+              onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
+              placeholder="e.g., AB_via_C"
+              required
+              data-testid="input-code"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="name">Pattern Name *</Label>
+            <Input
+              id="name"
+              value={formData.name}
+              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="e.g., Jakarta to Bandung via Purwakarta"
+              required
+              data-testid="input-name"
+            />
+          </div>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="vehicleClass">Vehicle Class</Label>
-                <Input
-                  id="vehicleClass"
-                  value={formData.vehicleClass}
-                  onChange={(e) => setFormData(prev => ({ ...prev, vehicleClass: e.target.value }))}
-                  placeholder="e.g., standard, executive"
-                  data-testid="input-vehicle-class"
-                />
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="vehicleClass">Vehicle Class</Label>
+          <Input
+            id="vehicleClass"
+            value={formData.vehicleClass}
+            onChange={(e) => setFormData(prev => ({ ...prev, vehicleClass: e.target.value }))}
+            placeholder="e.g., standard, executive"
+            data-testid="input-vehicle-class"
+          />
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="defaultLayoutId">Default Layout</Label>
-                <Select 
-                  value={formData.defaultLayoutId} 
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, defaultLayoutId: value }))}
-                >
-                  <SelectTrigger data-testid="select-layout">
-                    <SelectValue placeholder="Select default layout" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {layouts.map(layout => (
-                      <SelectItem key={layout.id} value={layout.id}>
-                        {layout.name} ({layout.rows}x{layout.cols})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="defaultLayoutId">Default Layout</Label>
+          <Select 
+            value={formData.defaultLayoutId} 
+            onValueChange={(value) => setFormData(prev => ({ ...prev, defaultLayoutId: value }))}
+          >
+            <SelectTrigger data-testid="select-layout">
+              <SelectValue placeholder="Select default layout" />
+            </SelectTrigger>
+            <SelectContent>
+              {layouts.map(layout => (
+                <SelectItem key={layout.id} value={layout.id}>
+                  {layout.name} ({layout.rows}x{layout.cols})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="tags">Tags (comma separated)</Label>
-                <Input
-                  id="tags"
-                  value={formData.tags}
-                  onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
-                  placeholder="e.g., intercity, express, overnight"
-                  data-testid="input-tags"
-                />
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="tags">Tags (comma separated)</Label>
+          <Input
+            id="tags"
+            value={formData.tags}
+            onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
+            placeholder="e.g., intercity, express, overnight"
+            data-testid="input-tags"
+          />
+        </div>
 
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="active"
-                  checked={formData.active}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, active: checked }))}
-                  data-testid="switch-active"
-                />
-                <Label htmlFor="active">Active pattern</Label>
-              </div>
-            </form>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsDialogOpen(false)}
-                data-testid="cancel-button"
-              >
-                Batal
-              </Button>
-              <Button
-                type="submit"
-                form="pattern-form"
-                disabled={createMutation.isPending || updateMutation.isPending}
-                data-testid="submit-button"
-              >
-                {(createMutation.isPending || updateMutation.isPending) ? 'Menyimpan...' : 'Simpan'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-      </Dialog>
+        <div className="flex items-center justify-between rounded-lg border px-4 py-3 bg-muted/30">
+          <div>
+            <p className="text-sm font-medium">Active pattern</p>
+          </div>
+          <Switch
+            id="active"
+            checked={formData.active}
+            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, active: checked }))}
+            data-testid="switch-active"
+          />
+        </div>
+      </MasterFormDialog>
 
       {/* Pattern Stops Management Dialog */}
       <Dialog open={isStopsDialogOpen} onOpenChange={setIsStopsDialogOpen}>
-        <DialogContent className="max-w-3xl" data-testid="stops-dialog">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-3xl max-h-[92vh] flex flex-col p-0 gap-0" data-testid="stops-dialog">
+          <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
             <DialogTitle>
               Manage Stops - {selectedPatternForStops?.name}
             </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
             <DialogDescription>
               Kelola daftar pemberhentian untuk pola rute ini.
             </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             <div className="flex justify-between items-center">
-              <Label>Stop Sequence</Label>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stop Sequence</Label>
               <Button onClick={addPatternStop} size="sm" data-testid="add-pattern-stop">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Stop
               </Button>
             </div>
             
-            {patternStops.map((stop, index) => (
-              <div key={index} className="flex flex-col space-y-2 p-3 border rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <div className="w-12 text-center font-mono font-bold">
-                    {stop.stopSequence}
-                  </div>
-                  <div className="flex-1">
-                    <Select 
-                      value={stop.stopId} 
-                      onValueChange={(value) => updatePatternStop(index, 'stopId', value)}
+            <div className="space-y-3">
+              {patternStops.map((stop, index) => (
+                <div key={index} className="flex flex-col space-y-2 p-3 border rounded-lg bg-card">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-12 text-center font-mono font-bold text-primary">
+                      {stop.stopSequence}
+                    </div>
+                    <div className="flex-1">
+                      <Select 
+                        value={stop.stopId} 
+                        onValueChange={(value) => updatePatternStop(index, 'stopId', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select stop" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {stops.map(stopOption => (
+                            <SelectItem key={stopOption.id} value={stopOption.id}>
+                              {stopOption.name} ({stopOption.code})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="w-32">
+                      <Input
+                        type="number"
+                        value={stop.dwellSeconds}
+                        onChange={(e) => updatePatternStop(index, 'dwellSeconds', parseInt(e.target.value, 10) || 0)}
+                        placeholder="Dwell (sec)"
+                        min="0"
+                      />
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => removePatternStop(index)}
+                      data-testid={`remove-stop-${index}`}
+                      className="hover:bg-destructive/10 hover:text-destructive"
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select stop" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {stops.map(stopOption => (
-                          <SelectItem key={stopOption.id} value={stopOption.id}>
-                            {stopOption.name} ({stopOption.code})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <div className="w-32">
-                    <Input
-                      type="number"
-                      value={stop.dwellSeconds}
-                      onChange={(e) => updatePatternStop(index, 'dwellSeconds', parseInt(e.target.value, 10) || 0)}
-                      placeholder="Dwell (sec)"
-                      min="0"
-                    />
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => removePatternStop(index)}
-                    data-testid={`remove-stop-${index}`}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-                <div className="flex items-center space-x-6 ml-14">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id={`boarding-${index}`}
-                      checked={stop.boardingAllowed !== false}
-                      onChange={(e) => updatePatternStop(index, 'boardingAllowed', e.target.checked)}
-                      className="rounded border-input"
-                      data-testid={`checkbox-boarding-${index}`}
-                    />
-                    <label htmlFor={`boarding-${index}`} className="text-sm font-medium">
-                      Allow Pickup (Boarding)
-                    </label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id={`alighting-${index}`}
-                      checked={stop.alightingAllowed !== false}
-                      onChange={(e) => updatePatternStop(index, 'alightingAllowed', e.target.checked)}
-                      className="rounded border-input"
-                      data-testid={`checkbox-alighting-${index}`}
-                    />
-                    <label htmlFor={`alighting-${index}`} className="text-sm font-medium">
-                      Allow Drop (Alighting)
-                    </label>
+                  <div className="flex items-center space-x-6 ml-14">
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id={`boarding-${index}`}
+                        checked={stop.boardingAllowed !== false}
+                        onCheckedChange={(checked) => updatePatternStop(index, 'boardingAllowed', checked)}
+                        data-testid={`switch-boarding-${index}`}
+                      />
+                      <Label htmlFor={`boarding-${index}`} className="text-sm font-medium cursor-pointer">
+                        Allow Pickup
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id={`alighting-${index}`}
+                        checked={stop.alightingAllowed !== false}
+                        onCheckedChange={(checked) => updatePatternStop(index, 'alightingAllowed', checked)}
+                        data-testid={`switch-alighting-${index}`}
+                      />
+                      <Label htmlFor={`alighting-${index}`} className="text-sm font-medium cursor-pointer">
+                        Allow Drop
+                      </Label>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsStopsDialogOpen(false)}
-              >
-                Batal
-              </Button>
-              <Button onClick={savePatternStops} data-testid="save-pattern-stops">
-                Simpan
-              </Button>
-            </DialogFooter>
+              ))}
+            </div>
+          </div>
+          <div className="px-5 py-4 border-t shrink-0 bg-background flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsStopsDialogOpen(false)}
+            >
+              Batal
+            </Button>
+            <Button onClick={savePatternStops} data-testid="save-pattern-stops">
+              Simpan
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

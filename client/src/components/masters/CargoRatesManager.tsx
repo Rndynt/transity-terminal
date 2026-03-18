@@ -4,21 +4,13 @@ import { cargoRatesApi, cargoTypesApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import {
-  DollarSign, Plus, Pencil, Trash2, Loader2, ArrowRight, Search, X
+  DollarSign, Plus, Pencil, Trash2, ArrowRight
 } from 'lucide-react';
 import type { CargoType, CargoRate, Stop, TripPattern, Trip } from '@shared/schema';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -27,6 +19,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import MasterPageHeader from './MasterPageHeader';
+import MasterFormDialog from './MasterFormDialog';
 
 const fmt = (amount: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
@@ -179,284 +173,239 @@ export default function CargoRatesManager() {
 
   return (
     <div data-testid="cargo-rates-manager" className="space-y-4">
-      <div className="space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-semibold text-foreground">Tarif Kargo</h3>
-              <span className="text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
-                {filteredData.length}
-              </span>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            onClick={() => { resetForm(); setShowForm(true); }}
-            data-testid="btn-add-cargo-rate"
-          >
+      <MasterPageHeader
+        title="Tarif Kargo"
+        description="Kelola tarif pengiriman kargo berdasarkan jenis dan rute"
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Cari jenis, rute, atau scope..."
+        count={filteredData.length}
+        action={
+          <Button onClick={() => { resetForm(); setShowForm(true); }} data-testid="btn-add-cargo-rate">
             <Plus className="w-4 h-4 mr-2" /> Tambah
           </Button>
-        </div>
+        }
+      />
 
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Cari jenis, rute, atau scope..."
-              className="pl-9 pr-9 h-9"
-              data-testid="master-search-input"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                data-testid="master-search-clear"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-          <Select value={filterTypeId} onValueChange={setFilterTypeId}>
-            <SelectTrigger className="w-full sm:w-[180px] h-9" data-testid="filter-rate-type">
-              <SelectValue placeholder="Semua Jenis" />
+      <div className="flex justify-end">
+        <Select value={filterTypeId} onValueChange={setFilterTypeId}>
+          <SelectTrigger className="w-full sm:w-[180px] h-9" data-testid="filter-rate-type">
+            <SelectValue placeholder="Semua Jenis" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Jenis</SelectItem>
+            {cargoTypes.map(ct => (
+              <SelectItem key={ct.id} value={ct.id}>{ct.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <MasterFormDialog
+        open={showForm}
+        onOpenChange={(open) => !open && resetForm()}
+        title={editId ? 'Edit Tarif' : 'Tambah Tarif'}
+        description="Konfigurasi tarif kargo berdasarkan jenis dan jangkauan rute."
+        onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
+        isPending={isPending}
+        data-testid="cargo-rate-form-dialog"
+      >
+        <div className="space-y-2">
+          <Label>Jenis Kargo *</Label>
+          <Select
+            value={form.cargoTypeId}
+            onValueChange={v => setForm(f => ({ ...f, cargoTypeId: v }))}
+          >
+            <SelectTrigger data-testid="select-rate-cargo-type">
+              <SelectValue placeholder="Pilih jenis..." />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Jenis</SelectItem>
               {cargoTypes.map(ct => (
-                <SelectItem key={ct.id} value={ct.id}>{ct.name}</SelectItem>
+                <SelectItem key={ct.id} value={ct.id}>{ct.name} ({ct.code})</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
-      </div>
 
-      <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
-        <DialogContent data-testid="cargo-rate-form-dialog">
-          <DialogHeader>
-            <DialogTitle>{editId ? 'Edit Tarif' : 'Tambah Tarif'}</DialogTitle>
-            <DialogDescription>
-              Konfigurasi tarif kargo berdasarkan jenis dan jangkauan rute.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Jenis Kargo *</Label>
-              <div className="col-span-3">
-                <Select
-                  value={form.cargoTypeId}
-                  onValueChange={v => setForm(f => ({ ...f, cargoTypeId: v }))}
-                >
-                  <SelectTrigger data-testid="select-rate-cargo-type">
-                    <SelectValue placeholder="Pilih jenis..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cargoTypes.map(ct => (
-                      <SelectItem key={ct.id} value={ct.id}>{ct.name} ({ct.code})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Scope</Label>
-              <div className="col-span-3">
-                <Select
-                  value={form.scope}
-                  onValueChange={v => setForm(f => ({ ...f, scope: v, scopeRefId: '' }))}
-                >
-                  <SelectTrigger data-testid="select-rate-scope">
-                    <SelectValue placeholder="Pilih scope..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="global">Global</SelectItem>
-                    <SelectItem value="pattern">Pola Trip</SelectItem>
-                    <SelectItem value="trip">Trip Spesifik</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {form.scope === 'pattern' && (
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">Pola Trip</Label>
-                <div className="col-span-3">
-                  <Select
-                    value={form.scopeRefId}
-                    onValueChange={v => setForm(f => ({ ...f, scopeRefId: v }))}
-                  >
-                    <SelectTrigger data-testid="select-rate-pattern">
-                      <SelectValue placeholder="Pilih pola..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {patterns.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-            {form.scope === 'trip' && (
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">Trip</Label>
-                <div className="col-span-3">
-                  <Select
-                    value={form.scopeRefId}
-                    onValueChange={v => setForm(f => ({ ...f, scopeRefId: v }))}
-                  >
-                    <SelectTrigger data-testid="select-rate-trip">
-                      <SelectValue placeholder="Pilih trip..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {trips.map(t => (
-                        <SelectItem key={t.id} value={t.id}>{t.id.slice(0,8)}...</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Asal</Label>
-              <div className="col-span-3">
-                <Select
-                  value={form.originStopId || 'all'}
-                  onValueChange={v => setForm(f => ({ ...f, originStopId: v === 'all' ? '' : v }))}
-                >
-                  <SelectTrigger data-testid="select-rate-origin">
-                    <SelectValue placeholder="Semua asal" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua asal</SelectItem>
-                    {allStops.map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Tujuan</Label>
-              <div className="col-span-3">
-                <Select
-                  value={form.destinationStopId || 'all'}
-                  onValueChange={v => setForm(f => ({ ...f, destinationStopId: v === 'all' ? '' : v }))}
-                >
-                  <SelectTrigger data-testid="select-rate-dest">
-                    <SelectValue placeholder="Semua tujuan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua tujuan</SelectItem>
-                    {allStops.map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="pricePerKg" className="text-right">Harga/kg *</Label>
-              <Input
-                id="pricePerKg"
-                type="number"
-                value={form.pricePerKg}
-                onChange={e => setForm(f => ({ ...f, pricePerKg: e.target.value }))}
-                placeholder="15000"
-                className="col-span-3"
-                data-testid="input-rate-price-per-kg"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="pricePerLeg" className="text-right">Harga/leg</Label>
-              <Input
-                id="pricePerLeg"
-                type="number"
-                value={form.pricePerLeg}
-                onChange={e => setForm(f => ({ ...f, pricePerLeg: e.target.value }))}
-                placeholder="5000"
-                className="col-span-3"
-                data-testid="input-rate-price-per-leg"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="minCharge" className="text-right">Min. Biaya</Label>
-              <Input
-                id="minCharge"
-                type="number"
-                value={form.minCharge}
-                onChange={e => setForm(f => ({ ...f, minCharge: e.target.value }))}
-                placeholder="25000"
-                className="col-span-3"
-                data-testid="input-rate-min-charge"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="isActiveRate" className="text-right cursor-pointer">Aktif</Label>
-              <div className="col-span-3">
-                <Checkbox
-                  id="isActiveRate"
-                  checked={form.isActive}
-                  onCheckedChange={checked => setForm(f => ({ ...f, isActive: !!checked }))}
-                  data-testid="input-rate-active"
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={resetForm} data-testid="btn-cancel-cargo-rate">
-              Batal
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isPending || !form.cargoTypeId || !form.pricePerKg}
-              data-testid="btn-save-cargo-rate"
+        <div className="space-y-2">
+          <Label>Scope</Label>
+          <Select
+            value={form.scope}
+            onValueChange={v => setForm(f => ({ ...f, scope: v, scopeRefId: '' }))}
+          >
+            <SelectTrigger data-testid="select-rate-scope">
+              <SelectValue placeholder="Pilih scope..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="global">Global</SelectItem>
+              <SelectItem value="pattern">Pola Trip</SelectItem>
+              <SelectItem value="trip">Trip Spesifik</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {form.scope === 'pattern' && (
+          <div className="space-y-2">
+            <Label>Pola Trip</Label>
+            <Select
+              value={form.scopeRefId}
+              onValueChange={v => setForm(f => ({ ...f, scopeRefId: v }))}
             >
-              {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Simpan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              <SelectTrigger data-testid="select-rate-pattern">
+                <SelectValue placeholder="Pilih pola..." />
+              </SelectTrigger>
+              <SelectContent>
+                {patterns.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {form.scope === 'trip' && (
+          <div className="space-y-2">
+            <Label>Trip</Label>
+            <Select
+              value={form.scopeRefId}
+              onValueChange={v => setForm(f => ({ ...f, scopeRefId: v }))}
+            >
+              <SelectTrigger data-testid="select-rate-trip">
+                <SelectValue placeholder="Pilih trip..." />
+              </SelectTrigger>
+              <SelectContent>
+                {trips.map(t => (
+                  <SelectItem key={t.id} value={t.id}>{t.id.slice(0, 8)}...</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Asal</Label>
+            <Select
+              value={form.originStopId || 'all'}
+              onValueChange={v => setForm(f => ({ ...f, originStopId: v === 'all' ? '' : v }))}
+            >
+              <SelectTrigger data-testid="select-rate-origin">
+                <SelectValue placeholder="Semua asal" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua asal</SelectItem>
+                {allStops.map(s => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Tujuan</Label>
+            <Select
+              value={form.destinationStopId || 'all'}
+              onValueChange={v => setForm(f => ({ ...f, destinationStopId: v === 'all' ? '' : v }))}
+            >
+              <SelectTrigger data-testid="select-rate-dest">
+                <SelectValue placeholder="Semua tujuan" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua tujuan</SelectItem>
+                {allStops.map(s => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="pricePerKg">Harga/kg *</Label>
+            <Input
+              id="pricePerKg"
+              type="number"
+              value={form.pricePerKg}
+              onChange={e => setForm(f => ({ ...f, pricePerKg: e.target.value }))}
+              placeholder="15000"
+              data-testid="input-rate-price-per-kg"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pricePerLeg">Harga/leg</Label>
+            <Input
+              id="pricePerLeg"
+              type="number"
+              value={form.pricePerLeg}
+              onChange={e => setForm(f => ({ ...f, pricePerLeg: e.target.value }))}
+              placeholder="5000"
+              data-testid="input-rate-price-per-leg"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="minCharge">Min. Biaya</Label>
+            <Input
+              id="minCharge"
+              type="number"
+              value={form.minCharge}
+              onChange={e => setForm(f => ({ ...f, minCharge: e.target.value }))}
+              placeholder="25000"
+              data-testid="input-rate-min-charge"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border px-4 py-3 bg-muted/30">
+          <div>
+            <p className="text-sm font-medium">Aktif</p>
+          </div>
+          <Switch
+            id="isActiveRate"
+            checked={form.isActive}
+            onCheckedChange={checked => setForm(f => ({ ...f, isActive: checked }))}
+            data-testid="input-rate-active"
+          />
+        </div>
+      </MasterFormDialog>
 
       {isLoading ? (
         <div className="text-center py-8">
-          <Loader2 className="w-5 h-5 animate-spin mx-auto text-amber-500" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
         </div>
       ) : filteredData.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <DollarSign className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+        <div className="text-center py-12 text-muted-foreground">
+          <DollarSign className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" />
           <p className="text-sm font-medium">
             {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada tarif kargo'}
           </p>
-          {!searchQuery && <p className="text-xs text-gray-300 mt-1">Tambahkan tarif berdasarkan jenis dan rute</p>}
+          {!searchQuery && <p className="text-xs text-muted-foreground mt-1">Tambahkan tarif berdasarkan jenis dan rute</p>}
         </div>
       ) : (
         <div className="space-y-2">
           {filteredData.map((cr: CargoRate) => (
             <div
               key={cr.id}
-              className={`bg-white border rounded-xl p-3 ${cr.isActive !== false ? 'border-gray-200' : 'border-gray-100 opacity-60'}`}
+              className={`bg-card border rounded-lg p-3 ${cr.isActive !== false ? 'border-border' : 'border-border/60 opacity-60'}`}
               data-testid={`cargo-rate-${cr.id}`}
             >
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">{getTypeCode(cr.cargoTypeId)}</span>
-                    <span className="text-sm font-medium text-gray-800">{getTypeName(cr.cargoTypeId)}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">{SCOPE_LABELS[cr.scope || 'global']}</span>
+                    <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{getTypeCode(cr.cargoTypeId)}</span>
+                    <span className="text-sm font-medium text-foreground">{getTypeName(cr.cargoTypeId)}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">{SCOPE_LABELS[cr.scope || 'global']}</span>
                     {cr.scopeRefId && (
-                      <span className="text-[10px] text-gray-400">{getScopeRefName(cr.scope, cr.scopeRefId)}</span>
+                      <span className="text-[10px] text-muted-foreground">{getScopeRefName(cr.scope, cr.scopeRefId)}</span>
                     )}
-                    {cr.isActive === false && <span className="text-[10px] text-red-500 font-medium">Nonaktif</span>}
+                    {cr.isActive === false && <span className="text-[10px] text-destructive font-medium">Nonaktif</span>}
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                     <span>{getStopName(cr.originStopId)}</span>
-                    <ArrowRight className="w-3 h-3 text-gray-300" />
+                    <ArrowRight className="w-3 h-3 text-muted-foreground/40" />
                     <span>{getStopName(cr.destinationStopId)}</span>
                   </div>
-                  <div className="flex gap-3 text-[11px] text-gray-500 mt-1">
-                    <span className="font-semibold text-gray-700">{fmt(parseFloat(cr.pricePerKg))}/kg</span>
+                  <div className="flex gap-3 text-[11px] text-muted-foreground mt-1">
+                    <span className="font-semibold text-foreground">{fmt(parseFloat(cr.pricePerKg))}/kg</span>
                     {parseFloat(cr.pricePerLeg || '0') > 0 && <span>{fmt(parseFloat(cr.pricePerLeg))}/leg</span>}
                     {parseFloat(cr.minCharge) > 0 && <span>Min. {fmt(parseFloat(cr.minCharge))}</span>}
                   </div>
@@ -470,17 +419,17 @@ export default function CargoRatesManager() {
                     data-testid={`btn-edit-cargo-rate-${cr.id}`}
                     aria-label="Edit"
                   >
-                    <Pencil className="w-3.5 h-3.5" />
+                    <Pencil className="w-3.5 h-3.5 text-primary" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => setDeleteConfirmId(cr.id)}
-                    className="h-7 w-7 p-0 rounded-lg hover:text-red-600 hover:bg-red-50"
+                    className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 hover:text-destructive"
                     data-testid={`btn-del-cargo-rate-${cr.id}`}
                     aria-label="Delete"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-3.5 h-3.5 text-destructive" />
                   </Button>
                 </div>
               </div>

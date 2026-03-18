@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import MasterFormDialog from './MasterFormDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -273,191 +273,170 @@ export default function PriceRulesManager() {
           </Button>
         }
       />
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-2xl" data-testid="price-rule-dialog">
-            <DialogHeader>
-              <DialogTitle>
-                {editingRule ? 'Edit Price Rule' : 'Add New Price Rule'}
-              </DialogTitle>
-              <DialogDescription>
-                {editingRule ? 'Perbarui aturan harga yang ada.' : 'Buat aturan harga baru untuk pola perjalanan atau trip tertentu.'}
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="scope">Scope *</Label>
-                <Select 
-                  value={formData.scope} 
-                  onValueChange={handleScopeChange}
-                  required
-                >
-                  <SelectTrigger data-testid="select-scope">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pattern">Pattern Level</SelectItem>
-                    <SelectItem value="trip">Trip Level</SelectItem>
-                    <SelectItem value="leg">Leg Level</SelectItem>
-                    <SelectItem value="time">Time Based</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+      <MasterFormDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        title={editingRule ? 'Edit Price Rule' : 'Add New Price Rule'}
+        description={editingRule ? 'Perbarui aturan harga yang ada.' : 'Buat aturan harga baru untuk pola perjalanan atau trip tertentu.'}
+        onSubmit={handleSubmit}
+        isPending={createMutation.isPending || updateMutation.isPending}
+        size="lg"
+        data-testid="price-rule-dialog"
+      >
+        <div className="space-y-2">
+          <Label htmlFor="scope">Scope *</Label>
+          <Select 
+            value={formData.scope} 
+            onValueChange={handleScopeChange}
+            required
+          >
+            <SelectTrigger data-testid="select-scope">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pattern">Pattern Level</SelectItem>
+              <SelectItem value="trip">Trip Level</SelectItem>
+              <SelectItem value="leg">Leg Level</SelectItem>
+              <SelectItem value="time">Time Based</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-              {formData.scope === 'pattern' && (
-                <div className="space-y-2">
-                  <Label htmlFor="patternId">Trip Pattern *</Label>
-                  <Select 
-                    value={formData.patternId} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, patternId: value }))}
-                    required
-                  >
-                    <SelectTrigger data-testid="select-pattern">
-                      <SelectValue placeholder="Select pattern" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {patterns.map(pattern => (
-                        <SelectItem key={pattern.id} value={pattern.id}>
-                          {pattern.name} ({pattern.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+        {formData.scope === 'pattern' && (
+          <div className="space-y-2">
+            <Label htmlFor="patternId">Trip Pattern *</Label>
+            <Select 
+              value={formData.patternId} 
+              onValueChange={(value) => setFormData(prev => ({ ...prev, patternId: value }))}
+              required
+            >
+              <SelectTrigger data-testid="select-pattern">
+                <SelectValue placeholder="Select pattern" />
+              </SelectTrigger>
+              <SelectContent>
+                {patterns.map(pattern => (
+                  <SelectItem key={pattern.id} value={pattern.id}>
+                    {pattern.name} ({pattern.code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
-              {formData.scope === 'trip' && (
-                <div className="space-y-2">
-                  <Label htmlFor="tripId">Trip *</Label>
-                  <Select 
-                    value={formData.tripId} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, tripId: value }))}
-                    required
-                  >
-                    <SelectTrigger data-testid="select-trip">
-                      <SelectValue placeholder="Select trip" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {trips.slice(0, 20).map(trip => (
-                        <SelectItem key={trip.id} value={trip.id}>
-                          Trip {trip.id.slice(-8)} ({trip.serviceDate})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+        {formData.scope === 'trip' && (
+          <div className="space-y-2">
+            <Label htmlFor="tripId">Trip *</Label>
+            <Select 
+              value={formData.tripId} 
+              onValueChange={(value) => setFormData(prev => ({ ...prev, tripId: value }))}
+              required
+            >
+              <SelectTrigger data-testid="select-trip">
+                <SelectValue placeholder="Select trip" />
+              </SelectTrigger>
+              <SelectContent>
+                {trips.slice(0, 20).map(trip => (
+                  <SelectItem key={trip.id} value={trip.id}>
+                    Trip {trip.id.slice(-8)} ({trip.serviceDate})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
-              {formData.scope === 'leg' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="tripId">Trip *</Label>
-                    <Select 
-                      value={formData.tripId} 
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, tripId: value }))}
-                      required
-                    >
-                      <SelectTrigger data-testid="select-trip-leg">
-                        <SelectValue placeholder="Select trip" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {trips.slice(0, 20).map(trip => (
-                          <SelectItem key={trip.id} value={trip.id}>
-                            Trip {trip.id.slice(-8)} ({trip.serviceDate})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="legIndex">Leg Index *</Label>
-                    <Input
-                      id="legIndex"
-                      type="number"
-                      value={formData.legIndex}
-                      onChange={(e) => setFormData(prev => ({ ...prev, legIndex: e.target.value }))}
-                      placeholder="e.g., 1"
-                      min="1"
-                      required
-                      data-testid="input-leg-index"
-                    />
-                  </div>
-                </div>
-              )}
+        {formData.scope === 'leg' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="tripId">Trip *</Label>
+              <Select 
+                value={formData.tripId} 
+                onValueChange={(value) => setFormData(prev => ({ ...prev, tripId: value }))}
+                required
+              >
+                <SelectTrigger data-testid="select-trip-leg">
+                  <SelectValue placeholder="Select trip" />
+                </SelectTrigger>
+                <SelectContent>
+                  {trips.slice(0, 20).map(trip => (
+                    <SelectItem key={trip.id} value={trip.id}>
+                      Trip {trip.id.slice(-8)} ({trip.serviceDate})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="legIndex">Leg Index *</Label>
+              <Input
+                id="legIndex"
+                type="number"
+                value={formData.legIndex}
+                onChange={(e) => setFormData(prev => ({ ...prev, legIndex: e.target.value }))}
+                placeholder="e.g., 1"
+                min="1"
+                required
+                data-testid="input-leg-index"
+              />
+            </div>
+          </div>
+        )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="validFrom">Valid From</Label>
-                  <DatePicker
-                    id="validFrom"
-                    date={formData.validFrom}
-                    onDateChange={(date) => setFormData(prev => ({ ...prev, validFrom: date }))}
-                    placeholder="Select start date"
-                    data-testid="input-valid-from"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="validTo">Valid To</Label>
-                  <DatePicker
-                    id="validTo"
-                    date={formData.validTo}
-                    onDateChange={(date) => setFormData(prev => ({ ...prev, validTo: date }))}
-                    placeholder="Select end date"
-                    data-testid="input-valid-to"
-                  />
-                </div>
-              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="validFrom">Valid From</Label>
+            <DatePicker
+              id="validFrom"
+              date={formData.validFrom}
+              onDateChange={(date) => setFormData(prev => ({ ...prev, validFrom: date }))}
+              placeholder="Select start date"
+              data-testid="input-valid-from"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="validTo">Valid To</Label>
+            <DatePicker
+              id="validTo"
+              date={formData.validTo}
+              onDateChange={(date) => setFormData(prev => ({ ...prev, validTo: date }))}
+              placeholder="Select end date"
+              data-testid="input-valid-to"
+            />
+          </div>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="priority">Priority *</Label>
-                <Input
-                  id="priority"
-                  type="number"
-                  value={formData.priority}
-                  onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
-                  placeholder="e.g., 1"
-                  min="0"
-                  required
-                  data-testid="input-priority"
-                />
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="priority">Priority *</Label>
+          <Input
+            id="priority"
+            type="number"
+            value={formData.priority}
+            onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
+            placeholder="e.g., 1"
+            min="0"
+            required
+            data-testid="input-priority"
+          />
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="ruleJson">Rule Configuration (JSON) *</Label>
-                <Textarea
-                  id="ruleJson"
-                  value={formData.ruleJson}
-                  onChange={(e) => setFormData(prev => ({ ...prev, ruleJson: e.target.value }))}
-                  placeholder="Enter JSON rule configuration"
-                  rows={8}
-                  className="font-mono text-sm"
-                  required
-                  data-testid="input-rule-json"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Example: {"{ \"basePricePerLeg\": 25000, \"currency\": \"IDR\", \"multiplier\": 1.0 }"}
-                </p>
-              </div>
-
-              <DialogFooter className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                  data-testid="cancel-button"
-                >
-                  Batal
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  data-testid="submit-button"
-                >
-                  {(createMutation.isPending || updateMutation.isPending) ? 'Menyimpan...' : 'Simpan'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-      </Dialog>
+        <div className="space-y-2">
+          <Label htmlFor="ruleJson">Rule Configuration (JSON) *</Label>
+          <Textarea
+            id="ruleJson"
+            value={formData.ruleJson}
+            onChange={(e) => setFormData(prev => ({ ...prev, ruleJson: e.target.value }))}
+            placeholder="Enter JSON rule configuration"
+            rows={8}
+            className="font-mono text-sm"
+            required
+            data-testid="input-rule-json"
+          />
+          <p className="text-xs text-muted-foreground">
+            Example: {"{ \"basePricePerLeg\": 25000, \"currency\": \"IDR\", \"multiplier\": 1.0 }"}
+          </p>
+        </div>
+      </MasterFormDialog>
 
       <DeleteConfirmDialog
         open={!!deleteTarget}

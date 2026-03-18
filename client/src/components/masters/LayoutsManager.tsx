@@ -364,8 +364,8 @@ export default function LayoutsManager() {
         }
       />
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="w-[800px] h-[700px] max-w-none" data-testid="layout-dialog">
-            <DialogHeader>
+          <DialogContent className="sm:max-w-4xl max-h-[92vh] flex flex-col p-0 gap-0" data-testid="layout-dialog">
+            <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
               <DialogTitle>
                 {editingLayout ? 'Edit Layout' : 'Add New Layout'}
               </DialogTitle>
@@ -373,7 +373,7 @@ export default function LayoutsManager() {
                 {editingLayout ? 'Ubah informasi layout kendaraan.' : 'Tambah konfigurasi layout kursi kendaraan baru.'}
               </DialogDescription>
             </DialogHeader>
-            <div className="overflow-y-auto flex-1 px-1">
+            <div className="flex-1 overflow-y-auto px-5 py-4">
               <form id="layout-form" onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Layout Name *</Label>
@@ -640,7 +640,7 @@ export default function LayoutsManager() {
               )}
               </form>
             </div>
-            <DialogFooter>
+            <DialogFooter className="px-5 py-4 border-t shrink-0 bg-background gap-2 sm:gap-0">
               <Button
                 type="button"
                 variant="outline"
