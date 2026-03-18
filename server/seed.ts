@@ -413,6 +413,31 @@ export async function seedData() {
         { stopSequence: 2, arriveAt: "21:00", departAt: null    },
       ],
     },
+    // SBY → JKT: malam 21:00 (tiba siang 12:00 esok hari)
+    {
+      patternId: patternSbyJkt.id, code: "SBY-JKT-2100", name: "Surabaya→Jakarta 21:00 Malam",
+      vehicleId: busEk01.id, layoutId: layoutEkonomi.id, capacity: 40,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "21:00" },
+        { stopSequence: 2, arriveAt: "23:00", departAt: "23:30" },
+        { stopSequence: 3, arriveAt: "00:30", departAt: "01:00" },
+        { stopSequence: 4, arriveAt: "04:30", departAt: "05:00" },
+        { stopSequence: 5, arriveAt: "08:30", departAt: "09:00" },
+        { stopSequence: 6, arriveAt: "12:00", departAt: null    },
+      ],
+    },
+    // YGY → JKT: malam 21:00 Eksekutif (tiba siang 11:30 esok hari)
+    {
+      patternId: patternYgyJkt.id, code: "YGY-JKT-2100", name: "Yogyakarta→Jakarta 21:00 Eksekutif",
+      vehicleId: busEx01.id, layoutId: layoutEksekutif.id, capacity: 24,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "21:00" },
+        { stopSequence: 2, arriveAt: "23:30", departAt: "00:00" },
+        { stopSequence: 3, arriveAt: "03:30", departAt: "04:00" },
+        { stopSequence: 4, arriveAt: "07:30", departAt: "08:00" },
+        { stopSequence: 5, arriveAt: "11:30", departAt: null    },
+      ],
+    },
   ];
 
   const createdBases = [];
