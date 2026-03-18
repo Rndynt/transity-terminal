@@ -283,7 +283,8 @@ export default function SeatMap({
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
-        <div className="flex flex-col items-center gap-1">
+        <div className="flex justify-center">
+        <div className="flex flex-col gap-1">
           {seatGrid.map((row, ri) => (
             <div key={ri} className="flex items-center gap-1">
               {row.map((seat, ci) => {
@@ -310,10 +311,10 @@ export default function SeatMap({
                     {isMultiSeat && status === 'booked' && (
                       <span
                         title="Multi-Penumpang: kursi ini dipakai oleh lebih dari 1 penumpang pada rute berbeda"
-                        className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-orange-500 border border-white rounded-full flex items-center justify-center z-10 shadow-sm"
+                        className="absolute -top-1 -right-1 z-10 pointer-events-none"
                         data-testid={`multi-seat-badge-${seat.seat_no}`}
                       >
-                        <Users className="w-2.5 h-2.5 text-white" />
+                        <Users className="w-3 h-3 text-orange-500 drop-shadow-sm" />
                       </span>
                     )}
                   </div>
@@ -321,6 +322,7 @@ export default function SeatMap({
               })}
             </div>
           ))}
+        </div>
         </div>
 
         <div className="flex items-center justify-center gap-2 text-[10px] text-gray-400 mt-3">
@@ -383,9 +385,7 @@ function LegendMultiSeat() {
     <div className="flex items-center gap-1">
       <div className="relative w-3 h-3">
         <div className="w-3 h-3 rounded bg-red-100 border border-red-200" />
-        <span className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-orange-500 border border-white rounded-full flex items-center justify-center">
-          <Users className="w-1.5 h-1.5 text-white" />
-        </span>
+        <Users className="w-2.5 h-2.5 text-orange-500 absolute -top-1 -right-1" />
       </div>
       <span className="text-[10px] text-gray-500">Multi-Penumpang</span>
     </div>

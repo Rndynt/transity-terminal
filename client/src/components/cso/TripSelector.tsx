@@ -471,11 +471,39 @@ export default function TripSelector({
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
             <Calendar className="w-3 h-3" /> Tanggal
           </label>
-          <CustomDatePicker
-            value={selectedDate}
-            onChange={setSelectedDate}
-            testId="input-date"
-          />
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                const d = new Date(selectedDate + 'T00:00:00');
+                d.setDate(d.getDate() - 1);
+                setSelectedDate(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+              }}
+              className="flex-shrink-0 w-8 h-10 flex items-center justify-center border border-gray-200 rounded-xl text-gray-400 hover:text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all"
+              data-testid="btn-prev-date"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <CustomDatePicker
+                value={selectedDate}
+                onChange={setSelectedDate}
+                testId="input-date"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const d = new Date(selectedDate + 'T00:00:00');
+                d.setDate(d.getDate() + 1);
+                setSelectedDate(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+              }}
+              className="flex-shrink-0 w-8 h-10 flex items-center justify-center border border-gray-200 rounded-xl text-gray-400 hover:text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all"
+              data-testid="btn-next-date"
+            >
+              <ChevronRightIcon className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
