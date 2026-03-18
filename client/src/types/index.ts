@@ -35,6 +35,7 @@ export interface SeatAvailability {
   holdRef?: string;
   bookedType?: 'main' | 'transit' | null;
   bookingStatus?: 'pending' | 'paid' | null;
+  isMultiSeat?: boolean;
 }
 
 export interface SeatmapResponse {

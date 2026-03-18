@@ -3,7 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { tripsApi, holdsApi } from '@/lib/api';
 import { useSeatHold } from '@/hooks/useSeatHold';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { RotateCcw, Loader2, Bus, Timer, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { RotateCcw, Loader2, Bus, Timer, CheckCircle2, AlertTriangle, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Trip, SeatmapResponse } from '@/types';
 import PassengerDetailModal from './PassengerDetailModal';
@@ -262,6 +262,7 @@ export default function SeatMap({
           <>
             <LegendDot color="bg-gray-100 border-gray-200" label="Terkunci" />
             <LegendDot color="bg-red-100 border-red-200" label="Terisi (klik detail)" />
+            <LegendMultiSeat />
           </>
         ) : (
           <>
@@ -269,6 +270,7 @@ export default function SeatMap({
             <LegendDot color="bg-blue-500 border-blue-500" label="Dipilih" />
             <LegendDot color="bg-amber-100 border-amber-300" label="Dipegang" />
             <LegendDot color="bg-red-100 border-red-200" label="Terisi" />
+            <LegendMultiSeat />
           </>
         )}
       </div>
@@ -289,6 +291,7 @@ export default function SeatMap({
                 const status = getSeatStatus(seat.seat_no);
                 const holdTTL = getHoldTTL(seat.seat_no);
                 const isLoading = seatLoading === seat.seat_no;
+                const isMultiSeat = !!(seatmap?.seatAvailability[seat.seat_no]?.isMultiSeat);
                 return (
                   <div key={seat.seat_no} className="relative">
                     <button
@@ -303,6 +306,15 @@ export default function SeatMap({
                       <span className={`absolute -top-1.5 -right-1.5 px-1 py-px rounded text-[7px] font-mono font-bold z-10 ${
                         holdTTL < 60 ? 'bg-red-500 text-white animate-pulse' : 'bg-amber-400 text-amber-900'
                       }`}>{formatTTL(holdTTL)}</span>
+                    )}
+                    {isMultiSeat && status === 'booked' && (
+                      <span
+                        title="Multi-Penumpang: kursi ini dipakai oleh lebih dari 1 penumpang pada rute berbeda"
+                        className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-orange-500 border border-white rounded-full flex items-center justify-center z-10 shadow-sm"
+                        data-testid={`multi-seat-badge-${seat.seat_no}`}
+                      >
+                        <Users className="w-2.5 h-2.5 text-white" />
+                      </span>
                     )}
                   </div>
                 );
@@ -362,6 +374,20 @@ function LegendDot({ color, label }: { color: string; label: string }) {
     <div className="flex items-center gap-1">
       <div className={`w-3 h-3 rounded border ${color}`} />
       <span className="text-[10px] text-gray-500">{label}</span>
+    </div>
+  );
+}
+
+function LegendMultiSeat() {
+  return (
+    <div className="flex items-center gap-1">
+      <div className="relative w-3 h-3">
+        <div className="w-3 h-3 rounded bg-red-100 border border-red-200" />
+        <span className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-orange-500 border border-white rounded-full flex items-center justify-center">
+          <Users className="w-1.5 h-1.5 text-white" />
+        </span>
+      </div>
+      <span className="text-[10px] text-gray-500">Multi-Penumpang</span>
     </div>
   );
 }

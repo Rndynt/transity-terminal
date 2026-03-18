@@ -229,15 +229,18 @@ export class TripsService {
       holdRef?: string; 
       bookedType?: 'main' | 'transit' | null;
       bookingStatus?: 'pending' | 'paid' | null;
+      isMultiSeat?: boolean;
     }> = {};
     
     const seatMap = layout.seatMap as any[];
     seatMap.forEach(seat => {
-      seatAvailability[seat.seat_no] = { available: true, held: false, bookedType: null, bookingStatus: null };
+      seatAvailability[seat.seat_no] = { available: true, held: false, bookedType: null, bookingStatus: null, isMultiSeat: false };
     });
 
     // Create a map of seat bookings for efficiency
+    // Also track all booking IDs per seat to detect multi-seat scenario
     const seatBookingMap = new Map<string, { type: 'main' | 'transit'; status: 'pending' | 'paid' }>();
+    const seatBookingIds = new Map<string, Set<string>>();
     
     for (const booking of activeBookings) {
       // Check if this booking overlaps with the requested journey
@@ -252,19 +255,28 @@ export class TripsService {
         
         passengers.forEach(passenger => {
           seatBookingMap.set(passenger.seatNo, { type: bookingType, status: bookingStatus });
+          // Track all distinct booking IDs per seat for multi-seat detection
+          if (!seatBookingIds.has(passenger.seatNo)) {
+            seatBookingIds.set(passenger.seatNo, new Set());
+          }
+          seatBookingIds.get(passenger.seatNo)!.add(booking.id);
         });
       }
     }
 
     // Check each required leg for seat availability and determine booking type
+    // A seat is "multi-seat" if it is occupied by more than one distinct booking
+    // (i.e. different passengers sharing the same seat on different sub-legs)
     inventory.forEach(inv => {
       if (inv.booked) {
         const bookingInfo = seatBookingMap.get(inv.seatNo);
+        const bookingCount = seatBookingIds.get(inv.seatNo)?.size ?? 0;
         seatAvailability[inv.seatNo] = { 
           available: false, 
           held: false, 
           bookedType: bookingInfo?.type || null,
-          bookingStatus: bookingInfo?.status || null
+          bookingStatus: bookingInfo?.status || null,
+          isMultiSeat: bookingCount > 1
         };
       } else if (inv.holdRef) {
         seatAvailability[inv.seatNo] = { 
@@ -272,7 +284,8 @@ export class TripsService {
           held: true, 
           holdRef: inv.holdRef,
           bookedType: null,
-          bookingStatus: null
+          bookingStatus: null,
+          isMultiSeat: false
         };
       }
     });
