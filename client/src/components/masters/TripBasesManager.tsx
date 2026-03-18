@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { tripBasesApi, tripPatternsApi, layoutsApi, vehiclesApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Clock } from 'lucide-react';
+import { Plus, Pencil, Trash2, Clock, MapPin } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import { RowActionsMenu } from './RowActionsMenu';
