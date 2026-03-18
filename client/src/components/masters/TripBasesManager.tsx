@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { tripBasesApi, tripPatternsApi, layoutsApi, vehiclesApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Clock, MapPin } from 'lucide-react';
+import { Plus, Pencil, Trash2, Clock, MapPin, ArrowRight, Route } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import { RowActionsMenu } from './RowActionsMenu';
@@ -426,74 +426,146 @@ export default function TripBasesManager() {
         isPending={deleteMutation.isPending}
       />
 
-      {/* Trip Bases Table */}
+      {/* Trip Bases Table — grouped by route */}
       {isLoading ? (
         <div className="flex justify-center p-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
-      ) : (
-        <div className="rounded-md border overflow-x-auto">
-          <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-1/4 min-w-[200px]">Name</TableHead>
-                    <TableHead className="w-1/5 min-w-[150px]">Pattern</TableHead>
-                    <TableHead className="w-16">DOW</TableHead>
-                    <TableHead className="w-1/6 min-w-[120px]">Valid Period</TableHead>
-                    <TableHead className="w-20">Origin Depart</TableHead>
-                    <TableHead className="w-16">Active</TableHead>
-                    <TableHead className="w-20">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTripBases.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data'}
+      ) : filteredTripBases.length === 0 ? (
+        <div className="rounded-md border">
+          <div className="text-center py-12 text-muted-foreground">
+            <Clock className="h-8 w-8 mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-medium">
+              {searchQuery ? `Tidak ada hasil untuk "${searchQuery}"` : 'Belum ada trip base'}
+            </p>
+          </div>
+        </div>
+      ) : (() => {
+        // Group by patternId, then sort each group by origin depart time
+        const timeToMinutes = (t: string) => {
+          if (!t || t === '-') return 9999;
+          const [h, m] = t.split(':').map(Number);
+          return (h || 0) * 60 + (m || 0);
+        };
+
+        const groups: { pattern: TripPattern | undefined; patternId: string; bases: TripBase[] }[] = [];
+        const seen = new Set<string>();
+        filteredTripBases.forEach((base: TripBase) => {
+          if (!seen.has(base.patternId)) {
+            seen.add(base.patternId);
+            groups.push({
+              patternId: base.patternId,
+              pattern: patterns.find((p: TripPattern) => p.id === base.patternId),
+              bases: [],
+            });
+          }
+          groups.find(g => g.patternId === base.patternId)!.bases.push(base);
+        });
+
+        // Sort groups by pattern code, sort each group's rows by depart time
+        groups.sort((a, b) => (a.pattern?.code || '').localeCompare(b.pattern?.code || ''));
+        groups.forEach(g => {
+          g.bases.sort((a, b) =>
+            timeToMinutes(getOriginDepartTime(a.defaultStopTimes)) -
+            timeToMinutes(getOriginDepartTime(b.defaultStopTimes))
+          );
+        });
+
+        return (
+          <div className="rounded-md border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24 min-w-[88px]">Berangkat</TableHead>
+                  <TableHead className="min-w-[180px]">Nama / Kode</TableHead>
+                  <TableHead className="w-48 min-w-[176px]">Hari Operasi</TableHead>
+                  <TableHead className="w-44 min-w-[160px]">Periode</TableHead>
+                  <TableHead className="w-20">Status</TableHead>
+                  <TableHead className="w-12"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {groups.map(({ pattern, patternId, bases }) => (
+                  <Fragment key={patternId}>
+                    {/* Route group header */}
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell
+                        colSpan={6}
+                        className="py-2 px-4 bg-muted/50 border-y"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Route className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <span className="font-mono text-xs font-semibold text-primary tracking-wide">
+                            {pattern?.code || patternId.slice(0, 8)}
+                          </span>
+                          {pattern?.name && (
+                            <>
+                              <span className="text-muted-foreground/50 text-xs">—</span>
+                              <span className="text-xs font-medium text-foreground">{pattern.name}</span>
+                            </>
+                          )}
+                          <span className="ml-auto text-xs text-muted-foreground font-normal">
+                            {bases.length} jadwal
+                          </span>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    filteredTripBases.map((base: TripBase) => {
-                      const pattern = patterns.find(p => p.id === base.patternId);
+
+                    {/* Rows for this group */}
+                    {bases.map((base: TripBase, idx: number) => {
+                      const departTime = getOriginDepartTime(base.defaultStopTimes);
+                      const isLast = idx === bases.length - 1;
                       return (
-                        <TableRow key={base.id} data-testid={`row-trip-base-${base.id}`}>
-                          <TableCell className="font-medium">
-                            <div>
-                              <div>{base.name}</div>
-                              {base.code && <div className="text-sm text-muted-foreground">{base.code}</div>}
+                        <TableRow
+                          key={base.id}
+                          data-testid={`row-trip-base-${base.id}`}
+                          className={isLast ? 'border-b-0' : ''}
+                        >
+                          {/* Departure time — first & prominent */}
+                          <TableCell className="pl-6">
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <span className={`font-mono font-semibold tabular-nums ${departTime === '-' ? 'text-muted-foreground' : 'text-foreground'}`}>
+                                {departTime}
+                              </span>
                             </div>
                           </TableCell>
+
+                          {/* Name + code */}
                           <TableCell>
-                            <div>
-                              <div className="font-mono text-sm">{pattern?.code}</div>
-                              <div className="text-sm text-muted-foreground">{pattern?.name}</div>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-medium text-sm leading-snug">{base.name}</span>
+                              {base.code && (
+                                <span className="font-mono text-xs text-muted-foreground">{base.code}</span>
+                              )}
                             </div>
                           </TableCell>
+
+                          {/* Days of week */}
                           <TableCell>{getDowBadges(base)}</TableCell>
+
+                          {/* Valid period */}
                           <TableCell>
-                            <div className="text-sm">
-                              {base.validFrom && base.validTo 
+                            <span className="text-sm text-muted-foreground">
+                              {base.validFrom && base.validTo
                                 ? `${base.validFrom} – ${base.validTo}`
-                                : base.validFrom 
-                                  ? `From ${base.validFrom}`
+                                : base.validFrom
+                                  ? `Mulai ${base.validFrom}`
                                   : base.validTo
-                                    ? `Until ${base.validTo}`
-                                    : 'Always'
-                              }
-                            </div>
+                                    ? `S/d ${base.validTo}`
+                                    : <span className="italic text-muted-foreground/60">Tanpa batas</span>}
+                            </span>
                           </TableCell>
+
+                          {/* Active badge */}
                           <TableCell>
-                            <div className="flex items-center gap-1 font-mono">
-                              <Clock className="w-3 h-3" />
-                              {getOriginDepartTime(base.defaultStopTimes)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={base.active ? 'default' : 'secondary'}>
-                              {base.active ? 'Active' : 'Inactive'}
+                            <Badge variant={base.active ? 'default' : 'secondary'} className="text-xs">
+                              {base.active ? 'Aktif' : 'Nonaktif'}
                             </Badge>
                           </TableCell>
-                          <TableCell>
+
+                          {/* Actions */}
+                          <TableCell className="pr-3">
                             <RowActionsMenu
                               actions={[
                                 { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => openEditDialog(base) },
@@ -504,12 +576,14 @@ export default function TripBasesManager() {
                           </TableCell>
                         </TableRow>
                       );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                    })}
+                  </Fragment>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        );
+      })()}
 
       {/* Create/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
