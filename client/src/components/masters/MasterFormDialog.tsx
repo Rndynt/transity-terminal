@@ -85,14 +85,14 @@ export default function MasterFormDialog({
       >
         {onSubmit ? (
           <form onSubmit={onSubmit} className="flex flex-col min-h-0 flex-1">
-            <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
+            <DialogHeader className="px-5 pt-5 pb-4 border-b border-gray-200 shrink-0">
               <DialogTitle>{title}</DialogTitle>
               {description && (
                 <DialogDescription>{description}</DialogDescription>
               )}
             </DialogHeader>
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">{children}</div>
-            <DialogFooter className="px-5 py-4 border-t shrink-0 bg-background gap-2 sm:gap-0">
+            <DialogFooter className="px-5 py-4 border-t border-gray-200 shrink-0 bg-white gap-2 sm:gap-0">
               <Button
                 type="button"
                 variant="outline"
@@ -114,7 +114,7 @@ export default function MasterFormDialog({
           </form>
         ) : (
           <div className="flex flex-col min-h-0 flex-1">
-            <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
+            <DialogHeader className="px-5 pt-5 pb-4 border-b border-gray-200 shrink-0">
               <DialogTitle>{title}</DialogTitle>
               {description && (
                 <DialogDescription>{description}</DialogDescription>
