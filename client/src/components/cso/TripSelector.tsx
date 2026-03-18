@@ -2,11 +2,12 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Store, Calendar, Bus, Loader2, Search, ChevronDown,
-  ArrowRight, Armchair, Route, X, Check, ChevronLeft, ChevronRight as ChevronRightIcon
+  ArrowRight, Armchair, Route, X, Check, ChevronLeft, ChevronRight as ChevronRightIcon,
+  MapPin, Hash
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { tripsApi, outletsApi } from '@/lib/api';
-import type { Outlet, CsoAvailableTrip } from '@/types';
+import { tripsApi, outletsApi, stopsApi } from '@/lib/api';
+import type { Outlet, CsoAvailableTrip, Stop } from '@/types';
 
 interface TripSelectorProps {
   selectedOutlet?: Outlet;
@@ -21,26 +22,66 @@ const fmt = (n: number) =>
 const MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 const DAYS_ID = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
-function CustomSelect({ value, options, placeholder, icon: Icon, onChange, testId }: {
+function OutletSearchSelect({ value, outlets, stops, placeholder, onChange, testId }: {
   value: string;
-  options: { value: string; label: string }[];
+  outlets: Outlet[];
+  stops: Stop[];
   placeholder: string;
-  icon: any;
   onChange: (value: string) => void;
   testId: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch('');
+      }
     };
-    if (open) document.addEventListener('mousedown', handler);
+    if (open) {
+      document.addEventListener('mousedown', handler);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const selectedLabel = options.find(o => o.value === value)?.label;
+  const stopMap = useMemo(() => {
+    const map: Record<string, Stop> = {};
+    for (const s of stops) map[s.id] = s;
+    return map;
+  }, [stops]);
+
+  const getCity = (outlet: Outlet): string => {
+    return stopMap[outlet.stopId]?.city || 'Lainnya';
+  };
+
+  const selectedOutlet = outlets.find(o => o.id === value);
+
+  const filteredOutlets = useMemo(() => {
+    if (!search.trim()) return outlets;
+    const q = search.toLowerCase();
+    return outlets.filter(o =>
+      o.name.toLowerCase().includes(q) ||
+      getCity(o).toLowerCase().includes(q)
+    );
+  }, [outlets, search, stopMap]);
+
+  const groupedByCity = useMemo(() => {
+    const groups: Record<string, Outlet[]> = {};
+    for (const o of filteredOutlets) {
+      const city = getCity(o);
+      (groups[city] ??= []).push(o);
+    }
+    return Object.entries(groups).sort(([a], [b]) => {
+      if (a === 'Lainnya') return 1;
+      if (b === 'Lainnya') return -1;
+      return a.localeCompare(b);
+    });
+  }, [filteredOutlets, stopMap]);
 
   return (
     <div ref={ref} className="relative">
@@ -52,33 +93,71 @@ function CustomSelect({ value, options, placeholder, icon: Icon, onChange, testI
         }`}
         data-testid={testId}
       >
-        <Icon className="w-4 h-4 text-gray-400 flex-shrink-0" />
-        <span className={`flex-1 text-left truncate ${selectedLabel ? 'text-gray-800' : 'text-gray-400'}`}>
-          {selectedLabel || placeholder}
+        <Store className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        <span className={`flex-1 text-left truncate ${selectedOutlet ? 'text-gray-800' : 'text-gray-400'}`}>
+          {selectedOutlet ? selectedOutlet.name : placeholder}
         </span>
-        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        {selectedOutlet && (
+          <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">
+            {getCity(selectedOutlet)}
+          </span>
+        )}
+        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
       </button>
+
       {open && (
-        <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-52 overflow-y-auto py-1">
-          {options.map(opt => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => { onChange(opt.value); setOpen(false); }}
-              className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors ${
-                opt.value === value
-                  ? 'bg-blue-50 text-blue-700 font-medium'
-                  : 'text-gray-700 hover:bg-gray-50'
-              }`}
-              data-testid={`option-${opt.value}`}
-            >
-              <span className="flex-1 truncate">{opt.label}</span>
-              {opt.value === value && <Check className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />}
-            </button>
-          ))}
-          {options.length === 0 && (
-            <div className="px-3 py-4 text-center text-xs text-gray-400">Tidak ada opsi</div>
-          )}
+        <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg flex flex-col"
+          style={{ maxHeight: '280px' }}>
+          <div className="p-2 border-b border-gray-100 flex-shrink-0">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                ref={inputRef}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Cari outlet atau kota..."
+                className="w-full h-8 pl-8 pr-7 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-400"
+                data-testid="input-outlet-search"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="overflow-y-auto flex-1 py-1">
+            {groupedByCity.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">Tidak ada outlet ditemukan</div>
+            ) : (
+              groupedByCity.map(([city, cityOutlets]) => (
+                <div key={city}>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 sticky top-0 bg-gray-50 border-b border-gray-100">
+                    <MapPin className="w-3 h-3 text-blue-400 flex-shrink-0" />
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{city}</span>
+                    <span className="text-[10px] text-gray-400 ml-auto">{cityOutlets.length}</span>
+                  </div>
+                  {cityOutlets.map(outlet => (
+                    <button
+                      key={outlet.id}
+                      type="button"
+                      onClick={() => { onChange(outlet.id); setOpen(false); setSearch(''); }}
+                      className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors ${
+                        outlet.id === value
+                          ? 'bg-blue-50 text-blue-700 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                      data-testid={`option-${outlet.id}`}
+                    >
+                      <span className="flex-1 truncate text-xs">{outlet.name}</span>
+                      {outlet.id === value && <Check className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -254,6 +333,11 @@ export default function TripSelector({
     queryFn: outletsApi.getAll
   });
 
+  const { data: stops = [] } = useQuery<Stop[]>({
+    queryKey: ['/api/stops'],
+    queryFn: stopsApi.getAll
+  });
+
   const { data: trips = [], isLoading: tripsLoading, refetch: refetchTrips } = useQuery<CsoAvailableTrip[]>({
     queryKey: ['/api/cso/available-trips', selectedDate, selectedOutlet?.id],
     queryFn: () => tripsApi.getCsoAvailableTrips(selectedDate, selectedOutlet!.id),
@@ -334,28 +418,30 @@ export default function TripSelector({
     const q = searchQuery.toLowerCase();
     return (trips || []).filter(trip =>
       (trip.patternPath || '').toLowerCase().includes(q) ||
+      (trip.patternCode || '').toLowerCase().includes(q) ||
       (trip.vehicle?.code || '').toLowerCase().includes(q)
     );
   }, [trips, searchQuery]);
 
   const groupedTrips = useMemo(() => {
-    const groups: Record<string, CsoAvailableTrip[]> = {};
+    const groups: Record<string, { code: string; path: string; trips: CsoAvailableTrip[] }> = {};
     for (const trip of filteredTrips) {
-      const routeName = trip.patternPath || 'Unknown Route';
-      (groups[routeName] ??= []).push(trip);
+      const key = trip.patternCode || trip.patternPath || 'Unknown';
+      if (!groups[key]) {
+        groups[key] = { code: trip.patternCode || '', path: trip.patternPath || 'Unknown Route', trips: [] };
+      }
+      groups[key].trips.push(trip);
     }
-    return Object.entries(groups).map(([route, trips]) => ({ route, trips }));
+    return Object.entries(groups).map(([key, g]) => ({ key, ...g }));
   }, [filteredTrips]);
 
-  const toggleRouteCollapse = (routeName: string) => {
+  const toggleRouteCollapse = (key: string) => {
     setCollapsedRoutes(prev => {
       const next = new Set(prev);
-      if (next.has(routeName)) next.delete(routeName); else next.add(routeName);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   };
-
-  const outletOptions = outlets.map(o => ({ value: o.id, label: o.name }));
 
   return (
     <div className="space-y-4">
@@ -369,11 +455,11 @@ export default function TripSelector({
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
             <Store className="w-3 h-3" /> Outlet
           </label>
-          <CustomSelect
+          <OutletSearchSelect
             value={selectedOutlet?.id || ''}
-            options={outletOptions}
+            outlets={outlets}
+            stops={stops}
             placeholder="Pilih outlet..."
-            icon={Store}
             onChange={(val) => {
               const outlet = outlets.find(o => o.id === val);
               if (outlet) onOutletSelect(outlet);
@@ -393,13 +479,13 @@ export default function TripSelector({
         </div>
       </div>
 
-      {selectedOutlet && (trips || []).length > 0 && (
+      {selectedOutlet && (
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari rute, kota, atau kode..."
+            placeholder="Cari kode rute, nama rute, atau kendaraan..."
             className="w-full h-10 pl-9 pr-8 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all"
             data-testid="input-search-trip"
           />
@@ -411,7 +497,7 @@ export default function TripSelector({
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {!selectedOutlet ? (
           <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-100">
             <Store className="w-8 h-8 text-gray-300 mx-auto mb-1.5" />
@@ -426,25 +512,35 @@ export default function TripSelector({
           <div className="text-center py-6 text-gray-400">
             <Search className="w-8 h-8 mx-auto mb-2 text-gray-300" />
             <p className="text-sm">Tidak ada jadwal ditemukan</p>
-            <p className="text-xs text-gray-300 mt-0.5">Coba ubah kata kunci pencarian</p>
+            {searchQuery && <p className="text-xs text-gray-300 mt-0.5">Coba ubah kata kunci pencarian</p>}
           </div>
         ) : (
           groupedTrips.map(group => (
-            <div key={group.route}>
+            <div key={group.key} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
               <button
-                onClick={() => toggleRouteCollapse(group.route)}
-                className="w-full flex items-center justify-between py-1.5 mb-1.5 group"
-                data-testid={`route-group-${group.route.slice(0, 15)}`}
+                onClick={() => toggleRouteCollapse(group.key)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors"
+                data-testid={`route-group-${group.key.slice(0, 15)}`}
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Route className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                  <span className="text-xs font-bold text-gray-700 truncate">{group.route}</span>
-                  <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">{group.trips.length} jadwal</span>
+                <Route className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {group.code && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded font-mono flex-shrink-0">
+                        <Hash className="w-2.5 h-2.5" />{group.code}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded flex-shrink-0">
+                      {group.trips.length} jadwal
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 font-medium truncate mt-0.5">{group.path}</p>
                 </div>
-                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ${collapsedRoutes.has(group.route) ? '-rotate-90' : ''}`} />
+                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ${collapsedRoutes.has(group.key) ? '-rotate-90' : ''}`} />
               </button>
-              {!collapsedRoutes.has(group.route) && (
-                <div className="space-y-2">
+
+              {!collapsedRoutes.has(group.key) && (
+                <div className="divide-y divide-gray-100 px-2 pb-2 pt-1 space-y-1">
                   {group.trips
                     .sort((a, b) => {
                       if (!a.departAtAtOutlet && !b.departAtAtOutlet) return 0;
