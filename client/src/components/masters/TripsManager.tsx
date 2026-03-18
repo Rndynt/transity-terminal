@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +42,7 @@ export default function TripsManager() {
     capacity: '',
     status: 'scheduled'
   });
+  const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
 
   const { data: trips = [], isLoading } = useQuery({
@@ -281,11 +282,30 @@ export default function TripsManager() {
     }
   };
 
+  const filteredTrips = trips.filter(trip => {
+    const q = searchQuery.toLowerCase();
+    const patternName = getPatternPath(trip.patternId).toLowerCase();
+    const vehicleName = getVehicleName(trip.vehicleId).toLowerCase();
+    const tripId = trip.id.slice(-8).toLowerCase();
+    const serviceDate = trip.serviceDate.toLowerCase();
+    const status = (trip.status || 'scheduled').toLowerCase();
+
+    return patternName.includes(q) ||
+           vehicleName.includes(q) ||
+           tripId.includes(q) ||
+           serviceDate.includes(q) ||
+           status.includes(q);
+  });
+
   return (
     <div className="space-y-6" data-testid="trips-manager">
       <MasterPageHeader
         title="Trips Management"
         description="Manage scheduled trips and their configurations"
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Cari trip..."
+        count={filteredTrips.length}
         action={
           <Button onClick={handleCreate} data-testid="add-trip-button">
             <Plus className="h-4 w-4 mr-2" />
@@ -299,6 +319,9 @@ export default function TripsManager() {
               <DialogTitle>
                 {editingTrip ? 'Edit Trip' : 'Add New Trip'}
               </DialogTitle>
+              <DialogDescription>
+                {editingTrip ? 'Perbarui informasi trip ini.' : 'Buat trip baru dengan memilih pola perjalanan dan kendaraan.'}
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -405,23 +428,23 @@ export default function TripsManager() {
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2">
+              <DialogFooter className="flex justify-end space-x-2">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setIsDialogOpen(false)}
                   data-testid="cancel-button"
                 >
-                  Cancel
+                  Batal
                 </Button>
                 <Button
                   type="submit"
                   disabled={createMutation.isPending || updateMutation.isPending}
                   data-testid="submit-button"
                 >
-                  {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : 'Save'}
+                  {(createMutation.isPending || updateMutation.isPending) ? 'Menyimpan...' : 'Simpan'}
                 </Button>
-              </div>
+              </DialogFooter>
             </form>
           </DialogContent>
       </Dialog>
@@ -451,18 +474,18 @@ export default function TripsManager() {
                   <TableHead>Vehicle</TableHead>
                   <TableHead>Capacity</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-40">Actions</TableHead>
+                  <TableHead className="w-10">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {trips.length === 0 ? (
+                {filteredTrips.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      Belum ada data
+                      {searchQuery ? `Tidak ada hasil untuk "${searchQuery}"` : 'Belum ada data'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  trips.map(trip => (
+                  filteredTrips.map(trip => (
                     <TableRow key={trip.id} data-testid={`trip-row-${trip.id}`}>
                       <TableCell className="font-mono text-xs">{trip.id.slice(-8)}</TableCell>
                       <TableCell>
@@ -483,18 +506,16 @@ export default function TripsManager() {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
-                                  size="sm"
                                   variant="ghost"
                                   onClick={() => handleScheduling(trip)}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-primary/10 focus:ring-2 focus:ring-primary"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
                                   aria-label={`Manage schedule for trip ${trip.id.slice(-8)}`}
                                   data-testid={`scheduling-${trip.id}`}
                                 >
                                   <Clock className="h-4 w-4 text-primary" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Schedule</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Manage schedule</p>
                               </TooltipContent>
                             </Tooltip>
@@ -504,19 +525,17 @@ export default function TripsManager() {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
-                                  size="sm"
                                   variant="ghost"
                                   onClick={() => handleDeriveLegs(trip.id)}
                                   disabled={deriveLegsMutation.isPending}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-secondary/10 focus:ring-2 focus:ring-secondary disabled:opacity-50"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-secondary/10 disabled:opacity-50"
                                   aria-label={`Derive legs for trip ${trip.id.slice(-8)}`}
                                   data-testid={`derive-legs-${trip.id}`}
                                 >
                                   <Route className="h-4 w-4 text-secondary" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Derive</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Derive legs</p>
                               </TooltipContent>
                             </Tooltip>
@@ -526,19 +545,17 @@ export default function TripsManager() {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
-                                  size="sm"
                                   variant="ghost"
                                   onClick={() => handlePrecomputeInventory(trip.id)}
                                   disabled={precomputeSeatInventoryMutation.isPending}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-accent/10 focus:ring-2 focus:ring-accent disabled:opacity-50"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-accent/10 disabled:opacity-50"
                                   aria-label={`Precompute inventory for trip ${trip.id.slice(-8)}`}
                                   data-testid={`precompute-inventory-${trip.id}`}
                                 >
                                   <Grid3X3 className="h-4 w-4 text-accent" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Inventory</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Precompute inventory</p>
                               </TooltipContent>
                             </Tooltip>
@@ -548,18 +565,16 @@ export default function TripsManager() {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
-                                  size="sm"
                                   variant="ghost"
                                   onClick={() => handleEdit(trip)}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-primary/10 focus:ring-2 focus:ring-primary"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
                                   aria-label={`Edit trip ${trip.id.slice(-8)}`}
                                   data-testid={`edit-trip-${trip.id}`}
                                 >
                                   <Pencil className="h-4 w-4 text-primary" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Edit trip</p>
                               </TooltipContent>
                             </Tooltip>
@@ -569,19 +584,17 @@ export default function TripsManager() {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
-                                  size="sm"
                                   variant="ghost"
                                   onClick={() => handleDelete(trip.id)}
                                   disabled={deleteMutation.isPending}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50"
                                   aria-label={`Delete trip ${trip.id.slice(-8)}`}
                                   data-testid={`delete-trip-${trip.id}`}
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Delete</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Delete trip</p>
                               </TooltipContent>
                             </Tooltip>

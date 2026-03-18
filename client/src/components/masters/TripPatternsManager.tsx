@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -36,6 +36,7 @@ interface StopSequenceItem {
 }
 
 export default function TripPatternsManager() {
+  const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isStopsDialogOpen, setIsStopsDialogOpen] = useState(false);
   const [editingPattern, setEditingPattern] = useState<TripPattern | null>(null);
@@ -302,11 +303,20 @@ export default function TripPatternsManager() {
     return stop ? `${stop.name} (${stop.code})` : 'Select Stop';
   };
 
+  const filteredPatterns = patterns.filter(pattern => 
+    pattern.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    pattern.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="space-y-6" data-testid="trip-patterns-manager">
       <MasterPageHeader
         title="Trip Patterns Management"
         description="Manage route patterns and stop sequences"
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Cari pattern..."
+        count={filteredPatterns.length}
         action={
           <Button onClick={handleCreate} data-testid="add-pattern-button">
             <Plus className="h-4 w-4 mr-2" />
@@ -320,8 +330,11 @@ export default function TripPatternsManager() {
               <DialogTitle>
                 {editingPattern ? 'Edit Trip Pattern' : 'Add New Trip Pattern'}
               </DialogTitle>
+              <DialogDescription>
+                {editingPattern ? 'Ubah informasi pola rute perjalanan.' : 'Tambah pola rute perjalanan baru.'}
+              </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form id="pattern-form" onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="code">Pattern Code *</Label>
@@ -397,25 +410,25 @@ export default function TripPatternsManager() {
                 />
                 <Label htmlFor="active">Active pattern</Label>
               </div>
-
-              <div className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                  data-testid="cancel-button"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  data-testid="submit-button"
-                >
-                  {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : 'Save'}
-                </Button>
-              </div>
             </form>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+                data-testid="cancel-button"
+              >
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                form="pattern-form"
+                disabled={createMutation.isPending || updateMutation.isPending}
+                data-testid="submit-button"
+              >
+                {(createMutation.isPending || updateMutation.isPending) ? 'Menyimpan...' : 'Simpan'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
       </Dialog>
 
@@ -428,6 +441,9 @@ export default function TripPatternsManager() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <DialogDescription>
+              Kelola daftar pemberhentian untuk pola rute ini.
+            </DialogDescription>
             <div className="flex justify-between items-center">
               <Label>Stop Sequence</Label>
               <Button onClick={addPatternStop} size="sm" data-testid="add-pattern-stop">
@@ -508,17 +524,17 @@ export default function TripPatternsManager() {
               </div>
             ))}
 
-            <div className="flex justify-end space-x-2">
+            <DialogFooter>
               <Button
                 variant="outline"
                 onClick={() => setIsStopsDialogOpen(false)}
               >
-                Cancel
+                Batal
               </Button>
               <Button onClick={savePatternStops} data-testid="save-pattern-stops">
-                Save Stops
+                Simpan
               </Button>
-            </div>
+            </DialogFooter>
           </div>
         </DialogContent>
       </Dialog>
@@ -552,14 +568,14 @@ export default function TripPatternsManager() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {patterns.length === 0 ? (
+                {filteredPatterns.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      Belum ada data
+                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  patterns.map(pattern => (
+                  filteredPatterns.map(pattern => (
                     <TableRow key={pattern.id} data-testid={`pattern-row-${pattern.code}`}>
                       <TableCell className="font-mono font-medium">{pattern.code}</TableCell>
                       <TableCell>{pattern.name}</TableCell>
@@ -590,12 +606,11 @@ export default function TripPatternsManager() {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => handleManageStops(pattern)}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-secondary/10 focus:ring-2 focus:ring-secondary"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-secondary/10 focus:ring-2 focus:ring-secondary"
                                   aria-label={`Manage stops for ${pattern.name}`}
                                   data-testid={`manage-stops-${pattern.code}`}
                                 >
                                   <MapPin className="h-4 w-4 text-secondary" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Manage</span>
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent className="md:hidden">
@@ -611,12 +626,11 @@ export default function TripPatternsManager() {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => handleEdit(pattern)}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-primary/10 focus:ring-2 focus:ring-primary"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10 focus:ring-2 focus:ring-primary"
                                   aria-label={`Edit pattern ${pattern.name}`}
                                   data-testid={`edit-pattern-${pattern.code}`}
                                 >
                                   <Pencil className="h-4 w-4 text-primary" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent className="md:hidden">
@@ -633,12 +647,11 @@ export default function TripPatternsManager() {
                                   variant="ghost"
                                   onClick={() => handleDelete(pattern.id)}
                                   disabled={deleteMutation.isPending}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
                                   aria-label={`Delete pattern ${pattern.name}`}
                                   data-testid={`delete-pattern-${pattern.code}`}
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Delete</span>
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent className="md:hidden">

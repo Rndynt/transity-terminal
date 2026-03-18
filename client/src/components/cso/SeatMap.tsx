@@ -283,7 +283,7 @@ export default function SeatMap({
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 w-fit mx-auto">
           {seatGrid.map((row, ri) => (
             <div key={ri} className="flex gap-1">
               {row.map((seat, ci) => {
@@ -381,9 +381,9 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 function LegendMultiSeat() {
   return (
     <div className="flex items-center gap-1">
-      <div className="relative w-3 h-3">
-        <div className="w-3 h-3 rounded bg-red-100 border border-red-200" />
-        <Users className="w-2.5 h-2.5 text-orange-500 absolute -top-1 -right-1" />
+      <div className="relative w-5 h-5 flex-shrink-0">
+        <div className="w-5 h-5 rounded bg-red-100 border border-red-200" />
+        <Users className="w-2.5 h-2.5 text-orange-500 absolute top-0.5 right-0.5" />
       </div>
       <span className="text-[10px] text-gray-500">Multi-Penumpang</span>
     </div>

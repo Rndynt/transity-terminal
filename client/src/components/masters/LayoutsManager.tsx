@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
@@ -32,6 +32,7 @@ interface SeatMapItem {
 }
 
 export default function LayoutsManager() {
+  const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingLayout, setEditingLayout] = useState<Layout | null>(null);
   const [formData, setFormData] = useState<LayoutFormData>({
@@ -342,11 +343,19 @@ export default function LayoutsManager() {
     }
   };
 
+  const filteredLayouts = layouts.filter(layout => 
+    layout.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="space-y-6" data-testid="layouts-manager">
       <MasterPageHeader
         title="Layouts Management"
         description="Manage seat layout configurations for vehicles"
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Cari layout..."
+        count={filteredLayouts.length}
         action={
           <Button onClick={handleCreate} data-testid="add-layout-button">
             <Plus className="h-4 w-4 mr-2" />
@@ -360,9 +369,12 @@ export default function LayoutsManager() {
               <DialogTitle>
                 {editingLayout ? 'Edit Layout' : 'Add New Layout'}
               </DialogTitle>
+              <DialogDescription>
+                {editingLayout ? 'Ubah informasi layout kendaraan.' : 'Tambah konfigurasi layout kursi kendaraan baru.'}
+              </DialogDescription>
             </DialogHeader>
             <div className="overflow-y-auto flex-1 px-1">
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form id="layout-form" onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Layout Name *</Label>
                 <Input
@@ -626,31 +638,31 @@ export default function LayoutsManager() {
                   </div>
                 </div>
               )}
-
-              <div className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                  data-testid="cancel-button"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending || 
-                    (layoutMode === 'automatic' && previewSeatMap.length === 0) ||
-                    (layoutMode === 'custom' && customSeatMap.length === 0) ||
-                    !formData.name.trim() ||
-                    !formData.rows.trim() ||
-                    !formData.cols.trim()}
-                  data-testid="submit-button"
-                >
-                  {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : 'Save'}
-                </Button>
-              </div>
-            </form>
+              </form>
             </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+                data-testid="cancel-button"
+              >
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                form="layout-form"
+                disabled={createMutation.isPending || updateMutation.isPending || 
+                  (layoutMode === 'automatic' && previewSeatMap.length === 0) ||
+                  (layoutMode === 'custom' && customSeatMap.length === 0) ||
+                  !formData.name.trim() ||
+                  !formData.rows.trim() ||
+                  !formData.cols.trim()}
+                data-testid="submit-button"
+              >
+                {(createMutation.isPending || updateMutation.isPending) ? 'Menyimpan...' : 'Simpan'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
       </Dialog>
 
@@ -681,14 +693,14 @@ export default function LayoutsManager() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {layouts.length === 0 ? (
+                {filteredLayouts.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      Belum ada data
+                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  layouts.map(layout => {
+                  filteredLayouts.map(layout => {
                     const seatMap = layout.seatMap as SeatMapItem[];
                     return (
                       <TableRow key={layout.id} data-testid={`layout-row-${layout.id}`}>
@@ -723,12 +735,11 @@ export default function LayoutsManager() {
                                     size="sm"
                                     variant="ghost"
                                     onClick={() => handleEdit(layout)}
-                                    className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-primary/10 focus:ring-2 focus:ring-primary"
+                                    className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10 focus:ring-2 focus:ring-primary"
                                     aria-label={`Edit layout ${layout.name}`}
                                     data-testid={`edit-layout-${layout.id}`}
                                   >
                                     <Pencil className="h-4 w-4 text-primary" />
-                                    <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent className="md:hidden">
@@ -745,12 +756,11 @@ export default function LayoutsManager() {
                                     variant="ghost"
                                     onClick={() => handleDelete(layout.id)}
                                     disabled={deleteMutation.isPending}
-                                    className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
+                                    className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
                                     aria-label={`Delete layout ${layout.name}`}
                                     data-testid={`delete-layout-${layout.id}`}
                                   >
                                     <Trash2 className="h-4 w-4 text-destructive" />
-                                    <span className="sr-only md:not-sr-only md:ml-2">Delete</span>
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent className="md:hidden">

@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
@@ -15,6 +14,7 @@ import { queryClient } from '@/lib/queryClient';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
+import MasterFormDialog from './MasterFormDialog';
 import type { Vehicle, Layout } from '@/types';
 
 interface VehicleFormData {
@@ -29,6 +29,7 @@ export default function VehiclesManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState<VehicleFormData>({
     code: '',
     plate: '',
@@ -47,6 +48,12 @@ export default function VehiclesManager() {
     queryKey: ['/api/layouts'],
     queryFn: layoutsApi.getAll
   });
+
+  const filteredData = vehicles.filter(vehicle => 
+    vehicle.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    vehicle.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (vehicle.notes && vehicle.notes.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   const createMutation = useMutation({
     mutationFn: vehiclesApi.create,
@@ -171,6 +178,10 @@ export default function VehiclesManager() {
       <MasterPageHeader
         title="Vehicles Management"
         description="Manage bus fleet and vehicle configurations"
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Cari vehicle..."
+        count={filteredData.length}
         action={
           <Button onClick={handleCreate} data-testid="add-vehicle-button">
             <Plus className="h-4 w-4 mr-2" />
@@ -178,105 +189,85 @@ export default function VehiclesManager() {
           </Button>
         }
       />
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent data-testid="vehicle-dialog">
-            <DialogHeader>
-              <DialogTitle>
-                {editingVehicle ? 'Edit Vehicle' : 'Add New Vehicle'}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="code">Vehicle Code *</Label>
-                  <Input
-                    id="code"
-                    value={formData.code}
-                    onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
-                    placeholder="e.g., BUS-001"
-                    required
-                    data-testid="input-code"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="plate">License Plate *</Label>
-                  <Input
-                    id="plate"
-                    value={formData.plate}
-                    onChange={(e) => setFormData(prev => ({ ...prev, plate: e.target.value }))}
-                    placeholder="e.g., B 1234 ABC"
-                    required
-                    data-testid="input-plate"
-                  />
-                </div>
-              </div>
+      <MasterFormDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        title={editingVehicle ? 'Edit Vehicle' : 'Add New Vehicle'}
+        onSubmit={handleSubmit}
+        isPending={createMutation.isPending || updateMutation.isPending}
+        data-testid="vehicle-dialog"
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="code">Vehicle Code *</Label>
+            <Input
+              id="code"
+              value={formData.code}
+              onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
+              placeholder="e.g., BUS-001"
+              required
+              data-testid="input-code"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="plate">License Plate *</Label>
+            <Input
+              id="plate"
+              value={formData.plate}
+              onChange={(e) => setFormData(prev => ({ ...prev, plate: e.target.value }))}
+              placeholder="e.g., B 1234 ABC"
+              required
+              data-testid="input-plate"
+            />
+          </div>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="layoutId">Layout *</Label>
-                <Select 
-                  value={formData.layoutId} 
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, layoutId: value }))}
-                  required
-                >
-                  <SelectTrigger data-testid="select-layout">
-                    <SelectValue placeholder="Select a layout" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {layouts.map(layout => (
-                      <SelectItem key={layout.id} value={layout.id}>
-                        {layout.name} ({layout.rows}x{layout.cols} - {(layout.seatMap as any[]).length} seats)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="layoutId">Layout *</Label>
+          <Select 
+            value={formData.layoutId} 
+            onValueChange={(value) => setFormData(prev => ({ ...prev, layoutId: value }))}
+            required
+          >
+            <SelectTrigger data-testid="select-layout">
+              <SelectValue placeholder="Select a layout" />
+            </SelectTrigger>
+            <SelectContent>
+              {layouts.map(layout => (
+                <SelectItem key={layout.id} value={layout.id}>
+                  {layout.name} ({layout.rows}x{layout.cols} - {(layout.seatMap as any[]).length} seats)
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="capacity">Capacity *</Label>
-                <Input
-                  id="capacity"
-                  type="number"
-                  value={formData.capacity}
-                  onChange={(e) => setFormData(prev => ({ ...prev, capacity: e.target.value }))}
-                  placeholder="e.g., 40"
-                  min="1"
-                  required
-                  data-testid="input-capacity"
-                />
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="capacity">Capacity *</Label>
+          <Input
+            id="capacity"
+            type="number"
+            value={formData.capacity}
+            onChange={(e) => setFormData(prev => ({ ...prev, capacity: e.target.value }))}
+            placeholder="e.g., 40"
+            min="1"
+            required
+            data-testid="input-capacity"
+          />
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  value={formData.notes}
-                  onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Additional notes about the vehicle"
-                  rows={3}
-                  data-testid="input-notes"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                  data-testid="cancel-button"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  data-testid="submit-button"
-                >
-                  {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : 'Save'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-      </Dialog>
+        <div className="space-y-2">
+          <Label htmlFor="notes">Notes</Label>
+          <Textarea
+            id="notes"
+            value={formData.notes}
+            onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+            placeholder="Additional notes about the vehicle"
+            rows={3}
+            data-testid="input-notes"
+          />
+        </div>
+      </MasterFormDialog>
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
@@ -302,26 +293,26 @@ export default function VehiclesManager() {
                   <TableHead>Layout</TableHead>
                   <TableHead>Capacity</TableHead>
                   <TableHead>Notes</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
+                  <TableHead className="w-24 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {vehicles.length === 0 ? (
+                {filteredData.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Belum ada data
+                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  vehicles.map(vehicle => (
+                  filteredData.map(vehicle => (
                     <TableRow key={vehicle.id} data-testid={`vehicle-row-${vehicle.code}`}>
                       <TableCell className="font-mono font-medium">{vehicle.code}</TableCell>
                       <TableCell className="font-mono">{vehicle.plate}</TableCell>
                       <TableCell>{getLayoutName(vehicle.layoutId)}</TableCell>
                       <TableCell>{vehicle.capacity} seats</TableCell>
                       <TableCell className="max-w-xs truncate">{vehicle.notes || '-'}</TableCell>
-                      <TableCell className="overflow-visible">
-                        <div className="flex items-center space-x-1">
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end space-x-1">
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -329,15 +320,14 @@ export default function VehiclesManager() {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => handleEdit(vehicle)}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-primary/10 focus:ring-2 focus:ring-primary"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10 focus:ring-2 focus:ring-primary"
                                   aria-label={`Edit vehicle ${vehicle.code}`}
                                   data-testid={`edit-vehicle-${vehicle.code}`}
                                 >
                                   <Pencil className="h-4 w-4 text-primary" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Edit vehicle</p>
                               </TooltipContent>
                             </Tooltip>
@@ -351,15 +341,14 @@ export default function VehiclesManager() {
                                   variant="ghost"
                                   onClick={() => handleDelete(vehicle.id)}
                                   disabled={deleteMutation.isPending}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
                                   aria-label={`Delete vehicle ${vehicle.code}`}
                                   data-testid={`delete-vehicle-${vehicle.code}`}
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Delete</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Delete vehicle</p>
                               </TooltipContent>
                             </Tooltip>

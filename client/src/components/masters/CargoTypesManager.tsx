@@ -4,14 +4,28 @@ import { cargoTypesApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Package, Plus, Pencil, Trash2, X, Loader2, Check
+  Package, Plus, Pencil, Trash2, Loader2, Search, X
 } from 'lucide-react';
 import type { CargoType } from '@shared/schema';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
 
 export default function CargoTypesManager() {
   const { toast } = useToast();
   const [editId, setEditId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [form, setForm] = useState({ code: '', name: '', description: '', maxWeightKg: '', isActive: true });
 
@@ -85,116 +99,154 @@ export default function CargoTypesManager() {
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
-  return (
-    <div data-testid="cargo-types-manager">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-bold text-gray-800">Jenis Kargo</span>
-          <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded ml-1">
-            {cargoTypes.length} jenis
-          </span>
-        </div>
-        <button
-          onClick={() => { resetForm(); setShowForm(true); }}
-          className="h-8 px-3 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-          data-testid="btn-add-cargo-type"
-        >
-          <Plus className="w-3.5 h-3.5" /> Tambah
-        </button>
-      </div>
+  const filteredData = cargoTypes.filter(ct => {
+    const s = searchQuery.toLowerCase();
+    return (
+      ct.code.toLowerCase().includes(s) ||
+      ct.name.toLowerCase().includes(s) ||
+      (ct.description?.toLowerCase().includes(s) ?? false)
+    );
+  });
 
-      {showForm && (
-        <div className="mb-6 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-gray-800">{editId ? 'Edit Jenis Kargo' : 'Tambah Jenis Kargo'}</h3>
-            <button onClick={resetForm} className="text-gray-400 hover:text-gray-600">
+  return (
+    <div data-testid="cargo-types-manager" className="space-y-4">
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold text-foreground">Jenis Kargo</h3>
+              <span className="text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
+                {filteredData.length}
+              </span>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => { resetForm(); setShowForm(true); }}
+            data-testid="btn-add-cargo-type"
+          >
+            <Plus className="w-4 h-4 mr-2" /> Tambah
+          </Button>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Cari kode atau nama..."
+            className="pl-9 pr-9 h-9"
+            data-testid="master-search-input"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              data-testid="master-search-clear"
+            >
               <X className="w-4 h-4" />
             </button>
-          </div>
-          <div className="space-y-3">
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Kode *</label>
-                <input
-                  value={form.code}
-                  onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
-                  placeholder="PKT"
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="input-cargo-type-code"
-                />
-              </div>
-              <div className="flex-[2]">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Nama *</label>
-                <input
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="Paket Reguler"
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="input-cargo-type-name"
-                />
-              </div>
+          )}
+        </div>
+      </div>
+
+      <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
+        <DialogContent data-testid="cargo-type-form-dialog">
+          <DialogHeader>
+            <DialogTitle>{editId ? 'Edit Jenis Kargo' : 'Tambah Jenis Kargo'}</DialogTitle>
+            <DialogDescription>
+              Isi informasi jenis kargo di bawah ini.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="code" className="text-right">Kode *</Label>
+              <Input
+                id="code"
+                value={form.code}
+                onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
+                placeholder="PKT"
+                className="col-span-3"
+                data-testid="input-cargo-type-code"
+              />
             </div>
-            <div className="flex gap-3">
-              <div className="flex-[2]">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Deskripsi</label>
-                <input
-                  value={form.description}
-                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="Paket umum, max 50kg"
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="input-cargo-type-desc"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Maks. Berat (kg)</label>
-                <input
-                  type="number"
-                  value={form.maxWeightKg}
-                  onChange={e => setForm(f => ({ ...f, maxWeightKg: e.target.value }))}
-                  placeholder="50"
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="input-cargo-type-max-weight"
-                />
-              </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="name" className="text-right">Nama *</Label>
+              <Input
+                id="name"
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Paket Reguler"
+                className="col-span-3"
+                data-testid="input-cargo-type-name"
+              />
             </div>
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                <input
-                  type="checkbox"
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="description" className="text-right">Deskripsi</Label>
+              <Input
+                id="description"
+                value={form.description}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Paket umum, max 50kg"
+                className="col-span-3"
+                data-testid="input-cargo-type-desc"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="maxWeight" className="text-right">Maks. Berat (kg)</Label>
+              <Input
+                id="maxWeight"
+                type="number"
+                value={form.maxWeightKg}
+                onChange={e => setForm(f => ({ ...f, maxWeightKg: e.target.value }))}
+                placeholder="50"
+                className="col-span-3"
+                data-testid="input-cargo-type-max-weight"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="isActive" className="text-right cursor-pointer">Aktif</Label>
+              <div className="col-span-3">
+                <Checkbox
+                  id="isActive"
                   checked={form.isActive}
-                  onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
-                  className="w-4 h-4 rounded"
+                  onCheckedChange={checked => setForm(f => ({ ...f, isActive: !!checked }))}
                   data-testid="input-cargo-type-active"
                 />
-                Aktif
-              </label>
-              <button
-                onClick={handleSubmit}
-                disabled={isPending || !form.code.trim() || !form.name.trim()}
-                className="h-9 px-4 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5 disabled:opacity-50"
-                data-testid="btn-save-cargo-type"
-              >
-                {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                {editId ? 'Perbarui' : 'Simpan'}
-              </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button variant="outline" onClick={resetForm} data-testid="btn-cancel-cargo-type">
+              Batal
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={isPending || !form.code.trim() || !form.name.trim()}
+              data-testid="btn-save-cargo-type"
+            >
+              {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {isLoading ? (
         <div className="text-center py-8">
           <Loader2 className="w-5 h-5 animate-spin mx-auto text-amber-500" />
         </div>
-      ) : cargoTypes.length === 0 ? (
+      ) : filteredData.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <Package className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-          <p className="text-sm font-medium">Belum ada jenis kargo</p>
-          <p className="text-xs text-gray-300 mt-1">Tambahkan jenis kargo untuk mengelola tarif</p>
+          <p className="text-sm font-medium">
+            {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada jenis kargo'}
+          </p>
+          {!searchQuery && <p className="text-xs text-gray-300 mt-1">Tambahkan jenis kargo untuk mengelola tarif</p>}
         </div>
       ) : (
         <div className="space-y-2">
-          {cargoTypes.map((ct: CargoType) => (
+          {filteredData.map((ct: CargoType) => (
             <div
               key={ct.id}
               className={`bg-white border rounded-xl p-3 flex items-center justify-between ${ct.isActive !== false ? 'border-gray-200' : 'border-gray-100 opacity-60'}`}
@@ -212,55 +264,43 @@ export default function CargoTypesManager() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={() => startEdit(ct)}
-                  className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+                  className="h-7 w-7 p-0 rounded-lg"
                   data-testid={`btn-edit-cargo-type-${ct.id}`}
+                  aria-label="Edit"
                 >
                   <Pencil className="w-3.5 h-3.5" />
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setDeleteConfirmId(ct.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                  className="h-7 w-7 p-0 rounded-lg hover:text-red-600 hover:bg-red-50"
                   data-testid={`btn-del-cargo-type-${ct.id}`}
+                  aria-label="Delete"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                </Button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" data-testid="dialog-delete-type">
-          <div className="bg-white rounded-xl p-5 shadow-xl max-w-sm w-full mx-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
-                <Trash2 className="w-4 h-4 text-red-600" />
-              </div>
-              <h3 className="text-sm font-bold text-gray-800">Hapus Jenis Kargo</h3>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">Apakah Anda yakin ingin menghapus jenis kargo ini? Tindakan ini tidak dapat dibatalkan.</p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setDeleteConfirmId(null)}
-                className="h-8 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
-                data-testid="btn-cancel-delete-type"
-              >
-                Batal
-              </button>
-              <button
-                onClick={() => { deleteMutation.mutate(deleteConfirmId); setDeleteConfirmId(null); }}
-                className="h-8 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium transition-colors"
-                data-testid="btn-confirm-delete-type"
-              >
-                Hapus
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmDialog
+        open={!!deleteConfirmId}
+        onOpenChange={(open) => !open && setDeleteConfirmId(null)}
+        onConfirm={() => {
+          if (deleteConfirmId) {
+            deleteMutation.mutate(deleteConfirmId);
+            setDeleteConfirmId(null);
+          }
+        }}
+        isPending={deleteMutation.isPending}
+      />
     </div>
   );
 }

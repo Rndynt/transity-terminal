@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
@@ -14,6 +13,7 @@ import { queryClient } from '@/lib/queryClient';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
+import MasterFormDialog from './MasterFormDialog';
 import type { Outlet, Stop } from '@/types';
 
 interface OutletFormData {
@@ -28,6 +28,7 @@ export default function OutletsManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState<OutletFormData>({
     stopId: '',
     name: '',
@@ -46,6 +47,16 @@ export default function OutletsManager() {
     queryKey: ['/api/stops'],
     queryFn: stopsApi.getAll
   });
+
+  const getStopName = (stopId: string) => {
+    const stop = stops.find(s => s.id === stopId);
+    return stop ? `${stop.name} (${stop.code})` : 'Unknown Stop';
+  };
+
+  const filteredData = outlets.filter(outlet => 
+    outlet.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    getStopName(outlet.stopId).toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const createMutation = useMutation({
     mutationFn: outletsApi.create,
@@ -155,16 +166,15 @@ export default function OutletsManager() {
     }
   };
 
-  const getStopName = (stopId: string) => {
-    const stop = stops.find(s => s.id === stopId);
-    return stop ? `${stop.name} (${stop.code})` : 'Unknown Stop';
-  };
-
   return (
     <div className="space-y-6" data-testid="outlets-manager">
       <MasterPageHeader
         title="Outlets Management"
         description="Manage ticket sales outlets and their configurations"
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Cari outlet..."
+        count={filteredData.length}
         action={
           <Button onClick={handleCreate} data-testid="add-outlet-button">
             <Plus className="h-4 w-4 mr-2" />
@@ -172,99 +182,79 @@ export default function OutletsManager() {
           </Button>
         }
       />
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent data-testid="outlet-dialog">
-            <DialogHeader>
-              <DialogTitle>
-                {editingOutlet ? 'Edit Outlet' : 'Add New Outlet'}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="stopId">Stop *</Label>
-                <Select 
-                  value={formData.stopId} 
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, stopId: value }))}
-                  required
-                >
-                  <SelectTrigger data-testid="select-stop">
-                    <SelectValue placeholder="Select a stop" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stops.filter(stop => stop.isOutlet).map(stop => (
-                      <SelectItem key={stop.id} value={stop.id}>
-                        {stop.name} ({stop.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+      <MasterFormDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        title={editingOutlet ? 'Edit Outlet' : 'Add New Outlet'}
+        onSubmit={handleSubmit}
+        isPending={createMutation.isPending || updateMutation.isPending}
+        data-testid="outlet-dialog"
+      >
+        <div className="space-y-2">
+          <Label htmlFor="stopId">Stop *</Label>
+          <Select 
+            value={formData.stopId} 
+            onValueChange={(value) => setFormData(prev => ({ ...prev, stopId: value }))}
+            required
+          >
+            <SelectTrigger data-testid="select-stop">
+              <SelectValue placeholder="Select a stop" />
+            </SelectTrigger>
+            <SelectContent>
+              {stops.filter(stop => stop.isOutlet).map(stop => (
+                <SelectItem key={stop.id} value={stop.id}>
+                  {stop.name} ({stop.code})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="name">Outlet Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., Jakarta Terminal Outlet"
-                  required
-                  data-testid="input-name"
-                />
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="name">Outlet Name *</Label>
+          <Input
+            id="name"
+            value={formData.name}
+            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+            placeholder="e.g., Jakarta Terminal Outlet"
+            required
+            data-testid="input-name"
+          />
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-                  placeholder="Full address"
-                  data-testid="input-address"
-                />
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="address">Address</Label>
+          <Input
+            id="address"
+            value={formData.address}
+            onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+            placeholder="Full address"
+            data-testid="input-address"
+          />
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                  placeholder="+62-21-1234567"
-                  data-testid="input-phone"
-                />
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="phone">Phone</Label>
+          <Input
+            id="phone"
+            value={formData.phone}
+            onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+            placeholder="+62-21-1234567"
+            data-testid="input-phone"
+          />
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="printerProfileId">Printer Profile ID</Label>
-                <Input
-                  id="printerProfileId"
-                  value={formData.printerProfileId}
-                  onChange={(e) => setFormData(prev => ({ ...prev, printerProfileId: e.target.value }))}
-                  placeholder="default"
-                  data-testid="input-printer"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                  data-testid="cancel-button"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  data-testid="submit-button"
-                >
-                  {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : 'Save'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-      </Dialog>
+        <div className="space-y-2">
+          <Label htmlFor="printerProfileId">Printer Profile ID</Label>
+          <Input
+            id="printerProfileId"
+            value={formData.printerProfileId}
+            onChange={(e) => setFormData(prev => ({ ...prev, printerProfileId: e.target.value }))}
+            placeholder="default"
+            data-testid="input-printer"
+          />
+        </div>
+      </MasterFormDialog>
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
@@ -290,18 +280,18 @@ export default function OutletsManager() {
                   <TableHead>Address</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Printer</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
+                  <TableHead className="w-24 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {outlets.length === 0 ? (
+                {filteredData.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Belum ada data
+                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  outlets.map(outlet => (
+                  filteredData.map(outlet => (
                     <TableRow key={outlet.id} data-testid={`outlet-row-${outlet.id}`}>
                       <TableCell className="font-medium">{outlet.name}</TableCell>
                       <TableCell>{getStopName(outlet.stopId)}</TableCell>
@@ -310,8 +300,8 @@ export default function OutletsManager() {
                       <TableCell className="font-mono text-xs">
                         {outlet.printerProfileId || 'default'}
                       </TableCell>
-                      <TableCell className="overflow-visible">
-                        <div className="flex items-center space-x-1">
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end space-x-1">
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -319,15 +309,14 @@ export default function OutletsManager() {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => handleEdit(outlet)}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-primary/10 focus:ring-2 focus:ring-primary"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10 focus:ring-2 focus:ring-primary"
                                   aria-label={`Edit outlet ${outlet.name}`}
                                   data-testid={`edit-outlet-${outlet.id}`}
                                 >
                                   <Pencil className="h-4 w-4 text-primary" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Edit outlet</p>
                               </TooltipContent>
                             </Tooltip>
@@ -341,15 +330,14 @@ export default function OutletsManager() {
                                   variant="ghost"
                                   onClick={() => handleDelete(outlet.id)}
                                   disabled={deleteMutation.isPending}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
                                   aria-label={`Delete outlet ${outlet.name}`}
                                   data-testid={`delete-outlet-${outlet.id}`}
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Delete</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Delete outlet</p>
                               </TooltipContent>
                             </Tooltip>

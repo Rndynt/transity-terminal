@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -45,6 +45,7 @@ export default function PriceRulesManager() {
     validTo: undefined,
     priority: '1'
   });
+  const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
 
   const { data: priceRules = [], isLoading } = useQuery({
@@ -243,11 +244,28 @@ export default function PriceRulesManager() {
     }));
   };
 
+  const filteredPriceRules = priceRules.filter(rule => {
+    const q = searchQuery.toLowerCase();
+    const scope = rule.scope.toLowerCase();
+    const target = (
+      rule.scope === 'pattern' && rule.patternId ? getPatternName(rule.patternId) :
+      rule.scope === 'trip' && rule.tripId ? getTripName(rule.tripId) :
+      rule.scope === 'leg' && rule.tripId ? `${getTripName(rule.tripId)} - Leg ${rule.legIndex}` :
+      rule.scope === 'time' ? 'time-based pricing' : ''
+    ).toLowerCase();
+
+    return scope.includes(q) || target.includes(q);
+  });
+
   return (
     <div className="space-y-6" data-testid="price-rules-manager">
       <MasterPageHeader
         title="Price Rules Management"
         description="Manage pricing rules and fare calculations"
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Cari aturan harga..."
+        count={filteredPriceRules.length}
         action={
           <Button onClick={handleCreate} data-testid="add-price-rule-button">
             <Plus className="h-4 w-4 mr-2" />
@@ -261,6 +279,9 @@ export default function PriceRulesManager() {
               <DialogTitle>
                 {editingRule ? 'Edit Price Rule' : 'Add New Price Rule'}
               </DialogTitle>
+              <DialogDescription>
+                {editingRule ? 'Perbarui aturan harga yang ada.' : 'Buat aturan harga baru untuk pola perjalanan atau trip tertentu.'}
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -417,23 +438,23 @@ export default function PriceRulesManager() {
                 </p>
               </div>
 
-              <div className="flex justify-end space-x-2">
+              <DialogFooter className="flex justify-end space-x-2">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setIsDialogOpen(false)}
                   data-testid="cancel-button"
                 >
-                  Cancel
+                  Batal
                 </Button>
                 <Button
                   type="submit"
                   disabled={createMutation.isPending || updateMutation.isPending}
                   data-testid="submit-button"
                 >
-                  {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : 'Save'}
+                  {(createMutation.isPending || updateMutation.isPending) ? 'Menyimpan...' : 'Simpan'}
                 </Button>
-              </div>
+              </DialogFooter>
             </form>
           </DialogContent>
       </Dialog>
@@ -462,18 +483,18 @@ export default function PriceRulesManager() {
                   <TableHead>Rule</TableHead>
                   <TableHead>Valid Period</TableHead>
                   <TableHead>Priority</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
+                  <TableHead className="w-10">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {priceRules.length === 0 ? (
+                {filteredPriceRules.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Belum ada data
+                      {searchQuery ? `Tidak ada hasil untuk "${searchQuery}"` : 'Belum ada data'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  priceRules.map(rule => (
+                  filteredPriceRules.map(rule => (
                     <TableRow key={rule.id} data-testid={`price-rule-row-${rule.id}`}>
                       <TableCell>{getScopeBadge(rule.scope)}</TableCell>
                       <TableCell className="max-w-xs">
@@ -502,18 +523,16 @@ export default function PriceRulesManager() {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
-                                  size="sm"
                                   variant="ghost"
                                   onClick={() => handleEdit(rule)}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-primary/10 focus:ring-2 focus:ring-primary"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
                                   aria-label={`Edit price rule ${rule.scope}`}
                                   data-testid={`edit-price-rule-${rule.id}`}
                                 >
                                   <Pencil className="h-4 w-4 text-primary" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Edit price rule</p>
                               </TooltipContent>
                             </Tooltip>
@@ -523,19 +542,17 @@ export default function PriceRulesManager() {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
-                                  size="sm"
                                   variant="ghost"
                                   onClick={() => handleDelete(rule.id)}
                                   disabled={deleteMutation.isPending}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50"
                                   aria-label={`Delete price rule ${rule.scope}`}
                                   data-testid={`delete-price-rule-${rule.id}`}
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Delete</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Delete price rule</p>
                               </TooltipContent>
                             </Tooltip>

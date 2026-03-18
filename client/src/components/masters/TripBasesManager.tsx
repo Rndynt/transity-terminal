@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -102,6 +102,7 @@ interface DefaultStopTime {
 }
 
 export default function TripBasesManager() {
+  const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBase, setEditingBase] = useState<TripBase | null>(null);
   const [selectedPatternId, setSelectedPatternId] = useState<string>('');
@@ -383,11 +384,25 @@ export default function TripBasesManager() {
     ));
   };
 
+  const filteredTripBases = tripBases.filter((base: TripBase) => {
+    const pattern = patterns.find(p => p.id === base.patternId);
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      base.name.toLowerCase().includes(searchLower) ||
+      (base.code && base.code.toLowerCase().includes(searchLower)) ||
+      (pattern && (pattern.code.toLowerCase().includes(searchLower) || pattern.name.toLowerCase().includes(searchLower)))
+    );
+  });
+
   return (
     <div className="space-y-6" data-testid="trip-bases-manager">
       <MasterPageHeader
         title="Trip Bases Management"
         description="Manage virtual scheduling templates for trips"
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Cari trip base..."
+        count={filteredTripBases.length}
         action={
           <Button onClick={openCreateDialog} data-testid="button-create-trip-base">
             <Plus className="h-4 w-4 mr-2" />
@@ -425,14 +440,14 @@ export default function TripBasesManager() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {tripBases.length === 0 ? (
+                  {filteredTripBases.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        Belum ada data
+                        {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data'}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    tripBases.map((base: TripBase) => {
+                    filteredTripBases.map((base: TripBase) => {
                       const pattern = patterns.find(p => p.id === base.patternId);
                       return (
                         <TableRow key={base.id} data-testid={`row-trip-base-${base.id}`}>
@@ -481,9 +496,10 @@ export default function TripBasesManager() {
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => openEditDialog(base)}
+                                      className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10 focus:ring-2 focus:ring-primary"
                                       data-testid={`button-edit-${base.id}`}
                                     >
-                                      <Pencil className="w-4 h-4" />
+                                      <Pencil className="w-4 h-4 text-primary" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>Edit trip base</TooltipContent>
@@ -496,6 +512,7 @@ export default function TripBasesManager() {
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => handleDelete(base.id)}
+                                      className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 focus:ring-2 focus:ring-destructive"
                                       data-testid={`button-delete-${base.id}`}
                                     >
                                       <Trash2 className="w-4 h-4 text-destructive" />
@@ -523,11 +540,11 @@ export default function TripBasesManager() {
               {editingBase ? 'Edit Trip Base' : 'Create Trip Base'}
             </DialogTitle>
             <DialogDescription>
-              Create a virtual scheduling template that will generate real trips on demand.
+              {editingBase ? 'Ubah informasi template penjadwalan virtual.' : 'Buat template penjadwalan virtual baru yang akan menghasilkan perjalanan nyata sesuai permintaan.'}
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form id="trip-base-form" onSubmit={handleSubmit} className="space-y-6">
             {/* Basic Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -756,19 +773,20 @@ export default function TripBasesManager() {
             )}
 
             {/* Submit Buttons */}
-            <div className="flex justify-end gap-2 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                Cancel
+            </form>
+            <DialogFooter className="pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} data-testid="button-cancel">
+                Batal
               </Button>
               <Button 
                 type="submit" 
+                form="trip-base-form"
                 disabled={createMutation.isPending || updateMutation.isPending}
                 data-testid="button-save"
               >
-                {createMutation.isPending || updateMutation.isPending ? 'Saving...' : editingBase ? 'Update' : 'Create'}
+                {createMutation.isPending || updateMutation.isPending ? 'Menyimpan...' : 'Simpan'}
               </Button>
-            </div>
-          </form>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

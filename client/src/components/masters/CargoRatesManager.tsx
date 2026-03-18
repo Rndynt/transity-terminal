@@ -4,9 +4,29 @@ import { cargoRatesApi, cargoTypesApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import {
-  DollarSign, Plus, Pencil, Trash2, X, Loader2, Check, ArrowRight
+  DollarSign, Plus, Pencil, Trash2, Loader2, ArrowRight, Search, X
 } from 'lucide-react';
 import type { CargoType, CargoRate, Stop, TripPattern, Trip } from '@shared/schema';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
 
 const fmt = (amount: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
@@ -21,7 +41,8 @@ export default function CargoRatesManager() {
   const { toast } = useToast();
   const [editId, setEditId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [filterTypeId, setFilterTypeId] = useState('');
+  const [filterTypeId, setFilterTypeId] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [form, setForm] = useState({
     cargoTypeId: '', scope: 'global' as string, scopeRefId: '',
@@ -50,8 +71,8 @@ export default function CargoRatesManager() {
   });
 
   const { data: cargoRates = [], isLoading } = useQuery<CargoRate[]>({
-    queryKey: ['/api/cargo-rates', filterTypeId],
-    queryFn: () => cargoRatesApi.getAll(filterTypeId || undefined)
+    queryKey: ['/api/cargo-rates', filterTypeId === 'all' ? '' : filterTypeId],
+    queryFn: () => cargoRatesApi.getAll(filterTypeId === 'all' ? undefined : filterTypeId)
   });
 
   const createMutation = useMutation({
@@ -113,7 +134,7 @@ export default function CargoRatesManager() {
     }
     const payload = {
       cargoTypeId: form.cargoTypeId,
-      scope: form.scope,
+      scope: form.scope as 'global' | 'pattern' | 'trip',
       scopeRefId: (form.scope !== 'global' && form.scopeRefId) ? form.scopeRefId : null,
       originStopId: form.originStopId || null,
       destinationStopId: form.destinationStopId || null,
@@ -141,210 +162,278 @@ export default function CargoRatesManager() {
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
+  const filteredData = cargoRates.filter(cr => {
+    const s = searchQuery.toLowerCase();
+    const typeName = getTypeName(cr.cargoTypeId).toLowerCase();
+    const originName = getStopName(cr.originStopId).toLowerCase();
+    const destName = getStopName(cr.destinationStopId).toLowerCase();
+    const scopeLabel = (SCOPE_LABELS[cr.scope || 'global']).toLowerCase();
+
+    return (
+      typeName.includes(s) ||
+      originName.includes(s) ||
+      destName.includes(s) ||
+      scopeLabel.includes(s)
+    );
+  });
+
   return (
-    <div data-testid="cargo-rates-manager">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-bold text-gray-800">Tarif Kargo</span>
-          <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded ml-1">
-            {cargoRates.length} tarif
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={filterTypeId}
-            onChange={e => setFilterTypeId(e.target.value)}
-            className="h-8 px-2 bg-white border border-gray-200 rounded-lg text-xs text-gray-600"
-            data-testid="filter-rate-type"
-          >
-            <option value="">Semua Jenis</option>
-            {cargoTypes.map(ct => (
-              <option key={ct.id} value={ct.id}>{ct.name}</option>
-            ))}
-          </select>
-          <button
+    <div data-testid="cargo-rates-manager" className="space-y-4">
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold text-foreground">Tarif Kargo</h3>
+              <span className="text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
+                {filteredData.length}
+              </span>
+            </div>
+          </div>
+          <Button
+            size="sm"
             onClick={() => { resetForm(); setShowForm(true); }}
-            className="h-8 px-3 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
             data-testid="btn-add-cargo-rate"
           >
-            <Plus className="w-3.5 h-3.5" /> Tambah
-          </button>
+            <Plus className="w-4 h-4 mr-2" /> Tambah
+          </Button>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Cari jenis, rute, atau scope..."
+              className="pl-9 pr-9 h-9"
+              data-testid="master-search-input"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                data-testid="master-search-clear"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <Select value={filterTypeId} onValueChange={setFilterTypeId}>
+            <SelectTrigger className="w-full sm:w-[180px] h-9" data-testid="filter-rate-type">
+              <SelectValue placeholder="Semua Jenis" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Jenis</SelectItem>
+              {cargoTypes.map(ct => (
+                <SelectItem key={ct.id} value={ct.id}>{ct.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      {showForm && (
-        <div className="mb-6 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-gray-800">{editId ? 'Edit Tarif' : 'Tambah Tarif'}</h3>
-            <button onClick={resetForm} className="text-gray-400 hover:text-gray-600">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-3">
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Jenis Kargo *</label>
-                <select
+      <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
+        <DialogContent data-testid="cargo-rate-form-dialog">
+          <DialogHeader>
+            <DialogTitle>{editId ? 'Edit Tarif' : 'Tambah Tarif'}</DialogTitle>
+            <DialogDescription>
+              Konfigurasi tarif kargo berdasarkan jenis dan jangkauan rute.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right">Jenis Kargo *</Label>
+              <div className="col-span-3">
+                <Select
                   value={form.cargoTypeId}
-                  onChange={e => setForm(f => ({ ...f, cargoTypeId: e.target.value }))}
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="select-rate-cargo-type"
+                  onValueChange={v => setForm(f => ({ ...f, cargoTypeId: v }))}
                 >
-                  <option value="">Pilih jenis...</option>
-                  {cargoTypes.map(ct => (
-                    <option key={ct.id} value={ct.id}>{ct.name} ({ct.code})</option>
-                  ))}
-                </select>
+                  <SelectTrigger data-testid="select-rate-cargo-type">
+                    <SelectValue placeholder="Pilih jenis..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cargoTypes.map(ct => (
+                      <SelectItem key={ct.id} value={ct.id}>{ct.name} ({ct.code})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="flex-1">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Scope</label>
-                <select
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right">Scope</Label>
+              <div className="col-span-3">
+                <Select
                   value={form.scope}
-                  onChange={e => setForm(f => ({ ...f, scope: e.target.value, scopeRefId: '' }))}
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="select-rate-scope"
+                  onValueChange={v => setForm(f => ({ ...f, scope: v, scopeRefId: '' }))}
                 >
-                  <option value="global">Global</option>
-                  <option value="pattern">Pola Trip</option>
-                  <option value="trip">Trip Spesifik</option>
-                </select>
+                  <SelectTrigger data-testid="select-rate-scope">
+                    <SelectValue placeholder="Pilih scope..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="global">Global</SelectItem>
+                    <SelectItem value="pattern">Pola Trip</SelectItem>
+                    <SelectItem value="trip">Trip Spesifik</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             {form.scope === 'pattern' && (
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Pola Trip</label>
-                <select
-                  value={form.scopeRefId}
-                  onChange={e => setForm(f => ({ ...f, scopeRefId: e.target.value }))}
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="select-rate-pattern"
-                >
-                  <option value="">Pilih pola...</option>
-                  {patterns.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Pola Trip</Label>
+                <div className="col-span-3">
+                  <Select
+                    value={form.scopeRefId}
+                    onValueChange={v => setForm(f => ({ ...f, scopeRefId: v }))}
+                  >
+                    <SelectTrigger data-testid="select-rate-pattern">
+                      <SelectValue placeholder="Pilih pola..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {patterns.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             )}
             {form.scope === 'trip' && (
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Trip</label>
-                <select
-                  value={form.scopeRefId}
-                  onChange={e => setForm(f => ({ ...f, scopeRefId: e.target.value }))}
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="select-rate-trip"
-                >
-                  <option value="">Pilih trip...</option>
-                  {trips.map(t => (
-                    <option key={t.id} value={t.id}>{t.id.slice(0,8)}...</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Trip</Label>
+                <div className="col-span-3">
+                  <Select
+                    value={form.scopeRefId}
+                    onValueChange={v => setForm(f => ({ ...f, scopeRefId: v }))}
+                  >
+                    <SelectTrigger data-testid="select-rate-trip">
+                      <SelectValue placeholder="Pilih trip..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {trips.map(t => (
+                        <SelectItem key={t.id} value={t.id}>{t.id.slice(0,8)}...</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             )}
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Asal (opsional)</label>
-                <select
-                  value={form.originStopId}
-                  onChange={e => setForm(f => ({ ...f, originStopId: e.target.value }))}
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="select-rate-origin"
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right">Asal</Label>
+              <div className="col-span-3">
+                <Select
+                  value={form.originStopId || 'all'}
+                  onValueChange={v => setForm(f => ({ ...f, originStopId: v === 'all' ? '' : v }))}
                 >
-                  <option value="">Semua asal</option>
-                  {allStops.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Tujuan (opsional)</label>
-                <select
-                  value={form.destinationStopId}
-                  onChange={e => setForm(f => ({ ...f, destinationStopId: e.target.value }))}
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="select-rate-dest"
-                >
-                  <option value="">Semua tujuan</option>
-                  {allStops.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                  <SelectTrigger data-testid="select-rate-origin">
+                    <SelectValue placeholder="Semua asal" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua asal</SelectItem>
+                    {allStops.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Harga/kg *</label>
-                <input
-                  type="number"
-                  value={form.pricePerKg}
-                  onChange={e => setForm(f => ({ ...f, pricePerKg: e.target.value }))}
-                  placeholder="15000"
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="input-rate-price-per-kg"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Harga/leg</label>
-                <input
-                  type="number"
-                  value={form.pricePerLeg}
-                  onChange={e => setForm(f => ({ ...f, pricePerLeg: e.target.value }))}
-                  placeholder="5000"
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="input-rate-price-per-leg"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Min. Biaya</label>
-                <input
-                  type="number"
-                  value={form.minCharge}
-                  onChange={e => setForm(f => ({ ...f, minCharge: e.target.value }))}
-                  placeholder="25000"
-                  className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800"
-                  data-testid="input-rate-min-charge"
-                />
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right">Tujuan</Label>
+              <div className="col-span-3">
+                <Select
+                  value={form.destinationStopId || 'all'}
+                  onValueChange={v => setForm(f => ({ ...f, destinationStopId: v === 'all' ? '' : v }))}
+                >
+                  <SelectTrigger data-testid="select-rate-dest">
+                    <SelectValue placeholder="Semua tujuan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua tujuan</SelectItem>
+                    {allStops.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                <input
-                  type="checkbox"
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="pricePerKg" className="text-right">Harga/kg *</Label>
+              <Input
+                id="pricePerKg"
+                type="number"
+                value={form.pricePerKg}
+                onChange={e => setForm(f => ({ ...f, pricePerKg: e.target.value }))}
+                placeholder="15000"
+                className="col-span-3"
+                data-testid="input-rate-price-per-kg"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="pricePerLeg" className="text-right">Harga/leg</Label>
+              <Input
+                id="pricePerLeg"
+                type="number"
+                value={form.pricePerLeg}
+                onChange={e => setForm(f => ({ ...f, pricePerLeg: e.target.value }))}
+                placeholder="5000"
+                className="col-span-3"
+                data-testid="input-rate-price-per-leg"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="minCharge" className="text-right">Min. Biaya</Label>
+              <Input
+                id="minCharge"
+                type="number"
+                value={form.minCharge}
+                onChange={e => setForm(f => ({ ...f, minCharge: e.target.value }))}
+                placeholder="25000"
+                className="col-span-3"
+                data-testid="input-rate-min-charge"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="isActiveRate" className="text-right cursor-pointer">Aktif</Label>
+              <div className="col-span-3">
+                <Checkbox
+                  id="isActiveRate"
                   checked={form.isActive}
-                  onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
-                  className="w-4 h-4 rounded"
+                  onCheckedChange={checked => setForm(f => ({ ...f, isActive: !!checked }))}
                   data-testid="input-rate-active"
                 />
-                Aktif
-              </label>
-              <button
-                onClick={handleSubmit}
-                disabled={isPending || !form.cargoTypeId || !form.pricePerKg}
-                className="h-9 px-4 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5 disabled:opacity-50"
-                data-testid="btn-save-cargo-rate"
-              >
-                {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                {editId ? 'Perbarui' : 'Simpan'}
-              </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button variant="outline" onClick={resetForm} data-testid="btn-cancel-cargo-rate">
+              Batal
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={isPending || !form.cargoTypeId || !form.pricePerKg}
+              data-testid="btn-save-cargo-rate"
+            >
+              {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {isLoading ? (
         <div className="text-center py-8">
           <Loader2 className="w-5 h-5 animate-spin mx-auto text-amber-500" />
         </div>
-      ) : cargoRates.length === 0 ? (
+      ) : filteredData.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <DollarSign className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-          <p className="text-sm font-medium">Belum ada tarif kargo</p>
-          <p className="text-xs text-gray-300 mt-1">Tambahkan tarif berdasarkan jenis dan rute</p>
+          <p className="text-sm font-medium">
+            {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada tarif kargo'}
+          </p>
+          {!searchQuery && <p className="text-xs text-gray-300 mt-1">Tambahkan tarif berdasarkan jenis dan rute</p>}
         </div>
       ) : (
         <div className="space-y-2">
-          {cargoRates.map((cr: CargoRate) => (
+          {filteredData.map((cr: CargoRate) => (
             <div
               key={cr.id}
               className={`bg-white border rounded-xl p-3 ${cr.isActive !== false ? 'border-gray-200' : 'border-gray-100 opacity-60'}`}
@@ -373,20 +462,26 @@ export default function CargoRatesManager() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => startEdit(cr)}
-                    className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+                    className="h-7 w-7 p-0 rounded-lg"
                     data-testid={`btn-edit-cargo-rate-${cr.id}`}
+                    aria-label="Edit"
                   >
                     <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => setDeleteConfirmId(cr.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                    className="h-7 w-7 p-0 rounded-lg hover:text-red-600 hover:bg-red-50"
                     data-testid={`btn-del-cargo-rate-${cr.id}`}
+                    aria-label="Delete"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -394,35 +489,17 @@ export default function CargoRatesManager() {
         </div>
       )}
 
-      {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" data-testid="dialog-delete-rate">
-          <div className="bg-white rounded-xl p-5 shadow-xl max-w-sm w-full mx-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
-                <Trash2 className="w-4 h-4 text-red-600" />
-              </div>
-              <h3 className="text-sm font-bold text-gray-800">Hapus Tarif Kargo</h3>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">Apakah Anda yakin ingin menghapus tarif ini? Tindakan ini tidak dapat dibatalkan.</p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setDeleteConfirmId(null)}
-                className="h-8 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
-                data-testid="btn-cancel-delete-rate"
-              >
-                Batal
-              </button>
-              <button
-                onClick={() => { deleteMutation.mutate(deleteConfirmId); setDeleteConfirmId(null); }}
-                className="h-8 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium transition-colors"
-                data-testid="btn-confirm-delete-rate"
-              >
-                Hapus
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmDialog
+        open={!!deleteConfirmId}
+        onOpenChange={(open) => !open && setDeleteConfirmId(null)}
+        onConfirm={() => {
+          if (deleteConfirmId) {
+            deleteMutation.mutate(deleteConfirmId);
+            setDeleteConfirmId(null);
+          }
+        }}
+        isPending={deleteMutation.isPending}
+      />
     </div>
   );
 }

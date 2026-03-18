@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -15,6 +14,7 @@ import { queryClient } from '@/lib/queryClient';
 import { Plus, Pencil, Trash2, CheckCircle, XCircle } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
+import MasterFormDialog from './MasterFormDialog';
 import type { Stop } from '@/types';
 
 interface StopFormData {
@@ -30,6 +30,7 @@ export default function StopsManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStop, setEditingStop] = useState<Stop | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState<StopFormData>({
     code: '',
     name: '',
@@ -44,6 +45,12 @@ export default function StopsManager() {
     queryKey: ['/api/stops'],
     queryFn: stopsApi.getAll
   });
+
+  const filteredData = stops.filter(stop => 
+    stop.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    stop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (stop.city && stop.city.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   const createMutation = useMutation({
     mutationFn: stopsApi.create,
@@ -166,6 +173,10 @@ export default function StopsManager() {
       <MasterPageHeader
         title="Stops Management"
         description="Manage bus stops and terminal locations"
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Cari stop..."
+        count={filteredData.length}
         action={
           <Button onClick={handleCreate} data-testid="add-stop-button">
             <Plus className="h-4 w-4 mr-2" />
@@ -173,107 +184,87 @@ export default function StopsManager() {
           </Button>
         }
       />
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent data-testid="stop-dialog">
-            <DialogHeader>
-              <DialogTitle>
-                {editingStop ? 'Edit Stop' : 'Add New Stop'}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="code">Code *</Label>
-                  <Input
-                    id="code"
-                    value={formData.code}
-                    onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
-                    placeholder="e.g., JKT"
-                    required
-                    data-testid="input-code"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name *</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g., Jakarta Terminal"
-                    required
-                    data-testid="input-name"
-                  />
-                </div>
-              </div>
+      <MasterFormDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        title={editingStop ? 'Edit Stop' : 'Add New Stop'}
+        onSubmit={handleSubmit}
+        isPending={createMutation.isPending || updateMutation.isPending}
+        data-testid="stop-dialog"
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="code">Code *</Label>
+            <Input
+              id="code"
+              value={formData.code}
+              onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
+              placeholder="e.g., JKT"
+              required
+              data-testid="input-code"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="name">Name *</Label>
+            <Input
+              id="name"
+              value={formData.name}
+              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="e.g., Jakarta Terminal"
+              required
+              data-testid="input-name"
+            />
+          </div>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="city">City</Label>
-                <Input
-                  id="city"
-                  value={formData.city}
-                  onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
-                  placeholder="e.g., Jakarta"
-                  data-testid="input-city"
-                />
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="city">City</Label>
+          <Input
+            id="city"
+            value={formData.city}
+            onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
+            placeholder="e.g., Jakarta"
+            data-testid="input-city"
+          />
+        </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="lat">Latitude</Label>
-                  <Input
-                    id="lat"
-                    type="number"
-                    step="any"
-                    value={formData.lat}
-                    onChange={(e) => setFormData(prev => ({ ...prev, lat: e.target.value }))}
-                    placeholder="e.g., -6.2088"
-                    data-testid="input-lat"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lng">Longitude</Label>
-                  <Input
-                    id="lng"
-                    type="number"
-                    step="any"
-                    value={formData.lng}
-                    onChange={(e) => setFormData(prev => ({ ...prev, lng: e.target.value }))}
-                    placeholder="e.g., 106.8456"
-                    data-testid="input-lng"
-                  />
-                </div>
-              </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="lat">Latitude</Label>
+            <Input
+              id="lat"
+              type="number"
+              step="any"
+              value={formData.lat}
+              onChange={(e) => setFormData(prev => ({ ...prev, lat: e.target.value }))}
+              placeholder="e.g., -6.2088"
+              data-testid="input-lat"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="lng">Longitude</Label>
+            <Input
+              id="lng"
+              type="number"
+              step="any"
+              value={formData.lng}
+              onChange={(e) => setFormData(prev => ({ ...prev, lng: e.target.value }))}
+              placeholder="e.g., 106.8456"
+              data-testid="input-lng"
+            />
+          </div>
+        </div>
 
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="isOutlet"
-                  checked={formData.isOutlet}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isOutlet: checked }))}
-                  data-testid="switch-outlet"
-                />
-                <Label htmlFor="isOutlet">This stop is an outlet</Label>
-              </div>
-
-              <div className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                  data-testid="cancel-button"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  data-testid="submit-button"
-                >
-                  {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : 'Save'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-      </Dialog>
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="isOutlet"
+            checked={formData.isOutlet}
+            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isOutlet: checked }))}
+            data-testid="switch-outlet"
+          />
+          <Label htmlFor="isOutlet">This stop is an outlet</Label>
+        </div>
+      </MasterFormDialog>
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
@@ -299,18 +290,18 @@ export default function StopsManager() {
                   <TableHead>City</TableHead>
                   <TableHead>Coordinates</TableHead>
                   <TableHead>Outlet</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
+                  <TableHead className="w-24 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {stops.length === 0 ? (
+                {filteredData.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Belum ada data
+                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  stops.map(stop => (
+                  filteredData.map(stop => (
                     <TableRow key={stop.id} data-testid={`stop-row-${stop.code}`}>
                       <TableCell className="font-mono">{stop.code}</TableCell>
                       <TableCell className="font-medium">{stop.name}</TableCell>
@@ -331,8 +322,8 @@ export default function StopsManager() {
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="overflow-visible">
-                        <div className="flex items-center space-x-1">
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end space-x-1">
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -340,15 +331,14 @@ export default function StopsManager() {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => handleEdit(stop)}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-primary/10 focus:ring-2 focus:ring-primary"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10 focus:ring-2 focus:ring-primary"
                                   aria-label={`Edit stop ${stop.name}`}
                                   data-testid={`edit-stop-${stop.code}`}
                                 >
                                   <Pencil className="h-4 w-4 text-primary" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Edit</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Edit stop</p>
                               </TooltipContent>
                             </Tooltip>
@@ -362,15 +352,14 @@ export default function StopsManager() {
                                   variant="ghost"
                                   onClick={() => handleDelete(stop.id)}
                                   disabled={deleteMutation.isPending}
-                                  className="h-8 w-8 p-0 md:h-auto md:w-auto md:px-3 md:py-2 hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
                                   aria-label={`Delete stop ${stop.name}`}
                                   data-testid={`delete-stop-${stop.code}`}
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
-                                  <span className="sr-only md:not-sr-only md:ml-2">Delete</span>
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
+                              <TooltipContent>
                                 <p>Delete stop</p>
                               </TooltipContent>
                             </Tooltip>
