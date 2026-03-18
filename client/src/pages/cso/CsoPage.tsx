@@ -151,7 +151,13 @@ export default function CsoPage() {
   };
 
   const handleDestinationSelect = (stop: Stop, sequence: number) => {
-    updateState({ destinationStop: stop, destinationSeq: sequence });
+    updateState({
+      destinationStop: stop,
+      destinationSeq: sequence,
+      ...(state.originSeq !== undefined && state.originSeq >= sequence
+        ? { originStop: undefined, originSeq: undefined }
+        : {})
+    });
   };
 
   const handleSeatSelect = (seatNo: string) => addSeat(seatNo);

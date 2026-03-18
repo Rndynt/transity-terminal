@@ -150,34 +150,52 @@ export default function RouteTimeline({
 
                 <div className="flex gap-1.5 flex-shrink-0">
                   {canBoard && !isLast ? (
-                    <button
-                      onClick={() => onOriginSelect(stop, stopTime.stopSequence)}
-                      data-testid={`naik-${index}`}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-                        isOrigin
-                          ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-200'
-                          : 'bg-white border border-gray-200 text-gray-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'
-                      }`}
-                    >
-                      {isOrigin ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Naik</> : 'Naik'}
-                    </button>
+                    isDest && !isOrigin ? (
+                      <span
+                        title="Stop ini sudah dipilih sebagai titik turun"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
+                      >
+                        Naik
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => onOriginSelect(stop, stopTime.stopSequence)}
+                        data-testid={`naik-${index}`}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                          isOrigin
+                            ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-200'
+                            : 'bg-white border border-gray-200 text-gray-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'
+                        }`}
+                      >
+                        {isOrigin ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Naik</> : 'Naik'}
+                      </button>
+                    )
                   ) : !isLast ? (
                     <span className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">
                       Naik
                     </span>
                   ) : null}
                   {canAlight && !isFirst ? (
-                    <button
-                      onClick={() => onDestinationSelect(stop, stopTime.stopSequence)}
-                      data-testid={`turun-${index}`}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-                        isDest
-                          ? 'bg-rose-500 text-white shadow-sm shadow-rose-200'
-                          : 'bg-white border border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-600 hover:bg-rose-50'
-                      }`}
-                    >
-                      {isDest ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Turun</> : 'Turun'}
-                    </button>
+                    isOrigin && !isDest ? (
+                      <span
+                        title="Stop ini sudah dipilih sebagai titik naik"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
+                      >
+                        Turun
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => onDestinationSelect(stop, stopTime.stopSequence)}
+                        data-testid={`turun-${index}`}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                          isDest
+                            ? 'bg-rose-500 text-white shadow-sm shadow-rose-200'
+                            : 'bg-white border border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-600 hover:bg-rose-50'
+                        }`}
+                      >
+                        {isDest ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Turun</> : 'Turun'}
+                      </button>
+                    )
                   ) : !isFirst ? (
                     <span className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">
                       Turun
@@ -202,7 +220,7 @@ export default function RouteTimeline({
       </div>
 
       {selectedOrigin && selectedDestination && (
-        <div className="bg-white border-2 border-blue-200 rounded-xl p-4 shadow-sm">
+        <div className={`bg-white border-2 rounded-xl p-4 shadow-sm ${legCount > 0 ? 'border-blue-200' : 'border-rose-200 bg-rose-50/30'}`}>
           <div className="flex items-center gap-4 mb-3">
             <div className="flex-1">
               <p className="text-[9px] text-gray-400 uppercase font-semibold tracking-wider mb-0.5">Naik</p>
@@ -216,13 +234,13 @@ export default function RouteTimeline({
 
             <div className="flex flex-col items-center gap-1 px-3">
               <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                <div className="h-px w-8 bg-blue-400" />
-                <div className="px-2 py-0.5 bg-blue-100 rounded-full">
-                  <span className="text-[10px] font-bold text-blue-700">{legCount} leg</span>
+                <div className={`w-2 h-2 rounded-full ${legCount > 0 ? 'bg-emerald-400' : 'bg-rose-300'}`} />
+                <div className={`h-px w-8 ${legCount > 0 ? 'bg-blue-400' : 'bg-rose-300'}`} />
+                <div className={`px-2 py-0.5 rounded-full ${legCount > 0 ? 'bg-blue-100' : 'bg-rose-100'}`}>
+                  <span className={`text-[10px] font-bold ${legCount > 0 ? 'text-blue-700' : 'text-rose-600'}`}>{legCount} leg</span>
                 </div>
-                <div className="h-px w-8 bg-blue-400" />
-                <div className="w-2 h-2 rounded-full bg-rose-400" />
+                <div className={`h-px w-8 ${legCount > 0 ? 'bg-blue-400' : 'bg-rose-300'}`} />
+                <div className={`w-2 h-2 rounded-full ${legCount > 0 ? 'bg-rose-400' : 'bg-rose-300'}`} />
               </div>
             </div>
 
@@ -237,11 +255,23 @@ export default function RouteTimeline({
             </div>
           </div>
 
+          {legCount === 0 && (
+            <div className="mb-3 px-3 py-2 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2">
+              <span className="text-rose-500 text-sm font-bold">⚠</span>
+              <p className="text-xs text-rose-700 font-medium">Titik naik dan turun tidak boleh sama. Pilih stop yang berbeda.</p>
+            </div>
+          )}
+
           {onProceed && (
             <button
-              onClick={onProceed}
+              onClick={legCount > 0 ? onProceed : undefined}
+              disabled={legCount === 0}
               data-testid="btn-proceed-from-route"
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold transition-colors shadow-sm flex items-center justify-center gap-2"
+              className={`w-full py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm flex items-center justify-center gap-2 ${
+                legCount > 0
+                  ? 'bg-blue-600 hover:bg-blue-500 text-white cursor-pointer'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
             >
               Lanjut Pilih Kursi <ChevronRight className="w-4 h-4" />
             </button>

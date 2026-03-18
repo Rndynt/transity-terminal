@@ -83,7 +83,9 @@ export function useBookingFlow() {
     switch (state.currentStep) {
       case 1: return !!state.outlet;
       case 2: return !!state.trip;
-      case 3: return !!state.originStop && !!state.destinationStop;
+      case 3: return !!state.originStop && !!state.destinationStop &&
+                     state.originSeq !== undefined && state.destinationSeq !== undefined &&
+                     state.originSeq < state.destinationSeq;
       case 4: return state.selectedSeats.length > 0;
       case 5: return state.passengers.length === state.selectedSeats.length && 
                      state.passengers.every(p => (p.fullName ?? '').trim());
