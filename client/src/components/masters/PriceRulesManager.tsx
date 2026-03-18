@@ -4,7 +4,6 @@ import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import MasterFormDialog from './MasterFormDialog';
@@ -16,7 +15,7 @@ import { RowActionsMenu } from './RowActionsMenu';
 import { useToast } from '@/hooks/use-toast';
 import { priceRulesApi, tripPatternsApi, tripsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, DollarSign } from 'lucide-react';
+import { Plus, Pencil, Trash2, DollarSign, Tag, ArrowUpDown } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import type { PriceRule, TripPattern, Trip } from '@/types';
@@ -26,7 +25,9 @@ interface PriceRuleFormData {
   patternId: string;
   tripId: string;
   legIndex: string;
-  ruleJson: string;
+  basePricePerLeg: string;
+  currency: string;
+  multiplier: string;
   validFrom: Date | undefined;
   validTo: Date | undefined;
   priority: string;
@@ -42,26 +43,40 @@ function SectionDivider({ label }: { label: string }) {
 }
 
 const SCOPE_LABELS: Record<string, string> = {
-  pattern: 'Pola Perjalanan',
-  trip: 'Trip Spesifik',
-  leg: 'Leg Trip',
-  time: 'Berbasis Waktu'
+  pattern: 'Pattern',
+  trip: 'Trip',
+  leg: 'Leg',
+  time: 'Time-based'
+};
+
+const SCOPE_VARIANTS: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
+  pattern: 'secondary',
+  trip: 'default',
+  leg: 'outline',
+  time: 'destructive',
+};
+
+const formatRupiah = (value: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
+
+const DEFAULT_FORM: PriceRuleFormData = {
+  scope: 'pattern',
+  patternId: '',
+  tripId: '',
+  legIndex: '',
+  basePricePerLeg: '',
+  currency: 'IDR',
+  multiplier: '1',
+  validFrom: undefined,
+  validTo: undefined,
+  priority: '1',
 };
 
 export default function PriceRulesManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<PriceRule | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [formData, setFormData] = useState<PriceRuleFormData>({
-    scope: 'pattern',
-    patternId: '',
-    tripId: '',
-    legIndex: '',
-    ruleJson: '',
-    validFrom: undefined,
-    validTo: undefined,
-    priority: '1'
-  });
+  const [formData, setFormData] = useState<PriceRuleFormData>(DEFAULT_FORM);
   const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
 
@@ -92,12 +107,24 @@ export default function PriceRulesManager() {
     badge: t.serviceDate
   }));
 
+  const buildRule = (data: PriceRuleFormData) => ({
+    basePricePerLeg: parseFloat(data.basePricePerLeg) || 0,
+    currency: data.currency || 'IDR',
+    multiplier: parseFloat(data.multiplier) || 1,
+  });
+
+  const parseRule = (rule: any): Partial<PriceRuleFormData> => ({
+    basePricePerLeg: rule?.basePricePerLeg?.toString() || '',
+    currency: rule?.currency || 'IDR',
+    multiplier: rule?.multiplier?.toString() || '1',
+  });
+
   const createMutation = useMutation({
     mutationFn: priceRulesApi.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/price-rules'] });
       setIsDialogOpen(false);
-      resetForm();
+      setFormData(DEFAULT_FORM);
       toast({ title: 'Berhasil', description: 'Aturan harga berhasil dibuat' });
     },
     onError: (error) => {
@@ -110,7 +137,7 @@ export default function PriceRulesManager() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/price-rules'] });
       setIsDialogOpen(false);
-      resetForm();
+      setFormData(DEFAULT_FORM);
       setEditingRule(null);
       toast({ title: 'Berhasil', description: 'Aturan harga berhasil diperbarui' });
     },
@@ -131,14 +158,9 @@ export default function PriceRulesManager() {
     }
   });
 
-  const resetForm = () => {
-    setFormData({ scope: 'pattern', patternId: '', tripId: '', legIndex: '', ruleJson: '', validFrom: undefined, validTo: undefined, priority: '1' });
-  };
-
   const handleCreate = () => {
     setEditingRule(null);
-    resetForm();
-    setFormData(prev => ({ ...prev, ruleJson: JSON.stringify({ basePricePerLeg: 25000, currency: 'IDR', multiplier: 1.0 }, null, 2) }));
+    setFormData(DEFAULT_FORM);
     setIsDialogOpen(true);
   };
 
@@ -149,35 +171,34 @@ export default function PriceRulesManager() {
       patternId: rule.patternId || '',
       tripId: rule.tripId || '',
       legIndex: rule.legIndex?.toString() || '',
-      ruleJson: JSON.stringify(rule.rule, null, 2),
+      ...parseRule(rule.rule),
       validFrom: rule.validFrom ? new Date(rule.validFrom) : undefined,
       validTo: rule.validTo ? new Date(rule.validTo) : undefined,
-      priority: (rule.priority || 0).toString()
-    });
+      priority: (rule.priority || 0).toString(),
+    } as PriceRuleFormData);
     setIsDialogOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const rule = JSON.parse(formData.ruleJson);
-      const submitData = {
-        scope: formData.scope,
-        patternId: formData.patternId || null,
-        tripId: formData.tripId || null,
-        legIndex: formData.legIndex ? parseInt(formData.legIndex, 10) : null,
-        rule,
-        validFrom: formData.validFrom ? formData.validFrom.toISOString() : null,
-        validTo: formData.validTo ? formData.validTo.toISOString() : null,
-        priority: parseInt(formData.priority, 10)
-      };
-      if (editingRule) {
-        updateMutation.mutate({ id: editingRule.id, data: submitData });
-      } else {
-        createMutation.mutate(submitData);
-      }
-    } catch {
-      toast({ title: 'JSON Tidak Valid', description: 'Pastikan konfigurasi aturan adalah JSON yang valid', variant: 'destructive' });
+    if (!formData.basePricePerLeg || isNaN(parseFloat(formData.basePricePerLeg))) {
+      toast({ title: 'Harga tidak valid', description: 'Masukkan harga dasar per leg yang valid', variant: 'destructive' });
+      return;
+    }
+    const submitData = {
+      scope: formData.scope,
+      patternId: formData.patternId || null,
+      tripId: formData.tripId || null,
+      legIndex: formData.legIndex ? parseInt(formData.legIndex, 10) : null,
+      rule: buildRule(formData),
+      validFrom: formData.validFrom ? formData.validFrom.toISOString() : null,
+      validTo: formData.validTo ? formData.validTo.toISOString() : null,
+      priority: parseInt(formData.priority, 10) || 1,
+    };
+    if (editingRule) {
+      updateMutation.mutate({ id: editingRule.id, data: submitData });
+    } else {
+      createMutation.mutate(submitData);
     }
   };
 
@@ -188,28 +209,18 @@ export default function PriceRulesManager() {
     setFormData(prev => ({ ...prev, scope, patternId: '', tripId: '', legIndex: '' }));
   };
 
-  const getPatternName = (patternId: string) => patterns.find(p => p.id === patternId)?.name || '-';
-  const getTripName = (tripId: string) => {
-    const trip = trips.find(t => t.id === tripId);
-    return trip ? `Trip ${trip.id.slice(-8)} (${trip.serviceDate})` : '-';
-  };
-
-  const getScopeBadge = (scope: string) => {
-    const variants = { pattern: 'secondary', trip: 'default', leg: 'outline', time: 'destructive' } as const;
-    return <Badge variant={variants[scope as keyof typeof variants] || 'outline'}>{SCOPE_LABELS[scope] || scope}</Badge>;
-  };
-
-  const formatRule = (rule: any) => {
-    if (typeof rule === 'object') return Object.entries(rule).map(([k, v]) => `${k}: ${v}`).join(', ');
-    return String(rule);
+  const getPatternName = (patternId: string) => {
+    const p = patterns.find(p => p.id === patternId);
+    return p ? `${p.code} — ${p.name}` : '-';
   };
 
   const filteredPriceRules = priceRules.filter(rule => {
     const q = searchQuery.toLowerCase();
+    if (!q) return true;
     const scope = rule.scope.toLowerCase();
     const target = (
       rule.scope === 'pattern' && rule.patternId ? getPatternName(rule.patternId) :
-      rule.scope === 'trip' && rule.tripId ? getTripName(rule.tripId) : ''
+      rule.scope === 'trip' && rule.tripId ? rule.tripId : ''
     ).toLowerCase();
     return scope.includes(q) || target.includes(q);
   });
@@ -221,7 +232,7 @@ export default function PriceRulesManager() {
         description="Kelola aturan penetapan harga untuk pola perjalanan dan trip"
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Cari scope atau target..."
+        searchPlaceholder="Cari scope atau rute..."
         count={filteredPriceRules.length}
         action={
           <Button onClick={handleCreate} data-testid="add-price-rule-button">
@@ -231,6 +242,7 @@ export default function PriceRulesManager() {
         }
       />
 
+      {/* ── Form Dialog ── */}
       <MasterFormDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
@@ -241,7 +253,8 @@ export default function PriceRulesManager() {
         size="lg"
         data-testid="price-rule-dialog"
       >
-        <SectionDivider label="Cakupan Aturan" />
+        {/* ── Scope ── */}
+        <SectionDivider label="Cakupan" />
         <div className="space-y-1.5">
           <Label>Tipe Scope <span className="text-destructive">*</span></Label>
           <Select value={formData.scope} onValueChange={handleScopeChange}>
@@ -249,10 +262,10 @@ export default function PriceRulesManager() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="pattern">Pola Perjalanan</SelectItem>
-              <SelectItem value="trip">Trip Spesifik</SelectItem>
-              <SelectItem value="leg">Leg Trip</SelectItem>
-              <SelectItem value="time">Berbasis Waktu</SelectItem>
+              <SelectItem value="pattern">Pattern — berlaku untuk semua trip di pola ini</SelectItem>
+              <SelectItem value="trip">Trip — berlaku untuk trip spesifik</SelectItem>
+              <SelectItem value="leg">Leg — berlaku untuk leg tertentu di sebuah trip</SelectItem>
+              <SelectItem value="time">Time-based — berlaku berdasarkan waktu</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -271,51 +284,92 @@ export default function PriceRulesManager() {
           </div>
         )}
 
-        {formData.scope === 'trip' && (
-          <div className="space-y-1.5">
-            <Label>Trip <span className="text-destructive">*</span></Label>
-            <SearchableSelect
-              value={formData.tripId}
-              options={tripOptions}
-              placeholder="Pilih trip..."
-              searchPlaceholder="Cari ID atau tanggal trip..."
-              onChange={(v) => setFormData(prev => ({ ...prev, tripId: v }))}
-              data-testid="select-trip"
-            />
-          </div>
-        )}
-
-        {formData.scope === 'leg' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {(formData.scope === 'trip' || formData.scope === 'leg') && (
+          <div className={formData.scope === 'leg' ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : ''}>
             <div className="space-y-1.5">
               <Label>Trip <span className="text-destructive">*</span></Label>
               <SearchableSelect
                 value={formData.tripId}
                 options={tripOptions}
                 placeholder="Pilih trip..."
-                searchPlaceholder="Cari trip..."
+                searchPlaceholder="Cari ID atau tanggal trip..."
                 onChange={(v) => setFormData(prev => ({ ...prev, tripId: v }))}
-                data-testid="select-trip-leg"
+                data-testid="select-trip"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="legIndex">Indeks Leg <span className="text-destructive">*</span></Label>
-              <Input
-                id="legIndex"
-                type="number"
-                value={formData.legIndex}
-                onChange={(e) => setFormData(prev => ({ ...prev, legIndex: e.target.value }))}
-                placeholder="Contoh: 1"
-                min="1"
-                required
-                data-testid="input-leg-index"
-              />
-            </div>
+            {formData.scope === 'leg' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="legIndex">Nomor Leg <span className="text-destructive">*</span></Label>
+                <Input
+                  id="legIndex"
+                  type="number"
+                  value={formData.legIndex}
+                  onChange={(e) => setFormData(prev => ({ ...prev, legIndex: e.target.value }))}
+                  placeholder="Contoh: 1"
+                  min="1"
+                  data-testid="input-leg-index"
+                />
+              </div>
+            )}
           </div>
         )}
 
-        <SectionDivider label="Periode Berlaku" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* ── Tarif ── */}
+        <SectionDivider label="Tarif" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="sm:col-span-2 space-y-1.5">
+            <Label htmlFor="basePricePerLeg">Harga Dasar per Leg <span className="text-destructive">*</span></Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">Rp</span>
+              <Input
+                id="basePricePerLeg"
+                type="number"
+                min="0"
+                step="1000"
+                value={formData.basePricePerLeg}
+                onChange={(e) => setFormData(prev => ({ ...prev, basePricePerLeg: e.target.value }))}
+                placeholder="65000"
+                className="pl-9"
+                required
+                data-testid="input-base-price"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Harga yang dikenakan per segmen perjalanan (leg)
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="multiplier">Multiplier</Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">×</span>
+              <Input
+                id="multiplier"
+                type="number"
+                min="0"
+                step="0.1"
+                value={formData.multiplier}
+                onChange={(e) => setFormData(prev => ({ ...prev, multiplier: e.target.value }))}
+                placeholder="1.0"
+                className="pl-7"
+                data-testid="input-multiplier"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Preview */}
+        {formData.basePricePerLeg && !isNaN(parseFloat(formData.basePricePerLeg)) && (
+          <div className="rounded-lg bg-muted/40 border px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Harga efektif per leg</span>
+            <span className="font-semibold text-base">
+              {formatRupiah(parseFloat(formData.basePricePerLeg) * (parseFloat(formData.multiplier) || 1))}
+            </span>
+          </div>
+        )}
+
+        {/* ── Periode & Prioritas ── */}
+        <SectionDivider label="Periode & Prioritas" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="space-y-1.5">
             <Label>Berlaku Dari</Label>
             <DatePicker
@@ -336,39 +390,21 @@ export default function PriceRulesManager() {
               data-testid="input-valid-to"
             />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="priority">Prioritas</Label>
+            <Input
+              id="priority"
+              type="number"
+              value={formData.priority}
+              onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
+              placeholder="1"
+              min="0"
+              data-testid="input-priority"
+            />
+            <p className="text-xs text-muted-foreground">Lebih tinggi = lebih diprioritaskan</p>
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground -mt-2">Kosongkan keduanya jika aturan berlaku tanpa batas waktu</p>
-
-        <SectionDivider label="Konfigurasi Tarif" />
-        <div className="space-y-1.5">
-          <Label htmlFor="priority">Prioritas <span className="text-destructive">*</span></Label>
-          <Input
-            id="priority"
-            type="number"
-            value={formData.priority}
-            onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
-            placeholder="Contoh: 1"
-            min="0"
-            required
-            data-testid="input-priority"
-          />
-          <p className="text-xs text-muted-foreground">Nilai lebih tinggi = prioritas lebih tinggi</p>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="ruleJson">Konfigurasi Aturan (JSON) <span className="text-destructive">*</span></Label>
-          <Textarea
-            id="ruleJson"
-            value={formData.ruleJson}
-            onChange={(e) => setFormData(prev => ({ ...prev, ruleJson: e.target.value }))}
-            placeholder='{"basePricePerLeg": 25000, "currency": "IDR", "multiplier": 1.0}'
-            rows={8}
-            className="font-mono text-sm"
-            required
-            data-testid="input-rule-json"
-          />
-          <p className="text-xs text-muted-foreground">Contoh: {`{ "basePricePerLeg": 25000, "currency": "IDR", "multiplier": 1.0 }`}</p>
-        </div>
+        <p className="text-xs text-muted-foreground -mt-1">Kosongkan periode jika aturan berlaku tanpa batas waktu</p>
       </MasterFormDialog>
 
       <DeleteConfirmDialog
@@ -380,52 +416,113 @@ export default function PriceRulesManager() {
         isPending={deleteMutation.isPending}
       />
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
-          ) : (
-            <Table data-testid="price-rules-table">
-              <TableHeader>
+      {/* ── Table ── */}
+      <div className="rounded-md border overflow-hidden">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-48">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          </div>
+        ) : (
+          <Table data-testid="price-rules-table">
+            <TableHeader>
+              <TableRow className="bg-muted/10 hover:bg-muted/10">
+                <TableHead className="w-[90px] font-semibold text-xs uppercase tracking-wide">Scope</TableHead>
+                <TableHead className="font-semibold text-xs uppercase tracking-wide">Target</TableHead>
+                <TableHead className="w-[160px] font-semibold text-xs uppercase tracking-wide">Harga / Leg</TableHead>
+                <TableHead className="w-[70px] font-semibold text-xs uppercase tracking-wide">Mult.</TableHead>
+                <TableHead className="w-[60px] font-semibold text-xs uppercase tracking-wide">Prior.</TableHead>
+                <TableHead className="w-[180px] font-semibold text-xs uppercase tracking-wide">Periode</TableHead>
+                <TableHead className="w-10" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredPriceRules.length === 0 ? (
                 <TableRow>
-                  <TableHead>Scope</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Prioritas</TableHead>
-                  <TableHead>Periode</TableHead>
-                  <TableHead>Konfigurasi</TableHead>
-                  <TableHead className="w-24 text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPriceRules.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                      <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                    <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-medium">
                       {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada aturan harga'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredPriceRules.map(rule => (
+                    </p>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredPriceRules.map(rule => {
+                  const basePrice = rule.rule?.basePricePerLeg;
+                  const multiplier = rule.rule?.multiplier ?? 1;
+                  const effectivePrice = basePrice != null ? basePrice * multiplier : null;
+
+                  return (
                     <TableRow key={rule.id} data-testid={`price-rule-${rule.id}`}>
-                      <TableCell>{getScopeBadge(rule.scope)}</TableCell>
-                      <TableCell className="max-w-xs">
-                        <span className="text-sm truncate block">
-                          {rule.scope === 'pattern' && rule.patternId ? getPatternName(rule.patternId) :
-                           rule.scope === 'trip' && rule.tripId ? getTripName(rule.tripId) :
-                           rule.scope === 'leg' && rule.tripId ? `${getTripName(rule.tripId)} — Leg ${rule.legIndex}` :
-                           rule.scope === 'time' ? 'Berbasis waktu' : '-'}
+                      {/* Scope */}
+                      <TableCell>
+                        <Badge
+                          variant={SCOPE_VARIANTS[rule.scope] ?? 'outline'}
+                          className="text-[11px] font-mono px-1.5"
+                        >
+                          {SCOPE_LABELS[rule.scope] ?? rule.scope}
+                        </Badge>
+                      </TableCell>
+
+                      {/* Target */}
+                      <TableCell>
+                        <span className="text-sm">
+                          {rule.scope === 'pattern' && rule.patternId
+                            ? getPatternName(rule.patternId)
+                            : rule.scope === 'trip' && rule.tripId
+                              ? `Trip ${rule.tripId.slice(-8)}`
+                              : rule.scope === 'leg' && rule.tripId
+                                ? `Trip ${rule.tripId.slice(-8)} · Leg ${rule.legIndex}`
+                                : rule.scope === 'time'
+                                  ? 'Time-based'
+                                  : <span className="text-muted-foreground">—</span>}
                         </span>
                       </TableCell>
-                      <TableCell className="font-mono font-medium">{rule.priority || 0}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {rule.validFrom ? format(new Date(rule.validFrom), 'dd/MM/yy') : '—'} → {rule.validTo ? format(new Date(rule.validTo), 'dd/MM/yy') : '∞'}
+
+                      {/* Price per leg */}
+                      <TableCell>
+                        {effectivePrice != null ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-semibold text-sm tabular-nums">
+                              {formatRupiah(effectivePrice)}
+                            </span>
+                            {multiplier !== 1 && basePrice != null && (
+                              <span className="text-[11px] text-muted-foreground tabular-nums">
+                                base {formatRupiah(basePrice)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
                       </TableCell>
-                      <TableCell className="max-w-xs">
-                        <span className="text-xs text-muted-foreground font-mono truncate block">{formatRule(rule.rule)}</span>
+
+                      {/* Multiplier */}
+                      <TableCell>
+                        <span className={`font-mono text-sm tabular-nums ${multiplier !== 1 ? 'text-amber-600 font-semibold' : 'text-muted-foreground'}`}>
+                          ×{multiplier}
+                        </span>
                       </TableCell>
-                      <TableCell className="text-right">
+
+                      {/* Priority */}
+                      <TableCell>
+                        <span className="font-mono text-sm text-muted-foreground tabular-nums">{rule.priority ?? 0}</span>
+                      </TableCell>
+
+                      {/* Period */}
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {rule.validFrom
+                            ? format(new Date(rule.validFrom), 'dd MMM yy')
+                            : <span className="opacity-40">∞</span>}
+                          {' '}–{' '}
+                          {rule.validTo
+                            ? format(new Date(rule.validTo), 'dd MMM yy')
+                            : <span className="opacity-40">∞</span>}
+                        </span>
+                      </TableCell>
+
+                      {/* Actions */}
+                      <TableCell className="pr-3">
                         <RowActionsMenu
                           actions={[
                             { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(rule) },
@@ -435,13 +532,13 @@ export default function PriceRulesManager() {
                         />
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        )}
+      </div>
     </div>
   );
 }

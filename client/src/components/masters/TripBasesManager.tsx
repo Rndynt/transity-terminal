@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { tripBasesApi, tripPatternsApi, layoutsApi, vehiclesApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Clock, MapPin, ArrowRight, Route } from 'lucide-react';
+import { Plus, Pencil, Trash2, Clock, MapPin, ArrowRight, Route, ChevronRight, ChevronsUpDown } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import { RowActionsMenu } from './RowActionsMenu';
@@ -130,8 +130,18 @@ export default function TripBasesManager() {
   const [stopTimes, setStopTimes] = useState<DefaultStopTime[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [dialogOpenKey, setDialogOpenKey] = useState(0);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const editingStopTimesRef = useRef<DefaultStopTime[]>([]);
   const { toast } = useToast();
+
+  const toggleGroup = (patternId: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(patternId)) next.delete(patternId);
+      else next.add(patternId);
+      return next;
+    });
+  };
 
   const { data: tripBases = [], isLoading } = useQuery({
     queryKey: ['/api/trip-bases'],
@@ -426,10 +436,10 @@ export default function TripBasesManager() {
         isPending={deleteMutation.isPending}
       />
 
-      {/* Trip Bases Table — grouped by route */}
+      {/* Trip Bases Table — collapsible groups by route */}
       {isLoading ? (
         <div className="flex justify-center p-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
       ) : filteredTripBases.length === 0 ? (
         <div className="rounded-md border">
@@ -441,7 +451,6 @@ export default function TripBasesManager() {
           </div>
         </div>
       ) : (() => {
-        // Group by patternId, then sort each group by origin depart time
         const timeToMinutes = (t: string) => {
           if (!t || t === '-') return 9999;
           const [h, m] = t.split(':').map(Number);
@@ -461,8 +470,6 @@ export default function TripBasesManager() {
           }
           groups.find(g => g.patternId === base.patternId)!.bases.push(base);
         });
-
-        // Sort groups by pattern code, sort each group's rows by depart time
         groups.sort((a, b) => (a.pattern?.code || '').localeCompare(b.pattern?.code || ''));
         groups.forEach(g => {
           g.bases.sort((a, b) =>
@@ -471,116 +478,152 @@ export default function TripBasesManager() {
           );
         });
 
+        const allExpanded = groups.every(g => expandedGroups.has(g.patternId));
+
         return (
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-24 min-w-[88px]">Berangkat</TableHead>
-                  <TableHead className="min-w-[180px]">Nama / Kode</TableHead>
-                  <TableHead className="w-48 min-w-[176px]">Hari Operasi</TableHead>
-                  <TableHead className="w-44 min-w-[160px]">Periode</TableHead>
-                  <TableHead className="w-20">Status</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {groups.map(({ pattern, patternId, bases }) => (
-                  <Fragment key={patternId}>
-                    {/* Route group header */}
-                    <TableRow className="hover:bg-transparent">
-                      <TableCell
-                        colSpan={6}
-                        className="py-2 px-4 bg-muted/50 border-y"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Route className="h-3.5 w-3.5 text-primary shrink-0" />
-                          <span className="font-mono text-xs font-semibold text-primary tracking-wide">
-                            {pattern?.code || patternId.slice(0, 8)}
-                          </span>
-                          {pattern?.name && (
-                            <>
-                              <span className="text-muted-foreground/50 text-xs">—</span>
-                              <span className="text-xs font-medium text-foreground">{pattern.name}</span>
-                            </>
-                          )}
-                          <span className="ml-auto text-xs text-muted-foreground font-normal">
-                            {bases.length} jadwal
-                          </span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+          <div className="rounded-md border overflow-hidden divide-y">
+            {/* ── Expand / collapse all ── */}
+            <div className="flex items-center justify-end px-4 py-2 bg-muted/20">
+              <button
+                type="button"
+                onClick={() => setExpandedGroups(allExpanded ? new Set() : new Set(groups.map(g => g.patternId)))}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ChevronsUpDown className="h-3.5 w-3.5" />
+                {allExpanded ? 'Tutup semua' : 'Buka semua'}
+              </button>
+            </div>
 
-                    {/* Rows for this group */}
-                    {bases.map((base: TripBase, idx: number) => {
-                      const departTime = getOriginDepartTime(base.defaultStopTimes);
-                      const isLast = idx === bases.length - 1;
-                      return (
-                        <TableRow
-                          key={base.id}
-                          data-testid={`row-trip-base-${base.id}`}
-                          className={isLast ? 'border-b-0' : ''}
-                        >
-                          {/* Departure time — first & prominent */}
-                          <TableCell className="pl-6">
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                              <span className={`font-mono font-semibold tabular-nums ${departTime === '-' ? 'text-muted-foreground' : 'text-foreground'}`}>
-                                {departTime}
-                              </span>
-                            </div>
-                          </TableCell>
+            {/* ── One accordion section per route group ── */}
+            {groups.map(({ pattern, patternId, bases }) => {
+              const isExpanded = expandedGroups.has(patternId);
+              const activeCnt = bases.filter(b => b.active).length;
+              const times = bases.map(b => getOriginDepartTime(b.defaultStopTimes)).filter(t => t !== '-');
+              const firstTime = times[0];
+              const lastTime = times[times.length - 1];
 
-                          {/* Name + code */}
-                          <TableCell>
-                            <div className="flex flex-col gap-0.5">
-                              <span className="font-medium text-sm leading-snug">{base.name}</span>
-                              {base.code && (
-                                <span className="font-mono text-xs text-muted-foreground">{base.code}</span>
-                              )}
-                            </div>
-                          </TableCell>
+              return (
+                <div key={patternId} data-testid={`group-${patternId}`}>
+                  {/* ── Group header — sticky so it never scrolls away ── */}
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(patternId)}
+                    className="sticky top-0 z-10 w-full flex items-center gap-2 px-4 py-3 bg-muted/30 hover:bg-muted/40 active:bg-muted/60 transition-colors text-left select-none border-b"
+                  >
+                    {/* chevron */}
+                    <ChevronRight
+                      className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                    />
+                    {/* code — never wraps */}
+                    <span className="font-mono text-xs font-bold text-primary tracking-wider whitespace-nowrap shrink-0">
+                      {pattern?.code || patternId.slice(0, 8)}
+                    </span>
+                    {/* name — truncates cleanly */}
+                    {pattern?.name && (
+                      <span className="text-sm font-medium text-foreground truncate min-w-0 flex-1">
+                        {pattern.name}
+                      </span>
+                    )}
+                    {/* right side summary — never wraps */}
+                    <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 whitespace-nowrap pl-2">
+                      {firstTime && (
+                        <span className="font-mono tabular-nums hidden sm:inline">
+                          {firstTime}{lastTime && lastTime !== firstTime ? ` – ${lastTime}` : ''}
+                        </span>
+                      )}
+                      {firstTime && <span className="text-muted-foreground/40 hidden sm:inline">·</span>}
+                      <span className="tabular-nums">{bases.length} jadwal</span>
+                      {activeCnt < bases.length && (
+                        <span className="text-amber-600 font-medium">· {bases.length - activeCnt} nonaktif</span>
+                      )}
+                    </div>
+                  </button>
 
-                          {/* Days of week */}
-                          <TableCell>{getDowBadges(base)}</TableCell>
-
-                          {/* Valid period */}
-                          <TableCell>
-                            <span className="text-sm text-muted-foreground">
-                              {base.validFrom && base.validTo
-                                ? `${base.validFrom} – ${base.validTo}`
-                                : base.validFrom
-                                  ? `Mulai ${base.validFrom}`
-                                  : base.validTo
-                                    ? `S/d ${base.validTo}`
-                                    : <span className="italic text-muted-foreground/60">Tanpa batas</span>}
-                            </span>
-                          </TableCell>
-
-                          {/* Active badge */}
-                          <TableCell>
-                            <Badge variant={base.active ? 'default' : 'secondary'} className="text-xs">
-                              {base.active ? 'Aktif' : 'Nonaktif'}
-                            </Badge>
-                          </TableCell>
-
-                          {/* Actions */}
-                          <TableCell className="pr-3">
-                            <RowActionsMenu
-                              actions={[
-                                { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => openEditDialog(base) },
-                                { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(base.id), variant: 'destructive' },
-                              ]}
-                              data-testid={`actions-base-${base.id}`}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </Fragment>
-                ))}
-              </TableBody>
-            </Table>
+                  {/* ── Expanded content ── */}
+                  {isExpanded && (
+                    <div className="overflow-x-auto border-t bg-background">
+                      <table className="table-fixed min-w-[620px] w-full text-sm">
+                        <colgroup>
+                          <col style={{ width: 88 }} />   {/* Jam */}
+                          <col />                          {/* Nama / Kode — fills remaining */}
+                          <col style={{ width: 188 }} />  {/* Hari Operasi */}
+                          <col style={{ width: 164 }} />  {/* Periode */}
+                          <col style={{ width: 76 }} />   {/* Status */}
+                          <col style={{ width: 44 }} />   {/* Actions */}
+                        </colgroup>
+                        <thead>
+                          <tr className="border-b bg-muted/10">
+                            {(['Jam', 'Nama / Kode', 'Hari Operasi', 'Periode', 'Status', ''] as const).map((h, i) => (
+                              <th
+                                key={i}
+                                className={`text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground py-2 ${i === 0 ? 'pl-5 pr-3' : i === 5 ? 'pr-2' : 'px-3'}`}
+                              >
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {bases.map((base: TripBase) => {
+                            const departTime = getOriginDepartTime(base.defaultStopTimes);
+                            return (
+                              <tr key={base.id} className="hover:bg-muted/20 transition-colors" data-testid={`row-trip-base-${base.id}`}>
+                                {/* Jam */}
+                                <td className="pl-5 pr-3 py-3">
+                                  <span className={`font-mono font-semibold tabular-nums ${departTime === '-' ? 'text-muted-foreground/40' : ''}`}>
+                                    {departTime}
+                                  </span>
+                                </td>
+                                {/* Nama / Kode */}
+                                <td className="px-3 py-3 overflow-hidden">
+                                  <div className="flex flex-col gap-0.5 min-w-0">
+                                    <span className="font-medium leading-snug truncate">{base.name}</span>
+                                    {base.code && <span className="font-mono text-[11px] text-muted-foreground">{base.code}</span>}
+                                  </div>
+                                </td>
+                                {/* Hari */}
+                                <td className="px-3 py-3">{getDowBadges(base)}</td>
+                                {/* Periode */}
+                                <td className="px-3 py-3">
+                                  <span className="text-xs text-muted-foreground tabular-nums">
+                                    {base.validFrom && base.validTo
+                                      ? `${base.validFrom} – ${base.validTo}`
+                                      : base.validFrom
+                                        ? `Mulai ${base.validFrom}`
+                                        : base.validTo
+                                          ? `s/d ${base.validTo}`
+                                          : <span className="italic opacity-50">∞</span>}
+                                  </span>
+                                </td>
+                                {/* Status */}
+                                <td className="px-3 py-3">
+                                  <Badge
+                                    variant={base.active ? 'default' : 'secondary'}
+                                    className="text-[11px] px-1.5 py-0"
+                                  >
+                                    {base.active ? 'Aktif' : 'Nonaktif'}
+                                  </Badge>
+                                </td>
+                                {/* Actions */}
+                                <td className="pr-2 py-3 text-right">
+                                  <RowActionsMenu
+                                    actions={[
+                                      { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => openEditDialog(base) },
+                                      { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(base.id), variant: 'destructive' },
+                                    ]}
+                                    data-testid={`actions-base-${base.id}`}
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         );
       })()}
