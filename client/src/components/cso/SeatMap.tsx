@@ -275,17 +275,17 @@ export default function SeatMap({
         )}
       </div>
 
-      <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-        <div className="flex items-center justify-center gap-2 text-[10px] text-gray-400 mb-3">
+      <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 flex flex-col items-center gap-3">
+        <div className="w-full flex items-center gap-2 text-[10px] text-gray-400">
           <div className="flex-1 h-px bg-gray-200" />
           <Bus className="w-3.5 h-3.5" />
           <span className="font-semibold uppercase tracking-wider">Depan</span>
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
-        <div className="flex flex-col gap-1 w-fit mx-auto">
+        <div className="flex flex-col gap-1">
           {seatGrid.map((row, ri) => (
-            <div key={ri} className="flex items-center gap-1">
+            <div key={ri} className="flex gap-1">
               {row.map((seat, ci) => {
                 if (seat === null) return <div key={`gap-${ri}-${ci}`} className="w-9 h-9" />;
                 const status = getSeatStatus(seat.seat_no);
@@ -323,7 +323,7 @@ export default function SeatMap({
           ))}
         </div>
 
-        <div className="flex items-center justify-center gap-2 text-[10px] text-gray-400 mt-3">
+        <div className="w-full flex items-center gap-2 text-[10px] text-gray-400">
           <div className="flex-1 h-px bg-gray-200" />
           <span className="font-semibold uppercase tracking-wider">Belakang</span>
           <div className="flex-1 h-px bg-gray-200" />
