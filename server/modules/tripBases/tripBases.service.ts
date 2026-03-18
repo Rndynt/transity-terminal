@@ -93,7 +93,9 @@ export class TripBasesService {
   }
 
   /**
-   * Convert defaultStopTimes local time strings to timestamptz using base timezone + serviceDate
+   * Convert defaultStopTimes local time strings to timestamptz using base timezone + serviceDate.
+   * Handles overnight routes: if a converted timestamp is <= the previous one, it means midnight
+   * was crossed, so we add the accumulated day offset to keep times strictly increasing.
    */
   computeDefaultTimestamps(base: TripBase, serviceDate: string): any[] {
     const defaultStopTimes = base.defaultStopTimes as any[];
@@ -102,61 +104,70 @@ export class TripBasesService {
       throw new Error('defaultStopTimes must be an array');
     }
 
-    // Ensure timezone is set to default if not specified
     const timezone = ensureDefaultTimezone(base.timezone);
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-    const result = defaultStopTimes.map((stopTime, index) => {
+    const result: any[] = [];
+    let dayOffset = 0;
+    let lastTimestamp: Date | null = null;
+
+    for (let index = 0; index < defaultStopTimes.length; index++) {
+      const stopTime = defaultStopTimes[index];
       const { stopSequence, arriveAt, departAt } = stopTime;
-      
-      let arriveAtTimestamp = null;
-      let departAtTimestamp = null;
 
-      // Normalize and convert local time strings to UTC timestamps
-      // IMPORTANT: normalizeTimeFormat will convert "08.30" -> "08:30:00"
       const normalizedArriveAt = normalizeTimeFormat(arriveAt);
       const normalizedDepartAt = normalizeTimeFormat(departAt);
 
-      if (normalizedArriveAt) {
-        arriveAtTimestamp = fromZonedHHMMToUtc(serviceDate, normalizedArriveAt, timezone);
-      }
-      
-      if (normalizedDepartAt) {
-        departAtTimestamp = fromZonedHHMMToUtc(serviceDate, normalizedDepartAt, timezone);
-      }
-
       // Validation rules
       if (index === 0) {
-        // First stop: require departAt
-        if (!normalizedDepartAt || !departAtTimestamp) {
+        if (!normalizedDepartAt) {
           throw new Error(`First stop (sequence ${stopSequence}) must have valid departAt time. Got: "${departAt}"`);
         }
       } else if (index === defaultStopTimes.length - 1) {
-        // Last stop: require arriveAt
-        if (!normalizedArriveAt || !arriveAtTimestamp) {
+        if (!normalizedArriveAt) {
           throw new Error(`Last stop (sequence ${stopSequence}) must have valid arriveAt time. Got: "${arriveAt}"`);
         }
       } else {
-        // Intermediate stops: if either is provided, both must be provided
         if ((normalizedArriveAt && !normalizedDepartAt) || (!normalizedArriveAt && normalizedDepartAt)) {
           throw new Error(`Intermediate stop (sequence ${stopSequence}) must have both arriveAt and departAt or neither. Got arriveAt="${arriveAt}", departAt="${departAt}"`);
         }
       }
 
-      return {
-        stopSequence,
-        arriveAt: arriveAtTimestamp,
-        departAt: departAtTimestamp
-      };
-    });
+      // Convert to UTC using current day offset, then bump offset if midnight is crossed
+      let arriveAtTimestamp: Date | null = null;
+      let departAtTimestamp: Date | null = null;
 
-    // Validate monotonicity (times must be increasing)
+      if (normalizedArriveAt) {
+        const raw = fromZonedHHMMToUtc(serviceDate, normalizedArriveAt, timezone);
+        if (raw) {
+          if (lastTimestamp && raw.getTime() + dayOffset * ONE_DAY_MS <= lastTimestamp.getTime()) {
+            dayOffset++;
+          }
+          arriveAtTimestamp = new Date(raw.getTime() + dayOffset * ONE_DAY_MS);
+          lastTimestamp = arriveAtTimestamp;
+        }
+      }
+
+      if (normalizedDepartAt) {
+        const raw = fromZonedHHMMToUtc(serviceDate, normalizedDepartAt, timezone);
+        if (raw) {
+          if (lastTimestamp && raw.getTime() + dayOffset * ONE_DAY_MS <= lastTimestamp.getTime()) {
+            dayOffset++;
+          }
+          departAtTimestamp = new Date(raw.getTime() + dayOffset * ONE_DAY_MS);
+          lastTimestamp = departAtTimestamp;
+        }
+      }
+
+      result.push({ stopSequence, arriveAt: arriveAtTimestamp, departAt: departAtTimestamp });
+    }
+
+    // Final monotonicity check (should never fire now, kept as safety net)
     for (let i = 1; i < result.length; i++) {
       const prev = result[i - 1];
       const curr = result[i];
-      
       const prevTime = prev.departAt || prev.arriveAt;
       const currTime = curr.arriveAt || curr.departAt;
-      
       if (prevTime && currTime && prevTime >= currTime) {
         throw new Error(`Stop times must be monotonic (increasing). Stop ${prev.stopSequence} departs/arrives at or after stop ${curr.stopSequence}`);
       }
