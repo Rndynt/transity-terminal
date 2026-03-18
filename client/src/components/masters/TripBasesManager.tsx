@@ -541,84 +541,132 @@ export default function TripBasesManager() {
 
                   {/* ── Expanded content ── */}
                   {isExpanded && (
-                    <div className="overflow-x-auto border-t bg-background">
-                      <table className="table-fixed min-w-[620px] w-full text-sm">
-                        <colgroup>
-                          <col style={{ width: 88 }} />   {/* Jam */}
-                          <col />                          {/* Nama / Kode — fills remaining */}
-                          <col style={{ width: 188 }} />  {/* Hari Operasi */}
-                          <col style={{ width: 164 }} />  {/* Periode */}
-                          <col style={{ width: 76 }} />   {/* Status */}
-                          <col style={{ width: 44 }} />   {/* Actions */}
-                        </colgroup>
-                        <thead>
-                          <tr className="border-b bg-muted/10">
-                            {(['Jam', 'Nama / Kode', 'Hari Operasi', 'Periode', 'Status', ''] as const).map((h, i) => (
-                              <th
-                                key={i}
-                                className={`text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground py-2 ${i === 0 ? 'pl-5 pr-3' : i === 5 ? 'pr-2' : 'px-3'}`}
-                              >
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {bases.map((base: TripBase) => {
-                            const departTime = getOriginDepartTime(base.defaultStopTimes);
-                            return (
-                              <tr key={base.id} className="hover:bg-muted/20 transition-colors" data-testid={`row-trip-base-${base.id}`}>
-                                {/* Jam */}
-                                <td className="pl-5 pr-3 py-3">
-                                  <span className={`font-mono font-semibold tabular-nums ${departTime === '-' ? 'text-muted-foreground/40' : ''}`}>
-                                    {departTime}
-                                  </span>
-                                </td>
-                                {/* Nama / Kode */}
-                                <td className="px-3 py-3 overflow-hidden">
-                                  <div className="flex flex-col gap-0.5 min-w-0">
-                                    <span className="font-medium leading-snug truncate">{base.name}</span>
-                                    {base.code && <span className="font-mono text-[11px] text-muted-foreground">{base.code}</span>}
+                    <div className="border-t bg-background">
+
+                      {/* ══ MOBILE: card per jadwal ══ */}
+                      <div className="sm:hidden divide-y">
+                        {bases.map((base: TripBase) => {
+                          const departTime = getOriginDepartTime(base.defaultStopTimes);
+                          return (
+                            <div key={base.id} className="flex items-start gap-3 px-4 py-3" data-testid={`row-trip-base-${base.id}`}>
+                              {/* Jam — kolom kiri tetap */}
+                              <div className="w-14 shrink-0 pt-0.5">
+                                <span className={`font-mono font-bold text-sm tabular-nums ${departTime === '-' ? 'text-muted-foreground/40' : ''}`}>
+                                  {departTime}
+                                </span>
+                              </div>
+                              {/* Konten kanan */}
+                              <div className="flex-1 min-w-0 space-y-1.5">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-sm leading-snug">{base.name}</p>
+                                    {base.code && (
+                                      <p className="font-mono text-[11px] text-muted-foreground mt-0.5">{base.code}</p>
+                                    )}
                                   </div>
-                                </td>
-                                {/* Hari */}
-                                <td className="px-3 py-3">{getDowBadges(base)}</td>
-                                {/* Periode */}
-                                <td className="px-3 py-3">
-                                  <span className="text-xs text-muted-foreground tabular-nums">
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <Badge
+                                      variant={base.active ? 'default' : 'secondary'}
+                                      className="text-[10px] px-1.5 py-0 h-4"
+                                    >
+                                      {base.active ? 'Aktif' : 'Nonaktif'}
+                                    </Badge>
+                                    <RowActionsMenu
+                                      actions={[
+                                        { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => openEditDialog(base) },
+                                        { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(base.id), variant: 'destructive' },
+                                      ]}
+                                      data-testid={`actions-base-${base.id}`}
+                                    />
+                                  </div>
+                                </div>
+                                <div>{getDowBadges(base)}</div>
+                                {(base.validFrom || base.validTo) && (
+                                  <p className="text-[11px] text-muted-foreground tabular-nums">
                                     {base.validFrom && base.validTo
                                       ? `${base.validFrom} – ${base.validTo}`
                                       : base.validFrom
                                         ? `Mulai ${base.validFrom}`
-                                        : base.validTo
-                                          ? `s/d ${base.validTo}`
-                                          : <span className="italic opacity-50">∞</span>}
-                                  </span>
-                                </td>
-                                {/* Status */}
-                                <td className="px-3 py-3">
-                                  <Badge
-                                    variant={base.active ? 'default' : 'secondary'}
-                                    className="text-[11px] px-1.5 py-0"
-                                  >
-                                    {base.active ? 'Aktif' : 'Nonaktif'}
-                                  </Badge>
-                                </td>
-                                {/* Actions */}
-                                <td className="pr-2 py-3 text-right">
-                                  <RowActionsMenu
-                                    actions={[
-                                      { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => openEditDialog(base) },
-                                      { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(base.id), variant: 'destructive' },
-                                    ]}
-                                    data-testid={`actions-base-${base.id}`}
-                                  />
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                                        : `s/d ${base.validTo}`}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* ══ DESKTOP: tabel dengan kolom tetap ══ */}
+                      <div className="hidden sm:block overflow-x-auto">
+                        <table className="table-fixed w-full text-sm" style={{ minWidth: 620 }}>
+                          <colgroup>
+                            <col style={{ width: 88 }} />
+                            <col />
+                            <col style={{ width: 188 }} />
+                            <col style={{ width: 160 }} />
+                            <col style={{ width: 76 }} />
+                            <col style={{ width: 44 }} />
+                          </colgroup>
+                          <thead>
+                            <tr className="border-b bg-muted/10">
+                              {(['Jam', 'Nama / Kode', 'Hari Operasi', 'Periode', 'Status', ''] as const).map((h, i) => (
+                                <th
+                                  key={i}
+                                  className={`text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground py-2 ${i === 0 ? 'pl-5 pr-3' : i === 5 ? 'pr-2' : 'px-3'}`}
+                                >
+                                  {h}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {bases.map((base: TripBase) => {
+                              const departTime = getOriginDepartTime(base.defaultStopTimes);
+                              return (
+                                <tr key={base.id} className="hover:bg-muted/20 transition-colors" data-testid={`row-trip-base-${base.id}-desktop`}>
+                                  <td className="pl-5 pr-3 py-3">
+                                    <span className={`font-mono font-semibold tabular-nums ${departTime === '-' ? 'text-muted-foreground/40' : ''}`}>
+                                      {departTime}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-3 overflow-hidden">
+                                    <div className="min-w-0">
+                                      <p className="font-medium leading-snug truncate">{base.name}</p>
+                                      {base.code && <p className="font-mono text-[11px] text-muted-foreground">{base.code}</p>}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-3">{getDowBadges(base)}</td>
+                                  <td className="px-3 py-3">
+                                    <span className="text-xs text-muted-foreground tabular-nums">
+                                      {base.validFrom && base.validTo
+                                        ? `${base.validFrom} – ${base.validTo}`
+                                        : base.validFrom
+                                          ? `Mulai ${base.validFrom}`
+                                          : base.validTo
+                                            ? `s/d ${base.validTo}`
+                                            : <span className="opacity-40">∞</span>}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <Badge variant={base.active ? 'default' : 'secondary'} className="text-[11px] px-1.5 py-0">
+                                      {base.active ? 'Aktif' : 'Nonaktif'}
+                                    </Badge>
+                                  </td>
+                                  <td className="pr-2 py-3 text-right">
+                                    <RowActionsMenu
+                                      actions={[
+                                        { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => openEditDialog(base) },
+                                        { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(base.id), variant: 'destructive' },
+                                      ]}
+                                      data-testid={`actions-base-${base.id}`}
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </div>
