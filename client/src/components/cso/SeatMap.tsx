@@ -283,8 +283,7 @@ export default function SeatMap({
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
-        <div className="flex justify-center">
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 w-fit mx-auto">
           {seatGrid.map((row, ri) => (
             <div key={ri} className="flex items-center gap-1">
               {row.map((seat, ci) => {
@@ -294,7 +293,7 @@ export default function SeatMap({
                 const isLoading = seatLoading === seat.seat_no;
                 const isMultiSeat = !!(seatmap?.seatAvailability[seat.seat_no]?.isMultiSeat);
                 return (
-                  <div key={seat.seat_no} className="relative">
+                  <div key={seat.seat_no} className="relative w-9 h-9">
                     <button
                       onClick={() => !isLoading && handleSeatClick(seat.seat_no)}
                       disabled={isLoading}
@@ -311,10 +310,10 @@ export default function SeatMap({
                     {isMultiSeat && status === 'booked' && (
                       <span
                         title="Multi-Penumpang: kursi ini dipakai oleh lebih dari 1 penumpang pada rute berbeda"
-                        className="absolute -top-1 -right-1 z-10 pointer-events-none"
+                        className="absolute top-0.5 right-0.5 z-10 pointer-events-none"
                         data-testid={`multi-seat-badge-${seat.seat_no}`}
                       >
-                        <Users className="w-3 h-3 text-orange-500 drop-shadow-sm" />
+                        <Users className="w-2.5 h-2.5 text-orange-500" />
                       </span>
                     )}
                   </div>
@@ -322,7 +321,6 @@ export default function SeatMap({
               })}
             </div>
           ))}
-        </div>
         </div>
 
         <div className="flex items-center justify-center gap-2 text-[10px] text-gray-400 mt-3">
