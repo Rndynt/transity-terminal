@@ -4,20 +4,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { tripPatternsApi, layoutsApi, stopsApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, MapPin, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, MapPin } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
-import type { TripPattern, Layout, Stop, PatternStop } from '@/types';
+import type { TripPattern, Layout, Stop } from '@/types';
 
 interface TripPatternFormData {
   code: string;
@@ -34,6 +34,15 @@ interface StopSequenceItem {
   dwellSeconds: number;
   boardingAllowed?: boolean;
   alightingAllowed?: boolean;
+}
+
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <div className="flex-1 h-px bg-border" />
+    </div>
+  );
 }
 
 export default function TripPatternsManager() {
@@ -69,23 +78,29 @@ export default function TripPatternsManager() {
     queryFn: stopsApi.getAll
   });
 
+  const layoutOptions = layouts.map(l => ({
+    value: l.id,
+    label: l.name,
+    badge: `${l.rows}×${l.cols}`
+  }));
+
+  const stopOptions = stops.map(s => ({
+    value: s.id,
+    label: s.name,
+    badge: s.code,
+    subtitle: s.city || undefined
+  }));
+
   const createMutation = useMutation({
     mutationFn: tripPatternsApi.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trip-patterns'] });
       setIsDialogOpen(false);
       resetForm();
-      toast({
-        title: "Success",
-        description: "Trip pattern created successfully"
-      });
+      toast({ title: 'Berhasil', description: 'Pola perjalanan berhasil dibuat' });
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create trip pattern",
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal membuat pola perjalanan', variant: 'destructive' });
     }
   });
 
@@ -96,17 +111,10 @@ export default function TripPatternsManager() {
       setIsDialogOpen(false);
       resetForm();
       setEditingPattern(null);
-      toast({
-        title: "Success",
-        description: "Trip pattern updated successfully"
-      });
+      toast({ title: 'Berhasil', description: 'Pola perjalanan berhasil diperbarui' });
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update trip pattern",
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal memperbarui pola perjalanan', variant: 'destructive' });
     }
   });
 
@@ -115,47 +123,15 @@ export default function TripPatternsManager() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trip-patterns'] });
       setDeleteTarget(null);
-      toast({
-        title: "Success",
-        description: "Trip pattern deleted successfully"
-      });
+      toast({ title: 'Berhasil', description: 'Pola perjalanan berhasil dihapus' });
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete trip pattern",
-        variant: "destructive"
-      });
-    }
-  });
-
-  const createPatternStopMutation = useMutation({
-    mutationFn: patternStopsApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/trip-patterns', selectedPatternForStops?.id, 'stops'] });
-      toast({
-        title: "Success",
-        description: "Pattern stop added successfully"
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to add pattern stop",
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menghapus pola perjalanan', variant: 'destructive' });
     }
   });
 
   const resetForm = () => {
-    setFormData({
-      code: '',
-      name: '',
-      vehicleClass: '',
-      defaultLayoutId: '',
-      active: true,
-      tags: ''
-    });
+    setFormData({ code: '', name: '', vehicleClass: '', defaultLayoutId: '', active: true, tags: '' });
   };
 
   const handleCreate = () => {
@@ -179,12 +155,7 @@ export default function TripPatternsManager() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const submitData = {
-      ...formData,
-      tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
-    };
-
+    const submitData = { ...formData, tags: formData.tags.split(',').map(t => t.trim()).filter(t => t) };
     if (editingPattern) {
       updateMutation.mutate({ id: editingPattern.id, data: submitData });
     } else {
@@ -192,46 +163,31 @@ export default function TripPatternsManager() {
     }
   };
 
-  const handleDelete = (id: string) => {
-    setDeleteTarget(id);
-  };
-
-  const confirmDelete = () => {
-    if (deleteTarget) {
-      deleteMutation.mutate(deleteTarget);
-    }
-  };
+  const handleDelete = (id: string) => setDeleteTarget(id);
+  const confirmDelete = () => { if (deleteTarget) deleteMutation.mutate(deleteTarget); };
 
   const getLayoutName = (layoutId: string) => {
     const layout = layouts.find(l => l.id === layoutId);
-    return layout ? layout.name : 'None';
+    return layout ? layout.name : '-';
   };
 
   const handleManageStops = (pattern: TripPattern) => {
     setSelectedPatternForStops(pattern);
     setIsStopsDialogOpen(true);
-    // Load existing pattern stops
     tripPatternsApi.getStops(pattern.id).then(stops => {
-      const stopItems = stops.map(stop => ({
+      setPatternStops(stops.map(stop => ({
         stopId: stop.stopId,
         stopSequence: stop.stopSequence,
         dwellSeconds: stop.dwellSeconds || 0,
         boardingAllowed: stop.boardingAllowed,
         alightingAllowed: stop.alightingAllowed
-      }));
-      setPatternStops(stopItems);
+      })));
     });
   };
 
   const addPatternStop = () => {
     const nextSequence = Math.max(0, ...patternStops.map(s => s.stopSequence)) + 1;
-    setPatternStops(prev => [...prev, {
-      stopId: '',
-      stopSequence: nextSequence,
-      dwellSeconds: 0,
-      boardingAllowed: true,
-      alightingAllowed: true
-    }]);
+    setPatternStops(prev => [...prev, { stopId: '', stopSequence: nextSequence, dwellSeconds: 0, boardingAllowed: true, alightingAllowed: true }]);
   };
 
   const removePatternStop = (index: number) => {
@@ -239,16 +195,12 @@ export default function TripPatternsManager() {
   };
 
   const updatePatternStop = (index: number, field: keyof StopSequenceItem, value: any) => {
-    setPatternStops(prev => prev.map((stop, i) => 
-      i === index ? { ...stop, [field]: value } : stop
-    ));
+    setPatternStops(prev => prev.map((stop, i) => i === index ? { ...stop, [field]: value } : stop));
   };
 
   const savePatternStops = async () => {
     if (!selectedPatternForStops) return;
-
     try {
-      // Use atomic bulk replace to avoid duplication issues
       const validStops = patternStops.filter(stop => stop.stopId).map(stop => ({
         patternId: selectedPatternForStops.id,
         stopId: stop.stopId,
@@ -257,54 +209,18 @@ export default function TripPatternsManager() {
         boardingAllowed: stop.boardingAllowed !== false,
         alightingAllowed: stop.alightingAllowed !== false
       }));
-      
       await patternStopsApi.bulkReplace(selectedPatternForStops.id, validStops);
-      
-      // Invalidate cache for pattern stops and related trip stop times effective flags
       queryClient.invalidateQueries({ queryKey: ['/api/trip-patterns', selectedPatternForStops.id, 'stops'] });
-      
-      // CRITICAL: Invalidate all trips' effective stop times since pattern changed
-      queryClient.invalidateQueries({ queryKey: ['/api/trips'] }); // Invalidate all trips
-      queryClient.invalidateQueries({ 
-        predicate: (query) => {
-          // Invalidate any query that includes 'stop-times' and 'effective' 
-          const key = query.queryKey as string[];
-          return key.includes('stop-times') && key.includes('effective');
-        }
-      });
-      
+      queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
       setIsStopsDialogOpen(false);
       setPatternStops([]);
-      toast({
-        title: "Success",
-        description: "Pattern stops saved successfully - all affected trips will be refreshed"
-      });
+      toast({ title: 'Berhasil', description: 'Daftar halte berhasil disimpan' });
     } catch (error) {
-      console.error('Error saving pattern stops:', error);
-      
-      let errorMessage = "Failed to save pattern stops";
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      } else if (error && typeof error === 'object' && 'message' in error) {
-        errorMessage = error.message as string;
-      }
-      
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menyimpan halte pola', variant: 'destructive' });
     }
   };
 
-  const getStopName = (stopId: string) => {
-    const stop = stops.find(s => s.id === stopId);
-    return stop ? `${stop.name} (${stop.code})` : 'Select Stop';
-  };
-
-  const filteredPatterns = patterns.filter(pattern => 
+  const filteredPatterns = patterns.filter(pattern =>
     pattern.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
     pattern.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -312,97 +228,95 @@ export default function TripPatternsManager() {
   return (
     <div className="space-y-6" data-testid="trip-patterns-manager">
       <MasterPageHeader
-        title="Trip Patterns Management"
-        description="Manage route patterns and stop sequences"
+        title="Pola Perjalanan"
+        description="Kelola pola rute dan urutan pemberhentian"
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Cari pattern..."
+        searchPlaceholder="Cari kode atau nama pola..."
         count={filteredPatterns.length}
         action={
           <Button onClick={handleCreate} data-testid="add-pattern-button">
             <Plus className="h-4 w-4 mr-2" />
-            Tambah Trip Pattern
+            Tambah Pola
           </Button>
         }
       />
+
       <MasterFormDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
-        title={editingPattern ? 'Edit Trip Pattern' : 'Add New Trip Pattern'}
+        title={editingPattern ? 'Edit Pola Perjalanan' : 'Tambah Pola Perjalanan'}
         description={editingPattern ? 'Ubah informasi pola rute perjalanan.' : 'Tambah pola rute perjalanan baru.'}
         onSubmit={handleSubmit}
         isPending={createMutation.isPending || updateMutation.isPending}
         data-testid="pattern-dialog"
       >
+        <SectionDivider label="Identitas Pola" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="code">Pattern Code *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="code">Kode Pola <span className="text-destructive">*</span></Label>
             <Input
               id="code"
               value={formData.code}
               onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
-              placeholder="e.g., AB_via_C"
+              placeholder="Contoh: JKT-BDG-C"
               required
               data-testid="input-code"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="name">Pattern Name *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="name">Nama Pola <span className="text-destructive">*</span></Label>
             <Input
               id="name"
               value={formData.name}
               onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              placeholder="e.g., Jakarta to Bandung via Purwakarta"
+              placeholder="Contoh: Jakarta–Bandung via Purwakarta"
               required
               data-testid="input-name"
             />
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="vehicleClass">Vehicle Class</Label>
+        <SectionDivider label="Konfigurasi Armada" />
+        <div className="space-y-1.5">
+          <Label htmlFor="vehicleClass">Kelas Kendaraan</Label>
           <Input
             id="vehicleClass"
             value={formData.vehicleClass}
             onChange={(e) => setFormData(prev => ({ ...prev, vehicleClass: e.target.value }))}
-            placeholder="e.g., standard, executive"
+            placeholder="Contoh: standard, executive, sleeper"
             data-testid="input-vehicle-class"
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="defaultLayoutId">Default Layout</Label>
-          <Select 
-            value={formData.defaultLayoutId} 
-            onValueChange={(value) => setFormData(prev => ({ ...prev, defaultLayoutId: value }))}
-          >
-            <SelectTrigger data-testid="select-layout">
-              <SelectValue placeholder="Select default layout" />
-            </SelectTrigger>
-            <SelectContent>
-              {layouts.map(layout => (
-                <SelectItem key={layout.id} value={layout.id}>
-                  {layout.name} ({layout.rows}x{layout.cols})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="space-y-1.5">
+          <Label>Layout Default</Label>
+          <SearchableSelect
+            value={formData.defaultLayoutId}
+            options={layoutOptions}
+            placeholder="Pilih layout kursi default..."
+            searchPlaceholder="Cari layout..."
+            onChange={(v) => setFormData(prev => ({ ...prev, defaultLayoutId: v }))}
+            data-testid="select-layout"
+          />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="tags">Tags (comma separated)</Label>
+        <SectionDivider label="Tambahan" />
+        <div className="space-y-1.5">
+          <Label htmlFor="tags">Tag (pisahkan dengan koma)</Label>
           <Input
             id="tags"
             value={formData.tags}
             onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
-            placeholder="e.g., intercity, express, overnight"
+            placeholder="Contoh: intercity, express, overnight"
             data-testid="input-tags"
           />
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border px-4 py-3 bg-muted/30">
+        <div className="flex items-center justify-between rounded-xl border px-4 py-3 bg-muted/30">
           <div>
-            <p className="text-sm font-medium">Active pattern</p>
+            <p className="text-sm font-medium">Pola Aktif</p>
+            <p className="text-xs text-muted-foreground">Pola yang tidak aktif tidak akan tersedia untuk pembuatan trip</p>
           </div>
           <Switch
             id="active"
@@ -413,56 +327,44 @@ export default function TripPatternsManager() {
         </div>
       </MasterFormDialog>
 
-      {/* Pattern Stops Management Dialog */}
+      {/* Stops Management Dialog */}
       <Dialog open={isStopsDialogOpen} onOpenChange={setIsStopsDialogOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[92vh] flex flex-col p-0 gap-0" data-testid="stops-dialog">
           <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
-            <DialogTitle>
-              Manage Stops - {selectedPatternForStops?.name}
-            </DialogTitle>
-            <DialogDescription>
-              Kelola daftar pemberhentian untuk pola rute ini.
-            </DialogDescription>
+            <DialogTitle>Halte & Urutan — {selectedPatternForStops?.name}</DialogTitle>
+            <DialogDescription>Kelola daftar pemberhentian untuk pola rute ini.</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             <div className="flex justify-between items-center">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stop Sequence</Label>
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Urutan Halte</span>
               <Button onClick={addPatternStop} size="sm" data-testid="add-pattern-stop">
                 <Plus className="h-4 w-4 mr-2" />
-                Add Stop
+                Tambah Halte
               </Button>
             </div>
-            
+
             <div className="space-y-3">
               {patternStops.map((stop, index) => (
-                <div key={index} className="flex flex-col space-y-2 p-3 border rounded-lg bg-card">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-12 text-center font-mono font-bold text-primary">
+                <div key={index} className="flex flex-col space-y-3 p-3 border rounded-xl bg-card">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 text-center font-mono font-bold text-sm text-primary bg-primary/10 rounded-lg py-1.5 flex-shrink-0">
                       {stop.stopSequence}
                     </div>
                     <div className="flex-1">
-                      <Select 
-                        value={stop.stopId} 
-                        onValueChange={(value) => updatePatternStop(index, 'stopId', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select stop" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {stops.map(stopOption => (
-                            <SelectItem key={stopOption.id} value={stopOption.id}>
-                              {stopOption.name} ({stopOption.code})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={stop.stopId}
+                        options={stopOptions}
+                        placeholder="Pilih halte..."
+                        searchPlaceholder="Cari halte..."
+                        onChange={(value) => updatePatternStop(index, 'stopId', value)}
+                      />
                     </div>
-                    <div className="w-32">
+                    <div className="w-28 flex-shrink-0">
                       <Input
                         type="number"
                         value={stop.dwellSeconds}
                         onChange={(e) => updatePatternStop(index, 'dwellSeconds', parseInt(e.target.value, 10) || 0)}
-                        placeholder="Dwell (sec)"
+                        placeholder="Waktu (dtk)"
                         min="0"
                       />
                     </div>
@@ -471,49 +373,44 @@ export default function TripPatternsManager() {
                       variant="ghost"
                       onClick={() => removePatternStop(index)}
                       data-testid={`remove-stop-${index}`}
-                      className="hover:bg-destructive/10 hover:text-destructive"
+                      className="h-10 w-10 rounded-xl hover:bg-destructive/10 hover:text-destructive flex-shrink-0"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
-                  <div className="flex items-center space-x-6 ml-14">
-                    <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-6 pl-12">
+                    <div className="flex items-center gap-2">
                       <Switch
                         id={`boarding-${index}`}
                         checked={stop.boardingAllowed !== false}
                         onCheckedChange={(checked) => updatePatternStop(index, 'boardingAllowed', checked)}
                         data-testid={`switch-boarding-${index}`}
                       />
-                      <Label htmlFor={`boarding-${index}`} className="text-sm font-medium cursor-pointer">
-                        Allow Pickup
-                      </Label>
+                      <Label htmlFor={`boarding-${index}`} className="text-sm cursor-pointer">Naik penumpang</Label>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-2">
                       <Switch
                         id={`alighting-${index}`}
                         checked={stop.alightingAllowed !== false}
                         onCheckedChange={(checked) => updatePatternStop(index, 'alightingAllowed', checked)}
                         data-testid={`switch-alighting-${index}`}
                       />
-                      <Label htmlFor={`alighting-${index}`} className="text-sm font-medium cursor-pointer">
-                        Allow Drop
-                      </Label>
+                      <Label htmlFor={`alighting-${index}`} className="text-sm cursor-pointer">Turun penumpang</Label>
                     </div>
                   </div>
                 </div>
               ))}
+              {patternStops.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground border border-dashed rounded-xl">
+                  <MapPin className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Belum ada halte. Klik "Tambah Halte" untuk mulai.</p>
+                </div>
+              )}
             </div>
           </div>
           <div className="px-5 py-4 border-t shrink-0 bg-background flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setIsStopsDialogOpen(false)}
-            >
-              Batal
-            </Button>
-            <Button onClick={savePatternStops} data-testid="save-pattern-stops">
-              Simpan
-            </Button>
+            <Button variant="outline" onClick={() => setIsStopsDialogOpen(false)}>Batal</Button>
+            <Button onClick={savePatternStops} data-testid="save-pattern-stops">Simpan Perubahan</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -522,8 +419,8 @@ export default function TripPatternsManager() {
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         onConfirm={confirmDelete}
-        title="Delete Trip Pattern"
-        description="Are you sure you want to delete this trip pattern? This action cannot be undone."
+        title="Hapus Pola Perjalanan"
+        description="Apakah Anda yakin ingin menghapus pola ini? Tindakan ini tidak dapat dibatalkan."
         isPending={deleteMutation.isPending}
       />
 
@@ -531,26 +428,27 @@ export default function TripPatternsManager() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
           ) : (
             <Table data-testid="patterns-table">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Vehicle Class</TableHead>
-                  <TableHead>Default Layout</TableHead>
+                  <TableHead>Kode</TableHead>
+                  <TableHead>Nama</TableHead>
+                  <TableHead>Kelas Kendaraan</TableHead>
+                  <TableHead>Layout Default</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Tags</TableHead>
-                  <TableHead className="w-32">Actions</TableHead>
+                  <TableHead>Tag</TableHead>
+                  <TableHead className="w-32">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredPatterns.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data'}
+                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                      <MapPin className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada pola perjalanan'}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -558,84 +456,68 @@ export default function TripPatternsManager() {
                     <TableRow key={pattern.id} data-testid={`pattern-row-${pattern.code}`}>
                       <TableCell className="font-mono font-medium">{pattern.code}</TableCell>
                       <TableCell>{pattern.name}</TableCell>
-                      <TableCell>{pattern.vehicleClass || '-'}</TableCell>
+                      <TableCell className="text-muted-foreground">{pattern.vehicleClass || '-'}</TableCell>
                       <TableCell>{getLayoutName(pattern.defaultLayoutId || '')}</TableCell>
                       <TableCell>
                         {pattern.active ? (
-                          <Badge variant="secondary">Active</Badge>
+                          <Badge variant="secondary">Aktif</Badge>
                         ) : (
-                          <Badge variant="outline">Inactive</Badge>
+                          <Badge variant="outline" className="text-muted-foreground">Nonaktif</Badge>
                         )}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {pattern.tags?.map(tag => (
-                            <Badge key={tag} variant="outline" className="text-xs">
-                              {tag}
-                            </Badge>
+                            <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
                           ))}
                         </div>
                       </TableCell>
-                      <TableCell className="overflow-visible">
-                        <div className="flex items-center space-x-1">
+                      <TableCell>
+                        <div className="flex items-center gap-1">
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
-                                  size="sm"
-                                  variant="ghost"
+                                  size="sm" variant="ghost"
                                   onClick={() => handleManageStops(pattern)}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-secondary/10 focus:ring-2 focus:ring-secondary"
-                                  aria-label={`Manage stops for ${pattern.name}`}
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-secondary/10"
                                   data-testid={`manage-stops-${pattern.code}`}
                                 >
-                                  <MapPin className="h-4 w-4 text-secondary" />
+                                  <MapPin className="h-3.5 w-3.5 text-secondary" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
-                                <p>Manage stops</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Kelola halte</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
-                                  size="sm"
-                                  variant="ghost"
+                                  size="sm" variant="ghost"
                                   onClick={() => handleEdit(pattern)}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10 focus:ring-2 focus:ring-primary"
-                                  aria-label={`Edit pattern ${pattern.name}`}
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
                                   data-testid={`edit-pattern-${pattern.code}`}
                                 >
-                                  <Pencil className="h-4 w-4 text-primary" />
+                                  <Pencil className="h-3.5 w-3.5 text-primary" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
-                                <p>Edit pattern</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Edit pola</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
-                                  size="sm"
-                                  variant="ghost"
+                                  size="sm" variant="ghost"
                                   onClick={() => handleDelete(pattern.id)}
                                   disabled={deleteMutation.isPending}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
-                                  aria-label={`Delete pattern ${pattern.name}`}
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50"
                                   data-testid={`delete-pattern-${pattern.code}`}
                                 >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent className="md:hidden">
-                                <p>Delete pattern</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Hapus pola</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         </div>

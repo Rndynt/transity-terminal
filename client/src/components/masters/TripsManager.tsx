@@ -9,10 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, tripPatternsApi, vehiclesApi, layoutsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Clock, Route, Grid3X3 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Clock, Route, Grid3X3, CalendarDays } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
@@ -26,6 +27,15 @@ interface TripFormData {
   layoutId: string;
   capacity: string;
   status: 'scheduled' | 'canceled' | 'closed';
+}
+
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <div className="flex-1 h-px bg-border" />
+    </div>
+  );
 }
 
 export default function TripsManager() {
@@ -65,27 +75,36 @@ export default function TripsManager() {
     queryFn: layoutsApi.getAll
   });
 
+  const patternOptions = patterns.filter(p => p.active).map(p => ({
+    value: p.id,
+    label: p.name,
+    badge: p.code,
+    subtitle: p.vehicleClass || undefined
+  }));
+
+  const vehicleOptions = vehicles.map(v => ({
+    value: v.id,
+    label: `${v.code} — ${v.plate}`,
+    badge: `${v.capacity} kursi`
+  }));
+
+  const layoutOptions = [
+    { value: '', label: 'Gunakan default kendaraan', badge: 'Default' },
+    ...layouts.map(l => ({ value: l.id, label: l.name, badge: `${l.rows}×${l.cols}` }))
+  ];
+
   const createMutation = useMutation({
     mutationFn: tripsApi.create,
     onSuccess: (createdTrip) => {
       queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
       setIsDialogOpen(false);
       resetForm();
-      toast({
-        title: "Success",
-        description: "Trip created successfully. Now set up the schedule."
-      });
-      
-      // Immediately open the scheduling dialog for the new trip
+      toast({ title: 'Berhasil', description: 'Trip berhasil dibuat. Atur jadwal keberangkatan sekarang.' });
       setSchedulingTrip(createdTrip);
       setIsSchedulingDialogOpen(true);
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create trip",
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal membuat trip', variant: 'destructive' });
     }
   });
 
@@ -96,17 +115,10 @@ export default function TripsManager() {
       setIsDialogOpen(false);
       resetForm();
       setEditingTrip(null);
-      toast({
-        title: "Success",
-        description: "Trip updated successfully"
-      });
+      toast({ title: 'Berhasil', description: 'Trip berhasil diperbarui' });
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update trip",
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal memperbarui trip', variant: 'destructive' });
     }
   });
 
@@ -115,93 +127,40 @@ export default function TripsManager() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
       setDeleteTarget(null);
-      toast({
-        title: "Success",
-        description: "Trip deleted successfully"
-      });
+      toast({ title: 'Berhasil', description: 'Trip berhasil dihapus' });
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete trip",
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menghapus trip', variant: 'destructive' });
     }
   });
 
   const deriveLegsMutation = useMutation({
     mutationFn: tripsApi.deriveLegs,
-    onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Trip legs derived successfully"
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to derive trip legs",
-        variant: "destructive"
-      });
-    }
+    onSuccess: () => { toast({ title: 'Berhasil', description: 'Leg trip berhasil diturunkan' }); },
+    onError: (error) => { toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menurunkan leg', variant: 'destructive' }); }
   });
 
   const precomputeSeatInventoryMutation = useMutation({
     mutationFn: tripsApi.precomputeSeatInventory,
-    onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Seat inventory precomputed successfully"
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to precompute seat inventory",
-        variant: "destructive"
-      });
-    }
+    onSuccess: () => { toast({ title: 'Berhasil', description: 'Inventori kursi berhasil dihitung ulang' }); },
+    onError: (error) => { toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menghitung inventori', variant: 'destructive' }); }
   });
 
   const resetForm = () => {
-    setFormData({
-      patternId: '',
-      serviceDate: new Date().toISOString().split('T')[0],
-      vehicleId: '',
-      layoutId: '',
-      capacity: '',
-      status: 'scheduled'
-    });
+    setFormData({ patternId: '', serviceDate: new Date().toISOString().split('T')[0], vehicleId: '', layoutId: '', capacity: '', status: 'scheduled' });
   };
 
-  const handleCreate = () => {
-    setEditingTrip(null);
-    resetForm();
-    setIsDialogOpen(true);
-  };
+  const handleCreate = () => { setEditingTrip(null); resetForm(); setIsDialogOpen(true); };
 
   const handleEdit = (trip: Trip) => {
     setEditingTrip(trip);
-    setFormData({
-      patternId: trip.patternId,
-      serviceDate: trip.serviceDate,
-      vehicleId: trip.vehicleId,
-      layoutId: trip.layoutId || '',
-      capacity: trip.capacity.toString(),
-      status: trip.status || 'scheduled'
-    });
+    setFormData({ patternId: trip.patternId, serviceDate: trip.serviceDate, vehicleId: trip.vehicleId, layoutId: trip.layoutId || '', capacity: trip.capacity.toString(), status: trip.status || 'scheduled' });
     setIsDialogOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const submitData = {
-      ...formData,
-      capacity: parseInt(formData.capacity, 10),
-      channelFlags: { CSO: true, WEB: false, APP: false, OTA: false }
-    };
-
+    const submitData = { ...formData, capacity: parseInt(formData.capacity, 10), channelFlags: { CSO: true, WEB: false, APP: false, OTA: false } };
     if (editingTrip) {
       updateMutation.mutate({ id: editingTrip.id, data: submitData });
     } else {
@@ -209,102 +168,54 @@ export default function TripsManager() {
     }
   };
 
-  const handleDelete = (id: string) => {
-    setDeleteTarget(id);
-  };
+  const handleDelete = (id: string) => setDeleteTarget(id);
+  const confirmDelete = () => { if (deleteTarget) deleteMutation.mutate(deleteTarget); };
+  const handleDeriveLegs = (tripId: string) => deriveLegsMutation.mutate(tripId);
+  const handlePrecomputeInventory = (tripId: string) => precomputeSeatInventoryMutation.mutate(tripId);
+  const handleScheduling = (trip: Trip) => { setSchedulingTrip(trip); setIsSchedulingDialogOpen(true); };
 
-  const confirmDelete = () => {
-    if (deleteTarget) {
-      deleteMutation.mutate(deleteTarget);
-    }
+  const getPatternName = (patternId: string) => patterns.find(p => p.id === patternId)?.name || '-';
+  const getPatternCode = (patternId: string) => patterns.find(p => p.id === patternId)?.code || '';
+  const getVehicleName = (vehicleId: string) => {
+    const v = vehicles.find(v => v.id === vehicleId);
+    return v ? `${v.code} (${v.plate})` : '-';
   };
-
-  const handleDeriveLegs = (tripId: string) => {
-    deriveLegsMutation.mutate(tripId);
-  };
-
-  const handlePrecomputeInventory = (tripId: string) => {
-    precomputeSeatInventoryMutation.mutate(tripId);
-  };
-
-  const handleScheduling = (trip: Trip) => {
-    setSchedulingTrip(trip);
-    setIsSchedulingDialogOpen(true);
-  };
-
-  const getPatternName = (patternId: string) => {
-    const pattern = patterns.find(p => p.id === patternId);
-    return pattern ? `${pattern.name} (${pattern.code})` : 'Unknown Pattern';
-  };
+  const getLayoutName = (layoutId: string) => layouts.find(l => l.id === layoutId)?.name || 'Default';
 
   const getScheduleDisplay = (trip: any) => {
-    // For now, we'll extract schedule info from the existing scheduleTime field
-    // In a real implementation, this would come from the TripWithDetails type
     if (trip.scheduleTime) {
-      const departTime = new Date(trip.scheduleTime).toLocaleTimeString('id-ID', { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: false,
-        timeZone: 'Asia/Jakarta'
-      });
-      return `Departs: ${departTime}`;
+      const departTime = new Date(trip.scheduleTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' });
+      return `Berangkat: ${departTime}`;
     }
-    return 'Schedule not set';
-  };
-
-  const getPatternPath = (patternId: string) => {
-    // This would ideally come from pattern stops data
-    // For now, we'll show pattern name as a placeholder
-    const pattern = patterns.find(p => p.id === patternId);
-    return pattern ? pattern.name : 'Unknown Route';
-  };
-
-  const getVehicleName = (vehicleId: string) => {
-    const vehicle = vehicles.find(v => v.id === vehicleId);
-    return vehicle ? `${vehicle.code} (${vehicle.plate})` : 'Unknown Vehicle';
-  };
-
-  const getLayoutName = (layoutId: string) => {
-    const layout = layouts.find(l => l.id === layoutId);
-    return layout ? layout.name : 'Default';
+    return 'Jadwal belum diatur';
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'scheduled':
-        return <Badge variant="secondary">Scheduled</Badge>;
-      case 'canceled':
-        return <Badge variant="destructive">Canceled</Badge>;
-      case 'closed':
-        return <Badge variant="outline">Closed</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
+      case 'scheduled': return <Badge variant="secondary">Terjadwal</Badge>;
+      case 'canceled': return <Badge variant="destructive">Dibatalkan</Badge>;
+      case 'closed': return <Badge variant="outline">Ditutup</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
     }
   };
 
   const filteredTrips = trips.filter(trip => {
     const q = searchQuery.toLowerCase();
-    const patternName = getPatternPath(trip.patternId).toLowerCase();
-    const vehicleName = getVehicleName(trip.vehicleId).toLowerCase();
-    const tripId = trip.id.slice(-8).toLowerCase();
-    const serviceDate = trip.serviceDate.toLowerCase();
-    const status = (trip.status || 'scheduled').toLowerCase();
-
-    return patternName.includes(q) ||
-           vehicleName.includes(q) ||
-           tripId.includes(q) ||
-           serviceDate.includes(q) ||
-           status.includes(q);
+    return getPatternName(trip.patternId).toLowerCase().includes(q) ||
+      getVehicleName(trip.vehicleId).toLowerCase().includes(q) ||
+      trip.id.slice(-8).toLowerCase().includes(q) ||
+      trip.serviceDate.toLowerCase().includes(q) ||
+      (trip.status || 'scheduled').toLowerCase().includes(q);
   });
 
   return (
     <div className="space-y-6" data-testid="trips-manager">
       <MasterPageHeader
-        title="Trips Management"
-        description="Manage scheduled trips and their configurations"
+        title="Perjalanan Terjadwal"
+        description="Kelola trip dan jadwal keberangkatan"
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Cari trip..."
+        searchPlaceholder="Cari pola, kendaraan, atau tanggal..."
         count={filteredTrips.length}
         action={
           <Button onClick={handleCreate} data-testid="add-trip-button">
@@ -313,37 +224,31 @@ export default function TripsManager() {
           </Button>
         }
       />
+
       <MasterFormDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
-        title={editingTrip ? 'Edit Trip' : 'Add New Trip'}
-        description={editingTrip ? 'Perbarui informasi trip ini.' : 'Buat trip baru dengan memilih pola perjalanan dan kendaraan.'}
+        title={editingTrip ? 'Edit Trip' : 'Tambah Trip'}
+        description={editingTrip ? 'Perbarui informasi trip ini.' : 'Buat trip baru dengan memilih pola dan kendaraan.'}
         onSubmit={handleSubmit}
         isPending={createMutation.isPending || updateMutation.isPending}
         data-testid="trip-dialog"
       >
-        <div className="space-y-2">
-          <Label htmlFor="patternId">Trip Pattern *</Label>
-          <Select 
-            value={formData.patternId} 
-            onValueChange={(value) => setFormData(prev => ({ ...prev, patternId: value }))}
-            required
-          >
-            <SelectTrigger data-testid="select-pattern">
-              <SelectValue placeholder="Select trip pattern" />
-            </SelectTrigger>
-            <SelectContent>
-              {patterns.filter(p => p.active).map(pattern => (
-                <SelectItem key={pattern.id} value={pattern.id}>
-                  {pattern.name} ({pattern.code})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <SectionDivider label="Rute & Tanggal" />
+        <div className="space-y-1.5">
+          <Label>Pola Perjalanan <span className="text-destructive">*</span></Label>
+          <SearchableSelect
+            value={formData.patternId}
+            options={patternOptions}
+            placeholder="Pilih pola rute perjalanan..."
+            searchPlaceholder="Cari pola..."
+            onChange={(v) => setFormData(prev => ({ ...prev, patternId: v }))}
+            data-testid="select-pattern"
+          />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="serviceDate">Service Date *</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="serviceDate">Tanggal Layanan <span className="text-destructive">*</span></Label>
           <Input
             id="serviceDate"
             type="date"
@@ -354,73 +259,56 @@ export default function TripsManager() {
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="vehicleId">Vehicle *</Label>
-          <Select 
-            value={formData.vehicleId} 
-            onValueChange={(value) => setFormData(prev => ({ ...prev, vehicleId: value }))}
-            required
-          >
-            <SelectTrigger data-testid="select-vehicle">
-              <SelectValue placeholder="Select vehicle" />
-            </SelectTrigger>
-            <SelectContent>
-              {vehicles.map(vehicle => (
-                <SelectItem key={vehicle.id} value={vehicle.id}>
-                  {vehicle.code} ({vehicle.plate}) - {vehicle.capacity} seats
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <SectionDivider label="Armada & Kapasitas" />
+        <div className="space-y-1.5">
+          <Label>Kendaraan <span className="text-destructive">*</span></Label>
+          <SearchableSelect
+            value={formData.vehicleId}
+            options={vehicleOptions}
+            placeholder="Pilih kendaraan..."
+            searchPlaceholder="Cari kode atau plat..."
+            onChange={(v) => setFormData(prev => ({ ...prev, vehicleId: v }))}
+            data-testid="select-vehicle"
+          />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="layoutId">Layout Override</Label>
-          <Select 
-            value={formData.layoutId} 
-            onValueChange={(value) => setFormData(prev => ({ ...prev, layoutId: value }))}
-          >
-            <SelectTrigger data-testid="select-layout">
-              <SelectValue placeholder="Use vehicle default layout" />
-            </SelectTrigger>
-            <SelectContent>
-              {layouts.map(layout => (
-                <SelectItem key={layout.id} value={layout.id}>
-                  {layout.name} ({layout.rows}x{layout.cols})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="space-y-1.5">
+          <Label>Override Layout Kursi</Label>
+          <SearchableSelect
+            value={formData.layoutId}
+            options={layoutOptions.slice(1)}
+            placeholder="Gunakan default kendaraan..."
+            searchPlaceholder="Cari layout..."
+            onChange={(v) => setFormData(prev => ({ ...prev, layoutId: v }))}
+            data-testid="select-layout"
+          />
+          <p className="text-xs text-muted-foreground">Kosongkan untuk menggunakan layout default kendaraan</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="capacity">Capacity *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="capacity">Kapasitas <span className="text-destructive">*</span></Label>
             <Input
               id="capacity"
               type="number"
               value={formData.capacity}
               onChange={(e) => setFormData(prev => ({ ...prev, capacity: e.target.value }))}
-              placeholder="e.g., 40"
+              placeholder="Contoh: 40"
               min="1"
               required
               data-testid="input-capacity"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="status">Status *</Label>
-            <Select 
-              value={formData.status} 
-              onValueChange={(value: any) => setFormData(prev => ({ ...prev, status: value }))}
-              required
-            >
+          <div className="space-y-1.5">
+            <Label>Status</Label>
+            <Select value={formData.status} onValueChange={(value: any) => setFormData(prev => ({ ...prev, status: value }))}>
               <SelectTrigger data-testid="select-status">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="scheduled">Scheduled</SelectItem>
-                <SelectItem value="canceled">Canceled</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
+                <SelectItem value="scheduled">Terjadwal</SelectItem>
+                <SelectItem value="canceled">Dibatalkan</SelectItem>
+                <SelectItem value="closed">Ditutup</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -431,8 +319,8 @@ export default function TripsManager() {
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         onConfirm={confirmDelete}
-        title="Delete Trip"
-        description="Are you sure you want to delete this trip? This action cannot be undone."
+        title="Hapus Trip"
+        description="Apakah Anda yakin ingin menghapus trip ini? Tindakan ini tidak dapat dibatalkan."
         isPending={deleteMutation.isPending}
       />
 
@@ -440,141 +328,93 @@ export default function TripsManager() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
           ) : (
             <Table data-testid="trips-table">
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>
-                  <TableHead>Route & Schedule</TableHead>
-                  <TableHead>Service Date</TableHead>
-                  <TableHead>Vehicle</TableHead>
-                  <TableHead>Capacity</TableHead>
+                  <TableHead>Rute & Jadwal</TableHead>
+                  <TableHead>Tgl. Layanan</TableHead>
+                  <TableHead>Kendaraan</TableHead>
+                  <TableHead>Kapasitas</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-10">Actions</TableHead>
+                  <TableHead className="w-10">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredTrips.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      {searchQuery ? `Tidak ada hasil untuk "${searchQuery}"` : 'Belum ada data'}
+                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                      <CalendarDays className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data trip'}
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredTrips.map(trip => (
                     <TableRow key={trip.id} data-testid={`trip-row-${trip.id}`}>
-                      <TableCell className="font-mono text-xs">{trip.id.slice(-8)}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{trip.id.slice(-8)}</TableCell>
                       <TableCell>
-                        <div className="space-y-1">
-                          <div className="font-medium">{getPatternPath(trip.patternId)}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {getScheduleDisplay(trip)}
-                          </div>
+                        <div className="space-y-0.5">
+                          <div className="font-medium text-sm">{getPatternName(trip.patternId)}</div>
+                          <div className="text-xs text-muted-foreground">{getScheduleDisplay(trip)}</div>
                         </div>
                       </TableCell>
-                      <TableCell>{trip.serviceDate}</TableCell>
-                      <TableCell>{getVehicleName(trip.vehicleId)}</TableCell>
-                      <TableCell>{trip.capacity} seats</TableCell>
+                      <TableCell className="text-sm">{trip.serviceDate}</TableCell>
+                      <TableCell className="text-sm">{getVehicleName(trip.vehicleId)}</TableCell>
+                      <TableCell className="text-sm">{trip.capacity} kursi</TableCell>
                       <TableCell>{getStatusBadge(trip.status || 'scheduled')}</TableCell>
                       <TableCell className="overflow-visible">
-                        <div className="flex items-center space-x-1">
+                        <div className="flex items-center gap-0.5">
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => handleScheduling(trip)}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
-                                  aria-label={`Manage schedule for trip ${trip.id.slice(-8)}`}
-                                  data-testid={`scheduling-${trip.id}`}
-                                >
-                                  <Clock className="h-4 w-4 text-primary" />
+                                <Button variant="ghost" onClick={() => handleScheduling(trip)} className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10" data-testid={`scheduling-${trip.id}`}>
+                                  <Clock className="h-3.5 w-3.5 text-primary" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Manage schedule</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Atur jadwal</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => handleDeriveLegs(trip.id)}
-                                  disabled={deriveLegsMutation.isPending}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-secondary/10 disabled:opacity-50"
-                                  aria-label={`Derive legs for trip ${trip.id.slice(-8)}`}
-                                  data-testid={`derive-legs-${trip.id}`}
-                                >
-                                  <Route className="h-4 w-4 text-secondary" />
+                                <Button variant="ghost" onClick={() => handleDeriveLegs(trip.id)} disabled={deriveLegsMutation.isPending} className="h-7 w-7 p-0 rounded-lg hover:bg-secondary/10 disabled:opacity-50" data-testid={`derive-legs-${trip.id}`}>
+                                  <Route className="h-3.5 w-3.5 text-secondary" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Derive legs</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Turunkan leg</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => handlePrecomputeInventory(trip.id)}
-                                  disabled={precomputeSeatInventoryMutation.isPending}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-accent/10 disabled:opacity-50"
-                                  aria-label={`Precompute inventory for trip ${trip.id.slice(-8)}`}
-                                  data-testid={`precompute-inventory-${trip.id}`}
-                                >
-                                  <Grid3X3 className="h-4 w-4 text-accent" />
+                                <Button variant="ghost" onClick={() => handlePrecomputeInventory(trip.id)} disabled={precomputeSeatInventoryMutation.isPending} className="h-7 w-7 p-0 rounded-lg hover:bg-accent/10 disabled:opacity-50" data-testid={`precompute-inventory-${trip.id}`}>
+                                  <Grid3X3 className="h-3.5 w-3.5 text-accent" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Precompute inventory</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Hitung inventori</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => handleEdit(trip)}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
-                                  aria-label={`Edit trip ${trip.id.slice(-8)}`}
-                                  data-testid={`edit-trip-${trip.id}`}
-                                >
-                                  <Pencil className="h-4 w-4 text-primary" />
+                                <Button variant="ghost" onClick={() => handleEdit(trip)} className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10" data-testid={`edit-trip-${trip.id}`}>
+                                  <Pencil className="h-3.5 w-3.5 text-primary" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Edit trip</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Edit trip</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => handleDelete(trip.id)}
-                                  disabled={deleteMutation.isPending}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50"
-                                  aria-label={`Delete trip ${trip.id.slice(-8)}`}
-                                  data-testid={`delete-trip-${trip.id}`}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                <Button variant="ghost" onClick={() => handleDelete(trip.id)} disabled={deleteMutation.isPending} className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50" data-testid={`delete-trip-${trip.id}`}>
+                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Delete trip</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Hapus trip</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         </div>
@@ -592,43 +432,22 @@ export default function TripsManager() {
       <Dialog open={isSchedulingDialogOpen} onOpenChange={setIsSchedulingDialogOpen}>
         <DialogContent className="sm:max-w-4xl max-h-[92vh] flex flex-col p-0 gap-0" data-testid="scheduling-dialog">
           <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
-            <DialogTitle>
-              Manage Schedule - {schedulingTrip && getPatternName(schedulingTrip.patternId)}
-            </DialogTitle>
-            <DialogDescription>
-              Manage arrival and departure times for each stop in this trip.
-            </DialogDescription>
+            <DialogTitle>Jadwal Keberangkatan — {schedulingTrip && getPatternName(schedulingTrip.patternId)}</DialogTitle>
+            <DialogDescription>Atur waktu tiba dan berangkat untuk setiap halte dalam trip ini.</DialogDescription>
           </DialogHeader>
-          
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             {schedulingTrip && (
-              <div className="bg-accent/10 border border-accent/20 rounded-lg p-4">
+              <div className="bg-muted/40 border border-border rounded-xl p-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium">Service Date:</span>
-                    <span className="ml-2">{schedulingTrip.serviceDate}</span>
-                  </div>
-                  <div>
-                    <span className="font-medium">Vehicle:</span>
-                    <span className="ml-2">{getVehicleName(schedulingTrip.vehicleId)}</span>
-                  </div>
-                  <div>
-                    <span className="font-medium">Capacity:</span>
-                    <span className="ml-2">{schedulingTrip.capacity} seats</span>
-                  </div>
-                  <div>
-                    <span className="font-medium">Status:</span>
-                    <span className="ml-2">{getStatusBadge(schedulingTrip.status || 'scheduled')}</span>
-                  </div>
+                  <div><span className="font-medium text-muted-foreground">Tanggal:</span> <span className="ml-1">{schedulingTrip.serviceDate}</span></div>
+                  <div><span className="font-medium text-muted-foreground">Kendaraan:</span> <span className="ml-1">{getVehicleName(schedulingTrip.vehicleId)}</span></div>
+                  <div><span className="font-medium text-muted-foreground">Kapasitas:</span> <span className="ml-1">{schedulingTrip.capacity} kursi</span></div>
+                  <div className="flex items-center gap-1"><span className="font-medium text-muted-foreground">Status:</span> <span className="ml-1">{getStatusBadge(schedulingTrip.status || 'scheduled')}</span></div>
                 </div>
               </div>
             )}
-
             {schedulingTrip && (
-              <TripScheduleEditor 
-                trip={schedulingTrip} 
-                onClose={() => setIsSchedulingDialogOpen(false)}
-              />
+              <TripScheduleEditor trip={schedulingTrip} onClose={() => setIsSchedulingDialogOpen(false)} />
             )}
           </div>
           <div className="px-5 py-4 border-t shrink-0 bg-background flex justify-end">

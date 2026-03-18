@@ -3,21 +3,16 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { cargoRatesApi, cargoTypesApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import {
-  DollarSign, Plus, Pencil, Trash2, ArrowRight
-} from 'lucide-react';
+import { DollarSign, Plus, Pencil, Trash2, ArrowRight } from 'lucide-react';
 import type { CargoType, CargoRate, Stop, TripPattern, Trip } from '@shared/schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
@@ -30,6 +25,15 @@ const SCOPE_LABELS: Record<string, string> = {
   pattern: 'Pola Trip',
   trip: 'Trip Spesifik'
 };
+
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <div className="flex-1 h-px bg-border" />
+    </div>
+  );
+}
 
 export default function CargoRatesManager() {
   const { toast } = useToast();
@@ -68,6 +72,11 @@ export default function CargoRatesManager() {
     queryKey: ['/api/cargo-rates', filterTypeId === 'all' ? '' : filterTypeId],
     queryFn: () => cargoRatesApi.getAll(filterTypeId === 'all' ? undefined : filterTypeId)
   });
+
+  const cargoTypeOptions = cargoTypes.map(ct => ({ value: ct.id, label: ct.name, badge: ct.code }));
+  const stopOptions = allStops.map(s => ({ value: s.id, label: s.name, badge: s.code, subtitle: s.city || undefined }));
+  const patternOptions = patterns.map(p => ({ value: p.id, label: p.name, badge: p.code }));
+  const tripOptions = trips.slice(0, 50).map(t => ({ value: t.id, label: `Trip ${t.id.slice(-8)}`, badge: t.serviceDate }));
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<CargoRate>) => cargoRatesApi.create(data),
@@ -150,7 +159,7 @@ export default function CargoRatesManager() {
   const getScopeRefName = (scope: string | null, refId: string | null) => {
     if (!scope || scope === 'global' || !refId) return '';
     if (scope === 'pattern') return patterns.find(p => p.id === refId)?.name || refId;
-    if (scope === 'trip') return trips.find(t => t.id === refId)?.id?.slice(0,8) || refId;
+    if (scope === 'trip') return trips.find(t => t.id === refId)?.id?.slice(0, 8) || refId;
     return '';
   };
 
@@ -162,13 +171,7 @@ export default function CargoRatesManager() {
     const originName = getStopName(cr.originStopId).toLowerCase();
     const destName = getStopName(cr.destinationStopId).toLowerCase();
     const scopeLabel = (SCOPE_LABELS[cr.scope || 'global']).toLowerCase();
-
-    return (
-      typeName.includes(s) ||
-      originName.includes(s) ||
-      destName.includes(s) ||
-      scopeLabel.includes(s)
-    );
+    return typeName.includes(s) || originName.includes(s) || destName.includes(s) || scopeLabel.includes(s);
   });
 
   return (
@@ -210,29 +213,22 @@ export default function CargoRatesManager() {
         isPending={isPending}
         data-testid="cargo-rate-form-dialog"
       >
-        <div className="space-y-2">
-          <Label>Jenis Kargo *</Label>
-          <Select
+        <SectionDivider label="Jenis & Cakupan" />
+        <div className="space-y-1.5">
+          <Label>Jenis Kargo <span className="text-destructive">*</span></Label>
+          <SearchableSelect
             value={form.cargoTypeId}
-            onValueChange={v => setForm(f => ({ ...f, cargoTypeId: v }))}
-          >
-            <SelectTrigger data-testid="select-rate-cargo-type">
-              <SelectValue placeholder="Pilih jenis..." />
-            </SelectTrigger>
-            <SelectContent>
-              {cargoTypes.map(ct => (
-                <SelectItem key={ct.id} value={ct.id}>{ct.name} ({ct.code})</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={cargoTypeOptions}
+            placeholder="Pilih jenis kargo..."
+            searchPlaceholder="Cari jenis kargo..."
+            onChange={v => setForm(f => ({ ...f, cargoTypeId: v }))}
+            data-testid="select-rate-cargo-type"
+          />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label>Scope</Label>
-          <Select
-            value={form.scope}
-            onValueChange={v => setForm(f => ({ ...f, scope: v, scopeRefId: '' }))}
-          >
+          <Select value={form.scope} onValueChange={v => setForm(f => ({ ...f, scope: v, scopeRefId: '' }))}>
             <SelectTrigger data-testid="select-rate-scope">
               <SelectValue placeholder="Pilih scope..." />
             </SelectTrigger>
@@ -245,83 +241,63 @@ export default function CargoRatesManager() {
         </div>
 
         {form.scope === 'pattern' && (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label>Pola Trip</Label>
-            <Select
+            <SearchableSelect
               value={form.scopeRefId}
-              onValueChange={v => setForm(f => ({ ...f, scopeRefId: v }))}
-            >
-              <SelectTrigger data-testid="select-rate-pattern">
-                <SelectValue placeholder="Pilih pola..." />
-              </SelectTrigger>
-              <SelectContent>
-                {patterns.map(p => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={patternOptions}
+              placeholder="Pilih pola trip..."
+              searchPlaceholder="Cari pola..."
+              onChange={v => setForm(f => ({ ...f, scopeRefId: v }))}
+              data-testid="select-rate-pattern"
+            />
           </div>
         )}
 
         {form.scope === 'trip' && (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label>Trip</Label>
-            <Select
+            <SearchableSelect
               value={form.scopeRefId}
-              onValueChange={v => setForm(f => ({ ...f, scopeRefId: v }))}
-            >
-              <SelectTrigger data-testid="select-rate-trip">
-                <SelectValue placeholder="Pilih trip..." />
-              </SelectTrigger>
-              <SelectContent>
-                {trips.map(t => (
-                  <SelectItem key={t.id} value={t.id}>{t.id.slice(0, 8)}...</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={tripOptions}
+              placeholder="Pilih trip..."
+              searchPlaceholder="Cari trip..."
+              onChange={v => setForm(f => ({ ...f, scopeRefId: v }))}
+              data-testid="select-rate-trip"
+            />
           </div>
         )}
 
+        <SectionDivider label="Rute" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label>Asal</Label>
-            <Select
-              value={form.originStopId || 'all'}
-              onValueChange={v => setForm(f => ({ ...f, originStopId: v === 'all' ? '' : v }))}
-            >
-              <SelectTrigger data-testid="select-rate-origin">
-                <SelectValue placeholder="Semua asal" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua asal</SelectItem>
-                {allStops.map(s => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.originStopId}
+              options={stopOptions}
+              placeholder="Semua asal..."
+              searchPlaceholder="Cari halte asal..."
+              onChange={v => setForm(f => ({ ...f, originStopId: v }))}
+              data-testid="select-rate-origin"
+            />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label>Tujuan</Label>
-            <Select
-              value={form.destinationStopId || 'all'}
-              onValueChange={v => setForm(f => ({ ...f, destinationStopId: v === 'all' ? '' : v }))}
-            >
-              <SelectTrigger data-testid="select-rate-dest">
-                <SelectValue placeholder="Semua tujuan" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua tujuan</SelectItem>
-                {allStops.map(s => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.destinationStopId}
+              options={stopOptions}
+              placeholder="Semua tujuan..."
+              searchPlaceholder="Cari halte tujuan..."
+              onChange={v => setForm(f => ({ ...f, destinationStopId: v }))}
+              data-testid="select-rate-dest"
+            />
           </div>
         </div>
 
+        <SectionDivider label="Tarif" />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="pricePerKg">Harga/kg *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="pricePerKg">Harga/kg <span className="text-destructive">*</span></Label>
             <Input
               id="pricePerKg"
               type="number"
@@ -331,7 +307,7 @@ export default function CargoRatesManager() {
               data-testid="input-rate-price-per-kg"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="pricePerLeg">Harga/leg</Label>
             <Input
               id="pricePerLeg"
@@ -342,7 +318,7 @@ export default function CargoRatesManager() {
               data-testid="input-rate-price-per-leg"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="minCharge">Min. Biaya</Label>
             <Input
               id="minCharge"
@@ -355,9 +331,11 @@ export default function CargoRatesManager() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border px-4 py-3 bg-muted/30">
+        <SectionDivider label="Status" />
+        <div className="flex items-center justify-between rounded-xl border px-4 py-3 bg-muted/30">
           <div>
             <p className="text-sm font-medium">Aktif</p>
+            <p className="text-xs text-muted-foreground">Tarif ini tersedia untuk digunakan</p>
           </div>
           <Switch
             id="isActiveRate"
@@ -394,9 +372,7 @@ export default function CargoRatesManager() {
                     <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{getTypeCode(cr.cargoTypeId)}</span>
                     <span className="text-sm font-medium text-foreground">{getTypeName(cr.cargoTypeId)}</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">{SCOPE_LABELS[cr.scope || 'global']}</span>
-                    {cr.scopeRefId && (
-                      <span className="text-[10px] text-muted-foreground">{getScopeRefName(cr.scope, cr.scopeRefId)}</span>
-                    )}
+                    {cr.scopeRefId && <span className="text-[10px] text-muted-foreground">{getScopeRefName(cr.scope, cr.scopeRefId)}</span>}
                     {cr.isActive === false && <span className="text-[10px] text-destructive font-medium">Nonaktif</span>}
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -411,24 +387,10 @@ export default function CargoRatesManager() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => startEdit(cr)}
-                    className="h-7 w-7 p-0 rounded-lg"
-                    data-testid={`btn-edit-cargo-rate-${cr.id}`}
-                    aria-label="Edit"
-                  >
+                  <Button variant="ghost" size="icon" onClick={() => startEdit(cr)} className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10" data-testid={`btn-edit-cargo-rate-${cr.id}`} aria-label="Edit">
                     <Pencil className="w-3.5 h-3.5 text-primary" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setDeleteConfirmId(cr.id)}
-                    className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 hover:text-destructive"
-                    data-testid={`btn-del-cargo-rate-${cr.id}`}
-                    aria-label="Delete"
-                  >
+                  <Button variant="ghost" size="icon" onClick={() => setDeleteConfirmId(cr.id)} className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 hover:text-destructive" data-testid={`btn-del-cargo-rate-${cr.id}`} aria-label="Delete">
                     <Trash2 className="w-3.5 h-3.5 text-destructive" />
                   </Button>
                 </div>
@@ -441,12 +403,7 @@ export default function CargoRatesManager() {
       <DeleteConfirmDialog
         open={!!deleteConfirmId}
         onOpenChange={(open) => !open && setDeleteConfirmId(null)}
-        onConfirm={() => {
-          if (deleteConfirmId) {
-            deleteMutation.mutate(deleteConfirmId);
-            setDeleteConfirmId(null);
-          }
-        }}
+        onConfirm={() => { if (deleteConfirmId) { deleteMutation.mutate(deleteConfirmId); setDeleteConfirmId(null); } }}
         isPending={deleteMutation.isPending}
       />
     </div>

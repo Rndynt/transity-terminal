@@ -12,10 +12,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { priceRulesApi, tripPatternsApi, tripsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, DollarSign } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import type { PriceRule, TripPattern, Trip } from '@/types';
@@ -30,6 +31,22 @@ interface PriceRuleFormData {
   validTo: Date | undefined;
   priority: string;
 }
+
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <div className="flex-1 h-px bg-border" />
+    </div>
+  );
+}
+
+const SCOPE_LABELS: Record<string, string> = {
+  pattern: 'Pola Perjalanan',
+  trip: 'Trip Spesifik',
+  leg: 'Leg Trip',
+  time: 'Berbasis Waktu'
+};
 
 export default function PriceRulesManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -63,23 +80,28 @@ export default function PriceRulesManager() {
     queryFn: () => tripsApi.getAll()
   });
 
+  const patternOptions = patterns.map(p => ({
+    value: p.id,
+    label: p.name,
+    badge: p.code
+  }));
+
+  const tripOptions = trips.slice(0, 50).map(t => ({
+    value: t.id,
+    label: `Trip ${t.id.slice(-8)}`,
+    badge: t.serviceDate
+  }));
+
   const createMutation = useMutation({
     mutationFn: priceRulesApi.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/price-rules'] });
       setIsDialogOpen(false);
       resetForm();
-      toast({
-        title: "Success",
-        description: "Price rule created successfully"
-      });
+      toast({ title: 'Berhasil', description: 'Aturan harga berhasil dibuat' });
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create price rule",
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal membuat aturan harga', variant: 'destructive' });
     }
   });
 
@@ -90,17 +112,10 @@ export default function PriceRulesManager() {
       setIsDialogOpen(false);
       resetForm();
       setEditingRule(null);
-      toast({
-        title: "Success",
-        description: "Price rule updated successfully"
-      });
+      toast({ title: 'Berhasil', description: 'Aturan harga berhasil diperbarui' });
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update price rule",
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal memperbarui aturan harga', variant: 'destructive' });
     }
   });
 
@@ -109,44 +124,21 @@ export default function PriceRulesManager() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/price-rules'] });
       setDeleteTarget(null);
-      toast({
-        title: "Success",
-        description: "Price rule deleted successfully"
-      });
+      toast({ title: 'Berhasil', description: 'Aturan harga berhasil dihapus' });
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete price rule",
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menghapus aturan harga', variant: 'destructive' });
     }
   });
 
   const resetForm = () => {
-    setFormData({
-      scope: 'pattern',
-      patternId: '',
-      tripId: '',
-      legIndex: '',
-      ruleJson: '',
-      validFrom: undefined,
-      validTo: undefined,
-      priority: '1'
-    });
+    setFormData({ scope: 'pattern', patternId: '', tripId: '', legIndex: '', ruleJson: '', validFrom: undefined, validTo: undefined, priority: '1' });
   };
 
   const handleCreate = () => {
     setEditingRule(null);
     resetForm();
-    setFormData(prev => ({
-      ...prev,
-      ruleJson: JSON.stringify({
-        basePricePerLeg: 25000,
-        currency: "IDR",
-        multiplier: 1.0
-      }, null, 2)
-    }));
+    setFormData(prev => ({ ...prev, ruleJson: JSON.stringify({ basePricePerLeg: 25000, currency: 'IDR', multiplier: 1.0 }, null, 2) }));
     setIsDialogOpen(true);
   };
 
@@ -167,10 +159,8 @@ export default function PriceRulesManager() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
       const rule = JSON.parse(formData.ruleJson);
-      
       const submitData = {
         scope: formData.scope,
         patternId: formData.patternId || null,
@@ -181,67 +171,37 @@ export default function PriceRulesManager() {
         validTo: formData.validTo ? formData.validTo.toISOString() : null,
         priority: parseInt(formData.priority, 10)
       };
-
       if (editingRule) {
         updateMutation.mutate({ id: editingRule.id, data: submitData });
       } else {
         createMutation.mutate(submitData);
       }
-    } catch (error) {
-      toast({
-        title: "Invalid JSON",
-        description: "Please provide valid JSON for the rule configuration",
-        variant: "destructive"
-      });
+    } catch {
+      toast({ title: 'JSON Tidak Valid', description: 'Pastikan konfigurasi aturan adalah JSON yang valid', variant: 'destructive' });
     }
   };
 
-  const handleDelete = (id: string) => {
-    setDeleteTarget(id);
+  const handleDelete = (id: string) => setDeleteTarget(id);
+  const confirmDelete = () => { if (deleteTarget) deleteMutation.mutate(deleteTarget); };
+
+  const handleScopeChange = (scope: 'pattern' | 'trip' | 'leg' | 'time') => {
+    setFormData(prev => ({ ...prev, scope, patternId: '', tripId: '', legIndex: '' }));
   };
 
-  const confirmDelete = () => {
-    if (deleteTarget) {
-      deleteMutation.mutate(deleteTarget);
-    }
-  };
-
-  const getPatternName = (patternId: string) => {
-    const pattern = patterns.find(p => p.id === patternId);
-    return pattern ? `${pattern.name} (${pattern.code})` : 'Unknown Pattern';
-  };
-
+  const getPatternName = (patternId: string) => patterns.find(p => p.id === patternId)?.name || '-';
   const getTripName = (tripId: string) => {
     const trip = trips.find(t => t.id === tripId);
-    return trip ? `Trip ${trip.id.slice(-8)} (${trip.serviceDate})` : 'Unknown Trip';
+    return trip ? `Trip ${trip.id.slice(-8)} (${trip.serviceDate})` : '-';
   };
 
   const getScopeBadge = (scope: string) => {
-    const colors = {
-      pattern: 'secondary',
-      trip: 'default',
-      leg: 'outline',
-      time: 'destructive'
-    } as const;
-    
-    return <Badge variant={colors[scope as keyof typeof colors] || 'outline'}>{scope.toUpperCase()}</Badge>;
+    const variants = { pattern: 'secondary', trip: 'default', leg: 'outline', time: 'destructive' } as const;
+    return <Badge variant={variants[scope as keyof typeof variants] || 'outline'}>{SCOPE_LABELS[scope] || scope}</Badge>;
   };
 
   const formatRule = (rule: any) => {
-    if (typeof rule === 'object') {
-      return Object.entries(rule).map(([key, value]) => `${key}: ${value}`).join(', ');
-    }
+    if (typeof rule === 'object') return Object.entries(rule).map(([k, v]) => `${k}: ${v}`).join(', ');
     return String(rule);
-  };
-
-  const handleScopeChange = (scope: 'pattern' | 'trip' | 'leg' | 'time') => {
-    setFormData(prev => ({
-      ...prev,
-      scope,
-      patternId: '',
-      tripId: '',
-      legIndex: ''
-    }));
   };
 
   const filteredPriceRules = priceRules.filter(rule => {
@@ -249,132 +209,103 @@ export default function PriceRulesManager() {
     const scope = rule.scope.toLowerCase();
     const target = (
       rule.scope === 'pattern' && rule.patternId ? getPatternName(rule.patternId) :
-      rule.scope === 'trip' && rule.tripId ? getTripName(rule.tripId) :
-      rule.scope === 'leg' && rule.tripId ? `${getTripName(rule.tripId)} - Leg ${rule.legIndex}` :
-      rule.scope === 'time' ? 'time-based pricing' : ''
+      rule.scope === 'trip' && rule.tripId ? getTripName(rule.tripId) : ''
     ).toLowerCase();
-
     return scope.includes(q) || target.includes(q);
   });
 
   return (
     <div className="space-y-6" data-testid="price-rules-manager">
       <MasterPageHeader
-        title="Price Rules Management"
-        description="Manage pricing rules and fare calculations"
+        title="Aturan Harga"
+        description="Kelola aturan penetapan harga untuk pola perjalanan dan trip"
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Cari aturan harga..."
+        searchPlaceholder="Cari scope atau target..."
         count={filteredPriceRules.length}
         action={
           <Button onClick={handleCreate} data-testid="add-price-rule-button">
             <Plus className="h-4 w-4 mr-2" />
-            Tambah Price Rule
+            Tambah Aturan
           </Button>
         }
       />
+
       <MasterFormDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
-        title={editingRule ? 'Edit Price Rule' : 'Add New Price Rule'}
-        description={editingRule ? 'Perbarui aturan harga yang ada.' : 'Buat aturan harga baru untuk pola perjalanan atau trip tertentu.'}
+        title={editingRule ? 'Edit Aturan Harga' : 'Tambah Aturan Harga'}
+        description={editingRule ? 'Perbarui aturan penetapan harga.' : 'Buat aturan harga baru untuk pola atau trip tertentu.'}
         onSubmit={handleSubmit}
         isPending={createMutation.isPending || updateMutation.isPending}
         size="lg"
         data-testid="price-rule-dialog"
       >
-        <div className="space-y-2">
-          <Label htmlFor="scope">Scope *</Label>
-          <Select 
-            value={formData.scope} 
-            onValueChange={handleScopeChange}
-            required
-          >
+        <SectionDivider label="Cakupan Aturan" />
+        <div className="space-y-1.5">
+          <Label>Tipe Scope <span className="text-destructive">*</span></Label>
+          <Select value={formData.scope} onValueChange={handleScopeChange}>
             <SelectTrigger data-testid="select-scope">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="pattern">Pattern Level</SelectItem>
-              <SelectItem value="trip">Trip Level</SelectItem>
-              <SelectItem value="leg">Leg Level</SelectItem>
-              <SelectItem value="time">Time Based</SelectItem>
+              <SelectItem value="pattern">Pola Perjalanan</SelectItem>
+              <SelectItem value="trip">Trip Spesifik</SelectItem>
+              <SelectItem value="leg">Leg Trip</SelectItem>
+              <SelectItem value="time">Berbasis Waktu</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         {formData.scope === 'pattern' && (
-          <div className="space-y-2">
-            <Label htmlFor="patternId">Trip Pattern *</Label>
-            <Select 
-              value={formData.patternId} 
-              onValueChange={(value) => setFormData(prev => ({ ...prev, patternId: value }))}
-              required
-            >
-              <SelectTrigger data-testid="select-pattern">
-                <SelectValue placeholder="Select pattern" />
-              </SelectTrigger>
-              <SelectContent>
-                {patterns.map(pattern => (
-                  <SelectItem key={pattern.id} value={pattern.id}>
-                    {pattern.name} ({pattern.code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-1.5">
+            <Label>Pola Perjalanan <span className="text-destructive">*</span></Label>
+            <SearchableSelect
+              value={formData.patternId}
+              options={patternOptions}
+              placeholder="Pilih pola perjalanan..."
+              searchPlaceholder="Cari pola..."
+              onChange={(v) => setFormData(prev => ({ ...prev, patternId: v }))}
+              data-testid="select-pattern"
+            />
           </div>
         )}
 
         {formData.scope === 'trip' && (
-          <div className="space-y-2">
-            <Label htmlFor="tripId">Trip *</Label>
-            <Select 
-              value={formData.tripId} 
-              onValueChange={(value) => setFormData(prev => ({ ...prev, tripId: value }))}
-              required
-            >
-              <SelectTrigger data-testid="select-trip">
-                <SelectValue placeholder="Select trip" />
-              </SelectTrigger>
-              <SelectContent>
-                {trips.slice(0, 20).map(trip => (
-                  <SelectItem key={trip.id} value={trip.id}>
-                    Trip {trip.id.slice(-8)} ({trip.serviceDate})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-1.5">
+            <Label>Trip <span className="text-destructive">*</span></Label>
+            <SearchableSelect
+              value={formData.tripId}
+              options={tripOptions}
+              placeholder="Pilih trip..."
+              searchPlaceholder="Cari ID atau tanggal trip..."
+              onChange={(v) => setFormData(prev => ({ ...prev, tripId: v }))}
+              data-testid="select-trip"
+            />
           </div>
         )}
 
         {formData.scope === 'leg' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="tripId">Trip *</Label>
-              <Select 
-                value={formData.tripId} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, tripId: value }))}
-                required
-              >
-                <SelectTrigger data-testid="select-trip-leg">
-                  <SelectValue placeholder="Select trip" />
-                </SelectTrigger>
-                <SelectContent>
-                  {trips.slice(0, 20).map(trip => (
-                    <SelectItem key={trip.id} value={trip.id}>
-                      Trip {trip.id.slice(-8)} ({trip.serviceDate})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="space-y-1.5">
+              <Label>Trip <span className="text-destructive">*</span></Label>
+              <SearchableSelect
+                value={formData.tripId}
+                options={tripOptions}
+                placeholder="Pilih trip..."
+                searchPlaceholder="Cari trip..."
+                onChange={(v) => setFormData(prev => ({ ...prev, tripId: v }))}
+                data-testid="select-trip-leg"
+              />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="legIndex">Leg Index *</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="legIndex">Indeks Leg <span className="text-destructive">*</span></Label>
               <Input
                 id="legIndex"
                 type="number"
                 value={formData.legIndex}
                 onChange={(e) => setFormData(prev => ({ ...prev, legIndex: e.target.value }))}
-                placeholder="e.g., 1"
+                placeholder="Contoh: 1"
                 min="1"
                 required
                 data-testid="input-leg-index"
@@ -383,58 +314,60 @@ export default function PriceRulesManager() {
           </div>
         )}
 
+        <SectionDivider label="Periode Berlaku" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="validFrom">Valid From</Label>
+          <div className="space-y-1.5">
+            <Label>Berlaku Dari</Label>
             <DatePicker
               id="validFrom"
               date={formData.validFrom}
               onDateChange={(date) => setFormData(prev => ({ ...prev, validFrom: date }))}
-              placeholder="Select start date"
+              placeholder="Pilih tanggal mulai"
               data-testid="input-valid-from"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="validTo">Valid To</Label>
+          <div className="space-y-1.5">
+            <Label>Berlaku Sampai</Label>
             <DatePicker
               id="validTo"
               date={formData.validTo}
               onDateChange={(date) => setFormData(prev => ({ ...prev, validTo: date }))}
-              placeholder="Select end date"
+              placeholder="Pilih tanggal akhir"
               data-testid="input-valid-to"
             />
           </div>
         </div>
+        <p className="text-xs text-muted-foreground -mt-2">Kosongkan keduanya jika aturan berlaku tanpa batas waktu</p>
 
-        <div className="space-y-2">
-          <Label htmlFor="priority">Priority *</Label>
+        <SectionDivider label="Konfigurasi Tarif" />
+        <div className="space-y-1.5">
+          <Label htmlFor="priority">Prioritas <span className="text-destructive">*</span></Label>
           <Input
             id="priority"
             type="number"
             value={formData.priority}
             onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
-            placeholder="e.g., 1"
+            placeholder="Contoh: 1"
             min="0"
             required
             data-testid="input-priority"
           />
+          <p className="text-xs text-muted-foreground">Nilai lebih tinggi = prioritas lebih tinggi</p>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="ruleJson">Rule Configuration (JSON) *</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="ruleJson">Konfigurasi Aturan (JSON) <span className="text-destructive">*</span></Label>
           <Textarea
             id="ruleJson"
             value={formData.ruleJson}
             onChange={(e) => setFormData(prev => ({ ...prev, ruleJson: e.target.value }))}
-            placeholder="Enter JSON rule configuration"
+            placeholder='{"basePricePerLeg": 25000, "currency": "IDR", "multiplier": 1.0}'
             rows={8}
             className="font-mono text-sm"
             required
             data-testid="input-rule-json"
           />
-          <p className="text-xs text-muted-foreground">
-            Example: {"{ \"basePricePerLeg\": 25000, \"currency\": \"IDR\", \"multiplier\": 1.0 }"}
-          </p>
+          <p className="text-xs text-muted-foreground">Contoh: {`{ "basePricePerLeg": 25000, "currency": "IDR", "multiplier": 1.0 }`}</p>
         </div>
       </MasterFormDialog>
 
@@ -442,8 +375,8 @@ export default function PriceRulesManager() {
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         onConfirm={confirmDelete}
-        title="Delete Price Rule"
-        description="Are you sure you want to delete this price rule? This action cannot be undone."
+        title="Hapus Aturan Harga"
+        description="Apakah Anda yakin ingin menghapus aturan harga ini? Tindakan ini tidak dapat dibatalkan."
         isPending={deleteMutation.isPending}
       />
 
@@ -451,7 +384,7 @@ export default function PriceRulesManager() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
           ) : (
             <Table data-testid="price-rules-table">
@@ -459,81 +392,59 @@ export default function PriceRulesManager() {
                 <TableRow>
                   <TableHead>Scope</TableHead>
                   <TableHead>Target</TableHead>
-                  <TableHead>Rule</TableHead>
-                  <TableHead>Valid Period</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead className="w-10">Actions</TableHead>
+                  <TableHead>Prioritas</TableHead>
+                  <TableHead>Periode</TableHead>
+                  <TableHead>Konfigurasi</TableHead>
+                  <TableHead className="w-24 text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredPriceRules.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      {searchQuery ? `Tidak ada hasil untuk "${searchQuery}"` : 'Belum ada data'}
+                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada aturan harga'}
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredPriceRules.map(rule => (
-                    <TableRow key={rule.id} data-testid={`price-rule-row-${rule.id}`}>
+                    <TableRow key={rule.id} data-testid={`price-rule-${rule.id}`}>
                       <TableCell>{getScopeBadge(rule.scope)}</TableCell>
                       <TableCell className="max-w-xs">
-                        {rule.scope === 'pattern' && rule.patternId && getPatternName(rule.patternId)}
-                        {rule.scope === 'trip' && rule.tripId && getTripName(rule.tripId)}
-                        {rule.scope === 'leg' && rule.tripId && `${getTripName(rule.tripId)} - Leg ${rule.legIndex}`}
-                        {rule.scope === 'time' && 'Time-based pricing'}
+                        <span className="text-sm truncate block">
+                          {rule.scope === 'pattern' && rule.patternId ? getPatternName(rule.patternId) :
+                           rule.scope === 'trip' && rule.tripId ? getTripName(rule.tripId) :
+                           rule.scope === 'leg' && rule.tripId ? `${getTripName(rule.tripId)} — Leg ${rule.legIndex}` :
+                           rule.scope === 'time' ? 'Berbasis waktu' : '-'}
+                        </span>
                       </TableCell>
-                      <TableCell className="max-w-xs truncate font-mono text-xs">
-                        {formatRule(rule.rule)}
+                      <TableCell className="font-mono font-medium">{rule.priority || 0}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {rule.validFrom ? format(new Date(rule.validFrom), 'dd/MM/yy') : '—'} → {rule.validTo ? format(new Date(rule.validTo), 'dd/MM/yy') : '∞'}
                       </TableCell>
-                      <TableCell className="text-xs">
-                        {rule.validFrom && rule.validTo 
-                          ? `${format(new Date(rule.validFrom), 'MMM dd, yyyy')} to ${format(new Date(rule.validTo), 'MMM dd, yyyy')}`
-                          : rule.validFrom 
-                          ? `From ${format(new Date(rule.validFrom), 'MMM dd, yyyy')}`
-                          : rule.validTo 
-                          ? `Until ${format(new Date(rule.validTo), 'MMM dd, yyyy')}`
-                          : 'Always active'
-                        }
+                      <TableCell className="max-w-xs">
+                        <span className="text-xs text-muted-foreground font-mono truncate block">{formatRule(rule.rule)}</span>
                       </TableCell>
-                      <TableCell className="font-mono">{rule.priority}</TableCell>
-                      <TableCell className="overflow-visible">
-                        <div className="flex items-center space-x-1">
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end space-x-1">
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => handleEdit(rule)}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
-                                  aria-label={`Edit price rule ${rule.scope}`}
-                                  data-testid={`edit-price-rule-${rule.id}`}
-                                >
-                                  <Pencil className="h-4 w-4 text-primary" />
+                                <Button size="sm" variant="ghost" onClick={() => handleEdit(rule)} className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10" data-testid={`edit-price-rule-${rule.id}`}>
+                                  <Pencil className="h-3.5 w-3.5 text-primary" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Edit price rule</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Edit aturan</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => handleDelete(rule.id)}
-                                  disabled={deleteMutation.isPending}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50"
-                                  aria-label={`Delete price rule ${rule.scope}`}
-                                  data-testid={`delete-price-rule-${rule.id}`}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                <Button size="sm" variant="ghost" onClick={() => handleDelete(rule.id)} disabled={deleteMutation.isPending} className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50" data-testid={`delete-price-rule-${rule.id}`}>
+                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Delete price rule</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Hapus aturan</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         </div>

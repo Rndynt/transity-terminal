@@ -57,83 +57,40 @@ export default function MastersPage() {
   };
 
   const tabs: TabDef[] = [
-    { id: 'stops', label: 'Stops', icon: MapPin, component: StopsManager },
-    { id: 'outlets', label: 'Outlets', icon: Store, component: OutletsManager },
-    {
-      id: 'vehicles',
-      label: 'Vehicles',
-      icon: Bus,
-      component: VehiclesManager,
-    },
-    {
-      id: 'layouts',
-      label: 'Layouts',
-      icon: LayoutGrid,
-      component: LayoutsManager,
-    },
-    {
-      id: 'patterns',
-      label: 'Trip Patterns',
-      icon: Route,
-      component: TripPatternsManager,
-    },
-    {
-      id: 'trip-bases',
-      label: 'Trip Bases',
-      icon: CalendarPlus,
-      component: TripBasesManager,
-    },
-    { id: 'trips', label: 'Trips', icon: CalendarDays, component: TripsManager },
-    {
-      id: 'pricing',
-      label: 'Price Rules',
-      icon: DollarSign,
-      component: PriceRulesManager,
-    },
-    {
-      id: 'cargo-types',
-      label: 'Jenis Kargo',
-      icon: Tag,
-      component: CargoTypesManager,
-    },
-    {
-      id: 'cargo-rates',
-      label: 'Tarif Kargo',
-      icon: Package,
-      component: CargoRatesManager,
-    },
+    { id: 'stops', label: 'Halte', icon: MapPin, component: StopsManager },
+    { id: 'outlets', label: 'Outlet', icon: Store, component: OutletsManager },
+    { id: 'vehicles', label: 'Kendaraan', icon: Bus, component: VehiclesManager },
+    { id: 'layouts', label: 'Layout Kursi', icon: LayoutGrid, component: LayoutsManager },
+    { id: 'patterns', label: 'Pola Rute', icon: Route, component: TripPatternsManager },
+    { id: 'trip-bases', label: 'Dasar Trip', icon: CalendarPlus, component: TripBasesManager },
+    { id: 'trips', label: 'Trip', icon: CalendarDays, component: TripsManager },
+    { id: 'pricing', label: 'Aturan Harga', icon: DollarSign, component: PriceRulesManager },
+    { id: 'cargo-types', label: 'Jenis Kargo', icon: Tag, component: CargoTypesManager },
+    { id: 'cargo-rates', label: 'Tarif Kargo', icon: Package, component: CargoRatesManager },
   ];
 
   const activeTabDef = tabs.find((t) => t.id === activeTab) || tabs[0];
 
   return (
-    <div
-      className="flex-1 flex flex-col overflow-hidden"
-      data-testid="masters-page"
-    >
+    <div className="flex-1 flex flex-col overflow-hidden" data-testid="masters-page">
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
         <div className="max-w-7xl mx-auto w-full p-3 sm:p-4 md:p-6 space-y-4">
           <div className="space-y-1">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Master Data Management
+              Master Data
             </h1>
             <p className="text-sm text-muted-foreground">
-              Configure stops, vehicles, routes, and pricing rules for the
-              multi-stop travel system
+              Konfigurasi halte, kendaraan, rute, dan aturan harga sistem perjalanan multi-halte
             </p>
           </div>
 
           <Card className="overflow-hidden border-none shadow-none bg-transparent sm:bg-card sm:border sm:shadow-sm">
-            <Tabs
-              value={activeTab}
-              onValueChange={handleTabChange}
-              className="w-full"
-            >
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
               {/* Mobile Select Dropdown */}
               <div className="sm:hidden mb-4">
                 <Select value={activeTab} onValueChange={handleTabChange}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Pilih tab..." />
+                    <SelectValue placeholder="Pilih modul..." />
                   </SelectTrigger>
                   <SelectContent>
                     {tabs.map((tab) => (
@@ -161,9 +118,7 @@ export default function MastersPage() {
                         data-testid={`tab-${tab.id}`}
                       >
                         <Icon className="h-4 w-4 flex-shrink-0" />
-                        <span className="text-sm font-medium whitespace-nowrap">
-                          {tab.label}
-                        </span>
+                        <span className="text-sm font-medium whitespace-nowrap">{tab.label}</span>
                       </TabsTrigger>
                     );
                   })}

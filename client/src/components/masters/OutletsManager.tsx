@@ -3,14 +3,14 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { outletsApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Store, MapPin } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
@@ -22,6 +22,15 @@ interface OutletFormData {
   address: string;
   phone: string;
   printerProfileId: string;
+}
+
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <div className="flex-1 h-px bg-border" />
+    </div>
+  );
 }
 
 export default function OutletsManager() {
@@ -48,12 +57,19 @@ export default function OutletsManager() {
     queryFn: stopsApi.getAll
   });
 
+  const stopOptions = stops.filter(s => s.isOutlet).map(s => ({
+    value: s.id,
+    label: s.name,
+    badge: s.code,
+    subtitle: s.city || undefined
+  }));
+
   const getStopName = (stopId: string) => {
     const stop = stops.find(s => s.id === stopId);
-    return stop ? `${stop.name} (${stop.code})` : 'Unknown Stop';
+    return stop ? `${stop.name} (${stop.code})` : '-';
   };
 
-  const filteredData = outlets.filter(outlet => 
+  const filteredData = outlets.filter(outlet =>
     outlet.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     getStopName(outlet.stopId).toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -64,17 +80,10 @@ export default function OutletsManager() {
       queryClient.invalidateQueries({ queryKey: ['/api/outlets'] });
       setIsDialogOpen(false);
       resetForm();
-      toast({
-        title: "Success",
-        description: "Outlet created successfully"
-      });
+      toast({ title: 'Berhasil', description: 'Outlet berhasil ditambahkan' });
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create outlet",
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menambahkan outlet', variant: 'destructive' });
     }
   });
 
@@ -85,17 +94,10 @@ export default function OutletsManager() {
       setIsDialogOpen(false);
       resetForm();
       setEditingOutlet(null);
-      toast({
-        title: "Success",
-        description: "Outlet updated successfully"
-      });
+      toast({ title: 'Berhasil', description: 'Outlet berhasil diperbarui' });
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update outlet",
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal memperbarui outlet', variant: 'destructive' });
     }
   });
 
@@ -104,28 +106,15 @@ export default function OutletsManager() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/outlets'] });
       setDeleteTarget(null);
-      toast({
-        title: "Success",
-        description: "Outlet deleted successfully"
-      });
+      toast({ title: 'Berhasil', description: 'Outlet berhasil dihapus' });
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete outlet",
-        variant: "destructive"
-      });
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menghapus outlet', variant: 'destructive' });
     }
   });
 
   const resetForm = () => {
-    setFormData({
-      stopId: '',
-      name: '',
-      address: '',
-      phone: '',
-      printerProfileId: ''
-    });
+    setFormData({ stopId: '', name: '', address: '', phone: '', printerProfileId: '' });
   };
 
   const handleCreate = () => {
@@ -148,7 +137,6 @@ export default function OutletsManager() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (editingOutlet) {
       updateMutation.mutate({ id: editingOutlet.id, data: formData });
     } else {
@@ -156,24 +144,17 @@ export default function OutletsManager() {
     }
   };
 
-  const handleDelete = (id: string) => {
-    setDeleteTarget(id);
-  };
-
-  const confirmDelete = () => {
-    if (deleteTarget) {
-      deleteMutation.mutate(deleteTarget);
-    }
-  };
+  const handleDelete = (id: string) => setDeleteTarget(id);
+  const confirmDelete = () => { if (deleteTarget) deleteMutation.mutate(deleteTarget); };
 
   return (
     <div className="space-y-6" data-testid="outlets-manager">
       <MasterPageHeader
-        title="Outlets Management"
-        description="Manage ticket sales outlets and their configurations"
+        title="Outlet Penjualan"
+        description="Kelola outlet penjualan tiket dan konfigurasinya"
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Cari outlet..."
+        searchPlaceholder="Cari nama outlet atau halte..."
         count={filteredData.length}
         action={
           <Button onClick={handleCreate} data-testid="add-outlet-button">
@@ -182,59 +163,57 @@ export default function OutletsManager() {
           </Button>
         }
       />
+
       <MasterFormDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
-        title={editingOutlet ? 'Edit Outlet' : 'Add New Outlet'}
+        title={editingOutlet ? 'Edit Outlet' : 'Tambah Outlet'}
+        description={editingOutlet ? 'Perbarui informasi outlet penjualan.' : 'Tambahkan outlet penjualan tiket baru.'}
         onSubmit={handleSubmit}
         isPending={createMutation.isPending || updateMutation.isPending}
         data-testid="outlet-dialog"
       >
-        <div className="space-y-2">
-          <Label htmlFor="stopId">Stop *</Label>
-          <Select 
-            value={formData.stopId} 
-            onValueChange={(value) => setFormData(prev => ({ ...prev, stopId: value }))}
-            required
-          >
-            <SelectTrigger data-testid="select-stop">
-              <SelectValue placeholder="Select a stop" />
-            </SelectTrigger>
-            <SelectContent>
-              {stops.filter(stop => stop.isOutlet).map(stop => (
-                <SelectItem key={stop.id} value={stop.id}>
-                  {stop.name} ({stop.code})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <SectionDivider label="Lokasi & Identitas" />
+        <div className="space-y-1.5">
+          <Label>Halte / Terminal <span className="text-destructive">*</span></Label>
+          <SearchableSelect
+            value={formData.stopId}
+            options={stopOptions}
+            placeholder="Pilih halte yang menjadi lokasi outlet..."
+            searchPlaceholder="Cari halte atau kota..."
+            emptyLabel="Tidak ada halte dengan status outlet"
+            onChange={(v) => setFormData(prev => ({ ...prev, stopId: v }))}
+            data-testid="select-stop"
+          />
+          <p className="text-xs text-muted-foreground">Hanya halte yang bertanda outlet yang ditampilkan</p>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="name">Outlet Name *</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="name">Nama Outlet <span className="text-destructive">*</span></Label>
           <Input
             id="name"
             value={formData.name}
             onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="e.g., Jakarta Terminal Outlet"
+            placeholder="Contoh: Terminal Jakarta — Loket 1"
             required
             data-testid="input-name"
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="address">Address</Label>
+        <SectionDivider label="Kontak & Alamat" />
+        <div className="space-y-1.5">
+          <Label htmlFor="address">Alamat Lengkap</Label>
           <Input
             id="address"
             value={formData.address}
             onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-            placeholder="Full address"
+            placeholder="Jl. Contoh No. 1, Jakarta"
             data-testid="input-address"
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="phone">Phone</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="phone">Nomor Telepon</Label>
           <Input
             id="phone"
             value={formData.phone}
@@ -244,8 +223,9 @@ export default function OutletsManager() {
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="printerProfileId">Printer Profile ID</Label>
+        <SectionDivider label="Konfigurasi" />
+        <div className="space-y-1.5">
+          <Label htmlFor="printerProfileId">Profil Printer</Label>
           <Input
             id="printerProfileId"
             value={formData.printerProfileId}
@@ -253,6 +233,7 @@ export default function OutletsManager() {
             placeholder="default"
             data-testid="input-printer"
           />
+          <p className="text-xs text-muted-foreground">Kosongkan untuk menggunakan profil printer default</p>
         </div>
       </MasterFormDialog>
 
@@ -260,8 +241,8 @@ export default function OutletsManager() {
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         onConfirm={confirmDelete}
-        title="Delete Outlet"
-        description="Are you sure you want to delete this outlet? This action cannot be undone."
+        title="Hapus Outlet"
+        description="Apakah Anda yakin ingin menghapus outlet ini? Tindakan ini tidak dapat dibatalkan."
         isPending={deleteMutation.isPending}
       />
 
@@ -269,25 +250,26 @@ export default function OutletsManager() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
           ) : (
             <Table data-testid="outlets-table">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Stop</TableHead>
-                  <TableHead>Address</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Printer</TableHead>
-                  <TableHead className="w-24 text-right">Actions</TableHead>
+                  <TableHead>Nama Outlet</TableHead>
+                  <TableHead>Halte / Terminal</TableHead>
+                  <TableHead>Alamat</TableHead>
+                  <TableHead>Telepon</TableHead>
+                  <TableHead>Profil Printer</TableHead>
+                  <TableHead className="w-24 text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data'}
+                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      <Store className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data outlet'}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -295,11 +277,9 @@ export default function OutletsManager() {
                     <TableRow key={outlet.id} data-testid={`outlet-row-${outlet.id}`}>
                       <TableCell className="font-medium">{outlet.name}</TableCell>
                       <TableCell>{getStopName(outlet.stopId)}</TableCell>
-                      <TableCell>{outlet.address || '-'}</TableCell>
-                      <TableCell>{outlet.phone || '-'}</TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {outlet.printerProfileId || 'default'}
-                      </TableCell>
+                      <TableCell className="text-muted-foreground">{outlet.address || '-'}</TableCell>
+                      <TableCell className="text-muted-foreground">{outlet.phone || '-'}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{outlet.printerProfileId || 'default'}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end space-x-1">
                           <TooltipProvider>
@@ -309,19 +289,16 @@ export default function OutletsManager() {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => handleEdit(outlet)}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10 focus:ring-2 focus:ring-primary"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
                                   aria-label={`Edit outlet ${outlet.name}`}
                                   data-testid={`edit-outlet-${outlet.id}`}
                                 >
-                                  <Pencil className="h-4 w-4 text-primary" />
+                                  <Pencil className="h-3.5 w-3.5 text-primary" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Edit outlet</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Edit outlet</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -330,16 +307,14 @@ export default function OutletsManager() {
                                   variant="ghost"
                                   onClick={() => handleDelete(outlet.id)}
                                   disabled={deleteMutation.isPending}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
+                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50"
                                   aria-label={`Delete outlet ${outlet.name}`}
                                   data-testid={`delete-outlet-${outlet.id}`}
                                 >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Delete outlet</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Hapus outlet</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         </div>

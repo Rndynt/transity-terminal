@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,13 +9,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { tripBasesApi, tripPatternsApi, layoutsApi, vehiclesApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { Plus, Pencil, Trash2, Calendar, Clock, MapPin, Users } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
+import { RowActionsMenu } from './RowActionsMenu';
 
 interface TripBase {
   id: string;
@@ -129,6 +129,8 @@ export default function TripBasesManager() {
   });
   const [stopTimes, setStopTimes] = useState<DefaultStopTime[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [dialogOpenKey, setDialogOpenKey] = useState(0);
+  const editingStopTimesRef = useRef<DefaultStopTime[]>([]);
   const { toast } = useToast();
 
   const { data: tripBases = [], isLoading } = useQuery({
@@ -220,14 +222,25 @@ export default function TripBasesManager() {
     setStopTimes([]);
     setSelectedPatternId('');
     setEditingBase(null);
+    editingStopTimesRef.current = [];
   };
 
   const openCreateDialog = () => {
     resetForm();
+    editingStopTimesRef.current = [];
+    setDialogOpenKey(k => k + 1);
     setIsDialogOpen(true);
   };
 
   const openEditDialog = (base: TripBase) => {
+    const existingTimes: DefaultStopTime[] = base.defaultStopTimes?.map((st: any) => ({
+      stopSequence: st.stopSequence,
+      arriveAt: st.arriveAt || '',
+      departAt: st.departAt || '',
+    })) || [];
+
+    editingStopTimesRef.current = existingTimes;
+
     setEditingBase(base);
     setSelectedPatternId(base.patternId);
     setFormData({
@@ -251,11 +264,9 @@ export default function TripBasesManager() {
       channelFlags: base.channelFlags || { CSO: true, WEB: false, APP: false, OTA: false },
       defaultStopTimes: base.defaultStopTimes || []
     });
-    setStopTimes(base.defaultStopTimes?.map((st: any) => ({
-      stopSequence: st.stopSequence,
-      arriveAt: st.arriveAt || '',
-      departAt: st.departAt || ''
-    })) || []);
+    // Set immediately so stops show right away (names will be enriched once patternStops loads)
+    setStopTimes(existingTimes);
+    setDialogOpenKey(k => k + 1);
     setIsDialogOpen(true);
   };
 
@@ -315,36 +326,23 @@ export default function TripBasesManager() {
     }
   };
 
-  // Update stop times when pattern changes
+  // Rebuild stop times whenever pattern stops load OR dialog opens (dialogOpenKey)
   useEffect(() => {
-    if (patternStops.length > 0) {
-      // If editing and we already have stop times, preserve existing times
-      if (editingBase && stopTimes.length > 0) {
-        // Merge pattern stops with existing stop times
-        const mergedStopTimes = patternStops.map((ps) => {
-          const existingStopTime = stopTimes.find(st => st.stopSequence === ps.stopSequence);
-          return {
-            stopSequence: ps.stopSequence,
-            stopName: `Stop ${ps.stopSequence}`,
-            stopCode: '',
-            arriveAt: existingStopTime?.arriveAt || '',
-            departAt: existingStopTime?.departAt || ''
-          };
-        });
-        setStopTimes(mergedStopTimes);
-      } else {
-        // For new trip base, create empty stop times
-        const newStopTimes = patternStops.map((ps) => ({
-          stopSequence: ps.stopSequence,
-          stopName: `Stop ${ps.stopSequence}`,
-          stopCode: '',
-          arriveAt: '',
-          departAt: ''
-        }));
-        setStopTimes(newStopTimes);
-      }
-    }
-  }, [patternStops, editingBase]);
+    if (patternStops.length === 0) return;
+    const existingTimes = editingStopTimesRef.current;
+    const merged: DefaultStopTime[] = patternStops.map((ps: any) => {
+      const existing = existingTimes.find(st => st.stopSequence === ps.stopSequence);
+      return {
+        stopSequence: ps.stopSequence,
+        stopName: ps.stop?.name || ps.stopName || `Stop ${ps.stopSequence}`,
+        stopCode: ps.stop?.code || ps.stopCode || '',
+        arriveAt: existing?.arriveAt || '',
+        departAt: existing?.departAt || '',
+      };
+    });
+    setStopTimes(merged);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patternStops, dialogOpenKey]);
 
   const getDowBadges = (base: TripBase) => {
     const days = [
