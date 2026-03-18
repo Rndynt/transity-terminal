@@ -534,259 +534,303 @@ export default function TripBasesManager() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="w-full max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
             <DialogTitle>
-              {editingBase ? 'Edit Trip Base' : 'Create Trip Base'}
+              {editingBase ? 'Edit Trip Base' : 'Tambah Trip Base'}
             </DialogTitle>
             <DialogDescription>
-              {editingBase ? 'Ubah informasi template penjadwalan virtual.' : 'Buat template penjadwalan virtual baru yang akan menghasilkan perjalanan nyata sesuai permintaan.'}
+              {editingBase
+                ? 'Ubah informasi template penjadwalan virtual.'
+                : 'Buat template penjadwalan virtual baru yang menghasilkan perjalanan nyata sesuai permintaan.'}
             </DialogDescription>
           </DialogHeader>
 
-          <form id="trip-base-form" onSubmit={handleSubmit} className="space-y-6">
-            {/* Basic Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="pattern">Trip Pattern *</Label>
-                <Select
-                  value={formData.patternId}
-                  onValueChange={(value) => {
-                    setFormData(prev => ({ ...prev, patternId: value }));
-                    setSelectedPatternId(value);
-                  }}
-                >
-                  <SelectTrigger data-testid="select-pattern">
-                    <SelectValue placeholder="Select pattern" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {patterns.map((pattern: TripPattern) => (
-                      <SelectItem key={pattern.id} value={pattern.id}>
-                        {pattern.code} - {pattern.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          <form id="trip-base-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
 
-              <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., Morning Express Slot 1"
-                  data-testid="input-name"
-                />
+            {/* ── INFORMASI DASAR ── */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Informasi Dasar</span>
+                <div className="flex-1 h-px bg-border" />
               </div>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="pattern">Trip Pattern <span className="text-destructive">*</span></Label>
+                  <Select
+                    value={formData.patternId}
+                    onValueChange={(value) => {
+                      setFormData(prev => ({ ...prev, patternId: value }));
+                      setSelectedPatternId(value);
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-pattern">
+                      <SelectValue placeholder="Pilih pola perjalanan..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {patterns.map((pattern: TripPattern) => (
+                        <SelectItem key={pattern.id} value={pattern.id}>
+                          {pattern.code} — {pattern.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="code">Code</Label>
-                <Input
-                  id="code"
-                  value={formData.code}
-                  onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
-                  placeholder="Optional unique code"
-                  data-testid="input-code"
-                />
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="name">Nama <span className="text-destructive">*</span></Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Contoh: Pagi Express Slot 1"
+                      data-testid="input-name"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="code">Kode <span className="text-muted-foreground text-xs">(opsional)</span></Label>
+                    <Input
+                      id="code"
+                      value={formData.code}
+                      onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
+                      placeholder="Kode unik"
+                      data-testid="input-code"
+                    />
+                  </div>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="active">Status</Label>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center justify-between rounded-lg border px-4 py-3 bg-muted/30">
+                  <div>
+                    <p className="text-sm font-medium">Status Aktif</p>
+                    <p className="text-xs text-muted-foreground">Trip base ini aktif menghasilkan perjalanan</p>
+                  </div>
                   <Switch
                     id="active"
                     checked={formData.active}
                     onCheckedChange={(checked) => setFormData(prev => ({ ...prev, active: checked }))}
                     data-testid="switch-active"
                   />
-                  <Label htmlFor="active">{formData.active ? 'Active' : 'Inactive'}</Label>
                 </div>
               </div>
             </div>
 
-            {/* Days of Week */}
-            <div className="space-y-2">
-              <Label>Days of Operation</Label>
-              <div className="flex gap-4 flex-wrap">
-                {[
-                  { key: 'mon', label: 'Monday' },
-                  { key: 'tue', label: 'Tuesday' },
-                  { key: 'wed', label: 'Wednesday' },
-                  { key: 'thu', label: 'Thursday' },
-                  { key: 'fri', label: 'Friday' },
-                  { key: 'sat', label: 'Saturday' },
-                  { key: 'sun', label: 'Sunday' }
-                ].map(day => (
-                  <div key={day.key} className="flex items-center space-x-2">
-                    <Switch
-                      id={day.key}
-                      checked={formData[day.key as keyof TripBaseFormData] as boolean}
-                      onCheckedChange={(checked) => setFormData(prev => ({ ...prev, [day.key]: checked }))}
-                      data-testid={`switch-${day.key}`}
-                    />
-                    <Label htmlFor={day.key} className="text-sm">{day.label}</Label>
-                  </div>
-                ))}
+            {/* ── HARI OPERASI ── */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hari Operasi</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {([
+                  { key: 'mon', label: 'Sen' },
+                  { key: 'tue', label: 'Sel' },
+                  { key: 'wed', label: 'Rab' },
+                  { key: 'thu', label: 'Kam' },
+                  { key: 'fri', label: 'Jum' },
+                  { key: 'sat', label: 'Sab' },
+                  { key: 'sun', label: 'Min' },
+                ] as { key: keyof TripBaseFormData; label: string }[]).map(day => {
+                  const isOn = formData[day.key] as boolean;
+                  return (
+                    <button
+                      key={day.key}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, [day.key]: !isOn }))}
+                      className={`w-11 h-11 rounded-lg text-sm font-semibold border-2 transition-all ${isOn ? 'bg-primary text-primary-foreground border-primary shadow-sm' : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'}`}
+                      data-testid={`toggle-${day.key}`}
+                    >
+                      {day.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Valid Date Range */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="validFrom">Valid From</Label>
-                <Input
-                  id="validFrom"
-                  type="date"
-                  value={formData.validFrom}
-                  onChange={(e) => setFormData(prev => ({ ...prev, validFrom: e.target.value }))}
-                  data-testid="input-valid-from"
-                />
+            {/* ── PERIODE BERLAKU ── */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Periode Berlaku</span>
+                <div className="flex-1 h-px bg-border" />
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="validFrom">Berlaku Dari</Label>
+                  <Input
+                    id="validFrom"
+                    type="date"
+                    value={formData.validFrom}
+                    onChange={(e) => setFormData(prev => ({ ...prev, validFrom: e.target.value }))}
+                    data-testid="input-valid-from"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="validTo">Berlaku Sampai</Label>
+                  <Input
+                    id="validTo"
+                    type="date"
+                    value={formData.validTo}
+                    onChange={(e) => setFormData(prev => ({ ...prev, validTo: e.target.value }))}
+                    data-testid="input-valid-to"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">Kosongkan keduanya jika berlaku tanpa batas waktu</p>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="validTo">Valid To</Label>
-                <Input
-                  id="validTo"
-                  type="date"
-                  value={formData.validTo}
-                  onChange={(e) => setFormData(prev => ({ ...prev, validTo: e.target.value }))}
-                  data-testid="input-valid-to"
-                />
+            {/* ── NILAI DEFAULT ── */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nilai Default</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Layout</Label>
+                  <Select
+                    value={formData.defaultLayoutId}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, defaultLayoutId: value }))}
+                  >
+                    <SelectTrigger data-testid="select-layout">
+                      <SelectValue placeholder="Pilih layout..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Tidak ada —</SelectItem>
+                      {layouts.map((layout: Layout) => (
+                        <SelectItem key={layout.id} value={layout.id}>{layout.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Kendaraan</Label>
+                  <Select
+                    value={formData.defaultVehicleId}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, defaultVehicleId: value }))}
+                  >
+                    <SelectTrigger data-testid="select-vehicle">
+                      <SelectValue placeholder="Pilih kendaraan..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Tidak ada —</SelectItem>
+                      {vehicles.map((vehicle: Vehicle) => (
+                        <SelectItem key={vehicle.id} value={vehicle.id}>{vehicle.code} — {vehicle.plate}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="capacity">Override Kapasitas</Label>
+                  <Input
+                    id="capacity"
+                    type="number"
+                    min="1"
+                    value={formData.capacity}
+                    onChange={(e) => setFormData(prev => ({ ...prev, capacity: e.target.value }))}
+                    placeholder="Maks penumpang"
+                    data-testid="input-capacity"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Defaults */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="defaultLayout">Default Layout</Label>
-                <Select
-                  value={formData.defaultLayoutId}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, defaultLayoutId: value }))}
-                >
-                  <SelectTrigger data-testid="select-layout">
-                    <SelectValue placeholder="Select layout" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {layouts.map((layout: Layout) => (
-                      <SelectItem key={layout.id} value={layout.id}>
-                        {layout.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="defaultVehicle">Default Vehicle</Label>
-                <Select
-                  value={formData.defaultVehicleId}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, defaultVehicleId: value }))}
-                >
-                  <SelectTrigger data-testid="select-vehicle">
-                    <SelectValue placeholder="Select vehicle" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {vehicles.map((vehicle: Vehicle) => (
-                      <SelectItem key={vehicle.id} value={vehicle.id}>
-                        {vehicle.code} - {vehicle.plate}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="capacity">Capacity Override</Label>
-                <Input
-                  id="capacity"
-                  type="number"
-                  value={formData.capacity}
-                  onChange={(e) => setFormData(prev => ({ ...prev, capacity: e.target.value }))}
-                  placeholder="Override capacity"
-                  data-testid="input-capacity"
-                />
-              </div>
-            </div>
-
-            {/* Default Stop Times */}
+            {/* ── WAKTU HENTI DEFAULT ── */}
             {stopTimes.length > 0 && (
-              <div className="space-y-4">
-                <Label>Default Stop Times *</Label>
-                <div className="border rounded-md p-4 space-y-4 bg-muted/30">
-                  <div className="text-sm text-muted-foreground">
-                    Configure the default departure and arrival times for each stop. The first stop requires departure time, and the last stop requires arrival time.
-                  </div>
-                  
-                  <div className="grid gap-4">
-                    {stopTimes.map((stopTime, index) => (
-                      <div key={stopTime.stopSequence} className="grid grid-cols-4 gap-4 items-center p-3 bg-background rounded-md border">
-                        <div className="font-medium">
-                          <div>Stop {stopTime.stopSequence}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {stopTime.stopName} ({stopTime.stopCode})
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Waktu Henti Default</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Henti pertama wajib isi <strong>Berangkat</strong>, henti terakhir wajib isi <strong>Tiba</strong>.
+                </p>
+                <div className="rounded-lg border overflow-hidden">
+                  {stopTimes.map((stopTime, index) => {
+                    const isFirst = index === 0;
+                    const isLast = index === stopTimes.length - 1;
+                    const role = isFirst ? 'Asal' : isLast ? 'Tujuan' : 'Transit';
+                    const roleColor = isFirst ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300' : isLast ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300' : 'bg-muted text-muted-foreground border-border';
+                    return (
+                      <div
+                        key={stopTime.stopSequence}
+                        className={`flex flex-wrap items-center gap-3 px-4 py-3 ${index < stopTimes.length - 1 ? 'border-b' : ''}`}
+                      >
+                        <div className="flex items-center gap-2 min-w-[120px] flex-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${roleColor}`}>
+                            {role}
+                          </span>
+                          <span className="text-sm font-medium text-foreground">
+                            #{stopTime.stopSequence} {stopTime.stopName && stopTime.stopName !== `Stop ${stopTime.stopSequence}` ? `— ${stopTime.stopName}` : ''}
+                          </span>
+                        </div>
+                        <div className="flex gap-3 flex-wrap">
+                          <div className="space-y-1">
+                            <Label htmlFor={`arrive-${stopTime.stopSequence}`} className="text-xs text-muted-foreground">
+                              Tiba{isLast ? ' *' : ''}
+                            </Label>
+                            <Input
+                              id={`arrive-${stopTime.stopSequence}`}
+                              type="time"
+                              step="60"
+                              value={stopTime.arriveAt}
+                              onChange={(e) => updateStopTime(stopTime.stopSequence, 'arriveAt', e.target.value)}
+                              disabled={isFirst}
+                              className="h-8 w-28 text-sm disabled:opacity-30"
+                              data-testid={`input-arrive-${stopTime.stopSequence}`}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`depart-${stopTime.stopSequence}`} className="text-xs text-muted-foreground">
+                              Berangkat{isFirst ? ' *' : ''}
+                            </Label>
+                            <Input
+                              id={`depart-${stopTime.stopSequence}`}
+                              type="time"
+                              step="60"
+                              value={stopTime.departAt}
+                              onChange={(e) => updateStopTime(stopTime.stopSequence, 'departAt', e.target.value)}
+                              disabled={isLast}
+                              className="h-8 w-28 text-sm disabled:opacity-30"
+                              data-testid={`input-depart-${stopTime.stopSequence}`}
+                            />
                           </div>
                         </div>
-                        
-                        <div className="space-y-1">
-                          <Label htmlFor={`arrive-${stopTime.stopSequence}`} className="text-xs">
-                            Arrive At {index === stopTimes.length - 1 && '*'}
-                          </Label>
-                          <Input
-                            id={`arrive-${stopTime.stopSequence}`}
-                            type="time"
-                            step="1"
-                            value={stopTime.arriveAt}
-                            onChange={(e) => updateStopTime(stopTime.stopSequence, 'arriveAt', e.target.value)}
-                            disabled={index === 0} // First stop doesn't need arrival time
-                            data-testid={`input-arrive-${stopTime.stopSequence}`}
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <Label htmlFor={`depart-${stopTime.stopSequence}`} className="text-xs">
-                            Depart At {index === 0 && '*'}
-                          </Label>
-                          <Input
-                            id={`depart-${stopTime.stopSequence}`}
-                            type="time"
-                            step="1"
-                            value={stopTime.departAt}
-                            onChange={(e) => updateStopTime(stopTime.stopSequence, 'departAt', e.target.value)}
-                            disabled={index === stopTimes.length - 1} // Last stop doesn't need departure time
-                            data-testid={`input-depart-${stopTime.stopSequence}`}
-                          />
-                        </div>
-
-                        <div className="text-sm text-muted-foreground">
-                          {index === 0 && 'Origin'}
-                          {index === stopTimes.length - 1 && 'Destination'}
-                          {index > 0 && index < stopTimes.length - 1 && 'Transit'}
-                        </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            {/* Submit Buttons */}
-            </form>
-            <DialogFooter className="pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} data-testid="button-cancel">
-                Batal
-              </Button>
-              <Button 
-                type="submit" 
-                form="trip-base-form"
-                disabled={createMutation.isPending || updateMutation.isPending}
-                data-testid="button-save"
-              >
-                {createMutation.isPending || updateMutation.isPending ? 'Menyimpan...' : 'Simpan'}
-              </Button>
-            </DialogFooter>
+            {stopTimes.length === 0 && formData.patternId && (
+              <div className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+                <MapPin className="h-5 w-5 mx-auto mb-2 opacity-40" />
+                Memuat data henti dari pola perjalanan...
+              </div>
+            )}
+
+            {stopTimes.length === 0 && !formData.patternId && (
+              <div className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+                <MapPin className="h-5 w-5 mx-auto mb-2 opacity-40" />
+                Pilih trip pattern terlebih dahulu untuk mengatur waktu henti
+              </div>
+            )}
+
+          </form>
+
+          <DialogFooter className="px-5 py-4 border-t shrink-0 bg-background">
+            <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} data-testid="button-cancel">
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              form="trip-base-form"
+              disabled={createMutation.isPending || updateMutation.isPending}
+              data-testid="button-save"
+            >
+              {createMutation.isPending || updateMutation.isPending ? 'Menyimpan...' : 'Simpan'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

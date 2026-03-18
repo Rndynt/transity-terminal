@@ -133,10 +133,7 @@ export default function MastersPage() {
               <div className="sm:hidden mb-4">
                 <Select value={activeTab} onValueChange={handleTabChange}>
                   <SelectTrigger className="w-full">
-                    <div className="flex items-center gap-2">
-                      <activeTabDef.icon className="h-4 w-4" />
-                      <SelectValue placeholder="Select Tab" />
-                    </div>
+                    <SelectValue placeholder="Pilih tab..." />
                   </SelectTrigger>
                   <SelectContent>
                     {tabs.map((tab) => (
