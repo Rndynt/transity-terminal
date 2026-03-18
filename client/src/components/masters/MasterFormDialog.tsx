@@ -80,15 +80,48 @@ export default function MasterFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className={sizeClass}
+        className={`${sizeClass} max-h-[92vh] flex flex-col p-0 gap-0`}
         data-testid={props['data-testid']}
       >
         {onSubmit ? (
-          <form onSubmit={onSubmit} className="space-y-0">
-            {content}
+          <form onSubmit={onSubmit} className="flex flex-col min-h-0 flex-1">
+            <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
+              <DialogTitle>{title}</DialogTitle>
+              {description && (
+                <DialogDescription>{description}</DialogDescription>
+              )}
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">{children}</div>
+            <DialogFooter className="px-5 py-4 border-t shrink-0 bg-background gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isPending}
+                data-testid="dialog-cancel-btn"
+              >
+                {cancelLabel}
+              </Button>
+              <Button
+                type="submit"
+                disabled={isPending}
+                data-testid="dialog-submit-btn"
+              >
+                {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {isPending ? 'Menyimpan...' : submitLabel}
+              </Button>
+            </DialogFooter>
           </form>
         ) : (
-          content
+          <div className="flex flex-col min-h-0 flex-1">
+            <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
+              <DialogTitle>{title}</DialogTitle>
+              {description && (
+                <DialogDescription>{description}</DialogDescription>
+              )}
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">{children}</div>
+          </div>
         )}
       </DialogContent>
     </Dialog>

@@ -637,7 +637,7 @@ export default function TripBasesManager() {
                       key={day.key}
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, [day.key]: !isOn }))}
-                      className={`w-11 h-11 rounded-lg text-sm font-semibold border-2 transition-all ${isOn ? 'bg-primary text-primary-foreground border-primary shadow-sm' : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'}`}
+                      className={`w-10 h-10 rounded-md text-sm font-medium border transition-colors ${isOn ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-input hover:bg-muted hover:text-foreground'}`}
                       data-testid={`toggle-${day.key}`}
                     >
                       {day.label}
@@ -749,7 +749,7 @@ export default function TripBasesManager() {
                     const isFirst = index === 0;
                     const isLast = index === stopTimes.length - 1;
                     const role = isFirst ? 'Asal' : isLast ? 'Tujuan' : 'Transit';
-                    const roleColor = isFirst ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300' : isLast ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300' : 'bg-muted text-muted-foreground border-border';
+                    const roleColor = isFirst ? 'bg-primary/10 text-primary border-primary/20' : isLast ? 'bg-secondary/10 text-secondary border-secondary/20' : 'bg-muted text-muted-foreground border-border';
                     return (
                       <div
                         key={stopTime.stopSequence}
