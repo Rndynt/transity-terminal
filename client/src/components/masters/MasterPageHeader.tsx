@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { Search, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 interface MasterPageHeaderProps {
   title: string;
@@ -36,17 +37,21 @@ export default function MasterPageHeader({
       </div>
       {onSearchChange && (
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
+          <Input
             type="text"
             value={searchValue ?? ''}
             onChange={e => onSearchChange(e.target.value)}
             placeholder={searchPlaceholder ?? 'Cari...'}
-            className="w-full h-10 pl-9 pr-9 rounded-xl border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+            className="pl-9 pr-9"
             data-testid="master-search-input"
           />
           {searchValue && (
-            <button onClick={() => onSearchChange('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" data-testid="master-search-clear">
+            <button
+              onClick={() => onSearchChange('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              data-testid="master-search-clear"
+            >
               <X className="w-4 h-4" />
             </button>
           )}
