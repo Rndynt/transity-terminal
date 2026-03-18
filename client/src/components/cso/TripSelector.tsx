@@ -290,9 +290,18 @@ export default function TripSelector({
     }
   });
 
+  const getTripIsPast = (trip: CsoAvailableTrip): boolean => {
+    if (!trip.departAtAtOutlet) return false;
+    return new Date(trip.departAtAtOutlet) < new Date();
+  };
+
   const handleTripSelect = async (trip: CsoAvailableTrip) => {
     if (trip.status === 'closed') {
       toast({ title: "Trip Ditutup", description: "Trip ini sudah ditutup", variant: "destructive" });
+      return;
+    }
+    if (getTripIsPast(trip) && trip.isVirtual) {
+      toast({ title: "Jadwal Sudah Lewat", description: "Trip virtual yang sudah lewat tidak bisa diaktifkan", variant: "destructive" });
       return;
     }
     if (trip.isVirtual && trip.baseId) {
@@ -446,7 +455,9 @@ export default function TripSelector({
                     .map(trip => {
                       const isSelected = (trip.tripId && selectedTrip?.tripId === trip.tripId) ||
                         (trip.isVirtual && trip.baseId && selectedTrip?.baseId === trip.baseId);
-                      const isDisabled = trip.status === 'closed' || trip.status === 'canceled';
+                      const isPast = getTripIsPast(trip);
+                      const isPastVirtual = isPast && trip.isVirtual;
+                      const isDisabled = trip.status === 'closed' || trip.status === 'canceled' || isPastVirtual;
                       const isMaterializing = materializingBaseId === trip.baseId;
                       const seatCount = trip.availableSeats ?? trip.capacity ?? 0;
                       const totalSeats = trip.capacity ?? 40;
@@ -461,9 +472,11 @@ export default function TripSelector({
                           className={`w-full text-left p-3 rounded-xl border transition-all duration-150 ${
                             isDisabled
                               ? 'opacity-40 cursor-not-allowed bg-gray-50 border-gray-200'
-                              : isSelected
-                                ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-200'
-                                : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                              : isPast && !trip.isVirtual
+                                ? 'opacity-70 bg-gray-50 border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                                : isSelected
+                                  ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-200'
+                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
                           }`}
                         >
                           <div className="flex items-center justify-between mb-1.5">
@@ -472,7 +485,7 @@ export default function TripSelector({
                                 <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
                               ) : (
                                 <>
-                                  <span className="text-lg font-bold text-gray-900 font-mono tracking-tight">
+                                  <span className={`text-lg font-bold font-mono tracking-tight ${isPast ? 'text-gray-400' : 'text-gray-900'}`}>
                                     {formatDepartTime(trip.departAtAtOutlet)}
                                   </span>
                                   <ArrowRight className="w-3.5 h-3.5 text-gray-400" />
@@ -482,7 +495,11 @@ export default function TripSelector({
                                 </>
                               )}
                             </div>
-                            {trip.isVirtual ? (
+                            {isPast && trip.isVirtual ? (
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-md text-[10px] font-semibold">Sudah Lewat</span>
+                            ) : isPast && !trip.isVirtual ? (
+                              <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-md text-[10px] font-semibold">Sudah Lewat</span>
+                            ) : trip.isVirtual ? (
                               <span className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded-md text-[10px] font-semibold">Jadwal Virtual</span>
                             ) : trip.status === 'closed' ? (
                               <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-md text-[10px] font-semibold">Ditutup</span>

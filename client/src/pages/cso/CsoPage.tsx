@@ -54,6 +54,10 @@ export default function CsoPage() {
   const [mobileCargoPanel, setMobileCargoPanel] = useState<'left' | 'right'>('left');
 
   const tripId = selectedCsoTrip?.tripId;
+  const isPastCsoTrip = selectedCsoTrip?.departAtAtOutlet
+    ? new Date(selectedCsoTrip.departAtAtOutlet) < new Date()
+    : false;
+
   const { data: tripShipments = [], isLoading: tripShipmentsLoading } = useQuery<CargoShipmentWithStops[]>({
     queryKey: ['/api/cargo', tripId],
     queryFn: () => cargoApi.getAll({ tripId: tripId! }),
@@ -512,6 +516,7 @@ export default function CsoPage() {
                       selectedSeats={state.selectedSeats}
                       onSeatSelect={handleSeatSelect}
                       onSeatDeselect={handleSeatDeselect}
+                      isPastTrip={isPastCsoTrip}
                     />
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-gray-300">

@@ -15,6 +15,7 @@ interface SeatMapProps {
   selectedSeats: string[];
   onSeatSelect: (seatNo: string) => void;
   onSeatDeselect: (seatNo: string) => void;
+  isPastTrip?: boolean;
 }
 
 export default function SeatMap({
@@ -23,7 +24,8 @@ export default function SeatMap({
   destinationSeq,
   selectedSeats,
   onSeatSelect,
-  onSeatDeselect
+  onSeatDeselect,
+  isPastTrip = false
 }: SeatMapProps) {
   const [localSelectedSeats, setLocalSelectedSeats] = useState<Set<string>>(new Set());
   const [showPassengerModal, setShowPassengerModal] = useState(false);
@@ -94,6 +96,10 @@ export default function SeatMap({
       return;
     }
 
+    if (isPastTrip) {
+      return;
+    }
+
     if (seatAvailability.held) {
       if (localSelectedSeats.has(seatNo)) {
         setSeatLoading(seatNo);
@@ -156,9 +162,9 @@ export default function SeatMap({
     if (!seatmap) return 'available';
     if (localSelectedSeats.has(seatNo)) return 'selected';
     const sa = seatmap.seatAvailability[seatNo];
-    if (sa.held) return 'held';
+    if (sa.held) return isPastTrip ? 'past-locked' : 'held';
     if (!sa.available) return 'booked';
-    return 'available';
+    return isPastTrip ? 'past-locked' : 'available';
   };
 
   const seatColors: Record<string, string> = {
@@ -166,6 +172,7 @@ export default function SeatMap({
     selected: 'bg-blue-500 border-blue-500 text-white shadow-md cursor-pointer',
     booked: 'bg-red-100 border-red-200 text-red-300 cursor-pointer',
     held: 'bg-amber-100 border-amber-300 text-amber-600 cursor-pointer',
+    'past-locked': 'bg-gray-100 border-gray-200 text-gray-300 cursor-not-allowed',
   };
 
   const getAvailableCount = () => {
@@ -243,11 +250,27 @@ export default function SeatMap({
         </button>
       </div>
 
-      <div className="flex items-center justify-center gap-3 py-1.5 px-3 bg-gray-50 rounded-lg">
-        <LegendDot color="bg-white border-gray-300" label="Tersedia" />
-        <LegendDot color="bg-blue-500 border-blue-500" label="Dipilih" />
-        <LegendDot color="bg-amber-100 border-amber-300" label="Dipegang" />
-        <LegendDot color="bg-red-100 border-red-200" label="Terisi" />
+      {isPastTrip && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg">
+          <AlertTriangle className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
+          <p className="text-xs text-orange-700 font-medium">Jadwal sudah lewat — kursi kosong tidak bisa dipilih. Klik kursi terisi untuk lihat detail penumpang.</p>
+        </div>
+      )}
+
+      <div className="flex items-center justify-center gap-3 py-1.5 px-3 bg-gray-50 rounded-lg flex-wrap">
+        {isPastTrip ? (
+          <>
+            <LegendDot color="bg-gray-100 border-gray-200" label="Terkunci" />
+            <LegendDot color="bg-red-100 border-red-200" label="Terisi (klik detail)" />
+          </>
+        ) : (
+          <>
+            <LegendDot color="bg-white border-gray-300" label="Tersedia" />
+            <LegendDot color="bg-blue-500 border-blue-500" label="Dipilih" />
+            <LegendDot color="bg-amber-100 border-amber-300" label="Dipegang" />
+            <LegendDot color="bg-red-100 border-red-200" label="Terisi" />
+          </>
+        )}
       </div>
 
       <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
