@@ -1,10 +1,10 @@
 import { IStorage } from "../../routes";
-import { InsertPatternStop, PatternStop } from "@shared/schema";
+import { InsertPatternStop, PatternStop, Stop } from "@shared/schema";
 
 export class PatternStopsService {
   constructor(private storage: IStorage) {}
 
-  async getPatternStops(patternId: string): Promise<PatternStop[]> {
+  async getPatternStops(patternId: string): Promise<Array<PatternStop & { stop: Stop | null }>> {
     return await this.storage.getPatternStops(patternId);
   }
 

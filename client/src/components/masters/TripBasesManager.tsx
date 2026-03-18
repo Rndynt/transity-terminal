@@ -233,10 +233,15 @@ export default function TripBasesManager() {
   };
 
   const openEditDialog = (base: TripBase) => {
+    const normalizeTime = (t: string | null | undefined): string => {
+      if (!t) return '';
+      return t.length > 5 ? t.substring(0, 5) : t;
+    };
+
     const existingTimes: DefaultStopTime[] = base.defaultStopTimes?.map((st: any) => ({
       stopSequence: st.stopSequence,
-      arriveAt: st.arriveAt || '',
-      departAt: st.departAt || '',
+      arriveAt: normalizeTime(st.arriveAt),
+      departAt: normalizeTime(st.departAt),
     })) || [];
 
     editingStopTimesRef.current = existingTimes;

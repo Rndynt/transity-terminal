@@ -140,10 +140,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Pattern Stops
-  async getPatternStops(patternId: string): Promise<PatternStop[]> {
-    return await db.select().from(patternStops)
-      .where(eq(patternStops.patternId, patternId))
-      .orderBy(patternStops.stopSequence);
+  async getPatternStops(patternId: string): Promise<Array<PatternStop & { stop: Stop | null }>> {
+    const rows = await db.query.patternStops.findMany({
+      where: eq(patternStops.patternId, patternId),
+      orderBy: patternStops.stopSequence,
+      with: { stop: true }
+    });
+    return rows as Array<PatternStop & { stop: Stop | null }>;
   }
 
   async createPatternStop(data: InsertPatternStop): Promise<PatternStop> {
@@ -294,6 +297,13 @@ export class DatabaseStorage implements IStorage {
         ORDER BY tst.stop_sequence DESC 
         LIMIT 1
       )`.as('final_arrival_at'),
+      outletStopSequence: sql<number>`(
+        SELECT tst.stop_sequence 
+        FROM ${tripStopTimes} tst 
+        WHERE tst.trip_id = ${trips.id} 
+        AND tst.stop_id = ${outletStopId}
+        LIMIT 1
+      )`.as('outlet_stop_sequence'),
       stopCount: sql<number>`(
         SELECT COUNT(*) 
         FROM ${tripStopTimes} tst 
@@ -373,6 +383,7 @@ export class DatabaseStorage implements IStorage {
       departAtAtOutlet: row.departAtOutlet,
       finalArrivalAt: row.finalArrivalAt,
       stopCount: row.stopCount,
+      outletStopSequence: row.outletStopSequence || 1,
       availableSeats: Math.max(0, row.availableSeats || row.capacity || 0)
     }));
   }
@@ -418,6 +429,7 @@ export class DatabaseStorage implements IStorage {
           departAtAtOutlet: departAtOutlet,
           finalArrivalAt,
           stopCount: patternStopsForBase.length,
+          outletStopSequence: outletStop.stopSequence,
           availableSeats: base.capacity ?? undefined // Virtual trips show full capacity as available (estimated)
         });
       } catch (error) {

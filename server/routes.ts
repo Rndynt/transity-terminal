@@ -56,7 +56,7 @@ export interface IStorage {
   deleteTripPattern(id: string): Promise<void>;
 
   // Pattern Stops
-  getPatternStops(patternId: string): Promise<PatternStop[]>;
+  getPatternStops(patternId: string): Promise<Array<PatternStop & { stop: Stop | null }>>;
   createPatternStop(data: InsertPatternStop): Promise<PatternStop>;
   updatePatternStop(id: string, data: Partial<InsertPatternStop>): Promise<PatternStop>;
   deletePatternStop(id: string): Promise<void>;

@@ -476,6 +476,27 @@ export default function TripSelector({
     } catch { return '--:--'; }
   };
 
+  const formatDuration = (trip: CsoAvailableTrip): string | null => {
+    if (!trip.departAtAtOutlet || !trip.finalArrivalAt) return null;
+    try {
+      const start = new Date(trip.departAtAtOutlet).getTime();
+      const end = new Date(trip.finalArrivalAt).getTime();
+      const totalMins = Math.round((end - start) / 60000);
+      if (totalMins <= 0) return null;
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      if (h === 0) return `${m}m`;
+      if (m === 0) return `${h}j`;
+      return `${h}j ${m}m`;
+    } catch { return null; }
+  };
+
+  const shortenRoutePath = (path: string): string => {
+    const parts = path.split(' → ');
+    if (parts.length <= 3) return path;
+    return `${parts[0]} → ... → ${parts[parts.length - 1]}`;
+  };
+
   const filteredTrips = useMemo(() => {
     if (!searchQuery.trim()) return trips || [];
     const q = searchQuery.toLowerCase();
@@ -621,11 +642,21 @@ export default function TripSelector({
                         <Hash className="w-2.5 h-2.5" />{group.code}
                       </span>
                     )}
+                    {group.trips.some(t => t.outletStopSequence > 1) && (
+                      <span className="inline-flex items-center text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded flex-shrink-0">
+                        Transit
+                      </span>
+                    )}
                     <span className="text-[10px] text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded flex-shrink-0">
                       {group.trips.length} jadwal
                     </span>
                   </div>
-                  <p className="text-xs text-gray-600 font-medium truncate mt-0.5">{group.path}</p>
+                  <p
+                    className="text-xs text-gray-600 font-medium mt-0.5"
+                    title={group.path}
+                  >
+                    {shortenRoutePath(group.path)}
+                  </p>
                 </div>
                 <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ${collapsedRoutes.has(group.key) ? '-rotate-90' : ''}`} />
               </button>
@@ -703,6 +734,10 @@ export default function TripSelector({
                               }`}>
                                 <Armchair className="w-3 h-3" />{seatCount}/{totalSeats}
                               </span>
+                              {(() => { const dur = formatDuration(trip); return dur ? <span className="flex items-center gap-0.5 text-gray-400">⏱ {dur}</span> : null; })()}
+                              {trip.outletStopSequence > 1 && (
+                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-semibold">Transit</span>
+                              )}
                             </div>
                             {(trip as any).pricePerSeat != null && (
                               <span className="text-xs font-bold text-gray-700 font-mono">{fmt((trip as any).pricePerSeat)}</span>
