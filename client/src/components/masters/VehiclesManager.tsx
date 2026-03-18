@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { vehiclesApi, layoutsApi } from '@/lib/api';
@@ -15,6 +14,7 @@ import { Plus, Pencil, Trash2, Bus } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
+import { RowActionsMenu } from './RowActionsMenu';
 import type { Vehicle, Layout } from '@/types';
 
 interface VehicleFormData {
@@ -288,41 +288,13 @@ export default function VehiclesManager() {
                       <TableCell>{vehicle.capacity} kursi</TableCell>
                       <TableCell className="max-w-xs truncate text-muted-foreground text-sm">{vehicle.notes || '-'}</TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end space-x-1">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleEdit(vehicle)}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
-                                  data-testid={`edit-vehicle-${vehicle.code}`}
-                                >
-                                  <Pencil className="h-3.5 w-3.5 text-primary" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Edit kendaraan</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDelete(vehicle.id)}
-                                  disabled={deleteMutation.isPending}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50"
-                                  data-testid={`delete-vehicle-${vehicle.code}`}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Hapus kendaraan</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
+                        <RowActionsMenu
+                          actions={[
+                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(vehicle) },
+                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(vehicle.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                          ]}
+                          data-testid={`actions-vehicle-${vehicle.code}`}
+                        />
                       </TableCell>
                     </TableRow>
                   ))

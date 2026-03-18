@@ -3,9 +3,8 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { cargoTypesApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import {
-  Package, Plus, Pencil, Trash2, Loader2, Search, X
-} from 'lucide-react';
+import { Package, Plus, Pencil, Trash2 } from 'lucide-react';
+import { RowActionsMenu } from './RowActionsMenu';
 import type { CargoType } from '@shared/schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -214,28 +213,13 @@ export default function CargoTypesManager() {
                   {ct.maxWeightKg && <span>Maks. {ct.maxWeightKg} kg</span>}
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => startEdit(ct)}
-                  className="h-7 w-7 p-0 rounded-lg"
-                  data-testid={`btn-edit-cargo-type-${ct.id}`}
-                  aria-label="Edit"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setDeleteConfirmId(ct.id)}
-                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 hover:text-destructive"
-                  data-testid={`btn-del-cargo-type-${ct.id}`}
-                  aria-label="Delete"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
+              <RowActionsMenu
+                actions={[
+                  { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => startEdit(ct) },
+                  { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => setDeleteConfirmId(ct.id), variant: 'destructive' },
+                ]}
+                data-testid={`actions-cargo-type-${ct.id}`}
+              />
             </div>
           ))}
         </div>

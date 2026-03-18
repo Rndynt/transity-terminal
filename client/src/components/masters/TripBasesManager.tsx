@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { tripBasesApi, tripPatternsApi, layoutsApi, vehiclesApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Calendar, Clock, MapPin, Users } from 'lucide-react';
+import { Plus, Pencil, Trash2, Clock } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import { RowActionsMenu } from './RowActionsMenu';
@@ -346,25 +346,28 @@ export default function TripBasesManager() {
 
   const getDowBadges = (base: TripBase) => {
     const days = [
-      { key: 'sun', label: 'S', active: base.sun },
-      { key: 'mon', label: 'M', active: base.mon },
-      { key: 'tue', label: 'T', active: base.tue },
-      { key: 'wed', label: 'W', active: base.wed },
-      { key: 'thu', label: 'T', active: base.thu },
-      { key: 'fri', label: 'F', active: base.fri },
-      { key: 'sat', label: 'S', active: base.sat }
+      { key: 'sun', label: 'Mg', active: base.sun },
+      { key: 'mon', label: 'Sn', active: base.mon },
+      { key: 'tue', label: 'Sl', active: base.tue },
+      { key: 'wed', label: 'Rb', active: base.wed },
+      { key: 'thu', label: 'Km', active: base.thu },
+      { key: 'fri', label: 'Jm', active: base.fri },
+      { key: 'sat', label: 'Sb', active: base.sat }
     ];
 
     return (
       <div className="flex gap-0.5">
         {days.map(day => (
-          <Badge 
-            key={day.key} 
-            variant={day.active ? 'default' : 'outline'} 
-            className="w-4 h-4 p-0 text-[10px] font-mono leading-none"
+          <span
+            key={day.key}
+            className={`inline-flex items-center justify-center w-6 h-5 rounded text-[10px] font-semibold leading-none transition-colors ${
+              day.active
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground/40'
+            }`}
           >
             {day.label}
-          </Badge>
+          </span>
         ))}
       </div>
     );
@@ -486,40 +489,13 @@ export default function TripBasesManager() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-2">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => openEditDialog(base)}
-                                      className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10 focus:ring-2 focus:ring-primary"
-                                      data-testid={`button-edit-${base.id}`}
-                                    >
-                                      <Pencil className="w-4 h-4 text-primary" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Edit trip base</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleDelete(base.id)}
-                                      className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 focus:ring-2 focus:ring-destructive"
-                                      data-testid={`button-delete-${base.id}`}
-                                    >
-                                      <Trash2 className="w-4 h-4 text-destructive" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Delete trip base</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </div>
+                            <RowActionsMenu
+                              actions={[
+                                { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => openEditDialog(base) },
+                                { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(base.id), variant: 'destructive' },
+                              ]}
+                              data-testid={`actions-base-${base.id}`}
+                            />
                           </TableCell>
                         </TableRow>
                       );

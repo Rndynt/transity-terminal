@@ -4,6 +4,7 @@ import { cargoRatesApi, cargoTypesApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { DollarSign, Plus, Pencil, Trash2, ArrowRight } from 'lucide-react';
+import { RowActionsMenu } from './RowActionsMenu';
 import type { CargoType, CargoRate, Stop, TripPattern, Trip } from '@shared/schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -386,14 +387,13 @@ export default function CargoRatesManager() {
                     {parseFloat(cr.minCharge) > 0 && <span>Min. {fmt(parseFloat(cr.minCharge))}</span>}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => startEdit(cr)} className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10" data-testid={`btn-edit-cargo-rate-${cr.id}`} aria-label="Edit">
-                    <Pencil className="w-3.5 h-3.5 text-primary" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setDeleteConfirmId(cr.id)} className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 hover:text-destructive" data-testid={`btn-del-cargo-rate-${cr.id}`} aria-label="Delete">
-                    <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                  </Button>
-                </div>
+                <RowActionsMenu
+                  actions={[
+                    { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => startEdit(cr) },
+                    { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => setDeleteConfirmId(cr.id), variant: 'destructive' },
+                  ]}
+                  data-testid={`actions-cargo-rate-${cr.id}`}
+                />
               </div>
             </div>
           ))}

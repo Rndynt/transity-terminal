@@ -8,8 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { RowActionsMenu } from './RowActionsMenu';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, tripPatternsApi, vehiclesApi, layoutsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
@@ -365,59 +365,17 @@ export default function TripsManager() {
                       <TableCell className="text-sm">{getVehicleName(trip.vehicleId)}</TableCell>
                       <TableCell className="text-sm">{trip.capacity} kursi</TableCell>
                       <TableCell>{getStatusBadge(trip.status || 'scheduled')}</TableCell>
-                      <TableCell className="overflow-visible">
-                        <div className="flex items-center gap-0.5">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" onClick={() => handleScheduling(trip)} className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10" data-testid={`scheduling-${trip.id}`}>
-                                  <Clock className="h-3.5 w-3.5 text-primary" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Atur jadwal</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" onClick={() => handleDeriveLegs(trip.id)} disabled={deriveLegsMutation.isPending} className="h-7 w-7 p-0 rounded-lg hover:bg-secondary/10 disabled:opacity-50" data-testid={`derive-legs-${trip.id}`}>
-                                  <Route className="h-3.5 w-3.5 text-secondary" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Turunkan leg</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" onClick={() => handlePrecomputeInventory(trip.id)} disabled={precomputeSeatInventoryMutation.isPending} className="h-7 w-7 p-0 rounded-lg hover:bg-accent/10 disabled:opacity-50" data-testid={`precompute-inventory-${trip.id}`}>
-                                  <Grid3X3 className="h-3.5 w-3.5 text-accent" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Hitung inventori</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" onClick={() => handleEdit(trip)} className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10" data-testid={`edit-trip-${trip.id}`}>
-                                  <Pencil className="h-3.5 w-3.5 text-primary" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Edit trip</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" onClick={() => handleDelete(trip.id)} disabled={deleteMutation.isPending} className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50" data-testid={`delete-trip-${trip.id}`}>
-                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Hapus trip</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
+                      <TableCell>
+                        <RowActionsMenu
+                          actions={[
+                            { label: 'Atur Jadwal', icon: <Clock className="h-3.5 w-3.5" />, onClick: () => handleScheduling(trip) },
+                            { label: 'Turunkan Leg', icon: <Route className="h-3.5 w-3.5" />, onClick: () => handleDeriveLegs(trip.id), disabled: deriveLegsMutation.isPending },
+                            { label: 'Hitung Inventori', icon: <Grid3X3 className="h-3.5 w-3.5" />, onClick: () => handlePrecomputeInventory(trip.id), disabled: precomputeSeatInventoryMutation.isPending },
+                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(trip) },
+                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(trip.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                          ]}
+                          data-testid={`actions-trip-${trip.id}`}
+                        />
                       </TableCell>
                     </TableRow>
                   ))

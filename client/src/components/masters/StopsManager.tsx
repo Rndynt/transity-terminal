@@ -7,7 +7,6 @@ import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
@@ -15,6 +14,7 @@ import { Plus, Pencil, Trash2, CheckCircle, XCircle, MapPin } from 'lucide-react
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
+import { RowActionsMenu } from './RowActionsMenu';
 import type { Stop } from '@/types';
 
 interface StopFormData {
@@ -304,41 +304,13 @@ export default function StopsManager() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end space-x-1">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleEdit(stop)}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
-                                  data-testid={`edit-stop-${stop.code}`}
-                                >
-                                  <Pencil className="h-3.5 w-3.5 text-primary" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Edit halte</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDelete(stop.id)}
-                                  disabled={deleteMutation.isPending}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50"
-                                  data-testid={`delete-stop-${stop.code}`}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Hapus halte</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
+                        <RowActionsMenu
+                          actions={[
+                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(stop) },
+                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(stop.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                          ]}
+                          data-testid={`actions-stop-${stop.code}`}
+                        />
                       </TableCell>
                     </TableRow>
                   ))

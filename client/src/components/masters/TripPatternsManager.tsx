@@ -8,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { tripPatternsApi, layoutsApi, stopsApi, patternStopsApi } from '@/lib/api';
@@ -17,6 +16,7 @@ import { Plus, Pencil, Trash2, MapPin } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
+import { RowActionsMenu } from './RowActionsMenu';
 import type { TripPattern, Layout, Stop } from '@/types';
 
 interface TripPatternFormData {
@@ -473,54 +473,14 @@ export default function TripPatternsManager() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="sm" variant="ghost"
-                                  onClick={() => handleManageStops(pattern)}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-secondary/10"
-                                  data-testid={`manage-stops-${pattern.code}`}
-                                >
-                                  <MapPin className="h-3.5 w-3.5 text-secondary" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Kelola halte</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="sm" variant="ghost"
-                                  onClick={() => handleEdit(pattern)}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
-                                  data-testid={`edit-pattern-${pattern.code}`}
-                                >
-                                  <Pencil className="h-3.5 w-3.5 text-primary" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Edit pola</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="sm" variant="ghost"
-                                  onClick={() => handleDelete(pattern.id)}
-                                  disabled={deleteMutation.isPending}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50"
-                                  data-testid={`delete-pattern-${pattern.code}`}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Hapus pola</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
+                        <RowActionsMenu
+                          actions={[
+                            { label: 'Kelola Halte', icon: <MapPin className="h-3.5 w-3.5" />, onClick: () => handleManageStops(pattern) },
+                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(pattern) },
+                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(pattern.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                          ]}
+                          data-testid={`actions-pattern-${pattern.code}`}
+                        />
                       </TableCell>
                     </TableRow>
                   ))

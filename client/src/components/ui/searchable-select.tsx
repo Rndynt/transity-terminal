@@ -99,10 +99,10 @@ export function SearchableSelect({
         onClick={() => !disabled && setOpen(v => !v)}
         data-testid={props['data-testid']}
         className={cn(
-          'w-full h-10 bg-background border rounded-xl px-3 flex items-center gap-2 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed',
+          'w-full h-10 bg-white border rounded-xl px-3 flex items-center gap-2 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed',
           open
-            ? 'border-primary ring-2 ring-primary/10 shadow-sm'
-            : 'border-input hover:border-border/80'
+            ? 'border-blue-400 ring-2 ring-blue-100 shadow-sm'
+            : 'border-gray-200 hover:border-gray-300'
         )}
       >
         <span className={cn('flex-1 text-left truncate', selected ? 'text-foreground' : 'text-muted-foreground')}>

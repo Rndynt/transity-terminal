@@ -11,8 +11,8 @@ import MasterFormDialog from './MasterFormDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { RowActionsMenu } from './RowActionsMenu';
 import { useToast } from '@/hooks/use-toast';
 import { priceRulesApi, tripPatternsApi, tripsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
@@ -426,28 +426,13 @@ export default function PriceRulesManager() {
                         <span className="text-xs text-muted-foreground font-mono truncate block">{formatRule(rule.rule)}</span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end space-x-1">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button size="sm" variant="ghost" onClick={() => handleEdit(rule)} className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10" data-testid={`edit-price-rule-${rule.id}`}>
-                                  <Pencil className="h-3.5 w-3.5 text-primary" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Edit aturan</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button size="sm" variant="ghost" onClick={() => handleDelete(rule.id)} disabled={deleteMutation.isPending} className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50" data-testid={`delete-price-rule-${rule.id}`}>
-                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Hapus aturan</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
+                        <RowActionsMenu
+                          actions={[
+                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(rule) },
+                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(rule.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                          ]}
+                          data-testid={`actions-price-rule-${rule.id}`}
+                        />
                       </TableCell>
                     </TableRow>
                   ))

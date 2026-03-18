@@ -42,7 +42,7 @@ export default function MasterPageHeader({
             value={searchValue ?? ''}
             onChange={e => onSearchChange(e.target.value)}
             placeholder={searchPlaceholder ?? 'Cari...'}
-            className="w-full h-9 pl-9 pr-9 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full h-10 pl-9 pr-9 rounded-xl border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
             data-testid="master-search-input"
           />
           {searchValue && (

@@ -5,15 +5,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { outletsApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Store, MapPin } from 'lucide-react';
+import { Plus, Pencil, Trash2, Store } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
+import { RowActionsMenu } from './RowActionsMenu';
 import type { Outlet, Stop } from '@/types';
 
 interface OutletFormData {
@@ -281,43 +281,13 @@ export default function OutletsManager() {
                       <TableCell className="text-muted-foreground">{outlet.phone || '-'}</TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">{outlet.printerProfileId || 'default'}</TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end space-x-1">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleEdit(outlet)}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
-                                  aria-label={`Edit outlet ${outlet.name}`}
-                                  data-testid={`edit-outlet-${outlet.id}`}
-                                >
-                                  <Pencil className="h-3.5 w-3.5 text-primary" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Edit outlet</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDelete(outlet.id)}
-                                  disabled={deleteMutation.isPending}
-                                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 disabled:opacity-50"
-                                  aria-label={`Delete outlet ${outlet.name}`}
-                                  data-testid={`delete-outlet-${outlet.id}`}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Hapus outlet</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
+                        <RowActionsMenu
+                          actions={[
+                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(outlet) },
+                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(outlet.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                          ]}
+                          data-testid={`actions-outlet-${outlet.id}`}
+                        />
                       </TableCell>
                     </TableRow>
                   ))
