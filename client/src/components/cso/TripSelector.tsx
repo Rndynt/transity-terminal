@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, outletsApi, stopsApi } from '@/lib/api';
+import { useWebSocket } from '@/hooks/useWebSocket';
 import type { Outlet, CsoAvailableTrip, Stop } from '@/types';
 
 interface TripSelectorProps {
@@ -341,8 +342,68 @@ export default function TripSelector({
   const { data: trips = [], isLoading: tripsLoading, refetch: refetchTrips } = useQuery<CsoAvailableTrip[]>({
     queryKey: ['/api/cso/available-trips', selectedDate, selectedOutlet?.id],
     queryFn: () => tripsApi.getCsoAvailableTrips(selectedDate, selectedOutlet!.id),
-    enabled: !!selectedDate && !!selectedOutlet?.id
+    enabled: !!selectedDate && !!selectedOutlet?.id,
+    refetchInterval: 30000,
   });
+
+  // WebSocket: subscribe to each real (non-virtual) tripId in the list
+  // and refetch the list whenever inventory changes on any of them
+  const { subscribeToTrip, unsubscribeFromTrip, addEventListener } = useWebSocket();
+
+  const subscribedTripIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const realTripIds = (trips as CsoAvailableTrip[])
+      .filter(t => !t.isVirtual && t.tripId)
+      .map(t => t.tripId as string);
+
+    const prev = subscribedTripIdsRef.current;
+    const next = new Set(realTripIds);
+
+    // Unsubscribe from removed trips
+    for (const id of Array.from(prev)) {
+      if (!next.has(id)) {
+        unsubscribeFromTrip(id);
+        prev.delete(id);
+      }
+    }
+    // Subscribe to new trips
+    for (const id of Array.from(next)) {
+      if (!prev.has(id)) {
+        subscribeToTrip(id);
+        prev.add(id);
+      }
+    }
+  }, [trips, subscribeToTrip, unsubscribeFromTrip]);
+
+  // Unsubscribe from all trips when outlet or date changes
+  useEffect(() => {
+    return () => {
+      for (const id of Array.from(subscribedTripIdsRef.current)) {
+        unsubscribeFromTrip(id);
+      }
+      subscribedTripIdsRef.current.clear();
+    };
+  }, [selectedOutlet?.id, selectedDate, unsubscribeFromTrip]);
+
+  // Listen to inventory events and refetch the trip list
+  useEffect(() => {
+    const currentTripIds = subscribedTripIdsRef.current;
+
+    const handleInventoryUpdate = (data: { tripId: string }) => {
+      if (currentTripIds.has(data.tripId)) {
+        refetchTrips();
+      }
+    };
+
+    const removeInventory = addEventListener('INVENTORY_UPDATED', handleInventoryUpdate);
+    const removeHolds = addEventListener('HOLDS_RELEASED', handleInventoryUpdate);
+
+    return () => {
+      removeInventory();
+      removeHolds();
+    };
+  }, [addEventListener, refetchTrips]);
 
   const materializeMutation = useMutation({
     mutationFn: async (baseId: string) => {
