@@ -344,6 +344,8 @@ export default function TripSelector({
     queryFn: () => tripsApi.getCsoAvailableTrips(selectedDate, selectedOutlet!.id),
     enabled: !!selectedDate && !!selectedOutlet?.id,
     refetchInterval: 30000,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   // WebSocket: subscribe to each real (non-virtual) tripId in the list

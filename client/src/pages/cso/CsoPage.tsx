@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { queryClient } from '@/lib/queryClient';
 import { cargoApi } from '@/lib/api';
 import TripSelector from '@/components/cso/TripSelector';
 import RouteTimeline from '@/components/cso/RouteTimeline';
@@ -236,6 +237,7 @@ export default function CsoPage() {
     });
     resetFlow();
     releaseAllHolds();
+    queryClient.invalidateQueries({ queryKey: ['/api/cso/available-trips'] });
   };
 
   const handleBackFromPrint = () => {
