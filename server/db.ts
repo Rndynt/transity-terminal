@@ -8,8 +8,11 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
+const connectionString = process.env.DATABASE_URL;
+const useSSL = connectionString.includes('sslmode=require') || connectionString.includes('neon.tech');
+
 export const pool = new Pool({ 
-  connectionString: process.env.DATABASE_URL,
-  ssl: false // Disable SSL for Replit's built-in PostgreSQL
+  connectionString,
+  ssl: useSSL ? { rejectUnauthorized: false } : false,
 });
 export const db = drizzle({ client: pool, schema });
