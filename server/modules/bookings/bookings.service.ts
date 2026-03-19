@@ -8,6 +8,7 @@ import { db } from "../../db";
 import { bookings as bookingsTable, seatHolds, seatInventory } from "@shared/schema";
 import { eq, and, inArray, gt, lt } from "drizzle-orm";
 import { webSocketService } from "../../realtime/ws";
+import { generateBookingCode, generateTicketNumber } from "../../utils/codeGenerator";
 
 export class BookingsService {
   private holdsService: HoldsService;
@@ -147,6 +148,7 @@ export class BookingsService {
     // Create booking with 'paid' status since payment is provided
     const booking = await this.storage.createBooking({
       ...bookingData,
+      bookingCode: generateBookingCode(),
       status: 'paid',  // Set status to paid since payment is provided
       totalAmount: expectedTotal.toString()
     });
@@ -155,6 +157,7 @@ export class BookingsService {
     for (const passengerData of passengers) {
       await this.storage.createPassenger({
         ...passengerData,
+        ticketNumber: generateTicketNumber(),
         bookingId: booking.id,
         fareAmount: fareQuote.perPassenger.toString(),
         fareBreakdown: fareQuote.breakdown
@@ -328,6 +331,7 @@ export class BookingsService {
     const expectedTotal = Number(fareQuote.total) * passengers.length;
     const booking = await this.storage.createBooking({
       ...bookingData,
+      bookingCode: generateBookingCode(),
       status: 'pending',
       totalAmount: expectedTotal.toString(),
       pendingExpiresAt
@@ -337,6 +341,7 @@ export class BookingsService {
     for (const passengerData of passengers) {
       await this.storage.createPassenger({
         ...passengerData,
+        ticketNumber: generateTicketNumber(),
         bookingId: booking.id,
         fareAmount: fareQuote.perPassenger.toString(),
         fareBreakdown: fareQuote.breakdown

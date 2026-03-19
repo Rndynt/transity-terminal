@@ -23,6 +23,7 @@ export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'qr', 'ewalle
 export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'success', 'failed']);
 export const printStatusEnum = pgEnum('print_status', ['queued', 'sent', 'failed']);
 export const priceRuleScopeEnum = pgEnum('price_rule_scope', ['pattern', 'trip', 'leg', 'time']);
+export const ticketStatusEnum = pgEnum('ticket_status', ['active', 'canceled', 'refunded', 'checked_in', 'no_show']);
 
 // 1. Stops
 export const stops = pgTable("stops", {
@@ -206,6 +207,7 @@ export const priceRules = pgTable("price_rules", {
 // 12. Bookings
 export const bookings = pgTable("bookings", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingCode: text("booking_code").unique(), // Human-readable PNR e.g. TRV-20240319-XYZ12
   tripId: uuid("trip_id").notNull().references(() => trips.id),
   originStopId: uuid("origin_stop_id").notNull().references(() => stops.id),
   destinationStopId: uuid("destination_stop_id").notNull().references(() => stops.id),
@@ -225,6 +227,8 @@ export const bookings = pgTable("bookings", {
 // 13. Passengers
 export const passengers = pgTable("passengers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketNumber: text("ticket_number").unique(), // Per-passenger ticket ID e.g. TKT-20240319-AB123
+  ticketStatus: ticketStatusEnum("ticket_status").default('active'), // Individual cancellation per passenger
   bookingId: uuid("booking_id").notNull().references(() => bookings.id),
   fullName: text("full_name").notNull(),
   phone: text("phone"),

@@ -19,6 +19,22 @@ import {
   type CsoAvailableTrip
 } from "@shared/schema";
 
+export interface ManifestEntry {
+  ticketNumber: string | null;
+  ticketStatus: string;
+  passengerName: string;
+  seatNo: string;
+  phone: string | null;
+  idNumber: string | null;
+  fareAmount: string;
+  bookingCode: string | null;
+  bookingStatus: string;
+  channel: string | null;
+  originStopName: string | null;
+  destinationStopName: string | null;
+  createdAt: Date | null;
+}
+
 export interface IStorage {
   // Stops
   getStops(): Promise<Stop[]>;
@@ -105,12 +121,18 @@ export interface IStorage {
   // Bookings
   getBookings(tripId?: string): Promise<Booking[]>;
   getBookingById(id: string): Promise<Booking | undefined>;
+  getBookingByCode(bookingCode: string): Promise<Booking | undefined>;
   createBooking(data: InsertBooking): Promise<Booking>;
   updateBooking(id: string, data: Partial<InsertBooking>): Promise<Booking>;
 
   // Passengers
   getPassengers(bookingId: string): Promise<Passenger[]>;
+  getPassengerByTicketNumber(ticketNumber: string): Promise<Passenger | undefined>;
   createPassenger(data: InsertPassenger): Promise<Passenger>;
+  updatePassenger(id: string, data: Partial<InsertPassenger>): Promise<Passenger>;
+
+  // Manifest
+  getManifest(tripId: string): Promise<ManifestEntry[]>;
 
   // Payments
   getPayments(bookingId: string): Promise<Payment[]>;
@@ -264,6 +286,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/trips/:id/seatmap', asyncHandler(tripsController.getSeatmap.bind(tripsController)));
   app.get('/api/trips/:tripId/seats/:seatNo/passenger-details', asyncHandler(tripsController.getSeatPassengerDetails.bind(tripsController)));
 
+  // Manifest — operational passenger list per trip
+  app.get('/api/trips/:id/manifest', asyncHandler(async (req, res) => {
+    const manifest = await storage.getManifest(req.params.id);
+    res.json(manifest);
+  }));
+
   // Seat holds
   app.post('/api/holds', asyncHandler(bookingsController.createHold.bind(bookingsController)));
   app.delete('/api/holds/:holdRef', asyncHandler(bookingsController.releaseHold.bind(bookingsController)));
@@ -279,11 +307,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Bookings routes
   app.get('/api/bookings', asyncHandler(bookingsController.getAll.bind(bookingsController)));
+  // Lookup by booking code / PNR (must be before /:id)
+  app.get('/api/bookings/by-code/:code', asyncHandler(async (req, res) => {
+    const booking = await storage.getBookingByCode(req.params.code.toUpperCase());
+    if (!booking) return res.status(404).json({ message: 'Booking tidak ditemukan' });
+    res.json(booking);
+  }));
   app.get('/api/bookings/:id', asyncHandler(bookingsController.getById.bind(bookingsController)));
   app.post('/api/bookings', asyncHandler(bookingsController.create.bind(bookingsController)));
   app.post('/api/bookings/pending', asyncHandler(bookingsController.createPendingBooking.bind(bookingsController)));
   app.get('/api/bookings/pending', asyncHandler(bookingsController.getPendingBookings.bind(bookingsController)));
   app.delete('/api/bookings/pending/:id', asyncHandler(bookingsController.releasePendingBooking.bind(bookingsController)));
+
+  // Ticket (passenger-level) cancel — cancel satu penumpang tanpa batalkan booking
+  app.patch('/api/passengers/:id/cancel', asyncHandler(async (req, res) => {
+    const passenger = await storage.updatePassenger(req.params.id, { ticketStatus: 'canceled' });
+    res.json(passenger);
+  }));
+
+  // Lookup passenger by ticket number
+  app.get('/api/tickets/:ticketNumber', asyncHandler(async (req, res) => {
+    const passenger = await storage.getPassengerByTicketNumber(req.params.ticketNumber.toUpperCase());
+    if (!passenger) return res.status(404).json({ message: 'Tiket tidak ditemukan' });
+    res.json(passenger);
+  }));
 
   // Payments routes
   app.get('/api/bookings/:bookingId/payments', asyncHandler(paymentsController.getByBooking.bind(paymentsController)));

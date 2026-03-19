@@ -1,4 +1,4 @@
-import { IStorage } from "./routes";
+import { IStorage, ManifestEntry } from "./routes";
 import { 
   stops, outlets, vehicles, layouts, tripPatterns, patternStops, tripBases,
   trips, tripStopTimes, tripLegs, seatInventory, seatHolds, priceRules, 
@@ -728,14 +728,59 @@ export class DatabaseStorage implements IStorage {
     return booking;
   }
 
+  // Booking lookup by code
+  async getBookingByCode(bookingCode: string): Promise<Booking | undefined> {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.bookingCode, bookingCode));
+    return booking;
+  }
+
   // Passengers
   async getPassengers(bookingId: string): Promise<Passenger[]> {
     return await db.select().from(passengers).where(eq(passengers.bookingId, bookingId));
   }
 
+  async getPassengerByTicketNumber(ticketNumber: string): Promise<Passenger | undefined> {
+    const [passenger] = await db.select().from(passengers).where(eq(passengers.ticketNumber, ticketNumber));
+    return passenger;
+  }
+
   async createPassenger(data: InsertPassenger): Promise<Passenger> {
     const [passenger] = await db.insert(passengers).values(data).returning();
     return passenger;
+  }
+
+  async updatePassenger(id: string, data: Partial<InsertPassenger>): Promise<Passenger> {
+    const [passenger] = await db.update(passengers).set(data).where(eq(passengers.id, id)).returning();
+    return passenger;
+  }
+
+  // Manifest — all passengers for a trip with booking and stop context
+  async getManifest(tripId: string): Promise<ManifestEntry[]> {
+    const rows = await db.execute(sql`
+      SELECT
+        p.ticket_number         AS "ticketNumber",
+        COALESCE(p.ticket_status, 'active') AS "ticketStatus",
+        p.full_name             AS "passengerName",
+        p.seat_no               AS "seatNo",
+        p.phone,
+        p.id_number             AS "idNumber",
+        p.fare_amount           AS "fareAmount",
+        b.booking_code          AS "bookingCode",
+        b.status                AS "bookingStatus",
+        b.channel,
+        b.created_at            AS "createdAt",
+        os.name                 AS "originStopName",
+        ds.name                 AS "destinationStopName"
+      FROM ${passengers} p
+      INNER JOIN ${bookings} b ON b.id = p.booking_id
+      LEFT JOIN ${stops} os ON os.id = b.origin_stop_id
+      LEFT JOIN ${stops} ds ON ds.id = b.destination_stop_id
+      WHERE b.trip_id = ${tripId}
+        AND b.status NOT IN ('canceled', 'refunded')
+      ORDER BY p.seat_no ASC
+    `);
+
+    return rows.rows as ManifestEntry[];
   }
 
   // Payments
