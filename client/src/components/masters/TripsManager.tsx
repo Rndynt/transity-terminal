@@ -101,7 +101,51 @@ export default function TripsManager() {
   const [filterPatternId, setFilterPatternId] = useState<string>('all');
   const [filterDateFrom, setFilterDateFrom] = useState<string>('');
   const [filterDateTo, setFilterDateTo] = useState<string>('');
+  const [datePreset, setDatePreset] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
+
+  const DATE_PRESETS = [
+    { key: 'today',      label: 'Hari Ini' },
+    { key: 'tomorrow',   label: 'Besok' },
+    { key: 'this_week',  label: 'Minggu Ini' },
+    { key: 'this_month', label: 'Bulan Ini' },
+    { key: 'next_month', label: 'Bulan Depan' },
+    { key: 'custom',     label: 'Kustom' },
+  ] as const;
+
+  const applyDatePreset = (preset: string) => {
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    setDatePreset(preset);
+    if (preset === 'today') {
+      setFilterDateFrom(fmt(today));
+      setFilterDateTo(fmt(today));
+    } else if (preset === 'tomorrow') {
+      const d = new Date(today); d.setDate(d.getDate() + 1);
+      setFilterDateFrom(fmt(d));
+      setFilterDateTo(fmt(d));
+    } else if (preset === 'this_week') {
+      const day = today.getDay(); // 0=Sun
+      const mon = new Date(today); mon.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      setFilterDateFrom(fmt(mon));
+      setFilterDateTo(fmt(sun));
+    } else if (preset === 'this_month') {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1);
+      const end   = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      setFilterDateFrom(fmt(start));
+      setFilterDateTo(fmt(end));
+    } else if (preset === 'next_month') {
+      const start = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+      const end   = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+      setFilterDateFrom(fmt(start));
+      setFilterDateTo(fmt(end));
+    } else if (preset === 'custom') {
+      setFilterDateFrom('');
+      setFilterDateTo('');
+    }
+  };
 
   const { toast } = useToast();
 
@@ -241,8 +285,7 @@ export default function TripsManager() {
   const activeFilterCount = [
     filterStatus !== 'all',
     filterPatternId !== 'all',
-    filterDateFrom !== '',
-    filterDateTo !== '',
+    filterDateFrom !== '' || filterDateTo !== '',
   ].filter(Boolean).length;
 
   const clearAllFilters = () => {
@@ -250,6 +293,7 @@ export default function TripsManager() {
     setFilterPatternId('all');
     setFilterDateFrom('');
     setFilterDateTo('');
+    setDatePreset('');
     setSearchQuery('');
   };
 
@@ -388,42 +432,76 @@ export default function TripsManager() {
       {/* Filter Panel */}
       {showFilters && (
         <Card className="border-dashed">
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Rute / Pola</Label>
-                <Select value={filterPatternId} onValueChange={setFilterPatternId}>
-                  <SelectTrigger data-testid="filter-pattern-select">
-                    <SelectValue placeholder="Semua rute" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua rute</SelectItem>
-                    {uniquePatterns.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <CardContent className="p-4 space-y-4">
+            {/* Route filter */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Rute / Pola</Label>
+              <Select value={filterPatternId} onValueChange={setFilterPatternId}>
+                <SelectTrigger data-testid="filter-pattern-select">
+                  <SelectValue placeholder="Semua rute" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua rute</SelectItem>
+                  {uniquePatterns.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Date preset buttons */}
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Rentang Tanggal</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {DATE_PRESETS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => applyDatePreset(key)}
+                    data-testid={`preset-${key}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                      datePreset === key
+                        ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                        : 'bg-background text-foreground border-border hover:border-primary/50 hover:bg-muted'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Tanggal Dari</Label>
-                <Input
-                  type="date"
-                  value={filterDateFrom}
-                  onChange={e => setFilterDateFrom(e.target.value)}
-                  data-testid="filter-date-from"
-                />
-              </div>
+              {/* Custom date inputs — shown only when "Kustom" is selected or manually typed */}
+              {(datePreset === 'custom' || (!datePreset && (filterDateFrom || filterDateTo))) && (
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Dari</Label>
+                    <Input
+                      type="date"
+                      value={filterDateFrom}
+                      onChange={e => { setFilterDateFrom(e.target.value); setDatePreset('custom'); }}
+                      data-testid="filter-date-from"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Sampai</Label>
+                    <Input
+                      type="date"
+                      value={filterDateTo}
+                      onChange={e => { setFilterDateTo(e.target.value); setDatePreset('custom'); }}
+                      data-testid="filter-date-to"
+                    />
+                  </div>
+                </div>
+              )}
 
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Tanggal Sampai</Label>
-                <Input
-                  type="date"
-                  value={filterDateTo}
-                  onChange={e => setFilterDateTo(e.target.value)}
-                  data-testid="filter-date-to"
-                />
-              </div>
+              {/* Show resolved range for non-custom presets */}
+              {datePreset && datePreset !== 'custom' && (filterDateFrom || filterDateTo) && (
+                <p className="text-xs text-muted-foreground">
+                  {filterDateFrom === filterDateTo
+                    ? filterDateFrom
+                    : `${filterDateFrom} — ${filterDateTo}`}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -439,16 +517,17 @@ export default function TripsManager() {
               onRemove={() => setFilterPatternId('all')}
             />
           )}
-          {filterDateFrom && (
+          {(filterDateFrom || filterDateTo) && (
             <ActiveFilterPill
-              label={`Dari: ${filterDateFrom}`}
-              onRemove={() => setFilterDateFrom('')}
-            />
-          )}
-          {filterDateTo && (
-            <ActiveFilterPill
-              label={`Sampai: ${filterDateTo}`}
-              onRemove={() => setFilterDateTo('')}
+              label={(() => {
+                const preset = DATE_PRESETS.find(p => p.key === datePreset);
+                if (preset && datePreset !== 'custom') return `Tanggal: ${preset.label}`;
+                if (filterDateFrom === filterDateTo && filterDateFrom) return `Tanggal: ${filterDateFrom}`;
+                if (filterDateFrom && filterDateTo) return `${filterDateFrom} — ${filterDateTo}`;
+                if (filterDateFrom) return `Dari: ${filterDateFrom}`;
+                return `Sampai: ${filterDateTo}`;
+              })()}
+              onRemove={() => { setFilterDateFrom(''); setFilterDateTo(''); setDatePreset(''); }}
             />
           )}
         </div>
