@@ -91,12 +91,15 @@ export default function TripPatternsManager() {
     badge: `${l.rows}×${l.cols}`
   }));
 
-  const stopOptions = stops.map(s => ({
-    value: s.id,
-    label: s.name,
-    badge: s.code,
-    subtitle: s.city || undefined
-  }));
+  const stopOptions = [...stops]
+    .sort((a, b) => (a.city || 'Lainnya').localeCompare(b.city || 'Lainnya'))
+    .map(s => ({
+      value: s.id,
+      label: s.name,
+      badge: s.code,
+      subtitle: s.city || undefined,
+      group: s.city || 'Lainnya'
+    }));
 
   const createMutation = useMutation({
     mutationFn: tripPatternsApi.create,
@@ -481,14 +484,17 @@ export default function TripPatternsManager() {
 
       {/* Stops Management Dialog */}
       <Dialog open={isStopsDialogOpen} onOpenChange={setIsStopsDialogOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[92vh] flex flex-col p-0 gap-0" data-testid="stops-dialog">
+        <DialogContent className="sm:max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0" data-testid="stops-dialog">
           <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
-            <DialogTitle>Halte & Urutan — {selectedPatternForStops?.name}</DialogTitle>
-            <DialogDescription>Kelola daftar pemberhentian untuk pola rute ini.</DialogDescription>
+            <DialogTitle>Kelola Halte — {selectedPatternForStops?.name}</DialogTitle>
+            <DialogDescription>Atur urutan dan konfigurasi pemberhentian untuk rute ini.</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
             <div className="flex justify-between items-center">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Urutan Halte</span>
+              <div>
+                <p className="text-sm font-semibold">Urutan Halte</p>
+                <p className="text-xs text-muted-foreground">{patternStops.length} halte ditambahkan</p>
+              </div>
               <Button onClick={addPatternStop} size="sm" data-testid="add-pattern-stop">
                 <Plus className="h-4 w-4 mr-2" />
                 Tambah Halte
@@ -497,57 +503,101 @@ export default function TripPatternsManager() {
 
             <div className="space-y-3">
               {patternStops.map((stop, index) => (
-                <div key={index} className="flex flex-col space-y-3 p-3 border rounded-xl bg-card">
-                  <div className="flex items-center gap-2">
-                    <div className="w-10 text-center font-mono font-bold text-sm text-primary bg-primary/10 rounded-lg py-1.5 flex-shrink-0">
-                      {stop.stopSequence}
-                    </div>
-                    <div className="flex-1">
-                      <SearchableSelect
-                        value={stop.stopId}
-                        options={stopOptions}
-                        placeholder="Pilih halte..."
-                        searchPlaceholder="Cari halte..."
-                        onChange={(value) => updatePatternStop(index, 'stopId', value)}
-                      />
-                    </div>
-                    <div className="w-28 flex-shrink-0">
-                      <Input
-                        type="number"
-                        value={stop.dwellSeconds}
-                        onChange={(e) => updatePatternStop(index, 'dwellSeconds', parseInt(e.target.value, 10) || 0)}
-                        placeholder="Waktu (dtk)"
-                        min="0"
-                      />
+                <div key={index} className="border rounded-xl bg-card overflow-hidden">
+                  {/* Card header: sequence + delete */}
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40 border-b">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-sm text-primary bg-primary/10 rounded-md px-2 py-0.5">
+                        #{stop.stopSequence}
+                      </span>
+                      <span className="text-xs text-muted-foreground font-medium">Pemberhentian ke-{index + 1}</span>
                     </div>
                     <Button
                       size="icon"
                       variant="ghost"
                       onClick={() => removePatternStop(index)}
                       data-testid={`remove-stop-${index}`}
-                      className="h-10 w-10 rounded-xl hover:bg-destructive/10 hover:text-destructive flex-shrink-0"
+                      className="h-7 w-7 rounded-lg hover:bg-destructive/10 hover:text-destructive"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
-                  <div className="flex items-center gap-6 pl-12">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id={`boarding-${index}`}
-                        checked={stop.boardingAllowed !== false}
-                        onCheckedChange={(checked) => updatePatternStop(index, 'boardingAllowed', checked)}
-                        data-testid={`switch-boarding-${index}`}
+
+                  {/* Card body: fields with labels */}
+                  <div className="p-4 space-y-4">
+                    {/* Halte selector */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Halte <span className="text-destructive">*</span>
+                      </Label>
+                      <SearchableSelect
+                        value={stop.stopId}
+                        options={stopOptions}
+                        placeholder="Pilih halte..."
+                        searchPlaceholder="Cari nama halte atau kota..."
+                        onChange={(value) => updatePatternStop(index, 'stopId', value)}
                       />
-                      <Label htmlFor={`boarding-${index}`} className="text-sm cursor-pointer">Naik penumpang</Label>
+                      {!stop.stopId && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">Pilih halte untuk pemberhentian ini</p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id={`alighting-${index}`}
-                        checked={stop.alightingAllowed !== false}
-                        onCheckedChange={(checked) => updatePatternStop(index, 'alightingAllowed', checked)}
-                        data-testid={`switch-alighting-${index}`}
-                      />
-                      <Label htmlFor={`alighting-${index}`} className="text-sm cursor-pointer">Turun penumpang</Label>
+
+                    {/* Dwell time */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`dwell-${index}`} className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Waktu Berhenti di Halte
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id={`dwell-${index}`}
+                          type="number"
+                          value={stop.dwellSeconds}
+                          onChange={(e) => updatePatternStop(index, 'dwellSeconds', parseInt(e.target.value, 10) || 0)}
+                          min="0"
+                          className="w-32"
+                          data-testid={`input-dwell-${index}`}
+                        />
+                        <span className="text-sm text-muted-foreground">detik</span>
+                        {stop.dwellSeconds > 0 && (
+                          <span className="text-xs text-muted-foreground bg-muted rounded-md px-2 py-1">
+                            ≈ {Math.floor(stop.dwellSeconds / 60)} menit {stop.dwellSeconds % 60} dtk
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Berapa lama kendaraan berhenti di halte ini. Isi 0 jika hanya lewat.</p>
+                    </div>
+
+                    {/* Boarding / Alighting */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Izin Penumpang
+                      </Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex items-center justify-between rounded-lg border px-3 py-2.5 bg-background">
+                          <div>
+                            <p className="text-sm font-medium">Naik</p>
+                            <p className="text-xs text-muted-foreground">Penumpang boleh naik</p>
+                          </div>
+                          <Switch
+                            id={`boarding-${index}`}
+                            checked={stop.boardingAllowed !== false}
+                            onCheckedChange={(checked) => updatePatternStop(index, 'boardingAllowed', checked)}
+                            data-testid={`switch-boarding-${index}`}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between rounded-lg border px-3 py-2.5 bg-background">
+                          <div>
+                            <p className="text-sm font-medium">Turun</p>
+                            <p className="text-xs text-muted-foreground">Penumpang boleh turun</p>
+                          </div>
+                          <Switch
+                            id={`alighting-${index}`}
+                            checked={stop.alightingAllowed !== false}
+                            onCheckedChange={(checked) => updatePatternStop(index, 'alightingAllowed', checked)}
+                            data-testid={`switch-alighting-${index}`}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -35,6 +35,7 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [openUpward, setOpenUpward] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -42,6 +43,14 @@ export function SearchableSelect({
 
   useEffect(() => {
     if (!open) return;
+
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      setOpenUpward(spaceBelow < 300 && spaceAbove > spaceBelow);
+    }
+
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
@@ -126,7 +135,13 @@ export function SearchableSelect({
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-background border border-border rounded-xl shadow-lg flex flex-col overflow-hidden" style={{ maxHeight: '280px' }}>
+        <div
+          className={cn(
+            'absolute z-50 left-0 right-0 bg-background border border-border rounded-xl shadow-lg flex flex-col overflow-hidden',
+            openUpward ? 'bottom-full mb-1' : 'top-full mt-1'
+          )}
+          style={{ maxHeight: '280px' }}
+        >
           <div className="p-2 border-b border-border flex-shrink-0">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -149,7 +164,7 @@ export function SearchableSelect({
               grouped.map(({ group, items }, gi) => (
                 <div key={gi}>
                   {group && (
-                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/30 border-b border-border/50">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/30 border-b border-border/50 sticky top-0">
                       {group}
                     </div>
                   )}
