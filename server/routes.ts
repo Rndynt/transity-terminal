@@ -398,7 +398,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/cost-templates', asyncHandler(async (req: any, res: any) => {
     const patternId = req.query.patternId as string | undefined;
     const templates = await storage.getTripCostTemplates(patternId);
-    res.json(templates);
+    const templatesWithItems = await Promise.all(
+      templates.map(async (t) => {
+        const items = await storage.getTripCostItems(t.id);
+        return { ...t, items };
+      })
+    );
+    res.json(templatesWithItems);
   }));
   app.get('/api/cost-templates/:id', asyncHandler(async (req: any, res: any) => {
     const template = await storage.getTripCostTemplateById(req.params.id);
