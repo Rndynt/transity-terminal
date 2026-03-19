@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,6 +63,8 @@ export default function TripPatternsManager() {
     tags: ''
   });
   const [filterCity, setFilterCity] = useState('');
+  const [showCodeSuggestions, setShowCodeSuggestions] = useState(false);
+  const codeInputRef = useRef<HTMLDivElement>(null);
   const [patternStops, setPatternStops] = useState<StopSequenceItem[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const { toast } = useToast();
@@ -160,6 +162,7 @@ export default function TripPatternsManager() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isDuplicateCode) return;
     const submitData = { ...formData, tags: formData.tags.split(',').map(t => t.trim()).filter(t => t) };
     if (editingPattern) {
       updateMutation.mutate({ id: editingPattern.id, data: submitData });
@@ -224,6 +227,21 @@ export default function TripPatternsManager() {
       toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menyimpan halte pola', variant: 'destructive' });
     }
   };
+
+  const isDuplicateCode = useMemo(() => {
+    const code = formData.code.trim();
+    if (!code) return false;
+    return patterns.some(p => p.code === code && p.id !== editingPattern?.id);
+  }, [formData.code, patterns, editingPattern]);
+
+  const codeSuggestions = useMemo(() => {
+    const code = formData.code.trim();
+    if (!code || code.length < 1) return [];
+    const lower = code.toLowerCase();
+    return patterns
+      .filter(p => p.id !== editingPattern?.id && p.code.toLowerCase().includes(lower))
+      .slice(0, 6);
+  }, [formData.code, patterns, editingPattern]);
 
   const availableCities = useMemo(() => {
     const set = new Set<string>();
@@ -304,14 +322,53 @@ export default function TripPatternsManager() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="code">Kode Pola <span className="text-destructive">*</span></Label>
-            <Input
-              id="code"
-              value={formData.code}
-              onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
-              placeholder="Contoh: JKT-BDG-C"
-              required
-              data-testid="input-code"
-            />
+            <div ref={codeInputRef} className="relative">
+              <Input
+                id="code"
+                value={formData.code}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, code: e.target.value.toUpperCase() }));
+                  setShowCodeSuggestions(true);
+                }}
+                onFocus={() => setShowCodeSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowCodeSuggestions(false), 150)}
+                placeholder="Contoh: JKT-BDG-C"
+                required
+                autoComplete="off"
+                className={isDuplicateCode ? 'border-destructive focus-visible:ring-destructive' : ''}
+                data-testid="input-code"
+              />
+              {showCodeSuggestions && codeSuggestions.length > 0 && (
+                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-md overflow-hidden">
+                  <p className="text-[10px] text-muted-foreground px-2.5 pt-1.5 pb-0.5 uppercase tracking-wide font-medium">Kode yang sudah ada</p>
+                  {codeSuggestions.map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onMouseDown={() => {
+                        setFormData(prev => ({ ...prev, code: p.code }));
+                        setShowCodeSuggestions(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-2.5 py-1.5 text-sm hover:bg-accent text-left"
+                      data-testid={`suggestion-${p.code}`}
+                    >
+                      <span className="font-mono font-medium text-foreground">{p.code}</span>
+                      <span className="text-muted-foreground text-xs truncate">{p.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {isDuplicateCode && (
+              <p className="text-xs text-destructive flex items-center gap-1" data-testid="error-duplicate-code">
+                <span>⚠</span> Kode <span className="font-mono font-medium">"{formData.code}"</span> sudah digunakan oleh pola lain.
+              </p>
+            )}
+            {!isDuplicateCode && formData.code.trim() && (
+              <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1" data-testid="info-code-available">
+                <span>✓</span> Kode tersedia
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="name">Nama Pola <span className="text-destructive">*</span></Label>

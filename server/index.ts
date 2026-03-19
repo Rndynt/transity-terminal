@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import { ZodError } from "zod";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { scheduler } from "./scheduler";
@@ -67,7 +68,29 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
-  app.use((err: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: Error & { status?: number; statusCode?: number; code?: string }, _req: Request, res: Response, _next: NextFunction) => {
+    // PostgreSQL unique constraint violation  (code 23505)
+    // detail example: "Key (code)=(JKT-BDG-A) already exists."
+    if (err.code === '23505') {
+      const detail: string = (err as any).detail ?? '';
+      const valueMatch = detail.match(/Key \([^)]+\)=\(([^)]+)\)/);
+      const fieldMatch = detail.match(/Key \(([^)]+)\)=/);
+      const value = valueMatch ? valueMatch[1] : null;
+      const field = fieldMatch ? fieldMatch[1] : 'data';
+      const msg = value
+        ? `Kode "${value}" sudah digunakan. Gunakan ${field} yang berbeda.`
+        : `Nilai ${field} sudah digunakan. Gunakan nilai yang berbeda.`;
+      res.status(409).json({ message: msg });
+      return;
+    }
+
+    // Zod validation error
+    if (err instanceof ZodError) {
+      const messages = err.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+      res.status(400).json({ message: `Data tidak valid: ${messages}` });
+      return;
+    }
+
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
