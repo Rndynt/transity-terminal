@@ -562,116 +562,36 @@ export default function TripsManager() {
               )}
             </div>
           ) : (
-            <Table data-testid="trips-table">
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-4">Rute Perjalanan</TableHead>
-                  <TableHead>Tgl. Layanan</TableHead>
-                  <TableHead>Jam Berangkat</TableHead>
-                  <TableHead>Kendaraan</TableHead>
-                  <TableHead>Layout Kursi</TableHead>
-                  <TableHead className="text-center">Kapasitas</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-10 pr-4" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* ── Mobile card list (< md) ── */}
+              <div className="md:hidden divide-y" data-testid="trips-cards">
                 {filteredTrips.map(trip => {
-                  const pattern = getPattern(trip.patternId);
-                  const vehicle = getVehicle(trip.vehicleId);
-                  const layout = getLayout(trip.layoutId || null);
+                  const pattern    = getPattern(trip.patternId);
+                  const vehicle    = getVehicle(trip.vehicleId);
+                  const layout     = getLayout(trip.layoutId || null);
                   const vehicleLayout = vehicle ? getLayout(vehicle.layoutId || null) : null;
                   const resolvedLayout = layout || vehicleLayout;
                   const departTime = getDepartureTime(trip);
 
                   return (
-                    <TableRow key={trip.id} className="group" data-testid={`trip-row-${trip.id}`}>
-                      {/* Rute */}
-                      <TableCell className="pl-4 py-3">
-                        <div className="flex items-start gap-2.5">
-                          <div className="mt-0.5 w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                            <MapPin className="w-3.5 h-3.5 text-primary" />
+                    <div key={trip.id} className="p-4 space-y-3" data-testid={`trip-card-${trip.id}`}>
+                      {/* Top row: route + actions */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                            <MapPin className="w-4 h-4 text-primary" />
                           </div>
                           <div className="min-w-0">
-                            <div className="font-medium text-sm text-foreground leading-tight">
-                              {pattern?.name || <span className="text-muted-foreground italic">Rute tidak ditemukan</span>}
+                            <div className="font-semibold text-base text-foreground leading-snug">
+                              {pattern?.name || <span className="text-muted-foreground italic text-sm">Rute tidak ditemukan</span>}
                             </div>
                             {pattern?.code && (
-                              <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                              <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded mt-1 inline-block">
                                 {pattern.code}
                               </span>
                             )}
                           </div>
                         </div>
-                      </TableCell>
-
-                      {/* Tanggal */}
-                      <TableCell className="py-3">
-                        <div className="text-sm font-medium text-foreground">
-                          {formatServiceDate(trip.serviceDate)}
-                        </div>
-                      </TableCell>
-
-                      {/* Jam Berangkat */}
-                      <TableCell className="py-3">
-                        {departTime ? (
-                          <div className="flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                            <span className="text-sm font-semibold tabular-nums">{departTime}</span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800">
-                            Belum diatur
-                          </span>
-                        )}
-                      </TableCell>
-
-                      {/* Kendaraan */}
-                      <TableCell className="py-3">
-                        {vehicle ? (
-                          <div className="flex items-center gap-1.5">
-                            <Bus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            <div className="min-w-0">
-                              <div className="text-sm font-medium">{vehicle.code}</div>
-                              <div className="text-xs text-muted-foreground font-mono">{vehicle.plate}</div>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">—</span>
-                        )}
-                      </TableCell>
-
-                      {/* Layout */}
-                      <TableCell className="py-3">
-                        <div className="flex items-center gap-1.5">
-                          <LayoutGrid className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium leading-tight">
-                              {resolvedLayout?.name || <span className="text-muted-foreground italic text-xs">Tidak ada</span>}
-                            </div>
-                            {layout && vehicle && layout.id !== vehicle.layoutId && (
-                              <span className="text-xs text-indigo-600 dark:text-indigo-400">override</span>
-                            )}
-                            {!layout && vehicleLayout && (
-                              <span className="text-xs text-muted-foreground">dari kendaraan</span>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
-
-                      {/* Kapasitas */}
-                      <TableCell className="text-center py-3">
-                        <span className="text-sm font-medium tabular-nums">{trip.capacity}</span>
-                        <span className="text-xs text-muted-foreground ml-0.5">kursi</span>
-                      </TableCell>
-
-                      {/* Status */}
-                      <TableCell className="py-3">
-                        <StatusBadge status={trip.status || 'scheduled'} />
-                      </TableCell>
-
-                      {/* Actions */}
-                      <TableCell className="pr-4 py-3">
                         <RowActionsMenu
                           actions={[
                             { label: 'Lihat Manifest', icon: <FileText className="h-3.5 w-3.5" />, onClick: () => setManifestTripId(trip.id) },
@@ -683,12 +603,209 @@ export default function TripsManager() {
                           ]}
                           data-testid={`actions-trip-${trip.id}`}
                         />
-                      </TableCell>
-                    </TableRow>
+                      </div>
+
+                      {/* Info grid */}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 pl-12">
+                        {/* Tanggal */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-0.5">Tanggal</p>
+                          <p className="text-sm font-medium">{formatServiceDate(trip.serviceDate)}</p>
+                        </div>
+
+                        {/* Jam Berangkat */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-0.5">Jam Berangkat</p>
+                          {departTime ? (
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span className="text-sm font-bold tabular-nums">{departTime}</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                              Belum diatur
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Kendaraan */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-0.5">Kendaraan</p>
+                          {vehicle ? (
+                            <div className="flex items-center gap-1.5">
+                              <Bus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              <div>
+                                <span className="text-sm font-medium">{vehicle.code}</span>
+                                <span className="text-xs text-muted-foreground font-mono ml-1.5">{vehicle.plate}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          )}
+                        </div>
+
+                        {/* Layout */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-0.5">Layout</p>
+                          <div className="flex items-center gap-1.5">
+                            <LayoutGrid className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <div>
+                              <span className="text-sm font-medium">
+                                {resolvedLayout?.name || <span className="text-muted-foreground italic">—</span>}
+                              </span>
+                              {layout && vehicle && layout.id !== vehicle.layoutId && (
+                                <span className="text-xs text-indigo-600 ml-1">override</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Kapasitas */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-0.5">Kapasitas</p>
+                          <p className="text-sm font-medium">{trip.capacity} <span className="text-muted-foreground font-normal">kursi</span></p>
+                        </div>
+
+                        {/* Status */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-0.5">Status</p>
+                          <StatusBadge status={trip.status || 'scheduled'} />
+                        </div>
+                      </div>
+                    </div>
                   );
                 })}
-              </TableBody>
-            </Table>
+              </div>
+
+              {/* ── Desktop table (≥ md) ── */}
+              <Table className="hidden md:table" data-testid="trips-table">
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="pl-4">Rute Perjalanan</TableHead>
+                    <TableHead>Tgl. Layanan</TableHead>
+                    <TableHead>Jam Berangkat</TableHead>
+                    <TableHead>Kendaraan</TableHead>
+                    <TableHead>Layout Kursi</TableHead>
+                    <TableHead className="text-center">Kapasitas</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-10 pr-4" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredTrips.map(trip => {
+                    const pattern    = getPattern(trip.patternId);
+                    const vehicle    = getVehicle(trip.vehicleId);
+                    const layout     = getLayout(trip.layoutId || null);
+                    const vehicleLayout = vehicle ? getLayout(vehicle.layoutId || null) : null;
+                    const resolvedLayout = layout || vehicleLayout;
+                    const departTime = getDepartureTime(trip);
+
+                    return (
+                      <TableRow key={trip.id} className="group" data-testid={`trip-row-${trip.id}`}>
+                        {/* Rute */}
+                        <TableCell className="pl-4 py-3">
+                          <div className="flex items-start gap-2.5">
+                            <div className="mt-0.5 w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                              <MapPin className="w-3.5 h-3.5 text-primary" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium text-sm text-foreground leading-tight">
+                                {pattern?.name || <span className="text-muted-foreground italic">Rute tidak ditemukan</span>}
+                              </div>
+                              {pattern?.code && (
+                                <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                                  {pattern.code}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+
+                        {/* Tanggal */}
+                        <TableCell className="py-3">
+                          <div className="text-sm font-medium text-foreground">
+                            {formatServiceDate(trip.serviceDate)}
+                          </div>
+                        </TableCell>
+
+                        {/* Jam Berangkat */}
+                        <TableCell className="py-3">
+                          {departTime ? (
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span className="text-sm font-semibold tabular-nums">{departTime}</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800">
+                              Belum diatur
+                            </span>
+                          )}
+                        </TableCell>
+
+                        {/* Kendaraan */}
+                        <TableCell className="py-3">
+                          {vehicle ? (
+                            <div className="flex items-center gap-1.5">
+                              <Bus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium">{vehicle.code}</div>
+                                <div className="text-xs text-muted-foreground font-mono">{vehicle.plate}</div>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">—</span>
+                          )}
+                        </TableCell>
+
+                        {/* Layout */}
+                        <TableCell className="py-3">
+                          <div className="flex items-center gap-1.5">
+                            <LayoutGrid className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium leading-tight">
+                                {resolvedLayout?.name || <span className="text-muted-foreground italic text-xs">Tidak ada</span>}
+                              </div>
+                              {layout && vehicle && layout.id !== vehicle.layoutId && (
+                                <span className="text-xs text-indigo-600 dark:text-indigo-400">override</span>
+                              )}
+                              {!layout && vehicleLayout && (
+                                <span className="text-xs text-muted-foreground">dari kendaraan</span>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+
+                        {/* Kapasitas */}
+                        <TableCell className="text-center py-3">
+                          <span className="text-sm font-medium tabular-nums">{trip.capacity}</span>
+                          <span className="text-xs text-muted-foreground ml-0.5">kursi</span>
+                        </TableCell>
+
+                        {/* Status */}
+                        <TableCell className="py-3">
+                          <StatusBadge status={trip.status || 'scheduled'} />
+                        </TableCell>
+
+                        {/* Actions */}
+                        <TableCell className="pr-4 py-3">
+                          <RowActionsMenu
+                            actions={[
+                              { label: 'Lihat Manifest', icon: <FileText className="h-3.5 w-3.5" />, onClick: () => setManifestTripId(trip.id) },
+                              { label: 'Atur Jadwal', icon: <Clock className="h-3.5 w-3.5" />, onClick: () => handleScheduling(trip) },
+                              { label: 'Turunkan Leg', icon: <Route className="h-3.5 w-3.5" />, onClick: () => handleDeriveLegs(trip.id), disabled: deriveLegsMutation.isPending },
+                              { label: 'Hitung Inventori', icon: <Grid3X3 className="h-3.5 w-3.5" />, onClick: () => handlePrecomputeInventory(trip.id), disabled: precomputeSeatInventoryMutation.isPending },
+                              { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(trip) },
+                              { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(trip.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                            ]}
+                            data-testid={`actions-trip-${trip.id}`}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </>
           )}
         </CardContent>
       </Card>
