@@ -7,6 +7,7 @@ import {
   insertTripPatternSchema, insertPatternStopSchema, insertTripBaseSchema, insertTripSchema,
   insertTripStopTimeSchema, insertPriceRuleSchema, insertBookingSchema,
   insertPassengerSchema, insertPaymentSchema, insertCargoShipmentSchema,
+  insertTripCostTemplateSchema, insertTripCostItemSchema,
   type Stop, type Outlet, type Vehicle, type Layout, type TripPattern, 
   type PatternStop, type TripBase, type Trip, type TripWithDetails, type TripStopTime, type TripLeg, 
   type SeatInventory, type PriceRule, type Booking, type Passenger, 
@@ -17,6 +18,8 @@ import {
   type InsertTripStopTime, type InsertPriceRule, type InsertBooking,
   type InsertPassenger, type InsertPayment, type InsertPrintJob, type InsertCargoShipment,
   type InsertCargoType, type InsertCargoRate,
+  type TripCostTemplate, type InsertTripCostTemplate,
+  type TripCostItem, type InsertTripCostItem,
   type CsoAvailableTrip
 } from "@shared/schema";
 
@@ -170,6 +173,19 @@ export interface IStorage {
   getCargoShipmentByWaybill(waybillNumber: string): Promise<CargoShipment | undefined>;
   createCargoShipment(data: InsertCargoShipment): Promise<CargoShipment>;
   updateCargoShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment>;
+
+  // Trip Cost Templates
+  getTripCostTemplates(patternId?: string): Promise<TripCostTemplate[]>;
+  getTripCostTemplateById(id: string): Promise<TripCostTemplate | undefined>;
+  createTripCostTemplate(data: InsertTripCostTemplate): Promise<TripCostTemplate>;
+  updateTripCostTemplate(id: string, data: Partial<InsertTripCostTemplate>): Promise<TripCostTemplate>;
+  deleteTripCostTemplate(id: string): Promise<void>;
+
+  // Trip Cost Items
+  getTripCostItems(templateId: string): Promise<TripCostItem[]>;
+  createTripCostItem(data: InsertTripCostItem): Promise<TripCostItem>;
+  updateTripCostItem(id: string, data: Partial<InsertTripCostItem>): Promise<TripCostItem>;
+  deleteTripCostItem(id: string): Promise<void>;
 
   // Utility
   tripHasBookings(tripId: string): Promise<boolean>;
@@ -377,6 +393,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/cargo', asyncHandler(cargoController.create.bind(cargoController)));
   app.put('/api/cargo/:id', asyncHandler(cargoController.update.bind(cargoController)));
   app.patch('/api/cargo/:id/status', asyncHandler(cargoController.updateStatus.bind(cargoController)));
+
+  // Trip Cost Templates routes
+  app.get('/api/cost-templates', asyncHandler(async (req: any, res: any) => {
+    const patternId = req.query.patternId as string | undefined;
+    const templates = await storage.getTripCostTemplates(patternId);
+    res.json(templates);
+  }));
+  app.get('/api/cost-templates/:id', asyncHandler(async (req: any, res: any) => {
+    const template = await storage.getTripCostTemplateById(req.params.id);
+    if (!template) return res.status(404).json({ message: 'Template tidak ditemukan' });
+    const items = await storage.getTripCostItems(req.params.id);
+    res.json({ ...template, items });
+  }));
+  app.post('/api/cost-templates', asyncHandler(async (req: any, res: any) => {
+    const parsed = insertTripCostTemplateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const template = await storage.createTripCostTemplate(parsed.data);
+    res.status(201).json(template);
+  }));
+  app.put('/api/cost-templates/:id', asyncHandler(async (req: any, res: any) => {
+    const parsed = insertTripCostTemplateSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const template = await storage.updateTripCostTemplate(req.params.id, parsed.data);
+    res.json(template);
+  }));
+  app.delete('/api/cost-templates/:id', asyncHandler(async (req: any, res: any) => {
+    await storage.deleteTripCostTemplate(req.params.id);
+    res.status(204).end();
+  }));
+
+  // Trip Cost Items routes
+  app.get('/api/cost-templates/:templateId/items', asyncHandler(async (req: any, res: any) => {
+    const items = await storage.getTripCostItems(req.params.templateId);
+    res.json(items);
+  }));
+  app.post('/api/cost-templates/:templateId/items', asyncHandler(async (req: any, res: any) => {
+    const parsed = insertTripCostItemSchema.safeParse({ ...req.body, templateId: req.params.templateId });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const item = await storage.createTripCostItem(parsed.data);
+    res.status(201).json(item);
+  }));
+  app.put('/api/cost-items/:id', asyncHandler(async (req: any, res: any) => {
+    const parsed = insertTripCostItemSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const item = await storage.updateTripCostItem(req.params.id, parsed.data);
+    res.json(item);
+  }));
+  app.delete('/api/cost-items/:id', asyncHandler(async (req: any, res: any) => {
+    await storage.deleteTripCostItem(req.params.id);
+    res.status(204).end();
+  }));
 
   // Seed data
   app.post('/api/seed', asyncHandler(async (req: any, res: any) => {

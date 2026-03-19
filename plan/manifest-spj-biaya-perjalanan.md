@@ -283,10 +283,10 @@ Permission matrix yang direncanakan:
 ## Definisi Selesai (Definition of Done)
 
 ### Fase 1 ✓ ketika:
-- [ ] Tabel `trip_cost_templates` dan `trip_cost_items` terbuat di DB
-- [ ] API CRUD semua endpoint berfungsi
-- [ ] UI Master Biaya bisa tambah/edit/hapus template dan item
-- [ ] Template bisa dilink ke trip_pattern
+- [x] Tabel `trip_cost_templates` dan `trip_cost_items` terbuat di DB
+- [x] API CRUD semua endpoint berfungsi
+- [x] UI Master Biaya bisa tambah/edit/hapus template dan item
+- [x] Template bisa dilink ke trip_pattern
 
 ### Fase 2 ✓ ketika:
 - [ ] API `/manifest` mengembalikan data lengkap (penumpang + kargo)

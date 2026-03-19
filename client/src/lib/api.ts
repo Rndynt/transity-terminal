@@ -230,6 +230,22 @@ export const cargoApi = {
   }
 };
 
+// Trip Cost Templates API
+export const costTemplatesApi = {
+  getAll: (patternId?: string) => {
+    const qs = patternId ? `?patternId=${patternId}` : '';
+    return fetch(`/api/cost-templates${qs}`).then(res => res.json());
+  },
+  getById: (id: string) => fetch(`/api/cost-templates/${id}`).then(res => res.json()),
+  create: (data: any) => apiRequest('POST', '/api/cost-templates', data).then(res => res.json()),
+  update: (id: string, data: any) => apiRequest('PUT', `/api/cost-templates/${id}`, data).then(res => res.json()),
+  delete: (id: string) => apiRequest('DELETE', `/api/cost-templates/${id}`),
+  getItems: (templateId: string) => fetch(`/api/cost-templates/${templateId}/items`).then(res => res.json()),
+  createItem: (templateId: string, data: any) => apiRequest('POST', `/api/cost-templates/${templateId}/items`, data).then(res => res.json()),
+  updateItem: (id: string, data: any) => apiRequest('PUT', `/api/cost-items/${id}`, data).then(res => res.json()),
+  deleteItem: (id: string) => apiRequest('DELETE', `/api/cost-items/${id}`)
+};
+
 // Seed API
 export const seedApi = {
   run: () => apiRequest('POST', '/api/seed').then(res => res.json())

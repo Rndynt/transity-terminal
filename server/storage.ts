@@ -3,11 +3,14 @@ import {
   drivers, stops, outlets, vehicles, layouts, tripPatterns, patternStops, tripBases,
   trips, tripStopTimes, tripLegs, seatInventory, seatHolds, priceRules, 
   bookings, passengers, payments, printJobs, cargoShipments, cargoTypes, cargoRates,
+  tripCostTemplates, tripCostItems,
   type Driver, type InsertDriver,
   type Stop, type Outlet, type Vehicle, type Layout, type TripPattern, 
   type PatternStop, type TripBase, type Trip, type TripWithDetails, type TripStopTime, type TripLeg, 
   type SeatInventory, type PriceRule, type Booking, type Passenger, 
   type Payment, type PrintJob, type CargoShipment, type CargoType, type CargoRate, type CsoAvailableTrip,
+  type TripCostTemplate, type InsertTripCostTemplate,
+  type TripCostItem, type InsertTripCostItem,
   type InsertStop, type InsertOutlet, type InsertVehicle, type InsertLayout,
   type InsertTripPattern, type InsertPatternStop, type InsertTripBase, type InsertTrip,
   type InsertTripStopTime, type InsertTripLeg, type InsertSeatInventory,
@@ -1043,6 +1046,53 @@ export class DatabaseStorage implements IStorage {
   async updateCargoShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment> {
     const [shipment] = await db.update(cargoShipments).set(data).where(eq(cargoShipments.id, id)).returning();
     return shipment;
+  }
+
+  // Trip Cost Templates
+  async getTripCostTemplates(patternId?: string): Promise<TripCostTemplate[]> {
+    if (patternId) {
+      return await db.select().from(tripCostTemplates).where(eq(tripCostTemplates.patternId, patternId)).orderBy(tripCostTemplates.name);
+    }
+    return await db.select().from(tripCostTemplates).orderBy(tripCostTemplates.name);
+  }
+
+  async getTripCostTemplateById(id: string): Promise<TripCostTemplate | undefined> {
+    const [template] = await db.select().from(tripCostTemplates).where(eq(tripCostTemplates.id, id));
+    return template;
+  }
+
+  async createTripCostTemplate(data: InsertTripCostTemplate): Promise<TripCostTemplate> {
+    const [template] = await db.insert(tripCostTemplates).values(data).returning();
+    return template;
+  }
+
+  async updateTripCostTemplate(id: string, data: Partial<InsertTripCostTemplate>): Promise<TripCostTemplate> {
+    const [template] = await db.update(tripCostTemplates).set(data).where(eq(tripCostTemplates.id, id)).returning();
+    return template;
+  }
+
+  async deleteTripCostTemplate(id: string): Promise<void> {
+    await db.delete(tripCostItems).where(eq(tripCostItems.templateId, id));
+    await db.delete(tripCostTemplates).where(eq(tripCostTemplates.id, id));
+  }
+
+  // Trip Cost Items
+  async getTripCostItems(templateId: string): Promise<TripCostItem[]> {
+    return await db.select().from(tripCostItems).where(eq(tripCostItems.templateId, templateId)).orderBy(tripCostItems.createdAt);
+  }
+
+  async createTripCostItem(data: InsertTripCostItem): Promise<TripCostItem> {
+    const [item] = await db.insert(tripCostItems).values(data).returning();
+    return item;
+  }
+
+  async updateTripCostItem(id: string, data: Partial<InsertTripCostItem>): Promise<TripCostItem> {
+    const [item] = await db.update(tripCostItems).set(data).where(eq(tripCostItems.id, id)).returning();
+    return item;
+  }
+
+  async deleteTripCostItem(id: string): Promise<void> {
+    await db.delete(tripCostItems).where(eq(tripCostItems.id, id));
   }
 }
 

@@ -645,6 +645,46 @@ export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, c
 export type Review = typeof reviews.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;
 
+// 21. Trip Cost Templates (Master Biaya Perjalanan)
+export const costItemCategoryEnum = pgEnum('cost_item_category', ['bbm', 'tol', 'makan', 'parkir', 'lainnya']);
+
+export const tripCostTemplates = pgTable("trip_cost_templates", {
+  id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  patternId: uuid("pattern_id").notNull().references(() => tripPatterns.id),
+  name:      text("name").notNull(),
+  isActive:  boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+});
+
+export const tripCostTemplatesRelations = relations(tripCostTemplates, ({ one, many }) => ({
+  pattern: one(tripPatterns, { fields: [tripCostTemplates.patternId], references: [tripPatterns.id] }),
+  items: many(tripCostItems)
+}));
+
+export const insertTripCostTemplateSchema = createInsertSchema(tripCostTemplates).omit({ id: true, createdAt: true });
+export type TripCostTemplate = typeof tripCostTemplates.$inferSelect;
+export type InsertTripCostTemplate = z.infer<typeof insertTripCostTemplateSchema>;
+
+// 22. Trip Cost Items
+export const tripCostItems = pgTable("trip_cost_items", {
+  id:         uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: uuid("template_id").notNull().references(() => tripCostTemplates.id),
+  category:   costItemCategoryEnum("category").notNull(),
+  label:      text("label").notNull(),
+  amount:     numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  isAdvance:  boolean("is_advance").notNull().default(true),
+  notes:      text("notes"),
+  createdAt:  timestamp("created_at", { withTimezone: true }).defaultNow()
+});
+
+export const tripCostItemsRelations = relations(tripCostItems, ({ one }) => ({
+  template: one(tripCostTemplates, { fields: [tripCostItems.templateId], references: [tripCostTemplates.id] })
+}));
+
+export const insertTripCostItemSchema = createInsertSchema(tripCostItems).omit({ id: true, createdAt: true });
+export type TripCostItem = typeof tripCostItems.$inferSelect;
+export type InsertTripCostItem = z.infer<typeof insertTripCostItemSchema>;
+
 // Keep existing user schema for compatibility (can be removed later)
 export const users = pgTable("users", {
   id:       uuid("id").primaryKey().default(sql`gen_random_uuid()`),
