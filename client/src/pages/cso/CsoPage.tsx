@@ -9,13 +9,14 @@ import PassengerForm from '@/components/cso/PassengerForm';
 import PrintPreview from '@/components/cso/PrintPreview';
 import CargoForm from '@/components/cso/CargoForm';
 import CargoWaybillPreview from '@/components/cso/CargoWaybillPreview';
+import ManifestDialog from '@/components/manifest/ManifestDialog';
 
 import { useBookingFlow } from '@/hooks/useBookingFlow';
 import { useSeatHold } from '@/hooks/useSeatHold';
 import {
   ChevronRight, ChevronLeft, Loader2, MapPin,
   Armchair, ArrowRight, Ticket, Package, Clock, CheckCircle2, Truck, XCircle,
-  Download, Upload, RotateCcw
+  Download, Upload, RotateCcw, FileText
 } from 'lucide-react';
 import type { Stop, Outlet, CsoAvailableTrip, CargoShipmentWithStops } from '@/types';
 
@@ -53,6 +54,7 @@ export default function CsoPage() {
   const [cargoResult, setCargoResult] = useState<CargoShipmentWithStops | null>(null);
   const [showCargoWaybill, setShowCargoWaybill] = useState(false);
   const [mobileCargoPanel, setMobileCargoPanel] = useState<'left' | 'right'>('left');
+  const [manifestDialogTripId, setManifestDialogTripId] = useState<string | null>(null);
 
   const tripId = selectedCsoTrip?.tripId;
   const isPastCsoTrip = selectedCsoTrip?.departAtAtOutlet
@@ -408,6 +410,15 @@ export default function CsoPage() {
                   </button>
                 </div>
                 <button
+                  onClick={() => setManifestDialogTripId(selectedCsoTrip.tripId)}
+                  className="px-2 md:px-3 py-1.5 bg-white border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap"
+                  data-testid="btn-cetak-manifest"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Cetak Manifest</span>
+                  <span className="sm:hidden">Manifest</span>
+                </button>
+                <button
                   onClick={handleBackToSelect}
                   className="px-2 md:px-3 py-1.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap"
                   data-testid="btn-change-route"
@@ -724,6 +735,12 @@ export default function CsoPage() {
           </div>
         </div>
       )}
+
+      <ManifestDialog
+        tripId={manifestDialogTripId}
+        open={!!manifestDialogTripId}
+        onOpenChange={(open) => { if (!open) setManifestDialogTripId(null); }}
+      />
     </div>
   );
 }
