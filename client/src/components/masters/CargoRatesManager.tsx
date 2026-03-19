@@ -3,13 +3,14 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { cargoRatesApi, cargoTypesApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { DollarSign, Plus, Pencil, Trash2, ArrowRight } from 'lucide-react';
+import { DollarSign, Plus, Pencil, Trash2, ArrowRight, Filter, X } from 'lucide-react';
 import { RowActionsMenu } from './RowActionsMenu';
 import type { CargoType, CargoRate, Stop, TripPattern, Trip } from '@shared/schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -42,6 +43,7 @@ export default function CargoRatesManager() {
   const [showForm, setShowForm] = useState(false);
   const [filterTypeId, setFilterTypeId] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [form, setForm] = useState({
     cargoTypeId: '', scope: 'global' as string, scopeRefId: '',
@@ -189,21 +191,63 @@ export default function CargoRatesManager() {
             <Plus className="w-4 h-4 mr-2" /> Tambah
           </Button>
         }
+        filterButton={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              data-testid="toggle-cargo-rate-filters"
+              className={showFilters || filterTypeId !== 'all' ? 'border-primary text-primary bg-primary/5' : ''}
+            >
+              <Filter className="h-4 w-4 mr-1.5" />
+              Filter
+              {filterTypeId !== 'all' && (
+                <span className="ml-1.5 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">1</span>
+              )}
+            </Button>
+            {filterTypeId !== 'all' && (
+              <Button variant="ghost" size="sm" onClick={() => setFilterTypeId('all')} className="text-muted-foreground hover:text-foreground">
+                <X className="h-3.5 w-3.5 mr-1" />
+                Hapus Filter
+              </Button>
+            )}
+          </div>
+        }
       />
 
-      <div className="flex justify-end">
-        <Select value={filterTypeId} onValueChange={setFilterTypeId}>
-          <SelectTrigger className="w-full sm:w-[180px] h-9" data-testid="filter-rate-type">
-            <SelectValue placeholder="Semua Jenis" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Jenis</SelectItem>
-            {cargoTypes.map(ct => (
-              <SelectItem key={ct.id} value={ct.id}>{ct.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Collapsible filter panel */}
+      {showFilters && (
+        <Card className="border-dashed">
+          <CardContent className="p-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Jenis Kargo</Label>
+              <SearchableSelect
+                value={filterTypeId}
+                options={[
+                  { value: 'all', label: 'Semua jenis' },
+                  ...cargoTypes.map(ct => ({ value: ct.id, label: ct.name }))
+                ]}
+                placeholder="Semua jenis"
+                searchPlaceholder="Cari jenis kargo..."
+                onChange={setFilterTypeId}
+                data-testid="filter-rate-type"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Active filter pill */}
+      {filterTypeId !== 'all' && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">Filter aktif:</span>
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+            Jenis: {cargoTypes.find(ct => ct.id === filterTypeId)?.name || filterTypeId}
+            <button onClick={() => setFilterTypeId('all')} className="hover:text-primary/60 ml-0.5"><X className="w-3 h-3" /></button>
+          </span>
+        </div>
+      )}
 
       <MasterFormDialog
         open={showForm}

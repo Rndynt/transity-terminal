@@ -12,10 +12,10 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { tripBasesApi, tripPatternsApi, layoutsApi, vehiclesApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Clock, MapPin, ArrowRight, Route, ChevronRight, ChevronsUpDown, Filter, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Clock, MapPin, ArrowRight, Route, ChevronRight, ChevronsUpDown, Filter, X, Search } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
-import MasterPageHeader from './MasterPageHeader';
 import { RowActionsMenu } from './RowActionsMenu';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 interface TripBase {
   id: string;
@@ -134,6 +134,7 @@ export default function TripBasesManager() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [filterCity, setFilterCity] = useState<string>('');
   const [filterPattern, setFilterPattern] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
   const editingStopTimesRef = useRef<DefaultStopTime[]>([]);
   const { toast } = useToast();
 
@@ -437,66 +438,126 @@ export default function TripBasesManager() {
   });
 
   return (
-    <div className="space-y-6" data-testid="trip-bases-manager">
-      <MasterPageHeader
-        title="Trip Bases Management"
-        description="Manage virtual scheduling templates for trips"
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder="Cari trip base..."
-        count={filteredTripBases.length}
-        action={
-          <Button onClick={openCreateDialog} data-testid="button-create-trip-base">
-            <Plus className="h-4 w-4 mr-2" />
-            Tambah Trip Base
-          </Button>
-        }
-      />
+    <div className="space-y-5" data-testid="trip-bases-manager">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-foreground">Dasar Trip</h3>
+            <span className="text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{filteredTripBases.length}</span>
+          </div>
+          <p className="text-sm text-muted-foreground mt-0.5">Template jadwal berulang berdasarkan pola rute</p>
+        </div>
+        <Button onClick={openCreateDialog} data-testid="button-create-trip-base">
+          <Plus className="h-4 w-4 mr-2" />
+          Tambah Dasar Trip
+        </Button>
+      </div>
 
-      {/* ── Filter bar ── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+      {/* Search + Filter button */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Cari nama, kode, atau rute..."
+            className="pl-9 pr-9"
+            data-testid="tripbase-search-input"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
 
-        <Select value={filterCity || '_all'} onValueChange={v => setFilterCity(v === '_all' ? '' : v)}>
-          <SelectTrigger className="h-8 text-sm w-[160px]" data-testid="filter-city">
-            <SelectValue placeholder="Semua Kota" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">Semua Kota</SelectItem>
-            {availableCities.map(city => (
-              <SelectItem key={city} value={city}>{city}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={filterPattern || '_all'} onValueChange={v => setFilterPattern(v === '_all' ? '' : v)}>
-          <SelectTrigger className="h-8 text-sm w-[200px]" data-testid="filter-pattern">
-            <SelectValue placeholder="Semua Rute" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">Semua Rute</SelectItem>
-            {patterns.map((p: TripPattern) => (
-              <SelectItem key={p.id} value={p.id}>
-                <span className="font-mono text-xs font-bold mr-1.5">{p.code}</span>
-                {p.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowFilters(!showFilters)}
+          data-testid="toggle-tripbase-filters"
+          className={showFilters || activeFilterCount > 0 ? 'border-primary text-primary bg-primary/5' : ''}
+        >
+          <Filter className="h-4 w-4 mr-1.5" />
+          Filter
+          {activeFilterCount > 0 && (
+            <span className="ml-1.5 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
+              {activeFilterCount}
+            </span>
+          )}
+        </Button>
 
         {activeFilterCount > 0 && (
-          <button
-            type="button"
-            onClick={() => { setFilterCity(''); setFilterPattern(''); }}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md border border-dashed"
-            data-testid="button-reset-filters"
-          >
-            <X className="h-3 w-3" />
-            Reset filter
-            <span className="ml-0.5 font-medium text-primary">({activeFilterCount})</span>
-          </button>
+          <Button variant="ghost" size="sm" onClick={() => { setFilterCity(''); setFilterPattern(''); }} className="text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5 mr-1" />
+            Hapus Filter
+          </Button>
         )}
       </div>
+
+      {/* Collapsible filter panel */}
+      {showFilters && (
+        <Card className="border-dashed">
+          <CardContent className="p-4 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Rute / Pola</Label>
+                <SearchableSelect
+                  value={filterPattern || 'all'}
+                  options={[
+                    { value: 'all', label: 'Semua rute' },
+                    ...patterns.map((p: TripPattern) => ({
+                      value: p.id,
+                      label: p.name,
+                      badge: p.code || undefined,
+                    }))
+                  ]}
+                  placeholder="Semua rute"
+                  searchPlaceholder="Cari nama atau kode rute..."
+                  onChange={v => setFilterPattern(v === 'all' ? '' : v)}
+                  data-testid="filter-pattern"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Kota</Label>
+                <SearchableSelect
+                  value={filterCity || 'all'}
+                  options={[
+                    { value: 'all', label: 'Semua kota' },
+                    ...availableCities.map(city => ({ value: city, label: city }))
+                  ]}
+                  placeholder="Semua kota"
+                  searchPlaceholder="Cari kota..."
+                  onChange={v => setFilterCity(v === 'all' ? '' : v)}
+                  data-testid="filter-city"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Active filter pills */}
+      {activeFilterCount > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">Filter aktif:</span>
+          {filterPattern && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+              Rute: {patterns.find((p: TripPattern) => p.id === filterPattern)?.name || filterPattern}
+              <button onClick={() => setFilterPattern('')} className="hover:text-primary/60 ml-0.5"><X className="w-3 h-3" /></button>
+            </span>
+          )}
+          {filterCity && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+              Kota: {filterCity}
+              <button onClick={() => setFilterCity('')} className="hover:text-primary/60 ml-0.5"><X className="w-3 h-3" /></button>
+            </span>
+          )}
+        </div>
+      )}
 
       <DeleteConfirmDialog
         open={!!deleteTarget}

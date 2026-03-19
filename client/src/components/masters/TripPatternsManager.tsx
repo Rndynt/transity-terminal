@@ -63,6 +63,7 @@ export default function TripPatternsManager() {
     tags: ''
   });
   const [filterCity, setFilterCity] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [showCodeSuggestions, setShowCodeSuggestions] = useState(false);
   const codeInputRef = useRef<HTMLDivElement>(null);
   const [patternStops, setPatternStops] = useState<StopSequenceItem[]>([]);
@@ -265,8 +266,10 @@ export default function TripPatternsManager() {
     return matchesSearch && matchesCity;
   });
 
+  const activeFilterCount = filterCity ? 1 : 0;
+
   return (
-    <div className="space-y-6" data-testid="trip-patterns-manager">
+    <div className="space-y-5" data-testid="trip-patterns-manager">
       <MasterPageHeader
         title="Pola Perjalanan"
         description="Kelola pola rute dan urutan pemberhentian"
@@ -280,34 +283,65 @@ export default function TripPatternsManager() {
             Tambah Pola
           </Button>
         }
+        filterButton={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              data-testid="toggle-pattern-filters"
+              className={showFilters || activeFilterCount > 0 ? 'border-primary text-primary bg-primary/5' : ''}
+            >
+              <Filter className="h-4 w-4 mr-1.5" />
+              Filter
+              {activeFilterCount > 0 && (
+                <span className="ml-1.5 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => setFilterCity('')} className="text-muted-foreground hover:text-foreground">
+                <X className="h-3.5 w-3.5 mr-1" />
+                Hapus Filter
+              </Button>
+            )}
+          </div>
+        }
       />
 
-      {/* ── Filter bar ── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <Select value={filterCity || '_all'} onValueChange={v => setFilterCity(v === '_all' ? '' : v)}>
-          <SelectTrigger className="h-8 text-sm w-[160px]" data-testid="filter-city">
-            <SelectValue placeholder="Semua Kota" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">Semua Kota</SelectItem>
-            {availableCities.map(city => (
-              <SelectItem key={city} value={city}>{city}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {filterCity && (
-          <button
-            type="button"
-            onClick={() => setFilterCity('')}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md border border-dashed"
-            data-testid="button-reset-filters"
-          >
-            <X className="h-3 w-3" />
-            Reset filter
-          </button>
-        )}
-      </div>
+      {/* Collapsible filter panel */}
+      {showFilters && (
+        <Card className="border-dashed">
+          <CardContent className="p-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Kota</Label>
+              <SearchableSelect
+                value={filterCity || 'all'}
+                options={[
+                  { value: 'all', label: 'Semua kota' },
+                  ...availableCities.map(city => ({ value: city, label: city }))
+                ]}
+                placeholder="Semua kota"
+                searchPlaceholder="Cari kota..."
+                onChange={v => setFilterCity(v === 'all' ? '' : v)}
+                data-testid="filter-city"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Active filter pill */}
+      {filterCity && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">Filter aktif:</span>
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+            Kota: {filterCity}
+            <button onClick={() => setFilterCity('')} className="hover:text-primary/60 ml-0.5"><X className="w-3 h-3" /></button>
+          </span>
+        </div>
+      )}
 
       <MasterFormDialog
         open={isDialogOpen}
