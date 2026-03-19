@@ -25,6 +25,25 @@ export const printStatusEnum = pgEnum('print_status', ['queued', 'sent', 'failed
 export const priceRuleScopeEnum = pgEnum('price_rule_scope', ['pattern', 'trip', 'leg', 'time']);
 export const ticketStatusEnum = pgEnum('ticket_status', ['active', 'canceled', 'refunded', 'checked_in', 'no_show']);
 
+// 0. Drivers
+export const driverStatusEnum = pgEnum('driver_status', ['active', 'inactive', 'suspended']);
+
+export const drivers = pgTable("drivers", {
+  id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code:        text("code").notNull().unique(),
+  name:        text("name").notNull(),
+  phone:       text("phone").notNull(),
+  licenseNo:   text("license_no").notNull(),
+  licenseType: text("license_type").notNull().default('B2'), // SIM B2 umum untuk kendaraan angkutan
+  status:      driverStatusEnum("status").notNull().default('active'),
+  notes:       text("notes"),
+  createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow()
+});
+
+export const insertDriverSchema = createInsertSchema(drivers).omit({ id: true, createdAt: true });
+export type Driver = typeof drivers.$inferSelect;
+export type InsertDriver = z.infer<typeof insertDriverSchema>;
+
 // 1. Stops
 export const stops = pgTable("stops", {
   id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -113,6 +132,7 @@ export const tripBases = pgTable("trip_bases", {
   sun:              boolean("sun").notNull().default(true),
   defaultLayoutId:  uuid("default_layout_id").references(() => layouts.id),
   defaultVehicleId: uuid("default_vehicle_id").references(() => vehicles.id),
+  defaultDriverId:  uuid("default_driver_id").references(() => drivers.id),
   capacity:         integer("capacity"),
   channelFlags:     jsonb("channel_flags").notNull().default(sql`'{"CSO":true,"WEB":false,"APP":false,"OTA":false}'`),
   defaultStopTimes: jsonb("default_stop_times").notNull(), // Default stop times as local time strings without date
@@ -134,6 +154,7 @@ export const trips = pgTable("trips", {
   vehicleId:        uuid("vehicle_id").notNull().references(() => vehicles.id),
   layoutId:         uuid("layout_id").references(() => layouts.id),
   capacity:         integer("capacity").notNull(),
+  driverId:         uuid("driver_id").references(() => drivers.id),
   originDepartHHMM: text("origin_depart_hhmm"),
   channelFlags:     jsonb("channel_flags").default(sql`'{"CSO":true,"WEB":false,"APP":false,"OTA":false}'`),
   createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow()
@@ -297,10 +318,16 @@ export const patternStopsRelations = relations(patternStops, ({ one }) => ({
   stop: one(stops, { fields: [patternStops.stopId], references: [stops.id] })
 }));
 
+export const driversRelations = relations(drivers, ({ many }) => ({
+  tripBases: many(tripBases),
+  trips: many(trips)
+}));
+
 export const tripBasesRelations = relations(tripBases, ({ one, many }) => ({
   pattern: one(tripPatterns, { fields: [tripBases.patternId], references: [tripPatterns.id] }),
   defaultLayout: one(layouts, { fields: [tripBases.defaultLayoutId], references: [layouts.id] }),
   defaultVehicle: one(vehicles, { fields: [tripBases.defaultVehicleId], references: [vehicles.id] }),
+  defaultDriver: one(drivers, { fields: [tripBases.defaultDriverId], references: [drivers.id] }),
   trips: many(trips)
 }));
 
@@ -308,6 +335,7 @@ export const tripsRelations = relations(trips, ({ one, many }) => ({
   pattern: one(tripPatterns, { fields: [trips.patternId], references: [tripPatterns.id] }),
   vehicle: one(vehicles, { fields: [trips.vehicleId], references: [vehicles.id] }),
   layout: one(layouts, { fields: [trips.layoutId], references: [layouts.id] }),
+  driver: one(drivers, { fields: [trips.driverId], references: [drivers.id] }),
   base: one(tripBases, { fields: [trips.baseId], references: [tripBases.id] }),
   tripStopTimes: many(tripStopTimes),
   tripLegs: many(tripLegs),
@@ -393,6 +421,8 @@ export type TripWithDetails = Trip & {
   patternCode?: string | null;
   vehicleCode?: string | null;
   vehiclePlate?: string | null;
+  driverName?: string | null;
+  driverCode?: string | null;
   scheduleTime?: string | null;
 };
 

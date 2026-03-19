@@ -2,7 +2,7 @@ import { Link, useLocation, useSearch } from "wouter";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  MapPin, Store, Truck, LayoutGrid, Route, Calendar, DollarSign,
+  MapPin, Store, Truck, UserCheck, LayoutGrid, Route, Calendar, DollarSign,
   Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag
 } from "lucide-react";
 
@@ -21,6 +21,7 @@ const NAV_SECTIONS = [
       { name: "Stops", path: "/masters?tab=stops", icon: MapPin },
       { name: "Outlets", path: "/masters?tab=outlets", icon: Store },
       { name: "Vehicles", path: "/masters?tab=vehicles", icon: Truck },
+      { name: "Driver", path: "/masters?tab=drivers", icon: UserCheck },
       { name: "Layouts", path: "/masters?tab=layouts", icon: LayoutGrid },
       { name: "Trip Patterns", path: "/masters?tab=patterns", icon: Route },
       { name: "Trips", path: "/masters?tab=trips", icon: Calendar },

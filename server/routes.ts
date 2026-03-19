@@ -11,6 +11,7 @@ import {
   type PatternStop, type TripBase, type Trip, type TripWithDetails, type TripStopTime, type TripLeg, 
   type SeatInventory, type PriceRule, type Booking, type Passenger, 
   type Payment, type PrintJob, type CargoShipment, type CargoType, type CargoRate,
+  type Driver, type InsertDriver,
   type InsertStop, type InsertOutlet, type InsertVehicle, type InsertLayout,
   type InsertTripPattern, type InsertPatternStop, type InsertTripBase, type InsertTrip,
   type InsertTripStopTime, type InsertPriceRule, type InsertBooking,
@@ -36,6 +37,13 @@ export interface ManifestEntry {
 }
 
 export interface IStorage {
+  // Drivers
+  getDrivers(): Promise<Driver[]>;
+  getDriverById(id: string): Promise<Driver | undefined>;
+  createDriver(data: InsertDriver): Promise<Driver>;
+  updateDriver(id: string, data: Partial<InsertDriver>): Promise<Driver>;
+  deleteDriver(id: string): Promise<void>;
+
   // Stops
   getStops(): Promise<Stop[]>;
   getStopById(id: string): Promise<Stop | undefined>;
@@ -170,6 +178,7 @@ export interface IStorage {
 }
 
 import { storage } from "./storage";
+import { DriversController } from "./modules/drivers/drivers.controller";
 import { StopsController } from "./modules/stops/stops.controller";
 import { OutletsController } from "./modules/outlets/outlets.controller";
 import { VehiclesController } from "./modules/vehicles/vehicles.controller";
@@ -189,6 +198,7 @@ import { appAuthMiddleware, optionalAuthMiddleware } from "./modules/app/app.aut
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize controllers
+  const driversController = new DriversController(storage);
   const stopsController = new StopsController(storage);
   const outletsController = new OutletsController(storage);
   const vehiclesController = new VehiclesController(storage);
@@ -210,6 +220,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const asyncHandler = (fn: Function) => (req: any, res: any, next: any) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
+
+  // Drivers routes
+  app.get('/api/drivers', asyncHandler(driversController.getAll.bind(driversController)));
+  app.get('/api/drivers/:id', asyncHandler(driversController.getById.bind(driversController)));
+  app.post('/api/drivers', asyncHandler(driversController.create.bind(driversController)));
+  app.put('/api/drivers/:id', asyncHandler(driversController.update.bind(driversController)));
+  app.delete('/api/drivers/:id', asyncHandler(driversController.delete.bind(driversController)));
 
   // Stops routes
   app.get('/api/stops', asyncHandler(stopsController.getAll.bind(stopsController)));

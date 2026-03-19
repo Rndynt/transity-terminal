@@ -1,8 +1,9 @@
 import { IStorage, ManifestEntry } from "./routes";
 import { 
-  stops, outlets, vehicles, layouts, tripPatterns, patternStops, tripBases,
+  drivers, stops, outlets, vehicles, layouts, tripPatterns, patternStops, tripBases,
   trips, tripStopTimes, tripLegs, seatInventory, seatHolds, priceRules, 
   bookings, passengers, payments, printJobs, cargoShipments, cargoTypes, cargoRates,
+  type Driver, type InsertDriver,
   type Stop, type Outlet, type Vehicle, type Layout, type TripPattern, 
   type PatternStop, type TripBase, type Trip, type TripWithDetails, type TripStopTime, type TripLeg, 
   type SeatInventory, type PriceRule, type Booking, type Passenger, 
@@ -19,6 +20,30 @@ import { eq, and, desc, sql, inArray, isNull } from "drizzle-orm";
 import { fromZonedHHMMToUtc } from "./utils/timezone";
 
 export class DatabaseStorage implements IStorage {
+  // Drivers
+  async getDrivers(): Promise<Driver[]> {
+    return await db.select().from(drivers).orderBy(drivers.name);
+  }
+
+  async getDriverById(id: string): Promise<Driver | undefined> {
+    const [driver] = await db.select().from(drivers).where(eq(drivers.id, id));
+    return driver;
+  }
+
+  async createDriver(data: InsertDriver): Promise<Driver> {
+    const [driver] = await db.insert(drivers).values(data).returning();
+    return driver;
+  }
+
+  async updateDriver(id: string, data: Partial<InsertDriver>): Promise<Driver> {
+    const [driver] = await db.update(drivers).set(data).where(eq(drivers.id, id)).returning();
+    return driver;
+  }
+
+  async deleteDriver(id: string): Promise<void> {
+    await db.delete(drivers).where(eq(drivers.id, id));
+  }
+
   // Stops
   async getStops(): Promise<Stop[]> {
     return await db.select().from(stops).orderBy(stops.name);
@@ -216,6 +241,7 @@ export class DatabaseStorage implements IStorage {
       status: trips.status,
       channelFlags: trips.channelFlags,
       baseId: trips.baseId,
+      driverId: trips.driverId,
       originDepartHHMM: trips.originDepartHHMM,
       createdAt: trips.createdAt,
       // Joined fields
@@ -223,6 +249,8 @@ export class DatabaseStorage implements IStorage {
       patternCode: tripPatterns.code,
       vehicleCode: vehicles.code,
       vehiclePlate: vehicles.plate,
+      driverName: drivers.name,
+      driverCode: drivers.code,
       // Get earliest departure time as schedule time
       scheduleTime: sql<string>`(
         SELECT MIN(depart_at) 
@@ -232,7 +260,8 @@ export class DatabaseStorage implements IStorage {
     })
     .from(trips)
     .leftJoin(tripPatterns, eq(trips.patternId, tripPatterns.id))
-    .leftJoin(vehicles, eq(trips.vehicleId, vehicles.id));
+    .leftJoin(vehicles, eq(trips.vehicleId, vehicles.id))
+    .leftJoin(drivers, eq(trips.driverId, drivers.id));
     
     if (serviceDate) {
       return await query.where(eq(trips.serviceDate, serviceDate)).orderBy(trips.serviceDate);

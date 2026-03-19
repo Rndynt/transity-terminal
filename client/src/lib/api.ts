@@ -3,8 +3,17 @@ import type {
   Stop, Outlet, Vehicle, Layout, TripPattern, PatternStop,
   Trip, TripWithDetails, TripStopTime, PriceRule, Booking,
   SeatmapResponse, HoldResponse, CreateBookingRequest, CreateHoldRequest,
-  CsoAvailableTrip
+  CsoAvailableTrip, Driver
 } from "@/types";
+
+// Drivers API
+export const driversApi = {
+  getAll: () => fetch('/api/drivers').then(res => res.json()) as Promise<Driver[]>,
+  getById: (id: string) => fetch(`/api/drivers/${id}`).then(res => res.json()) as Promise<Driver>,
+  create: (data: any) => apiRequest('POST', '/api/drivers', data).then(res => res.json()),
+  update: (id: string, data: any) => apiRequest('PUT', `/api/drivers/${id}`, data).then(res => res.json()),
+  delete: (id: string) => apiRequest('DELETE', `/api/drivers/${id}`)
+};
 
 // Stops API
 export const stopsApi = {

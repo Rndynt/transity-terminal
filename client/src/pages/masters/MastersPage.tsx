@@ -13,6 +13,7 @@ import {
   MapPin,
   Store,
   Bus,
+  UserCheck,
   LayoutGrid,
   Route,
   CalendarPlus,
@@ -24,6 +25,7 @@ import {
 import StopsManager from '@/components/masters/StopsManager';
 import OutletsManager from '@/components/masters/OutletsManager';
 import VehiclesManager from '@/components/masters/VehiclesManager';
+import DriversManager from '@/components/masters/DriversManager';
 import LayoutsManager from '@/components/masters/LayoutsManager';
 import TripPatternsManager from '@/components/masters/TripPatternsManager';
 import TripBasesManager from '@/components/masters/TripBasesManager';
@@ -60,6 +62,7 @@ export default function MastersPage() {
     { id: 'stops', label: 'Halte', icon: MapPin, component: StopsManager },
     { id: 'outlets', label: 'Outlet', icon: Store, component: OutletsManager },
     { id: 'vehicles', label: 'Kendaraan', icon: Bus, component: VehiclesManager },
+    { id: 'drivers', label: 'Driver', icon: UserCheck, component: DriversManager },
     { id: 'layouts', label: 'Layout Kursi', icon: LayoutGrid, component: LayoutsManager },
     { id: 'patterns', label: 'Pola Rute', icon: Route, component: TripPatternsManager },
     { id: 'trip-bases', label: 'Dasar Trip', icon: CalendarPlus, component: TripBasesManager },
