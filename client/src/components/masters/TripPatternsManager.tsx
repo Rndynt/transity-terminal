@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,10 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { tripPatternsApi, layoutsApi, stopsApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, MapPin } from 'lucide-react';
+import { Plus, Pencil, Trash2, MapPin, Filter, X } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
@@ -22,6 +23,7 @@ import type { TripPattern, Layout, Stop } from '@/types';
 interface TripPatternFormData {
   code: string;
   name: string;
+  note: string;
   vehicleClass: string;
   defaultLayoutId: string;
   active: boolean;
@@ -54,11 +56,13 @@ export default function TripPatternsManager() {
   const [formData, setFormData] = useState<TripPatternFormData>({
     code: '',
     name: '',
+    note: '',
     vehicleClass: '',
     defaultLayoutId: '',
     active: true,
     tags: ''
   });
+  const [filterCity, setFilterCity] = useState('');
   const [patternStops, setPatternStops] = useState<StopSequenceItem[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const { toast } = useToast();
@@ -131,7 +135,7 @@ export default function TripPatternsManager() {
   });
 
   const resetForm = () => {
-    setFormData({ code: '', name: '', vehicleClass: '', defaultLayoutId: '', active: true, tags: '' });
+    setFormData({ code: '', name: '', note: '', vehicleClass: '', defaultLayoutId: '', active: true, tags: '' });
   };
 
   const handleCreate = () => {
@@ -145,6 +149,7 @@ export default function TripPatternsManager() {
     setFormData({
       code: pattern.code,
       name: pattern.name,
+      note: pattern.note || '',
       vehicleClass: pattern.vehicleClass || '',
       defaultLayoutId: pattern.defaultLayoutId || '',
       active: pattern.active !== false,
@@ -220,10 +225,27 @@ export default function TripPatternsManager() {
     }
   };
 
-  const filteredPatterns = patterns.filter(pattern =>
-    pattern.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    pattern.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const availableCities = useMemo(() => {
+    const set = new Set<string>();
+    patterns.forEach(p => {
+      p.name.split(' → ').forEach(city => {
+        const trimmed = city.trim();
+        if (trimmed) set.add(trimmed);
+      });
+    });
+    return Array.from(set).sort();
+  }, [patterns]);
+
+  const filteredPatterns = patterns.filter(pattern => {
+    const matchesSearch =
+      pattern.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      pattern.name.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesCity = !filterCity ||
+      pattern.name.split(' → ').some(c => c.trim() === filterCity);
+
+    return matchesSearch && matchesCity;
+  });
 
   return (
     <div className="space-y-6" data-testid="trip-patterns-manager">
@@ -241,6 +263,33 @@ export default function TripPatternsManager() {
           </Button>
         }
       />
+
+      {/* ── Filter bar ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <Select value={filterCity || '_all'} onValueChange={v => setFilterCity(v === '_all' ? '' : v)}>
+          <SelectTrigger className="h-8 text-sm w-[160px]" data-testid="filter-city">
+            <SelectValue placeholder="Semua Kota" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">Semua Kota</SelectItem>
+            {availableCities.map(city => (
+              <SelectItem key={city} value={city}>{city}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {filterCity && (
+          <button
+            type="button"
+            onClick={() => setFilterCity('')}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md border border-dashed"
+            data-testid="button-reset-filters"
+          >
+            <X className="h-3 w-3" />
+            Reset filter
+          </button>
+        )}
+      </div>
 
       <MasterFormDialog
         open={isDialogOpen}
@@ -270,11 +319,23 @@ export default function TripPatternsManager() {
               id="name"
               value={formData.name}
               onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              placeholder="Contoh: Jakarta–Bandung via Purwakarta"
+              placeholder="Contoh: Jakarta → Bandung"
               required
               data-testid="input-name"
             />
           </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="note">
+            Note <span className="text-muted-foreground text-xs">(opsional)</span>
+          </Label>
+          <Input
+            id="note"
+            value={formData.note}
+            onChange={(e) => setFormData(prev => ({ ...prev, note: e.target.value }))}
+            placeholder="Contoh: Via Cirebon, Semarang · Eksekutif"
+            data-testid="input-note"
+          />
         </div>
 
         <SectionDivider label="Konfigurasi Armada" />
@@ -455,7 +516,12 @@ export default function TripPatternsManager() {
                   filteredPatterns.map(pattern => (
                     <TableRow key={pattern.id} data-testid={`pattern-row-${pattern.code}`}>
                       <TableCell className="font-mono font-medium">{pattern.code}</TableCell>
-                      <TableCell>{pattern.name}</TableCell>
+                      <TableCell>
+                        <p className="font-medium">{pattern.name}</p>
+                        {pattern.note && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{pattern.note}</p>
+                        )}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{pattern.vehicleClass || '-'}</TableCell>
                       <TableCell>{getLayoutName(pattern.defaultLayoutId || '')}</TableCell>
                       <TableCell>

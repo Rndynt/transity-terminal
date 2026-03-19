@@ -93,6 +93,7 @@ export const tripPatterns = pgTable("trip_patterns", {
   id:              uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   code:            text("code").notNull().unique(),
   name:            text("name").notNull(),
+  note:            text("note"),
   active:          boolean("active").default(true),
   vehicleClass:    text("vehicle_class"),
   defaultLayoutId: uuid("default_layout_id").references(() => layouts.id),

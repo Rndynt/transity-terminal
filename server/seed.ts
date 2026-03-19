@@ -216,12 +216,12 @@ export async function seedData() {
 
   const channelAll = { CSO: true, WEB: true, APP: true, OTA: false };
 
-  const patternJktSby = await storage.createTripPattern({ code: "JKT-SBY", name: "Jakarta → Surabaya (via Cirebon, Semarang, Yogyakarta, Solo)", vehicleClass: "ekonomi",   defaultLayoutId: layoutEkonomi.id,   active: true, tags: ["intercity", "ekonomi"] });
-  const patternSbyJkt = await storage.createTripPattern({ code: "SBY-JKT", name: "Surabaya → Jakarta (via Solo, Yogyakarta, Semarang, Cirebon)", vehicleClass: "ekonomi",   defaultLayoutId: layoutEkonomi.id,   active: true, tags: ["intercity", "ekonomi"] });
-  const patternJktYgy = await storage.createTripPattern({ code: "JKT-YGY", name: "Jakarta → Yogyakarta (via Bandung, Cirebon, Semarang)",         vehicleClass: "eksekutif", defaultLayoutId: layoutEksekutif.id, active: true, tags: ["intercity", "eksekutif"] });
-  const patternYgyJkt = await storage.createTripPattern({ code: "YGY-JKT", name: "Yogyakarta → Jakarta (via Semarang, Cirebon, Bandung)",         vehicleClass: "eksekutif", defaultLayoutId: layoutEksekutif.id, active: true, tags: ["intercity", "eksekutif"] });
-  const patternJktBdg = await storage.createTripPattern({ code: "JKT-BDG", name: "Jakarta → Bandung (Express)",                                   vehicleClass: "ekonomi",   defaultLayoutId: layoutEkonomi.id,   active: true, tags: ["express", "ekonomi"] });
-  const patternBdgJkt = await storage.createTripPattern({ code: "BDG-JKT", name: "Bandung → Jakarta (Express)",                                   vehicleClass: "ekonomi",   defaultLayoutId: layoutEkonomi.id,   active: true, tags: ["express", "ekonomi"] });
+  const patternJktSby = await storage.createTripPattern({ code: "JKT-SBY", name: "Jakarta → Surabaya", note: "Via Cirebon, Semarang, Yogyakarta, Solo",  vehicleClass: "ekonomi",   defaultLayoutId: layoutEkonomi.id,   active: true, tags: ["intercity", "ekonomi"] });
+  const patternSbyJkt = await storage.createTripPattern({ code: "SBY-JKT", name: "Surabaya → Jakarta", note: "Via Solo, Yogyakarta, Semarang, Cirebon",  vehicleClass: "ekonomi",   defaultLayoutId: layoutEkonomi.id,   active: true, tags: ["intercity", "ekonomi"] });
+  const patternJktYgy = await storage.createTripPattern({ code: "JKT-YGY", name: "Jakarta → Yogyakarta", note: "Via Bandung, Cirebon, Semarang · Eksekutif", vehicleClass: "eksekutif", defaultLayoutId: layoutEksekutif.id, active: true, tags: ["intercity", "eksekutif"] });
+  const patternYgyJkt = await storage.createTripPattern({ code: "YGY-JKT", name: "Yogyakarta → Jakarta", note: "Via Semarang, Cirebon, Bandung · Eksekutif", vehicleClass: "eksekutif", defaultLayoutId: layoutEksekutif.id, active: true, tags: ["intercity", "eksekutif"] });
+  const patternJktBdg = await storage.createTripPattern({ code: "JKT-BDG", name: "Jakarta → Bandung",   note: "Ekspres",                                    vehicleClass: "ekonomi",   defaultLayoutId: layoutEkonomi.id,   active: true, tags: ["express", "ekonomi"] });
+  const patternBdgJkt = await storage.createTripPattern({ code: "BDG-JKT", name: "Bandung → Jakarta",   note: "Ekspres",                                    vehicleClass: "ekonomi",   defaultLayoutId: layoutEkonomi.id,   active: true, tags: ["express", "ekonomi"] });
 
   // Pattern Stops: JKT → SBY (seq 1-6)
   await storage.createPatternStop({ patternId: patternJktSby.id, stopId: jakartaStop.id,    stopSequence: 1, dwellSeconds: 0,    boardingAllowed: true,  alightingAllowed: false });

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment } from 'react';
+import { useState, useEffect, useRef, Fragment, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { tripBasesApi, tripPatternsApi, layoutsApi, vehiclesApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Clock, MapPin, ArrowRight, Route, ChevronRight, ChevronsUpDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Clock, MapPin, ArrowRight, Route, ChevronRight, ChevronsUpDown, Filter, X } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import { RowActionsMenu } from './RowActionsMenu';
@@ -46,6 +46,7 @@ interface TripPattern {
   id: string;
   code: string;
   name: string;
+  note?: string;
 }
 
 interface Layout {
@@ -131,6 +132,8 @@ export default function TripBasesManager() {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [dialogOpenKey, setDialogOpenKey] = useState(0);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [filterCity, setFilterCity] = useState<string>('');
+  const [filterPattern, setFilterPattern] = useState<string>('');
   const editingStopTimesRef = useRef<DefaultStopTime[]>([]);
   const { toast } = useToast();
 
@@ -400,14 +403,37 @@ export default function TripBasesManager() {
     ));
   };
 
+  const availableCities = useMemo(() => {
+    const set = new Set<string>();
+    patterns.forEach((p: TripPattern) => {
+      p.name.split(' → ').forEach(city => {
+        const trimmed = city.trim();
+        if (trimmed) set.add(trimmed);
+      });
+    });
+    return Array.from(set).sort();
+  }, [patterns]);
+
+  const activeFilterCount = (filterCity ? 1 : 0) + (filterPattern ? 1 : 0);
+
   const filteredTripBases = tripBases.filter((base: TripBase) => {
-    const pattern = patterns.find(p => p.id === base.patternId);
+    const pattern = patterns.find((p: TripPattern) => p.id === base.patternId);
     const searchLower = searchQuery.toLowerCase();
-    return (
+
+    const matchesSearch = !searchQuery || (
       base.name.toLowerCase().includes(searchLower) ||
       (base.code && base.code.toLowerCase().includes(searchLower)) ||
       (pattern && (pattern.code.toLowerCase().includes(searchLower) || pattern.name.toLowerCase().includes(searchLower)))
     );
+
+    const matchesCity = !filterCity || (() => {
+      if (!pattern) return false;
+      return pattern.name.split(' → ').some(c => c.trim() === filterCity);
+    })();
+
+    const matchesPattern = !filterPattern || base.patternId === filterPattern;
+
+    return matchesSearch && matchesCity && matchesPattern;
   });
 
   return (
@@ -426,6 +452,51 @@ export default function TripBasesManager() {
           </Button>
         }
       />
+
+      {/* ── Filter bar ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+
+        <Select value={filterCity || '_all'} onValueChange={v => setFilterCity(v === '_all' ? '' : v)}>
+          <SelectTrigger className="h-8 text-sm w-[160px]" data-testid="filter-city">
+            <SelectValue placeholder="Semua Kota" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">Semua Kota</SelectItem>
+            {availableCities.map(city => (
+              <SelectItem key={city} value={city}>{city}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={filterPattern || '_all'} onValueChange={v => setFilterPattern(v === '_all' ? '' : v)}>
+          <SelectTrigger className="h-8 text-sm w-[200px]" data-testid="filter-pattern">
+            <SelectValue placeholder="Semua Rute" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">Semua Rute</SelectItem>
+            {patterns.map((p: TripPattern) => (
+              <SelectItem key={p.id} value={p.id}>
+                <span className="font-mono text-xs font-bold mr-1.5">{p.code}</span>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {activeFilterCount > 0 && (
+          <button
+            type="button"
+            onClick={() => { setFilterCity(''); setFilterPattern(''); }}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md border border-dashed"
+            data-testid="button-reset-filters"
+          >
+            <X className="h-3 w-3" />
+            Reset filter
+            <span className="ml-0.5 font-medium text-primary">({activeFilterCount})</span>
+          </button>
+        )}
+      </div>
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
@@ -518,11 +589,18 @@ export default function TripBasesManager() {
                     <span className="font-mono text-xs font-bold text-primary tracking-wider whitespace-nowrap shrink-0">
                       {pattern?.code || patternId.slice(0, 8)}
                     </span>
-                    {/* name — truncates cleanly */}
+                    {/* name + note — stacked, truncates cleanly */}
                     {pattern?.name && (
-                      <span className="text-sm font-medium text-foreground truncate min-w-0 flex-1">
-                        {pattern.name}
-                      </span>
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <span className="text-sm font-medium text-foreground truncate block">
+                          {pattern.name}
+                        </span>
+                        {pattern?.note && (
+                          <span className="text-[11px] text-muted-foreground truncate block leading-tight">
+                            {pattern.note}
+                          </span>
+                        )}
+                      </div>
                     )}
                     {/* right side summary — never wraps */}
                     <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 whitespace-nowrap pl-2">
