@@ -172,7 +172,7 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
         data-testid="manifest-dialog"
       >
         {/* Non-printable dialog header */}
-        <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0 print:hidden flex-row items-center justify-between">
+        <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0 print:hidden pr-12">
           <DialogTitle className="flex items-center gap-2 text-base font-semibold">
             <Bus className="w-4 h-4 text-primary" />
             Manifest Perjalanan
@@ -182,38 +182,21 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
               </span>
             )}
           </DialogTitle>
-          <div className="flex items-center gap-3">
-            {manifest && (
-              <div className="flex items-center gap-1.5 text-xs">
-                {firstPrintedAt ? (
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    <Clock className="w-3 h-3" />
-                    Cetak pertama: <span className="font-medium text-foreground">{formatDateTime(firstPrintedAt)}</span>
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 text-amber-600">
-                    <AlertCircle className="w-3 h-3" />
-                    Belum pernah dicetak
-                  </span>
-                )}
-              </div>
-            )}
-            <Button
-              size="sm"
-              variant="default"
-              onClick={handlePrint}
-              disabled={isLoading || !!error || printMutation.isPending}
-              className="gap-1.5"
-              data-testid="button-print-manifest"
-            >
-              {printMutation.isPending ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          {manifest && (
+            <div className="flex items-center gap-1.5 text-xs mt-0.5">
+              {firstPrintedAt ? (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <Clock className="w-3 h-3" />
+                  Cetak pertama: <span className="font-medium text-foreground">{formatDateTime(firstPrintedAt)}</span>
+                </span>
               ) : (
-                <Printer className="w-3.5 h-3.5" />
+                <span className="flex items-center gap-1 text-amber-600">
+                  <AlertCircle className="w-3 h-3" />
+                  Belum pernah dicetak
+                </span>
               )}
-              Cetak Manifest
-            </Button>
-          </div>
+            </div>
+          )}
         </DialogHeader>
 
         {/* Scrollable content — screen view */}
@@ -426,8 +409,23 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
         {/* Thermal print layout — hidden on screen, shown only when printing */}
         {manifest && <ThermalManifest manifest={manifest} />}
 
-        {/* Bottom close bar */}
-        <div className="px-6 py-3 border-t shrink-0 bg-background flex justify-end print:hidden">
+        {/* Bottom action bar */}
+        <div className="px-6 py-3 border-t shrink-0 bg-background flex items-center justify-between print:hidden">
+          <Button
+            size="sm"
+            variant="default"
+            onClick={handlePrint}
+            disabled={isLoading || !!error || printMutation.isPending}
+            className="gap-1.5"
+            data-testid="button-print-manifest"
+          >
+            {printMutation.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Printer className="w-3.5 h-3.5" />
+            )}
+            Cetak Manifest
+          </Button>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             <X className="w-3.5 h-3.5 mr-1.5" />
             Tutup
