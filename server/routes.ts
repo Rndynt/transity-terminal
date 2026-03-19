@@ -39,6 +39,45 @@ export interface ManifestEntry {
   createdAt: Date | null;
 }
 
+export interface ManifestCargoEntry {
+  waybillNumber: string;
+  senderName: string;
+  recipientName: string;
+  itemDescription: string;
+  quantity: number;
+  weightKg: string | null;
+  totalAmount: string;
+  originStopName: string | null;
+  destinationStopName: string | null;
+}
+
+export interface ManifestFull {
+  header: {
+    manifestNumber: string;
+    tripId: string;
+    serviceDate: string;
+    departureTime: string | null;
+    routeName: string;
+    originStop: string;
+    destinationStop: string;
+    vehiclePlate: string;
+    vehicleType: string;
+    driverName: string | null;
+    driverLicense: string | null;
+    generatedAt: string;
+  };
+  passengers: ManifestEntry[];
+  cargo: ManifestCargoEntry[];
+  summary: {
+    totalPassengers: number;
+    totalCargoItems: number;
+    totalCargoWeight: number;
+    totalTicketRevenue: number;
+    totalCargoRevenue: number;
+    totalRevenue: number;
+  };
+}
+
 export interface IStorage {
   // Drivers
   getDrivers(): Promise<Driver[]>;
@@ -144,6 +183,7 @@ export interface IStorage {
 
   // Manifest
   getManifest(tripId: string): Promise<ManifestEntry[]>;
+  getManifestFull(tripId: string): Promise<ManifestFull>;
 
   // Payments
   getPayments(bookingId: string): Promise<Payment[]>;
@@ -319,9 +359,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/trips/:id/seatmap', asyncHandler(tripsController.getSeatmap.bind(tripsController)));
   app.get('/api/trips/:tripId/seats/:seatNo/passenger-details', asyncHandler(tripsController.getSeatPassengerDetails.bind(tripsController)));
 
-  // Manifest — operational passenger list per trip
+  // Manifest — full manifest document per trip (header + passengers + cargo + summary)
   app.get('/api/trips/:id/manifest', asyncHandler(async (req, res) => {
-    const manifest = await storage.getManifest(req.params.id);
+    const manifest = await storage.getManifestFull(req.params.id);
     res.json(manifest);
   }));
 

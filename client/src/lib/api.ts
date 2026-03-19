@@ -246,6 +246,11 @@ export const costTemplatesApi = {
   deleteItem: (id: string) => apiRequest('DELETE', `/api/cost-items/${id}`)
 };
 
+// Manifest API
+export const manifestApi = {
+  get: (tripId: string) => fetch(`/api/trips/${tripId}/manifest`).then(res => res.json())
+};
+
 // Seed API
 export const seedApi = {
   run: () => apiRequest('POST', '/api/seed').then(res => res.json())

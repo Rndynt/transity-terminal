@@ -1,4 +1,4 @@
-import { IStorage, ManifestEntry } from "./routes";
+import { IStorage, ManifestEntry, ManifestFull, ManifestCargoEntry } from "./routes";
 import { 
   drivers, stops, outlets, vehicles, layouts, tripPatterns, patternStops, tripBases,
   trips, tripStopTimes, tripLegs, seatInventory, seatHolds, priceRules, 
@@ -813,6 +813,125 @@ export class DatabaseStorage implements IStorage {
     `);
 
     return rows.rows as ManifestEntry[];
+  }
+
+  // Manifest Full — header + passengers + cargo + summary
+  async getManifestFull(tripId: string): Promise<ManifestFull> {
+    // 1. Trip header: trip + vehicle + driver + pattern + first/last stop
+    const tripRows = await db.execute(sql`
+      SELECT
+        t.id                    AS "tripId",
+        t.service_date          AS "serviceDate",
+        t.origin_depart_hhmm    AS "departureTime",
+        tp.name                 AS "routeName",
+        v.plate                 AS "vehiclePlate",
+        v.code                  AS "vehicleType",
+        d.name                  AS "driverName",
+        d.license_no            AS "driverLicense",
+        origin_s.name           AS "originStop",
+        dest_s.name             AS "destinationStop"
+      FROM ${trips} t
+      INNER JOIN ${vehicles} v ON v.id = t.vehicle_id
+      INNER JOIN ${tripPatterns} tp ON tp.id = t.pattern_id
+      LEFT JOIN ${drivers} d ON d.id = t.driver_id
+      LEFT JOIN ${patternStops} ps_origin ON ps_origin.pattern_id = t.pattern_id
+        AND ps_origin.stop_sequence = (
+          SELECT MIN(ps2.stop_sequence) FROM ${patternStops} ps2 WHERE ps2.pattern_id = t.pattern_id
+        )
+      LEFT JOIN ${stops} origin_s ON origin_s.id = ps_origin.stop_id
+      LEFT JOIN ${patternStops} ps_dest ON ps_dest.pattern_id = t.pattern_id
+        AND ps_dest.stop_sequence = (
+          SELECT MAX(ps3.stop_sequence) FROM ${patternStops} ps3 WHERE ps3.pattern_id = t.pattern_id
+        )
+      LEFT JOIN ${stops} dest_s ON dest_s.id = ps_dest.stop_id
+      WHERE t.id = ${tripId}
+    `);
+
+    const tripRow = (tripRows.rows[0] || {}) as any;
+
+    // 2. Passengers
+    const passengerRows = await db.execute(sql`
+      SELECT
+        p.ticket_number         AS "ticketNumber",
+        COALESCE(p.ticket_status, 'active') AS "ticketStatus",
+        p.full_name             AS "passengerName",
+        p.seat_no               AS "seatNo",
+        p.phone,
+        p.id_number             AS "idNumber",
+        p.fare_amount           AS "fareAmount",
+        b.booking_code          AS "bookingCode",
+        b.status                AS "bookingStatus",
+        b.channel,
+        b.created_at            AS "createdAt",
+        os.name                 AS "originStopName",
+        ds.name                 AS "destinationStopName"
+      FROM ${passengers} p
+      INNER JOIN ${bookings} b ON b.id = p.booking_id
+      LEFT JOIN ${stops} os ON os.id = b.origin_stop_id
+      LEFT JOIN ${stops} ds ON ds.id = b.destination_stop_id
+      WHERE b.trip_id = ${tripId}
+        AND b.status NOT IN ('canceled', 'refunded')
+      ORDER BY p.seat_no ASC
+    `);
+
+    const passengerList = passengerRows.rows as ManifestEntry[];
+
+    // 3. Cargo
+    const cargoRows = await db.execute(sql`
+      SELECT
+        cs.waybill_number       AS "waybillNumber",
+        cs.sender_name          AS "senderName",
+        cs.recipient_name       AS "recipientName",
+        cs.item_description     AS "itemDescription",
+        cs.quantity,
+        cs.weight_kg            AS "weightKg",
+        cs.total_amount         AS "totalAmount",
+        os.name                 AS "originStopName",
+        ds.name                 AS "destinationStopName"
+      FROM ${cargoShipments} cs
+      LEFT JOIN ${stops} os ON os.id = cs.origin_stop_id
+      LEFT JOIN ${stops} ds ON ds.id = cs.destination_stop_id
+      WHERE cs.trip_id = ${tripId}
+        AND cs.status NOT IN ('canceled')
+      ORDER BY cs.created_at ASC
+    `);
+
+    const cargoList = cargoRows.rows as ManifestCargoEntry[];
+
+    // 4. Summary
+    const totalTicketRevenue = passengerList.reduce((sum, p) => sum + parseFloat(p.fareAmount || '0'), 0);
+    const totalCargoRevenue = cargoList.reduce((sum, c) => sum + parseFloat((c as any).totalAmount || '0'), 0);
+    const totalCargoWeight = cargoList.reduce((sum, c) => sum + parseFloat((c as any).weightKg || '0'), 0);
+
+    const serviceDate = tripRow.serviceDate ? String(tripRow.serviceDate).replace(/-/g, '') : 'XXXXXX';
+    const manifestNumber = `MNF-${tripId.slice(-6).toUpperCase()}-${serviceDate}`;
+
+    return {
+      header: {
+        manifestNumber,
+        tripId,
+        serviceDate: tripRow.serviceDate || '',
+        departureTime: tripRow.departureTime || null,
+        routeName: tripRow.routeName || '',
+        originStop: tripRow.originStop || '',
+        destinationStop: tripRow.destinationStop || '',
+        vehiclePlate: tripRow.vehiclePlate || '',
+        vehicleType: tripRow.vehicleType || '',
+        driverName: tripRow.driverName || null,
+        driverLicense: tripRow.driverLicense || null,
+        generatedAt: new Date().toISOString(),
+      },
+      passengers: passengerList,
+      cargo: cargoList,
+      summary: {
+        totalPassengers: passengerList.length,
+        totalCargoItems: cargoList.length,
+        totalCargoWeight: Math.round(totalCargoWeight * 100) / 100,
+        totalTicketRevenue: Math.round(totalTicketRevenue * 100) / 100,
+        totalCargoRevenue: Math.round(totalCargoRevenue * 100) / 100,
+        totalRevenue: Math.round((totalTicketRevenue + totalCargoRevenue) * 100) / 100,
+      },
+    };
   }
 
   // Payments

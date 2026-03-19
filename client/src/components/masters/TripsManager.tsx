@@ -13,12 +13,13 @@ import { RowActionsMenu } from './RowActionsMenu';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, tripPatternsApi, vehiclesApi, layoutsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Clock, Route, Grid3X3, CalendarDays } from 'lucide-react';
+import { Plus, Pencil, Trash2, Clock, Route, Grid3X3, CalendarDays, FileText } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
 import type { Trip, TripPattern, Vehicle, Layout } from '@/types';
 import TripScheduleEditor from './TripScheduleEditor';
+import ManifestDialog from '@/components/manifest/ManifestDialog';
 
 interface TripFormData {
   patternId: string;
@@ -44,6 +45,7 @@ export default function TripsManager() {
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [schedulingTrip, setSchedulingTrip] = useState<Trip | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [manifestTripId, setManifestTripId] = useState<string | null>(null);
   const [formData, setFormData] = useState<TripFormData>({
     patternId: '',
     serviceDate: new Date().toISOString().split('T')[0],
@@ -368,6 +370,7 @@ export default function TripsManager() {
                       <TableCell>
                         <RowActionsMenu
                           actions={[
+                            { label: 'Lihat Manifest', icon: <FileText className="h-3.5 w-3.5" />, onClick: () => setManifestTripId(trip.id) },
                             { label: 'Atur Jadwal', icon: <Clock className="h-3.5 w-3.5" />, onClick: () => handleScheduling(trip) },
                             { label: 'Turunkan Leg', icon: <Route className="h-3.5 w-3.5" />, onClick: () => handleDeriveLegs(trip.id), disabled: deriveLegsMutation.isPending },
                             { label: 'Hitung Inventori', icon: <Grid3X3 className="h-3.5 w-3.5" />, onClick: () => handlePrecomputeInventory(trip.id), disabled: precomputeSeatInventoryMutation.isPending },
@@ -385,6 +388,13 @@ export default function TripsManager() {
           )}
         </CardContent>
       </Card>
+
+      {/* Manifest Dialog */}
+      <ManifestDialog
+        tripId={manifestTripId}
+        open={!!manifestTripId}
+        onOpenChange={(open) => { if (!open) setManifestTripId(null); }}
+      />
 
       {/* Scheduling Dialog */}
       <Dialog open={isSchedulingDialogOpen} onOpenChange={setIsSchedulingDialogOpen}>

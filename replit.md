@@ -10,6 +10,19 @@ A comprehensive production-grade MVP for a multi-stop bus travel ticketing syste
 - **UI**: Tailwind CSS + shadcn/ui components
 
 ## Recent Changes
+**Date: 2026-03-19 — Fase 2: Manifest Perjalanan**
+- Backend: `getManifestFull(tripId)` in storage.ts — returns complete manifest JSON (header + passengers + cargo + summary)
+- Manifest header includes: manifestNumber (MNF-{tripId}-{date}), serviceDate, departureTime, routeName, originStop, destinationStop, vehiclePlate, vehicleType, driverName, driverLicense
+- Cargo section: queries `cargo_shipments` per trip with origin/destination stop names
+- Summary: totalPassengers, totalCargoItems, totalCargoWeight, totalTicketRevenue, totalCargoRevenue, totalRevenue
+- `ManifestFull`, `ManifestCargoEntry` interfaces added to routes.ts; `IStorage.getManifestFull()` added
+- Frontend: `ManifestDialog.tsx` created at `client/src/components/manifest/`
+- ManifestDialog: full manifest view with Section A (penumpang) + Section B (kargo) + summary cards + Cetak/PDF button
+- TripsManager.tsx: "Lihat Manifest" added to action menu (first item), imports ManifestDialog
+- api.ts: `manifestApi.get(tripId)` added
+- Print CSS added to index.css for print-friendly manifest output
+- Plan doc updated: Fase 2 items checked off
+
 **Date: 2026-03-17**
 - Transity Mobile App (B2C marketplace) — Expo React Native app scaffolded in `apps/mobile/`
 - Schema: `app_users` table (email, passwordHash, name, phone, avatar), `reviews` table (appUserId, tripId, rating, comment), `appUserId` column added to `bookings`

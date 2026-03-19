@@ -293,4 +293,25 @@
   .no-print {
     display: none !important;
   }
+
+  /* Manifest print styles */
+  body > *:not([data-radix-portal]) {
+    display: none !important;
+  }
+  [data-radix-portal] [role="dialog"] {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+  [data-radix-portal] > div {
+    background: transparent !important;
+    position: static !important;
+  }
 }

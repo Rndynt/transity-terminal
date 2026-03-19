@@ -289,9 +289,9 @@ Permission matrix yang direncanakan:
 - [x] Template bisa dilink ke trip_pattern
 
 ### Fase 2 ✓ ketika:
-- [ ] API `/manifest` mengembalikan data lengkap (penumpang + kargo)
-- [ ] PDF manifest bisa diexport dari CSO dashboard
-- [ ] Halaman manifest tersedia di mobile app (driver)
+- [x] API `/manifest` mengembalikan data lengkap (penumpang + kargo)
+- [x] PDF manifest bisa diexport dari CSO dashboard (via tombol Cetak / PDF → window.print())
+- [ ] Halaman manifest tersedia di mobile app (driver) — ditunda, mobile adalah app end-user terpisah
 
 ### Fase 3 ✓ ketika:
 - [ ] SPJ bisa dibuat dari trip, auto-fill dari template biaya
