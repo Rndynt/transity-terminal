@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { tripPatternsApi, layoutsApi, stopsApi, patternStopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, MapPin, Filter, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, MapPin, Filter, X, ArrowUp, ArrowDown, Clock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
@@ -484,121 +485,90 @@ export default function TripPatternsManager() {
 
       {/* Stops Management Dialog */}
       <Dialog open={isStopsDialogOpen} onOpenChange={setIsStopsDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0" data-testid="stops-dialog">
-          <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
-            <DialogTitle>Kelola Halte — {selectedPatternForStops?.name}</DialogTitle>
-            <DialogDescription>Atur urutan dan konfigurasi pemberhentian untuk rute ini.</DialogDescription>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col p-0 gap-0" data-testid="stops-dialog">
+          <DialogHeader className="px-4 pt-4 pb-3 border-b shrink-0">
+            <DialogTitle className="text-base">Kelola Halte</DialogTitle>
+            <DialogDescription className="text-xs">{selectedPatternForStops?.name}</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm font-semibold">Urutan Halte</p>
-                <p className="text-xs text-muted-foreground">{patternStops.length} halte ditambahkan</p>
-              </div>
-              <Button onClick={addPatternStop} size="sm" data-testid="add-pattern-stop">
-                <Plus className="h-4 w-4 mr-2" />
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+            <div className="flex justify-between items-center pb-1">
+              <p className="text-xs text-muted-foreground">{patternStops.length} halte</p>
+              <Button onClick={addPatternStop} size="sm" variant="outline" data-testid="add-pattern-stop">
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
                 Tambah Halte
               </Button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {patternStops.map((stop, index) => (
-                <div key={index} className="border rounded-xl bg-card overflow-hidden">
-                  {/* Card header: sequence + delete */}
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40 border-b">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-sm text-primary bg-primary/10 rounded-md px-2 py-0.5">
-                        #{stop.stopSequence}
-                      </span>
-                      <span className="text-xs text-muted-foreground font-medium">Pemberhentian ke-{index + 1}</span>
-                    </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => removePatternStop(index)}
-                      data-testid={`remove-stop-${index}`}
-                      className="h-7 w-7 rounded-lg hover:bg-destructive/10 hover:text-destructive"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-
-                  {/* Card body: fields with labels */}
-                  <div className="p-4 space-y-4">
-                    {/* Halte selector */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Halte <span className="text-destructive">*</span>
-                      </Label>
+                <div key={index} className="rounded-xl border bg-card p-3 space-y-2">
+                  {/* Row 1: sequence + stop selector + delete */}
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-primary bg-primary/10 rounded-lg w-7 h-7 flex items-center justify-center flex-shrink-0">
+                      {index + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
                       <SearchableSelect
                         value={stop.stopId}
                         options={stopOptions}
                         placeholder="Pilih halte..."
-                        searchPlaceholder="Cari nama halte atau kota..."
+                        searchPlaceholder="Cari nama atau kota..."
                         onChange={(value) => updatePatternStop(index, 'stopId', value)}
                       />
-                      {!stop.stopId && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400">Pilih halte untuk pemberhentian ini</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removePatternStop(index)}
+                      data-testid={`remove-stop-${index}`}
+                      className="h-7 w-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Row 2: dwell + boarding/alighting pills */}
+                  <div className="flex items-center gap-2 pl-9 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                      <input
+                        type="number"
+                        value={stop.dwellSeconds}
+                        onChange={(e) => updatePatternStop(index, 'dwellSeconds', parseInt(e.target.value, 10) || 0)}
+                        min="0"
+                        className="w-14 h-6 text-xs text-center rounded-md border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                        data-testid={`input-dwell-${index}`}
+                      />
+                      <span className="text-xs text-muted-foreground">dtk</span>
+                    </div>
+                    <div className="w-px h-3.5 bg-border flex-shrink-0" />
+                    <button
+                      type="button"
+                      onClick={() => updatePatternStop(index, 'boardingAllowed', stop.boardingAllowed === false ? true : false)}
+                      data-testid={`switch-boarding-${index}`}
+                      className={cn(
+                        'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all select-none',
+                        stop.boardingAllowed !== false
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                          : 'bg-muted text-muted-foreground'
                       )}
-                    </div>
-
-                    {/* Dwell time */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`dwell-${index}`} className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Waktu Berhenti di Halte
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          id={`dwell-${index}`}
-                          type="number"
-                          value={stop.dwellSeconds}
-                          onChange={(e) => updatePatternStop(index, 'dwellSeconds', parseInt(e.target.value, 10) || 0)}
-                          min="0"
-                          className="w-32"
-                          data-testid={`input-dwell-${index}`}
-                        />
-                        <span className="text-sm text-muted-foreground">detik</span>
-                        {stop.dwellSeconds > 0 && (
-                          <span className="text-xs text-muted-foreground bg-muted rounded-md px-2 py-1">
-                            ≈ {Math.floor(stop.dwellSeconds / 60)} menit {stop.dwellSeconds % 60} dtk
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Berapa lama kendaraan berhenti di halte ini. Isi 0 jika hanya lewat.</p>
-                    </div>
-
-                    {/* Boarding / Alighting */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Izin Penumpang
-                      </Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="flex items-center justify-between rounded-lg border px-3 py-2.5 bg-background">
-                          <div>
-                            <p className="text-sm font-medium">Naik</p>
-                            <p className="text-xs text-muted-foreground">Penumpang boleh naik</p>
-                          </div>
-                          <Switch
-                            id={`boarding-${index}`}
-                            checked={stop.boardingAllowed !== false}
-                            onCheckedChange={(checked) => updatePatternStop(index, 'boardingAllowed', checked)}
-                            data-testid={`switch-boarding-${index}`}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between rounded-lg border px-3 py-2.5 bg-background">
-                          <div>
-                            <p className="text-sm font-medium">Turun</p>
-                            <p className="text-xs text-muted-foreground">Penumpang boleh turun</p>
-                          </div>
-                          <Switch
-                            id={`alighting-${index}`}
-                            checked={stop.alightingAllowed !== false}
-                            onCheckedChange={(checked) => updatePatternStop(index, 'alightingAllowed', checked)}
-                            data-testid={`switch-alighting-${index}`}
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    >
+                      <ArrowUp className="h-3 w-3" />
+                      Naik
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updatePatternStop(index, 'alightingAllowed', stop.alightingAllowed === false ? true : false)}
+                      data-testid={`switch-alighting-${index}`}
+                      className={cn(
+                        'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all select-none',
+                        stop.alightingAllowed !== false
+                          ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
+                          : 'bg-muted text-muted-foreground'
+                      )}
+                    >
+                      <ArrowDown className="h-3 w-3" />
+                      Turun
+                    </button>
                   </div>
                 </div>
               ))}
@@ -610,9 +580,9 @@ export default function TripPatternsManager() {
               )}
             </div>
           </div>
-          <div className="px-5 py-4 border-t shrink-0 bg-background flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-            <Button variant="outline" onClick={() => setIsStopsDialogOpen(false)}>Batal</Button>
-            <Button onClick={savePatternStops} data-testid="save-pattern-stops">Simpan Perubahan</Button>
+          <div className="px-4 py-3 border-t shrink-0 bg-background flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={() => setIsStopsDialogOpen(false)}>Batal</Button>
+            <Button size="sm" onClick={savePatternStops} data-testid="save-pattern-stops">Simpan</Button>
           </div>
         </DialogContent>
       </Dialog>
