@@ -248,7 +248,8 @@ export const costTemplatesApi = {
 
 // Manifest API
 export const manifestApi = {
-  get: (tripId: string) => fetch(`/api/trips/${tripId}/manifest`).then(res => res.json())
+  get: (tripId: string) => fetch(`/api/trips/${tripId}/manifest`).then(res => res.json()),
+  recordPrint: (tripId: string) => apiRequest('POST', `/api/trips/${tripId}/manifest/print`).then(res => res.json()),
 };
 
 // Seed API

@@ -290,7 +290,11 @@ Permission matrix yang direncanakan:
 
 ### Fase 2 ✓ ketika:
 - [x] API `/manifest` mengembalikan data lengkap (penumpang + kargo)
-- [x] PDF manifest bisa diexport dari CSO dashboard (via tombol Cetak / PDF → window.print())
+- [x] Manifest bisa dibuka untuk semua trip berstatus 'scheduled' (meski belum ada leg)
+- [x] Tombol "Cetak Manifest" mencatat waktu cetak pertama (`manifest_first_printed_at`) ke DB
+- [x] Waktu cetak pertama ditampilkan di dialog manifest (badge hijau jika sudah, amber jika belum)
+- [x] Format cetak thermal printer (80mm roll paper, monospace, plain text layout)
+- [x] API `POST /api/trips/:id/manifest/print` — idempotent, hanya set waktu pertama sekali
 - [ ] Halaman manifest tersedia di mobile app (driver) — ditunda, mobile adalah app end-user terpisah
 
 ### Fase 3 ✓ ketika:

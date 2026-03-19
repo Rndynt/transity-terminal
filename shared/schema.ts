@@ -155,9 +155,10 @@ export const trips = pgTable("trips", {
   layoutId:         uuid("layout_id").references(() => layouts.id),
   capacity:         integer("capacity").notNull(),
   driverId:         uuid("driver_id").references(() => drivers.id),
-  originDepartHHMM: text("origin_depart_hhmm"),
-  channelFlags:     jsonb("channel_flags").default(sql`'{"CSO":true,"WEB":false,"APP":false,"OTA":false}'`),
-  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow()
+  originDepartHHMM:         text("origin_depart_hhmm"),
+  channelFlags:             jsonb("channel_flags").default(sql`'{"CSO":true,"WEB":false,"APP":false,"OTA":false}'`),
+  manifestFirstPrintedAt:   timestamp("manifest_first_printed_at", { withTimezone: true }),
+  createdAt:                timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
   uniqTripBasePerDay: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_trip_base_per_day ON ${table} (base_id, service_date) WHERE base_id IS NOT NULL`
 }));

@@ -815,21 +815,34 @@ export class DatabaseStorage implements IStorage {
     return rows.rows as ManifestEntry[];
   }
 
+  // Manifest — record first print timestamp (only sets it once; idempotent after that)
+  async recordManifestPrint(tripId: string): Promise<string | null> {
+    const rows = await db.execute(sql`
+      UPDATE ${trips}
+      SET manifest_first_printed_at = COALESCE(manifest_first_printed_at, NOW())
+      WHERE id = ${tripId}
+      RETURNING manifest_first_printed_at AS "firstPrintedAt"
+    `);
+    const row = rows.rows[0] as any;
+    return row?.firstPrintedAt ? new Date(row.firstPrintedAt).toISOString() : null;
+  }
+
   // Manifest Full — header + passengers + cargo + summary
   async getManifestFull(tripId: string): Promise<ManifestFull> {
     // 1. Trip header: trip + vehicle + driver + pattern + first/last stop
     const tripRows = await db.execute(sql`
       SELECT
-        t.id                    AS "tripId",
-        t.service_date          AS "serviceDate",
-        t.origin_depart_hhmm    AS "departureTime",
-        tp.name                 AS "routeName",
-        v.plate                 AS "vehiclePlate",
-        v.code                  AS "vehicleType",
-        d.name                  AS "driverName",
-        d.license_no            AS "driverLicense",
-        origin_s.name           AS "originStop",
-        dest_s.name             AS "destinationStop"
+        t.id                          AS "tripId",
+        t.service_date                AS "serviceDate",
+        t.origin_depart_hhmm          AS "departureTime",
+        t.manifest_first_printed_at   AS "firstPrintedAt",
+        tp.name                       AS "routeName",
+        v.plate                       AS "vehiclePlate",
+        v.code                        AS "vehicleType",
+        d.name                        AS "driverName",
+        d.license_no                  AS "driverLicense",
+        origin_s.name                 AS "originStop",
+        dest_s.name                   AS "destinationStop"
       FROM ${trips} t
       INNER JOIN ${vehicles} v ON v.id = t.vehicle_id
       INNER JOIN ${tripPatterns} tp ON tp.id = t.pattern_id
@@ -920,6 +933,7 @@ export class DatabaseStorage implements IStorage {
         driverName: tripRow.driverName || null,
         driverLicense: tripRow.driverLicense || null,
         generatedAt: new Date().toISOString(),
+        firstPrintedAt: tripRow.firstPrintedAt ? new Date(tripRow.firstPrintedAt).toISOString() : null,
       },
       passengers: passengerList,
       cargo: cargoList,

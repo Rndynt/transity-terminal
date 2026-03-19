@@ -65,6 +65,7 @@ export interface ManifestFull {
     driverName: string | null;
     driverLicense: string | null;
     generatedAt: string;
+    firstPrintedAt: string | null;
   };
   passengers: ManifestEntry[];
   cargo: ManifestCargoEntry[];
@@ -184,6 +185,7 @@ export interface IStorage {
   // Manifest
   getManifest(tripId: string): Promise<ManifestEntry[]>;
   getManifestFull(tripId: string): Promise<ManifestFull>;
+  recordManifestPrint(tripId: string): Promise<string | null>;
 
   // Payments
   getPayments(bookingId: string): Promise<Payment[]>;
@@ -363,6 +365,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/trips/:id/manifest', asyncHandler(async (req, res) => {
     const manifest = await storage.getManifestFull(req.params.id);
     res.json(manifest);
+  }));
+
+  // Manifest print — record first print timestamp
+  app.post('/api/trips/:id/manifest/print', asyncHandler(async (req, res) => {
+    const firstPrintedAt = await storage.recordManifestPrint(req.params.id);
+    res.json({ success: true, firstPrintedAt });
   }));
 
   // Seat holds

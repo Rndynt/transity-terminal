@@ -1,10 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { manifestApi } from '@/lib/api';
-import { Printer, X, Bus, User, Package, ArrowRight, Loader2 } from 'lucide-react';
+import { Printer, X, Bus, User, Clock, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
 
 interface ManifestDialogProps {
   tripId: string | null;
@@ -27,39 +27,143 @@ function formatDate(dateStr: string) {
   }
 }
 
-function formatGeneratedAt(isoStr: string) {
-  if (!isoStr) return '-';
+function formatDateTime(isoStr: string | null) {
+  if (!isoStr) return null;
   try {
     return new Date(isoStr).toLocaleString('id-ID', {
-      dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Jakarta'
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      timeZone: 'Asia/Jakarta'
     });
   } catch {
     return isoStr;
   }
 }
 
+function formatDateShort(dateStr: string) {
+  if (!dateStr) return '-';
+  try {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+}
+
 function TicketStatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; color: string }> = {
-    active:     { label: 'Aktif',      color: 'bg-green-100 text-green-800' },
-    checked_in: { label: 'Check-In',   color: 'bg-blue-100 text-blue-800' },
-    no_show:    { label: 'No-Show',    color: 'bg-red-100 text-red-800' },
-    canceled:   { label: 'Batal',      color: 'bg-gray-100 text-gray-600' },
-    refunded:   { label: 'Refund',     color: 'bg-orange-100 text-orange-800' },
+    active:     { label: 'Aktif',    color: 'bg-green-100 text-green-800' },
+    checked_in: { label: 'Check-In', color: 'bg-blue-100 text-blue-800' },
+    no_show:    { label: 'No-Show',  color: 'bg-red-100 text-red-800' },
+    canceled:   { label: 'Batal',    color: 'bg-gray-100 text-gray-600' },
+    refunded:   { label: 'Refund',   color: 'bg-orange-100 text-orange-800' },
   };
   const s = map[status] ?? { label: status, color: 'bg-gray-100 text-gray-600' };
   return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${s.color}`}>{s.label}</span>;
 }
 
+// ── Thermal layout (visible only when printing) ──────────────────────────────
+function ThermalManifest({ manifest }: { manifest: any }) {
+  const h = manifest.header;
+  const line = '--------------------------------';
+  const doubleLine = '================================';
+
+  return (
+    <div id="thermal-manifest" className="hidden print:block font-mono text-[8pt] leading-tight whitespace-pre-wrap">
+      <div className="text-center font-bold text-[10pt]">MANIFEST PERJALANAN</div>
+      <div className="text-center">{doubleLine}</div>
+      <div>No : {h.manifestNumber}</div>
+      <div>Tgl: {formatDateShort(h.serviceDate)}{h.departureTime ? ` | Jam: ${h.departureTime}` : ''}</div>
+      <div>{line}</div>
+      <div>Rute  : {h.originStop} → {h.destinationStop}</div>
+      <div>Pola  : {h.routeName}</div>
+      <div>Plat  : {h.vehiclePlate} ({h.vehicleType})</div>
+      <div>Driver: {h.driverName || '-'}</div>
+      {h.driverLicense && <div>SIM   : {h.driverLicense}</div>}
+      <div>{line}</div>
+
+      {/* Section A — Penumpang */}
+      <div className="font-bold">A. DAFTAR PENUMPANG ({manifest.summary.totalPassengers} orang)</div>
+      <div>{line}</div>
+      {manifest.passengers.length === 0 ? (
+        <div>  (Tidak ada penumpang)</div>
+      ) : (
+        manifest.passengers.map((p: any, i: number) => (
+          <div key={p.ticketNumber || i}>
+            <div>{String(i + 1).padStart(2, ' ')}. {p.passengerName}</div>
+            <div>    Kursi: {p.seatNo || '-'} | {p.originStopName || '-'} → {p.destinationStopName || '-'}</div>
+            {p.ticketNumber && <div>    Tiket: {p.ticketNumber}</div>}
+            {p.phone && <div>    HP   : {p.phone}</div>}
+          </div>
+        ))
+      )}
+      <div>{line}</div>
+
+      {/* Section B — Kargo */}
+      {manifest.cargo.length > 0 && (
+        <>
+          <div className="font-bold">B. DAFTAR KARGO ({manifest.summary.totalCargoItems} kiriman)</div>
+          <div>{line}</div>
+          {manifest.cargo.map((c: any, i: number) => (
+            <div key={c.waybillNumber || i}>
+              <div>{String(i + 1).padStart(2, ' ')}. {c.waybillNumber}</div>
+              <div>    {c.senderName} → {c.recipientName}</div>
+              <div>    {c.itemDescription}{c.quantity > 1 ? ` (${c.quantity}x)` : ''} | {c.weightKg ? parseFloat(c.weightKg).toFixed(1) + ' kg' : '-'}</div>
+            </div>
+          ))}
+          <div>{line}</div>
+        </>
+      )}
+
+      {/* Summary */}
+      <div>Penumpang : {manifest.summary.totalPassengers} orang</div>
+      {manifest.summary.totalCargoItems > 0 && (
+        <div>Kargo     : {manifest.summary.totalCargoItems} kiriman ({manifest.summary.totalCargoWeight} kg)</div>
+      )}
+      <div>Pend. Tiket: {formatCurrency(manifest.summary.totalTicketRevenue)}</div>
+      {manifest.summary.totalCargoRevenue > 0 && (
+        <div>Pend. Kargo: {formatCurrency(manifest.summary.totalCargoRevenue)}</div>
+      )}
+      <div>TOTAL      : {formatCurrency(manifest.summary.totalRevenue)}</div>
+      <div>{line}</div>
+
+      {/* Print info */}
+      <div className="text-center">Dicetak: {formatDateTime(new Date().toISOString())}</div>
+      {h.firstPrintedAt && (
+        <div className="text-center">Pertama: {formatDateTime(h.firstPrintedAt)}</div>
+      )}
+      <div className="text-center">{doubleLine}</div>
+    </div>
+  );
+}
+
+// ── Main Dialog ───────────────────────────────────────────────────────────────
 export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestDialogProps) {
+  const queryClient = useQueryClient();
+
   const { data: manifest, isLoading, error } = useQuery({
     queryKey: ['/api/trips', tripId, 'manifest'],
     queryFn: () => manifestApi.get(tripId!),
     enabled: open && !!tripId,
   });
 
-  const handlePrint = () => {
-    window.print();
+  const printMutation = useMutation({
+    mutationFn: () => manifestApi.recordPrint(tripId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trips', tripId, 'manifest'] });
+    },
+  });
+
+  const handlePrint = async () => {
+    if (!tripId) return;
+    try {
+      await printMutation.mutateAsync();
+    } finally {
+      window.print();
+    }
   };
+
+  const firstPrintedAt = manifest?.header?.firstPrintedAt;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -78,23 +182,42 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
               </span>
             )}
           </DialogTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {manifest && (
+              <div className="flex items-center gap-1.5 text-xs">
+                {firstPrintedAt ? (
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <Clock className="w-3 h-3" />
+                    Cetak pertama: <span className="font-medium text-foreground">{formatDateTime(firstPrintedAt)}</span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-amber-600">
+                    <AlertCircle className="w-3 h-3" />
+                    Belum pernah dicetak
+                  </span>
+                )}
+              </div>
+            )}
             <Button
               size="sm"
-              variant="outline"
+              variant="default"
               onClick={handlePrint}
-              disabled={isLoading || !!error}
+              disabled={isLoading || !!error || printMutation.isPending}
               className="gap-1.5"
               data-testid="button-print-manifest"
             >
-              <Printer className="w-3.5 h-3.5" />
-              Cetak / PDF
+              {printMutation.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Printer className="w-3.5 h-3.5" />
+              )}
+              Cetak Manifest
             </Button>
           </div>
         </DialogHeader>
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 print:overflow-visible print:px-8 print:py-6">
+        {/* Scrollable content — screen view */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 print:hidden">
           {isLoading && (
             <div className="flex items-center justify-center py-24">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -109,18 +232,11 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
           )}
 
           {manifest && (
-            <div id="manifest-print-area" className="space-y-6">
-
-              {/* ─── PRINT HEADER (only visible when printing) ─── */}
-              <div className="hidden print:block text-center border-b pb-4 mb-4">
-                <h1 className="text-xl font-bold tracking-wide uppercase">Manifest Perjalanan</h1>
-                <p className="text-sm text-gray-500 mt-0.5">No. {manifest.header.manifestNumber}</p>
-              </div>
+            <div className="space-y-6">
 
               {/* ─── HEADER SECTION ─── */}
-              <div className="bg-muted/40 border border-border rounded-xl p-4 print:border print:rounded-none print:bg-transparent">
+              <div className="bg-muted/40 border border-border rounded-xl p-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  {/* Left col */}
                   <div className="space-y-2.5">
                     <div className="flex gap-2">
                       <span className="w-32 text-muted-foreground shrink-0">Nomor Manifest</span>
@@ -147,7 +263,6 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
                       <span>{manifest.header.routeName}</span>
                     </div>
                   </div>
-                  {/* Right col */}
                   <div className="space-y-2.5">
                     <div className="flex gap-2 items-center">
                       <Bus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -158,7 +273,9 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
                     <div className="flex gap-2 items-center">
                       <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                       <span className="w-28 text-muted-foreground shrink-0">Driver</span>
-                      <span className="font-medium">{manifest.header.driverName || <span className="text-muted-foreground italic">Belum ditugaskan</span>}</span>
+                      <span className="font-medium">
+                        {manifest.header.driverName || <span className="text-muted-foreground italic">Belum ditugaskan</span>}
+                      </span>
                     </div>
                     {manifest.header.driverLicense && (
                       <div className="flex gap-2">
@@ -166,9 +283,18 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
                         <span className="text-xs text-muted-foreground">No. SIM: {manifest.header.driverLicense}</span>
                       </div>
                     )}
-                    <div className="flex gap-2">
-                      <span className="w-[calc(0.875rem+0.5rem+7rem)] shrink-0" />
-                      <span className="text-xs text-muted-foreground">Dicetak: {formatGeneratedAt(manifest.header.generatedAt)}</span>
+                    <div className="flex gap-2 items-center">
+                      <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="w-28 text-muted-foreground shrink-0">Cetak Pertama</span>
+                      {firstPrintedAt ? (
+                        <span className="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200">
+                          {formatDateTime(firstPrintedAt)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          Belum dicetak
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -293,15 +419,12 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
                   </div>
                 </div>
               </div>
-
-              {/* ─── PRINT FOOTER ─── */}
-              <div className="hidden print:block mt-8 pt-4 border-t text-xs text-gray-500 flex justify-between">
-                <span>Manifest #{manifest.header.manifestNumber} — Dicetak {formatGeneratedAt(manifest.header.generatedAt)}</span>
-                <span>Halaman 1</span>
-              </div>
             </div>
           )}
         </div>
+
+        {/* Thermal print layout — hidden on screen, shown only when printing */}
+        {manifest && <ThermalManifest manifest={manifest} />}
 
         {/* Bottom close bar */}
         <div className="px-6 py-3 border-t shrink-0 bg-background flex justify-end print:hidden">

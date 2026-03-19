@@ -10,7 +10,19 @@ A comprehensive production-grade MVP for a multi-stop bus travel ticketing syste
 - **UI**: Tailwind CSS + shadcn/ui components
 
 ## Recent Changes
-**Date: 2026-03-19 — Fase 2: Manifest Perjalanan**
+**Date: 2026-03-19 — Fase 2: Manifest Perjalanan (Update)**
+- DB: `manifest_first_printed_at` column added to `trips` table — records first print timestamp (idempotent)
+- Backend: `recordManifestPrint(tripId)` in storage.ts — COALESCE update, only sets on first call
+- Backend: `POST /api/trips/:id/manifest/print` endpoint added to routes.ts
+- Backend: `getManifestFull` now returns `firstPrintedAt` in header
+- Frontend: `ManifestDialog.tsx` fully updated — shows "Cetak Pertama" timestamp (green badge if printed, amber if not)
+- Frontend: "Cetak Manifest" button calls recordPrint API first, then window.print(); invalidates manifest query
+- Print format: thermal printer (80mm roll paper) — `@page { size: 80mm auto }` in CSS
+- ThermalManifest component: monospace text layout (plain text, dashes separator) rendered only when printing
+- `manifestApi.recordPrint()` added to api.ts
+- Plan doc updated: Fase 2 fully done
+
+**Date: 2026-03-19 — Fase 2: Manifest Perjalanan (Initial)**
 - Backend: `getManifestFull(tripId)` in storage.ts — returns complete manifest JSON (header + passengers + cargo + summary)
 - Manifest header includes: manifestNumber (MNF-{tripId}-{date}), serviceDate, departureTime, routeName, originStop, destinationStop, vehiclePlate, vehicleType, driverName, driverLicense
 - Cargo section: queries `cargo_shipments` per trip with origin/destination stop names
@@ -20,8 +32,6 @@ A comprehensive production-grade MVP for a multi-stop bus travel ticketing syste
 - ManifestDialog: full manifest view with Section A (penumpang) + Section B (kargo) + summary cards + Cetak/PDF button
 - TripsManager.tsx: "Lihat Manifest" added to action menu (first item), imports ManifestDialog
 - api.ts: `manifestApi.get(tripId)` added
-- Print CSS added to index.css for print-friendly manifest output
-- Plan doc updated: Fase 2 items checked off
 
 **Date: 2026-03-17**
 - Transity Mobile App (B2C marketplace) — Expo React Native app scaffolded in `apps/mobile/`
