@@ -2,7 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { CalendarDays, Phone, CreditCard, MapPin, User, Armchair } from 'lucide-react';
+import { Phone, CreditCard, MapPin, User, Armchair, Ticket, Hash } from 'lucide-react';
 import type { Passenger, Booking, Payment, Stop } from '@/types';
 
 interface PassengerDetailsData {
@@ -64,15 +64,28 @@ export default function PassengerDetailModal({
     return methods[method as keyof typeof methods] || method;
   };
 
-  const getStatusBadge = (status: string) => {
-    const variants = {
+  const getBookingStatusBadge = (status: string) => {
+    const variants: Record<string, { label: string; className: string }> = {
       paid: { label: 'Lunas', className: 'bg-green-100 text-green-800' },
       pending: { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' },
       canceled: { label: 'Dibatalkan', className: 'bg-red-100 text-red-800' },
       refunded: { label: 'Dikembalikan', className: 'bg-gray-100 text-gray-800' }
     };
-    const variant = variants[status as keyof typeof variants] || { label: status, className: 'bg-gray-100 text-gray-800' };
-    return <Badge className={variant.className} data-testid={`status-${status}`}>{variant.label}</Badge>;
+    const variant = variants[status] || { label: status, className: 'bg-gray-100 text-gray-800' };
+    return <Badge className={variant.className} data-testid={`booking-status-${status}`}>{variant.label}</Badge>;
+  };
+
+  const getTicketStatusBadge = (status: string | null | undefined) => {
+    const variants: Record<string, { label: string; className: string }> = {
+      active:     { label: 'Aktif',       className: 'bg-blue-100 text-blue-800' },
+      canceled:   { label: 'Dibatalkan',  className: 'bg-red-100 text-red-800' },
+      refunded:   { label: 'Refund',      className: 'bg-gray-100 text-gray-700' },
+      checked_in: { label: 'Check-in',    className: 'bg-emerald-100 text-emerald-800' },
+      no_show:    { label: 'No-show',     className: 'bg-orange-100 text-orange-800' },
+    };
+    const s = status || 'active';
+    const variant = variants[s] || { label: s, className: 'bg-gray-100 text-gray-800' };
+    return <Badge className={variant.className} data-testid={`ticket-status-${s}`}>{variant.label}</Badge>;
   };
 
   return (
@@ -113,12 +126,36 @@ export default function PassengerDetailModal({
               {passengerDetails.bookings.map((bookingData, index) => (
                 <Card key={bookingData.booking.id} data-testid={`booking-${index}`}>
                   <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <CardTitle className="text-base flex items-center gap-2">
                         <User className="w-4 h-4" />
                         {bookingData.passenger.fullName}
                       </CardTitle>
-                      {getStatusBadge(bookingData.booking.status || 'unknown')}
+                      <div className="flex items-center gap-1.5">
+                        {getTicketStatusBadge((bookingData.passenger as any).ticketStatus)}
+                        {getBookingStatusBadge(bookingData.booking.status || 'unknown')}
+                      </div>
+                    </div>
+                    {/* Ticket & Booking codes */}
+                    <div className="flex flex-col gap-1 mt-2">
+                      {(bookingData.passenger as any).ticketNumber && (
+                        <div className="flex items-center gap-1.5 text-xs" data-testid="ticket-number">
+                          <Ticket className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-muted-foreground">No. Tiket:</span>
+                          <span className="font-mono font-semibold tracking-wider text-primary">
+                            {(bookingData.passenger as any).ticketNumber}
+                          </span>
+                        </div>
+                      )}
+                      {(bookingData.booking as any).bookingCode && (
+                        <div className="flex items-center gap-1.5 text-xs" data-testid="booking-code">
+                          <Hash className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-muted-foreground">Kode Booking:</span>
+                          <span className="font-mono font-semibold tracking-wider text-primary">
+                            {(bookingData.booking as any).bookingCode}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -214,7 +251,7 @@ export default function PassengerDetailModal({
 
                     {/* Booking Reference */}
                     <div className="text-xs text-muted-foreground" data-testid="booking-reference">
-                      Booking ID: {bookingData.booking.id.slice(-8).toUpperCase()}
+                      Booking ID: <span className="font-mono">{bookingData.booking.id.slice(-8).toUpperCase()}</span>
                     </div>
                   </CardContent>
                 </Card>

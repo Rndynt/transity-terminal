@@ -23,7 +23,7 @@ export default function PrintPreview({ booking, onNewBooking, onPrint }: PrintPr
   }
 
   const isPaid = booking.status === 'paid';
-  const bookingIdShort = booking.id?.slice(0, 8).toUpperCase() || '-';
+  const bookingRef = booking.bookingCode || booking.id?.slice(0, 8).toUpperCase() || '-';
 
   const formatDate = (date: string) => {
     try {
@@ -59,7 +59,7 @@ export default function PrintPreview({ booking, onNewBooking, onPrint }: PrintPr
           {isPaid ? 'Booking Berhasil!' : 'Booking Tersimpan'}
         </h2>
         <p className="text-sm text-gray-500">
-          ID: <span className="font-mono text-blue-600 font-semibold">{bookingIdShort}</span>
+          Kode: <span className="font-mono text-blue-600 font-semibold">{bookingRef}</span>
         </p>
       </div>
 
@@ -124,14 +124,18 @@ export default function PrintPreview({ booking, onNewBooking, onPrint }: PrintPr
                 <thead>
                   <tr className="text-[10px] text-gray-400 uppercase tracking-wider">
                     <th className="text-left py-1 font-medium">Nama</th>
-                    <th className="text-center py-1 font-medium w-14">Kursi</th>
-                    <th className="text-right py-1 font-medium w-24">Tarif</th>
+                    <th className="text-left py-1 font-medium">No. Tiket</th>
+                    <th className="text-center py-1 font-medium w-12">Kursi</th>
+                    <th className="text-right py-1 font-medium w-20">Tarif</th>
                   </tr>
                 </thead>
                 <tbody className="text-gray-700">
                   {booking.passengers.map((p: any, i: number) => (
                     <tr key={i} className="border-t border-gray-100" data-testid={`passenger-row-${i}`}>
                       <td className="py-1.5 font-medium">{p.fullName}</td>
+                      <td className="py-1.5 font-mono text-[10px] text-blue-700 whitespace-nowrap">
+                        {p.ticketNumber || '—'}
+                      </td>
                       <td className="py-1.5 text-center">
                         <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-mono font-bold">{p.seatNo}</span>
                       </td>
@@ -170,8 +174,11 @@ export default function PrintPreview({ booking, onNewBooking, onPrint }: PrintPr
             </span>
           </div>
           {isPaid && (
-            <div className="w-14 h-14 bg-white rounded-lg flex items-center justify-center border border-gray-200" data-testid="qr-placeholder">
-              <QrCode className="w-8 h-8 text-gray-900" />
+            <div className="flex flex-col items-center gap-1" data-testid="qr-placeholder">
+              <div className="w-14 h-14 bg-white rounded-lg flex items-center justify-center border border-gray-200">
+                <QrCode className="w-8 h-8 text-gray-900" />
+              </div>
+              <span className="font-mono text-[9px] text-gray-500 tracking-wider">{bookingRef}</span>
             </div>
           )}
         </div>
