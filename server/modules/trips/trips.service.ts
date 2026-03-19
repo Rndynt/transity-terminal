@@ -197,10 +197,17 @@ export class TripsService {
 
   async getSeatmap(tripId: string, originSeq: number, destinationSeq: number) {
     const trip = await this.getTripById(tripId);
-    const layout = await this.storage.getLayoutById(trip.layoutId || trip.layoutId!);
+
+    // Prefer trip's explicit layoutId; fall back to vehicle's layout
+    let resolvedLayoutId = trip.layoutId ?? null;
+    if (!resolvedLayoutId && trip.vehicleId) {
+      const vehicle = await this.storage.getVehicleById(trip.vehicleId);
+      resolvedLayoutId = vehicle?.layoutId ?? null;
+    }
+    const layout = resolvedLayoutId ? await this.storage.getLayoutById(resolvedLayoutId) : null;
     
     if (!layout) {
-      throw new Error("Trip layout not found");
+      throw new Error("Layout kursi tidak ditemukan. Pastikan trip atau kendaraan memiliki layout yang valid.");
     }
 
     // Get required leg indexes for this O-D pair

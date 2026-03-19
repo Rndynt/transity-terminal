@@ -9,12 +9,13 @@ export class SeatInventoryService {
   }
 
   async precomputeInventory(trip: Trip): Promise<void> {
-    // Get the vehicle layout
+    // Prefer trip's explicit layoutId; fall back to vehicle's layout
     const vehicle = await this.storage.getVehicleById(trip.vehicleId);
-    const layout = await this.storage.getLayoutById(vehicle.layoutId);
+    const resolvedLayoutId = trip.layoutId ?? vehicle?.layoutId ?? null;
+    const layout = resolvedLayoutId ? await this.storage.getLayoutById(resolvedLayoutId) : null;
     
     if (!layout) {
-      throw new Error("Vehicle layout not found");
+      throw new Error("Layout tidak ditemukan. Pastikan trip memiliki layout atau kendaraan memiliki layout yang valid.");
     }
 
     // Get trip legs
