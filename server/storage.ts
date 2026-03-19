@@ -389,6 +389,7 @@ export class DatabaseStorage implements IStorage {
           LEFT JOIN ${patternStops} ps ON ps.pattern_id = ${trips.patternId} AND ps.stop_id = tst.stop_id
           WHERE tst.trip_id = ${trips.id} 
           AND tst.stop_id = ${outletStopId}
+          AND tst.depart_at IS NOT NULL
           AND COALESCE(tst.boarding_allowed, ps.boarding_allowed, true) = true
           AND tst.stop_sequence < (
             SELECT MAX(tst2.stop_sequence) 
