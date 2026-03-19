@@ -1,0 +1,208 @@
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { tripsApi, tripPatternsApi } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import ManifestDialog from '@/components/manifest/ManifestDialog';
+import { FileText, ChevronLeft, ChevronRight, Bus, Clock, Search, Users } from 'lucide-react';
+import type { TripWithDetails, TripPattern } from '@/types';
+
+function formatDisplayDate(dateStr: string) {
+  try {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+}
+
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function addDays(dateStr: string, days: number) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; className: string }> = {
+    scheduled: { label: 'Terjadwal', className: 'bg-blue-100 text-blue-700' },
+    canceled:  { label: 'Batal',     className: 'bg-red-100 text-red-700' },
+    closed:    { label: 'Ditutup',   className: 'bg-gray-100 text-gray-600' },
+  };
+  const s = map[status] ?? { label: status, className: 'bg-gray-100 text-gray-600' };
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.className}`}>{s.label}</span>;
+}
+
+export default function ManifestPage() {
+  const [selectedDate, setSelectedDate] = useState(todayStr());
+  const [search, setSearch] = useState('');
+  const [manifestTripId, setManifestTripId] = useState<string | null>(null);
+
+  const { data: trips = [], isLoading } = useQuery<TripWithDetails[]>({
+    queryKey: ['/api/trips', selectedDate],
+    queryFn: () => tripsApi.getAll(selectedDate),
+  });
+
+  const { data: patterns = [] } = useQuery<TripPattern[]>({
+    queryKey: ['/api/trip-patterns'],
+    queryFn: tripPatternsApi.getAll,
+  });
+
+  const getPatternName = (patternId: string) => {
+    return patterns.find(p => p.id === patternId)?.name ?? patternId.slice(-8);
+  };
+
+  const filtered = trips.filter(t => {
+    const name = getPatternName(t.patternId).toLowerCase();
+    return name.includes(search.toLowerCase()) || t.id.includes(search.toLowerCase());
+  });
+
+  return (
+    <div className="flex flex-col h-full bg-background">
+      {/* ── Page Header ── */}
+      <div className="border-b px-6 py-4 shrink-0">
+        <div className="flex items-center gap-3 mb-1">
+          <FileText className="w-5 h-5 text-primary" />
+          <h1 className="text-xl font-semibold">Manifest Perjalanan</h1>
+        </div>
+        <p className="text-sm text-muted-foreground">Dokumen resmi penumpang dan kargo per trip. Pilih trip lalu klik <strong>Buka Manifest</strong>.</p>
+      </div>
+
+      {/* ── Controls ── */}
+      <div className="px-6 py-4 border-b bg-muted/20 shrink-0">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+          {/* Date navigator */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setSelectedDate(d => addDays(d, -1))}
+              data-testid="btn-prev-date"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <div className="flex flex-col items-center min-w-[180px]">
+              <span className="text-sm font-semibold">{formatDisplayDate(selectedDate)}</span>
+              <span className="text-xs text-muted-foreground font-mono">{selectedDate}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setSelectedDate(d => addDays(d, 1))}
+              data-testid="btn-next-date"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-2 h-8 text-xs"
+              onClick={() => setSelectedDate(todayStr())}
+              data-testid="btn-today"
+            >
+              Hari Ini
+            </Button>
+            <Input
+              type="date"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              className="h-8 w-36 text-xs"
+              data-testid="input-date-picker"
+            />
+          </div>
+
+          {/* Search */}
+          <div className="relative w-full sm:w-56">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Cari rute..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="h-8 pl-8 text-sm"
+              data-testid="input-search-manifest"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Trip List ── */}
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-48">
+            <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-primary" />
+            <span className="ml-3 text-sm text-muted-foreground">Memuat trip...</span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+            <FileText className="w-10 h-10 mb-3 opacity-20" />
+            <p className="text-sm font-medium">Tidak ada trip pada tanggal ini</p>
+            <p className="text-xs mt-1">Coba pilih tanggal lain</p>
+          </div>
+        ) : (
+          <div className="space-y-2" data-testid="manifest-trip-list">
+            {filtered.map(trip => (
+              <Card
+                key={trip.id}
+                className="border hover:border-primary/40 hover:shadow-sm transition-all"
+                data-testid={`manifest-card-${trip.id}`}
+              >
+                <CardContent className="p-4 flex items-center justify-between gap-4">
+                  {/* Left: trip info */}
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Bus className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm truncate">{getPatternName(trip.patternId)}</span>
+                        <StatusBadge status={trip.status ?? 'scheduled'} />
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                        {(trip as any).originDepartHHMM && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            Berangkat {(trip as any).originDepartHHMM}
+                          </span>
+                        )}
+                        <span className="font-mono text-[11px] bg-muted px-1.5 py-0.5 rounded">#{trip.id.slice(-8)}</span>
+                        <span className="flex items-center gap-1">
+                          <Users className="w-3 h-3" />
+                          {trip.capacity} kursi
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: action */}
+                  <Button
+                    size="sm"
+                    className="shrink-0 gap-1.5"
+                    onClick={() => setManifestTripId(trip.id)}
+                    data-testid={`btn-open-manifest-${trip.id}`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Buka Manifest
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Manifest Dialog ── */}
+      <ManifestDialog
+        tripId={manifestTripId}
+        open={!!manifestTripId}
+        onOpenChange={(open) => { if (!open) setManifestTripId(null); }}
+      />
+    </div>
+  );
+}

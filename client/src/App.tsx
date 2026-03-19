@@ -8,6 +8,7 @@ import AppLayout from "@/components/layout/AppLayout";
 import MastersPage from "@/pages/masters/MastersPage";
 import CsoPage from "@/pages/cso/CsoPage";
 import CargoListPage from "@/pages/cargo/CargoListPage";
+import ManifestPage from "@/pages/manifest/ManifestPage";
 
 function Router() {
   return (
@@ -16,6 +17,7 @@ function Router() {
         <Route path="/" component={CsoPage} />
         <Route path="/cso" component={CsoPage} />
         <Route path="/cargo" component={CargoListPage} />
+        <Route path="/manifest" component={ManifestPage} />
         <Route path="/masters" component={MastersPage} />
         <Route component={NotFound} />
       </Switch>

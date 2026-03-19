@@ -342,13 +342,14 @@ export default function TripsManager() {
                   <TableHead>Kendaraan</TableHead>
                   <TableHead>Kapasitas</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="w-32 text-center">Manifest</TableHead>
                   <TableHead className="w-10">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredTrips.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                       <CalendarDays className="w-8 h-8 mx-auto mb-2 opacity-30" />
                       {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data trip'}
                     </TableCell>
@@ -367,6 +368,18 @@ export default function TripsManager() {
                       <TableCell className="text-sm">{getVehicleName(trip.vehicleId)}</TableCell>
                       <TableCell className="text-sm">{trip.capacity} kursi</TableCell>
                       <TableCell>{getStatusBadge(trip.status || 'scheduled')}</TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 text-xs border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
+                          onClick={() => setManifestTripId(trip.id)}
+                          data-testid={`btn-manifest-${trip.id}`}
+                        >
+                          <FileText className="h-3 w-3" />
+                          Manifest
+                        </Button>
+                      </TableCell>
                       <TableCell>
                         <RowActionsMenu
                           actions={[
