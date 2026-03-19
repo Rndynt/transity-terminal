@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,9 +13,11 @@ import { RowActionsMenu } from './RowActionsMenu';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, tripPatternsApi, vehiclesApi, layoutsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Clock, Route, Grid3X3, CalendarDays, FileText } from 'lucide-react';
+import {
+  Plus, Pencil, Trash2, Clock, Route, Grid3X3, CalendarDays, FileText,
+  Search, X, Filter, Bus, MapPin, LayoutGrid, ChevronDown
+} from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
-import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
 import type { Trip, TripPattern, Vehicle, Layout } from '@/types';
 import TripScheduleEditor from './TripScheduleEditor';
@@ -39,6 +41,45 @@ function SectionDivider({ label }: { label: string }) {
   );
 }
 
+function StatusBadge({ status }: { status: string }) {
+  switch (status) {
+    case 'scheduled':
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />
+          Terjadwal
+        </span>
+      );
+    case 'canceled':
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+          Dibatalkan
+        </span>
+      );
+    case 'closed':
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">
+          <span className="w-1.5 h-1.5 rounded-full bg-gray-400 inline-block" />
+          Ditutup
+        </span>
+      );
+    default:
+      return <Badge variant="outline">{status}</Badge>;
+  }
+}
+
+function ActiveFilterPill({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+      {label}
+      <button onClick={onRemove} className="hover:text-primary/60 transition-colors ml-0.5">
+        <X className="w-3 h-3" />
+      </button>
+    </span>
+  );
+}
+
 export default function TripsManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSchedulingDialogOpen, setIsSchedulingDialogOpen] = useState(false);
@@ -54,7 +95,14 @@ export default function TripsManager() {
     capacity: '',
     status: 'scheduled'
   });
+
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterPatternId, setFilterPatternId] = useState<string>('all');
+  const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+  const [filterDateTo, setFilterDateTo] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
+
   const { toast } = useToast();
 
   const { data: trips = [], isLoading } = useQuery({
@@ -89,11 +137,6 @@ export default function TripsManager() {
     label: `${v.code} — ${v.plate}`,
     badge: `${v.capacity} kursi`
   }));
-
-  const layoutOptions = [
-    { value: '', label: 'Gunakan default kendaraan', badge: 'Default' },
-    ...layouts.map(l => ({ value: l.id, label: l.name, badge: `${l.rows}×${l.cols}` }))
-  ];
 
   const createMutation = useMutation({
     mutationFn: tripsApi.create,
@@ -176,57 +219,402 @@ export default function TripsManager() {
   const handlePrecomputeInventory = (tripId: string) => precomputeSeatInventoryMutation.mutate(tripId);
   const handleScheduling = (trip: Trip) => { setSchedulingTrip(trip); setIsSchedulingDialogOpen(true); };
 
-  const getPatternName = (patternId: string) => patterns.find(p => p.id === patternId)?.name || '-';
-  const getPatternCode = (patternId: string) => patterns.find(p => p.id === patternId)?.code || '';
-  const getVehicleName = (vehicleId: string) => {
-    const v = vehicles.find(v => v.id === vehicleId);
-    return v ? `${v.code} (${v.plate})` : '-';
-  };
-  const getLayoutName = (layoutId: string) => layouts.find(l => l.id === layoutId)?.name || 'Default';
+  const getPattern = (patternId: string) => patterns.find(p => p.id === patternId);
+  const getVehicle = (vehicleId: string) => vehicles.find(v => v.id === vehicleId);
+  const getLayout = (layoutId: string | null) => layoutId ? layouts.find(l => l.id === layoutId) : null;
 
-  const getScheduleDisplay = (trip: any) => {
+  const getDepartureTime = (trip: any): string | null => {
+    if (trip.originDepartHHMM) return trip.originDepartHHMM;
     if (trip.scheduleTime) {
-      const departTime = new Date(trip.scheduleTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' });
-      return `Berangkat: ${departTime}`;
+      return new Date(trip.scheduleTime).toLocaleTimeString('id-ID', {
+        hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta'
+      });
     }
-    return 'Jadwal belum diatur';
+    return null;
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'scheduled': return <Badge variant="secondary">Terjadwal</Badge>;
-      case 'canceled': return <Badge variant="destructive">Dibatalkan</Badge>;
-      case 'closed': return <Badge variant="outline">Ditutup</Badge>;
-      default: return <Badge variant="outline">{status}</Badge>;
-    }
+  const formatServiceDate = (dateStr: string) => {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
   };
 
-  const filteredTrips = trips.filter(trip => {
-    const q = searchQuery.toLowerCase();
-    return getPatternName(trip.patternId).toLowerCase().includes(q) ||
-      getVehicleName(trip.vehicleId).toLowerCase().includes(q) ||
-      trip.id.slice(-8).toLowerCase().includes(q) ||
-      trip.serviceDate.toLowerCase().includes(q) ||
-      (trip.status || 'scheduled').toLowerCase().includes(q);
-  });
+  const activeFilterCount = [
+    filterStatus !== 'all',
+    filterPatternId !== 'all',
+    filterDateFrom !== '',
+    filterDateTo !== '',
+  ].filter(Boolean).length;
+
+  const clearAllFilters = () => {
+    setFilterStatus('all');
+    setFilterPatternId('all');
+    setFilterDateFrom('');
+    setFilterDateTo('');
+    setSearchQuery('');
+  };
+
+  const filteredTrips = useMemo(() => {
+    return trips.filter(trip => {
+      const pattern = getPattern(trip.patternId);
+      const vehicle = getVehicle(trip.vehicleId);
+
+      if (filterStatus !== 'all' && (trip.status || 'scheduled') !== filterStatus) return false;
+      if (filterPatternId !== 'all' && trip.patternId !== filterPatternId) return false;
+      if (filterDateFrom && trip.serviceDate < filterDateFrom) return false;
+      if (filterDateTo && trip.serviceDate > filterDateTo) return false;
+
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const patternName = pattern?.name?.toLowerCase() || '';
+        const patternCode = pattern?.code?.toLowerCase() || '';
+        const vehiclePlate = vehicle?.plate?.toLowerCase() || '';
+        const vehicleCode = vehicle?.code?.toLowerCase() || '';
+        if (!patternName.includes(q) && !patternCode.includes(q) && !vehiclePlate.includes(q) && !vehicleCode.includes(q) && !trip.serviceDate.includes(q)) {
+          return false;
+        }
+      }
+      return true;
+    }).sort((a, b) => {
+      if (a.serviceDate !== b.serviceDate) return b.serviceDate.localeCompare(a.serviceDate);
+      const aTime = getDepartureTime(a) || '';
+      const bTime = getDepartureTime(b) || '';
+      return aTime.localeCompare(bTime);
+    });
+  }, [trips, filterStatus, filterPatternId, filterDateFrom, filterDateTo, searchQuery, patterns, vehicles]);
+
+  const statusCounts = useMemo(() => ({
+    all: trips.length,
+    scheduled: trips.filter(t => (t.status || 'scheduled') === 'scheduled').length,
+    canceled: trips.filter(t => t.status === 'canceled').length,
+    closed: trips.filter(t => t.status === 'closed').length,
+  }), [trips]);
+
+  const uniquePatterns = useMemo(() =>
+    patterns.filter(p => trips.some(t => t.patternId === p.id)),
+    [patterns, trips]
+  );
 
   return (
-    <div className="space-y-6" data-testid="trips-manager">
-      <MasterPageHeader
-        title="Perjalanan Terjadwal"
-        description="Kelola trip dan jadwal keberangkatan"
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder="Cari pola, kendaraan, atau tanggal..."
-        count={filteredTrips.length}
-        action={
-          <Button onClick={handleCreate} data-testid="add-trip-button">
-            <Plus className="h-4 w-4 mr-2" />
-            Tambah Trip
-          </Button>
-        }
-      />
+    <div className="space-y-5" data-testid="trips-manager">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-foreground">Perjalanan Terjadwal</h3>
+            <span className="text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{filteredTrips.length}</span>
+          </div>
+          <p className="text-sm text-muted-foreground mt-0.5">Kelola trip dan jadwal keberangkatan</p>
+        </div>
+        <Button onClick={handleCreate} data-testid="add-trip-button">
+          <Plus className="h-4 w-4 mr-2" />
+          Tambah Trip
+        </Button>
+      </div>
 
+      {/* Status Tabs */}
+      <div className="flex items-center gap-1 border-b">
+        {(['all', 'scheduled', 'canceled', 'closed'] as const).map(status => {
+          const labels: Record<string, string> = { all: 'Semua', scheduled: 'Terjadwal', canceled: 'Dibatalkan', closed: 'Ditutup' };
+          const count = statusCounts[status];
+          const isActive = filterStatus === status;
+          return (
+            <button
+              key={status}
+              onClick={() => setFilterStatus(status)}
+              data-testid={`filter-status-${status}`}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                isActive
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+              }`}
+            >
+              {labels[status]}
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                isActive ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+              }`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Search & Filter Row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Cari rute, kode, atau plat kendaraan..."
+            className="pl-9 pr-9"
+            data-testid="trip-search-input"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowFilters(!showFilters)}
+          data-testid="toggle-filters-button"
+          className={showFilters || activeFilterCount > 0 ? 'border-primary text-primary bg-primary/5' : ''}
+        >
+          <Filter className="h-4 w-4 mr-1.5" />
+          Filter
+          {activeFilterCount > 0 && (
+            <span className="ml-1.5 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
+              {activeFilterCount}
+            </span>
+          )}
+        </Button>
+
+        {activeFilterCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5 mr-1" />
+            Hapus Filter
+          </Button>
+        )}
+      </div>
+
+      {/* Filter Panel */}
+      {showFilters && (
+        <Card className="border-dashed">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Rute / Pola</Label>
+                <Select value={filterPatternId} onValueChange={setFilterPatternId}>
+                  <SelectTrigger data-testid="filter-pattern-select">
+                    <SelectValue placeholder="Semua rute" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua rute</SelectItem>
+                    {uniquePatterns.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Tanggal Dari</Label>
+                <Input
+                  type="date"
+                  value={filterDateFrom}
+                  onChange={e => setFilterDateFrom(e.target.value)}
+                  data-testid="filter-date-from"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Tanggal Sampai</Label>
+                <Input
+                  type="date"
+                  value={filterDateTo}
+                  onChange={e => setFilterDateTo(e.target.value)}
+                  data-testid="filter-date-to"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Active Filter Pills */}
+      {activeFilterCount > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">Filter aktif:</span>
+          {filterPatternId !== 'all' && (
+            <ActiveFilterPill
+              label={`Rute: ${getPattern(filterPatternId)?.name || filterPatternId}`}
+              onRemove={() => setFilterPatternId('all')}
+            />
+          )}
+          {filterDateFrom && (
+            <ActiveFilterPill
+              label={`Dari: ${filterDateFrom}`}
+              onRemove={() => setFilterDateFrom('')}
+            />
+          )}
+          {filterDateTo && (
+            <ActiveFilterPill
+              label={`Sampai: ${filterDateTo}`}
+              onRemove={() => setFilterDateTo('')}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Table */}
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+              <p className="text-sm">Memuat data trip...</p>
+            </div>
+          ) : filteredTrips.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
+              <CalendarDays className="w-10 h-10 opacity-25" />
+              <div className="text-center">
+                <p className="text-sm font-medium">
+                  {searchQuery || activeFilterCount > 0 ? 'Tidak ada trip yang cocok' : 'Belum ada data trip'}
+                </p>
+                <p className="text-xs mt-1 opacity-70">
+                  {searchQuery || activeFilterCount > 0
+                    ? 'Coba ubah kata kunci atau filter yang digunakan'
+                    : 'Klik "Tambah Trip" untuk membuat jadwal perjalanan baru'
+                  }
+                </p>
+              </div>
+              {(searchQuery || activeFilterCount > 0) && (
+                <Button variant="outline" size="sm" onClick={clearAllFilters}>
+                  Hapus semua filter
+                </Button>
+              )}
+            </div>
+          ) : (
+            <Table data-testid="trips-table">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="pl-4">Rute Perjalanan</TableHead>
+                  <TableHead>Tgl. Layanan</TableHead>
+                  <TableHead>Jam Berangkat</TableHead>
+                  <TableHead>Kendaraan</TableHead>
+                  <TableHead>Layout Kursi</TableHead>
+                  <TableHead className="text-center">Kapasitas</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-10 pr-4" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredTrips.map(trip => {
+                  const pattern = getPattern(trip.patternId);
+                  const vehicle = getVehicle(trip.vehicleId);
+                  const layout = getLayout(trip.layoutId || null);
+                  const vehicleLayout = vehicle ? getLayout(vehicle.layoutId || null) : null;
+                  const resolvedLayout = layout || vehicleLayout;
+                  const departTime = getDepartureTime(trip);
+
+                  return (
+                    <TableRow key={trip.id} className="group" data-testid={`trip-row-${trip.id}`}>
+                      {/* Rute */}
+                      <TableCell className="pl-4 py-3">
+                        <div className="flex items-start gap-2.5">
+                          <div className="mt-0.5 w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                            <MapPin className="w-3.5 h-3.5 text-primary" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm text-foreground leading-tight">
+                              {pattern?.name || <span className="text-muted-foreground italic">Rute tidak ditemukan</span>}
+                            </div>
+                            {pattern?.code && (
+                              <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                                {pattern.code}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+
+                      {/* Tanggal */}
+                      <TableCell className="py-3">
+                        <div className="text-sm font-medium text-foreground">
+                          {formatServiceDate(trip.serviceDate)}
+                        </div>
+                      </TableCell>
+
+                      {/* Jam Berangkat */}
+                      <TableCell className="py-3">
+                        {departTime ? (
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                            <span className="text-sm font-semibold tabular-nums">{departTime}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800">
+                            Belum diatur
+                          </span>
+                        )}
+                      </TableCell>
+
+                      {/* Kendaraan */}
+                      <TableCell className="py-3">
+                        {vehicle ? (
+                          <div className="flex items-center gap-1.5">
+                            <Bus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium">{vehicle.code}</div>
+                              <div className="text-xs text-muted-foreground font-mono">{vehicle.plate}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Layout */}
+                      <TableCell className="py-3">
+                        <div className="flex items-center gap-1.5">
+                          <LayoutGrid className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium leading-tight">
+                              {resolvedLayout?.name || <span className="text-muted-foreground italic text-xs">Tidak ada</span>}
+                            </div>
+                            {layout && vehicle && layout.id !== vehicle.layoutId && (
+                              <span className="text-xs text-indigo-600 dark:text-indigo-400">override</span>
+                            )}
+                            {!layout && vehicleLayout && (
+                              <span className="text-xs text-muted-foreground">dari kendaraan</span>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+
+                      {/* Kapasitas */}
+                      <TableCell className="text-center py-3">
+                        <span className="text-sm font-medium tabular-nums">{trip.capacity}</span>
+                        <span className="text-xs text-muted-foreground ml-0.5">kursi</span>
+                      </TableCell>
+
+                      {/* Status */}
+                      <TableCell className="py-3">
+                        <StatusBadge status={trip.status || 'scheduled'} />
+                      </TableCell>
+
+                      {/* Actions */}
+                      <TableCell className="pr-4 py-3">
+                        <RowActionsMenu
+                          actions={[
+                            { label: 'Lihat Manifest', icon: <FileText className="h-3.5 w-3.5" />, onClick: () => setManifestTripId(trip.id) },
+                            { label: 'Atur Jadwal', icon: <Clock className="h-3.5 w-3.5" />, onClick: () => handleScheduling(trip) },
+                            { label: 'Turunkan Leg', icon: <Route className="h-3.5 w-3.5" />, onClick: () => handleDeriveLegs(trip.id), disabled: deriveLegsMutation.isPending },
+                            { label: 'Hitung Inventori', icon: <Grid3X3 className="h-3.5 w-3.5" />, onClick: () => handlePrecomputeInventory(trip.id), disabled: precomputeSeatInventoryMutation.isPending },
+                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(trip) },
+                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(trip.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                          ]}
+                          data-testid={`actions-trip-${trip.id}`}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Form Dialog */}
       <MasterFormDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
@@ -278,7 +666,7 @@ export default function TripsManager() {
           <Label>Override Layout Kursi</Label>
           <SearchableSelect
             value={formData.layoutId}
-            options={layoutOptions.slice(1)}
+            options={layouts.map(l => ({ value: l.id, label: l.name, badge: `${l.rows}×${l.cols}` }))}
             placeholder="Gunakan default kendaraan..."
             searchPlaceholder="Cari layout..."
             onChange={(v) => setFormData(prev => ({ ...prev, layoutId: v }))}
@@ -317,6 +705,7 @@ export default function TripsManager() {
         </div>
       </MasterFormDialog>
 
+      {/* Delete Confirm */}
       <DeleteConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
@@ -325,82 +714,6 @@ export default function TripsManager() {
         description="Apakah Anda yakin ingin menghapus trip ini? Tindakan ini tidak dapat dibatalkan."
         isPending={deleteMutation.isPending}
       />
-
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
-          ) : (
-            <Table data-testid="trips-table">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Rute & Jadwal</TableHead>
-                  <TableHead>Tgl. Layanan</TableHead>
-                  <TableHead>Kendaraan</TableHead>
-                  <TableHead>Kapasitas</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-32 text-center">Manifest</TableHead>
-                  <TableHead className="w-10">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredTrips.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                      <CalendarDays className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data trip'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredTrips.map(trip => (
-                    <TableRow key={trip.id} data-testid={`trip-row-${trip.id}`}>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{trip.id.slice(-8)}</TableCell>
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <div className="font-medium text-sm">{getPatternName(trip.patternId)}</div>
-                          <div className="text-xs text-muted-foreground">{getScheduleDisplay(trip)}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">{trip.serviceDate}</TableCell>
-                      <TableCell className="text-sm">{getVehicleName(trip.vehicleId)}</TableCell>
-                      <TableCell className="text-sm">{trip.capacity} kursi</TableCell>
-                      <TableCell>{getStatusBadge(trip.status || 'scheduled')}</TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1 text-xs border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
-                          onClick={() => setManifestTripId(trip.id)}
-                          data-testid={`btn-manifest-${trip.id}`}
-                        >
-                          <FileText className="h-3 w-3" />
-                          Manifest
-                        </Button>
-                      </TableCell>
-                      <TableCell>
-                        <RowActionsMenu
-                          actions={[
-                            { label: 'Lihat Manifest', icon: <FileText className="h-3.5 w-3.5" />, onClick: () => setManifestTripId(trip.id) },
-                            { label: 'Atur Jadwal', icon: <Clock className="h-3.5 w-3.5" />, onClick: () => handleScheduling(trip) },
-                            { label: 'Turunkan Leg', icon: <Route className="h-3.5 w-3.5" />, onClick: () => handleDeriveLegs(trip.id), disabled: deriveLegsMutation.isPending },
-                            { label: 'Hitung Inventori', icon: <Grid3X3 className="h-3.5 w-3.5" />, onClick: () => handlePrecomputeInventory(trip.id), disabled: precomputeSeatInventoryMutation.isPending },
-                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(trip) },
-                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(trip.id), variant: 'destructive', disabled: deleteMutation.isPending },
-                          ]}
-                          data-testid={`actions-trip-${trip.id}`}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Manifest Dialog */}
       <ManifestDialog
@@ -413,17 +726,29 @@ export default function TripsManager() {
       <Dialog open={isSchedulingDialogOpen} onOpenChange={setIsSchedulingDialogOpen}>
         <DialogContent className="sm:max-w-4xl max-h-[92vh] flex flex-col p-0 gap-0" data-testid="scheduling-dialog">
           <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
-            <DialogTitle>Jadwal Keberangkatan — {schedulingTrip && getPatternName(schedulingTrip.patternId)}</DialogTitle>
+            <DialogTitle>Jadwal Keberangkatan — {schedulingTrip && getPattern(schedulingTrip.patternId)?.name}</DialogTitle>
             <DialogDescription>Atur waktu tiba dan berangkat untuk setiap halte dalam trip ini.</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             {schedulingTrip && (
               <div className="bg-muted/40 border border-border rounded-xl p-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div><span className="font-medium text-muted-foreground">Tanggal:</span> <span className="ml-1">{schedulingTrip.serviceDate}</span></div>
-                  <div><span className="font-medium text-muted-foreground">Kendaraan:</span> <span className="ml-1">{getVehicleName(schedulingTrip.vehicleId)}</span></div>
-                  <div><span className="font-medium text-muted-foreground">Kapasitas:</span> <span className="ml-1">{schedulingTrip.capacity} kursi</span></div>
-                  <div className="flex items-center gap-1"><span className="font-medium text-muted-foreground">Status:</span> <span className="ml-1">{getStatusBadge(schedulingTrip.status || 'scheduled')}</span></div>
+                  <div>
+                    <span className="text-xs text-muted-foreground font-medium block mb-0.5">Tanggal</span>
+                    <span className="font-medium">{formatServiceDate(schedulingTrip.serviceDate)}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground font-medium block mb-0.5">Kendaraan</span>
+                    <span className="font-medium">{(() => { const v = getVehicle(schedulingTrip.vehicleId); return v ? `${v.code} (${v.plate})` : '-'; })()}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground font-medium block mb-0.5">Kapasitas</span>
+                    <span className="font-medium">{schedulingTrip.capacity} kursi</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground font-medium block mb-0.5">Status</span>
+                    <StatusBadge status={schedulingTrip.status || 'scheduled'} />
+                  </div>
                 </div>
               </div>
             )}
