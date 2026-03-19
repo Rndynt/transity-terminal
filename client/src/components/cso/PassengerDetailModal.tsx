@@ -276,10 +276,6 @@ export default function PassengerDetailModal({
                         )}
                       </div>
 
-                      {/* Booking ref */}
-                      <div className="text-xs text-muted-foreground pt-1" data-testid="booking-reference">
-                        Booking ID: <span className="font-mono">{bookingData.booking.id.slice(-8).toUpperCase()}</span>
-                      </div>
                     </div>
                   )}
                 </div>
