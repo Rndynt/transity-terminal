@@ -436,17 +436,22 @@ export default function TripsManager() {
             {/* Route filter */}
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Rute / Pola</Label>
-              <Select value={filterPatternId} onValueChange={setFilterPatternId}>
-                <SelectTrigger data-testid="filter-pattern-select">
-                  <SelectValue placeholder="Semua rute" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua rute</SelectItem>
-                  {uniquePatterns.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={filterPatternId}
+                options={[
+                  { value: 'all', label: 'Semua rute' },
+                  ...uniquePatterns.map(p => ({
+                    value: p.id,
+                    label: p.name,
+                    badge: p.code || undefined,
+                    subtitle: p.vehicleClass || undefined,
+                  }))
+                ]}
+                placeholder="Semua rute"
+                searchPlaceholder="Cari nama atau kode rute..."
+                onChange={setFilterPatternId}
+                data-testid="filter-pattern-select"
+              />
             </div>
 
             {/* Date preset buttons */}
