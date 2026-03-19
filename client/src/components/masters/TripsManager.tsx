@@ -169,9 +169,9 @@ export default function TripsManager() {
     queryFn: layoutsApi.getAll
   });
 
-  const patternOptions = patterns.filter(p => p.active).map(p => ({
+  const patternOptions = patterns.map(p => ({
     value: p.id,
-    label: p.name,
+    label: p.active ? p.name : `${p.name} (Nonaktif)`,
     badge: p.code,
     subtitle: p.vehicleClass || undefined
   }));
@@ -249,7 +249,7 @@ export default function TripsManager() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const submitData = { ...formData, capacity: parseInt(formData.capacity, 10), channelFlags: { CSO: true, WEB: false, APP: false, OTA: false } };
+    const submitData = { ...formData, capacity: parseInt(formData.capacity, 10), layoutId: formData.layoutId || null, vehicleId: formData.vehicleId || null, channelFlags: { CSO: true, WEB: false, APP: false, OTA: false } };
     if (editingTrip) {
       updateMutation.mutate({ id: editingTrip.id, data: submitData });
     } else {
