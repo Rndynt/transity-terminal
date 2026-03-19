@@ -27,234 +27,233 @@ export const ticketStatusEnum = pgEnum('ticket_status', ['active', 'canceled', '
 
 // 1. Stops
 export const stops = pgTable("stops", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  code: text("code").notNull().unique(),
-  name: text("name").notNull(),
-  city: text("city"),
-  lat: numeric("lat", { precision: 9, scale: 6 }),
-  lng: numeric("lng", { precision: 9, scale: 6 }),
-  isOutlet: boolean("is_outlet").default(false),
+  id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code:      text("code").notNull().unique(),
+  name:      text("name").notNull(),
+  city:      text("city"),
+  isOutlet:  boolean("is_outlet").default(false),
+  lat:       numeric("lat", { precision: 9, scale: 6 }),
+  lng:       numeric("lng", { precision: 9, scale: 6 }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
 // 2. Outlets
 export const outlets = pgTable("outlets", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  stopId: uuid("stop_id").notNull().references(() => stops.id).unique(),
-  name: text("name").notNull(),
-  address: text("address"),
-  phone: text("phone"),
+  id:               uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  stopId:           uuid("stop_id").notNull().references(() => stops.id).unique(),
+  name:             text("name").notNull(),
+  address:          text("address"),
+  phone:            text("phone"),
   printerProfileId: text("printer_profile_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
 // 3. Layouts
 export const layouts = pgTable("layouts", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  rows: integer("rows").notNull(),
-  cols: integer("cols").notNull(),
-  seatMap: jsonb("seat_map").notNull(), // array of {seat_no, row, col, class?, disabled?}
+  id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name:      text("name").notNull(),
+  rows:      integer("rows").notNull(),
+  cols:      integer("cols").notNull(),
+  seatMap:   jsonb("seat_map").notNull(), // array of {seat_no, row, col, class?, disabled?}
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
 // 4. Vehicles
 export const vehicles = pgTable("vehicles", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  code: text("code").notNull().unique(),
-  plate: text("plate").notNull().unique(),
-  layoutId: uuid("layout_id").notNull().references(() => layouts.id),
-  capacity: integer("capacity").notNull(),
-  notes: text("notes"),
+  id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code:      text("code").notNull().unique(),
+  plate:     text("plate").notNull().unique(),
+  layoutId:  uuid("layout_id").notNull().references(() => layouts.id),
+  capacity:  integer("capacity").notNull(),
+  notes:     text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
 // 5. Trip Patterns
 export const tripPatterns = pgTable("trip_patterns", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  code: text("code").notNull().unique(),
-  name: text("name").notNull(),
-  vehicleClass: text("vehicle_class"),
+  id:              uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code:            text("code").notNull().unique(),
+  name:            text("name").notNull(),
+  active:          boolean("active").default(true),
+  vehicleClass:    text("vehicle_class"),
   defaultLayoutId: uuid("default_layout_id").references(() => layouts.id),
-  active: boolean("active").default(true),
-  tags: text("tags").array().default(sql`'{}'`),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  tags:            text("tags").array().default(sql`'{}'`),
+  createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
 // 6. Pattern Stops
 export const patternStops = pgTable("pattern_stops", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  patternId: uuid("pattern_id").notNull().references(() => tripPatterns.id),
-  stopId: uuid("stop_id").notNull().references(() => stops.id),
-  stopSequence: integer("stop_sequence").notNull(),
-  dwellSeconds: integer("dwell_seconds").default(0),
-  boardingAllowed: boolean("boarding_allowed").notNull().default(true),
+  id:               uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  patternId:        uuid("pattern_id").notNull().references(() => tripPatterns.id),
+  stopId:           uuid("stop_id").notNull().references(() => stops.id),
+  stopSequence:     integer("stop_sequence").notNull(),
+  boardingAllowed:  boolean("boarding_allowed").notNull().default(true),
   alightingAllowed: boolean("alighting_allowed").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  dwellSeconds:     integer("dwell_seconds").default(0),
+  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
 // 6a. Trip Bases (Virtual scheduling templates)
 export const tripBases = pgTable("trip_bases", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  patternId: uuid("pattern_id").notNull().references(() => tripPatterns.id),
-  code: text("code").unique(),
-  name: text("name").notNull(),
-  active: boolean("active").notNull().default(true),
-  timezone: text("timezone").notNull().default('Asia/Jakarta'),
+  id:               uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code:             text("code").unique(),
+  name:             text("name").notNull(),
+  patternId:        uuid("pattern_id").notNull().references(() => tripPatterns.id),
+  active:           boolean("active").notNull().default(true),
+  timezone:         text("timezone").notNull().default('Asia/Jakarta'),
+  validFrom:        date("valid_from"),
+  validTo:          date("valid_to"),
   // Days of operation
-  mon: boolean("mon").notNull().default(true),
-  tue: boolean("tue").notNull().default(true),
-  wed: boolean("wed").notNull().default(true),
-  thu: boolean("thu").notNull().default(true),
-  fri: boolean("fri").notNull().default(true),
-  sat: boolean("sat").notNull().default(true),
-  sun: boolean("sun").notNull().default(true),
-  validFrom: date("valid_from"),
-  validTo: date("valid_to"),
-  defaultLayoutId: uuid("default_layout_id").references(() => layouts.id),
+  mon:              boolean("mon").notNull().default(true),
+  tue:              boolean("tue").notNull().default(true),
+  wed:              boolean("wed").notNull().default(true),
+  thu:              boolean("thu").notNull().default(true),
+  fri:              boolean("fri").notNull().default(true),
+  sat:              boolean("sat").notNull().default(true),
+  sun:              boolean("sun").notNull().default(true),
+  defaultLayoutId:  uuid("default_layout_id").references(() => layouts.id),
   defaultVehicleId: uuid("default_vehicle_id").references(() => vehicles.id),
-  capacity: integer("capacity"),
-  channelFlags: jsonb("channel_flags").notNull().default(sql`'{"CSO":true,"WEB":false,"APP":false,"OTA":false}'`),
-  // Default stop times as local time strings without date
-  defaultStopTimes: jsonb("default_stop_times").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow()
+  capacity:         integer("capacity"),
+  channelFlags:     jsonb("channel_flags").notNull().default(sql`'{"CSO":true,"WEB":false,"APP":false,"OTA":false}'`),
+  defaultStopTimes: jsonb("default_stop_times").notNull(), // Default stop times as local time strings without date
+  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt:        timestamp("updated_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
-  idxTripBasesActive: sql`CREATE INDEX IF NOT EXISTS idx_trip_bases_active ON ${table} (active)`,
+  idxTripBasesActive:  sql`CREATE INDEX IF NOT EXISTS idx_trip_bases_active ON ${table} (active)`,
   idxTripBasesPattern: sql`CREATE INDEX IF NOT EXISTS idx_trip_bases_pattern ON ${table} (pattern_id)`,
-  idxTripBasesValid: sql`CREATE INDEX IF NOT EXISTS idx_trip_bases_valid ON ${table} (valid_from, valid_to)`
+  idxTripBasesValid:   sql`CREATE INDEX IF NOT EXISTS idx_trip_bases_valid ON ${table} (valid_from, valid_to)`
 }));
 
 // 7. Trips
 export const trips = pgTable("trips", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  patternId: uuid("pattern_id").notNull().references(() => tripPatterns.id),
-  serviceDate: date("service_date").notNull(),
-  vehicleId: uuid("vehicle_id").notNull().references(() => vehicles.id),
-  layoutId: uuid("layout_id").references(() => layouts.id),
-  capacity: integer("capacity").notNull(),
-  status: tripStatusEnum("status").default('scheduled'),
-  channelFlags: jsonb("channel_flags").default(sql`'{"CSO":true,"WEB":false,"APP":false,"OTA":false}'`),
-  baseId: uuid("base_id").references(() => tripBases.id),
+  id:               uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  baseId:           uuid("base_id").references(() => tripBases.id),
+  patternId:        uuid("pattern_id").notNull().references(() => tripPatterns.id),
+  serviceDate:      date("service_date").notNull(),
+  status:           tripStatusEnum("status").default('scheduled'),
+  vehicleId:        uuid("vehicle_id").notNull().references(() => vehicles.id),
+  layoutId:         uuid("layout_id").references(() => layouts.id),
+  capacity:         integer("capacity").notNull(),
   originDepartHHMM: text("origin_depart_hhmm"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  channelFlags:     jsonb("channel_flags").default(sql`'{"CSO":true,"WEB":false,"APP":false,"OTA":false}'`),
+  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
   uniqTripBasePerDay: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_trip_base_per_day ON ${table} (base_id, service_date) WHERE base_id IS NOT NULL`
 }));
 
 // 8. Trip Stop Times
 export const tripStopTimes = pgTable("trip_stop_times", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  tripId: uuid("trip_id").notNull().references(() => trips.id),
-  stopId: uuid("stop_id").notNull().references(() => stops.id),
-  stopSequence: integer("stop_sequence").notNull(),
-  arriveAt: timestamp("arrive_at", { withTimezone: true }),
-  departAt: timestamp("depart_at", { withTimezone: true }),
-  dwellSeconds: integer("dwell_seconds").default(0),
-  boardingAllowed: boolean("boarding_allowed"), // null = inherit from pattern
-  alightingAllowed: boolean("alighting_allowed") // null = inherit from pattern
+  id:               uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tripId:           uuid("trip_id").notNull().references(() => trips.id),
+  stopId:           uuid("stop_id").notNull().references(() => stops.id),
+  stopSequence:     integer("stop_sequence").notNull(),
+  arriveAt:         timestamp("arrive_at", { withTimezone: true }),
+  departAt:         timestamp("depart_at", { withTimezone: true }),
+  boardingAllowed:  boolean("boarding_allowed"), // null = inherit from pattern
+  alightingAllowed: boolean("alighting_allowed"), // null = inherit from pattern
+  dwellSeconds:     integer("dwell_seconds").default(0)
 });
 
 // 9. Trip Legs
 export const tripLegs = pgTable("trip_legs", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  tripId: uuid("trip_id").notNull().references(() => trips.id),
-  legIndex: integer("leg_index").notNull(),
-  fromStopId: uuid("from_stop_id").notNull().references(() => stops.id),
-  toStopId: uuid("to_stop_id").notNull().references(() => stops.id),
-  departAt: timestamp("depart_at", { withTimezone: true }).notNull(),
-  arriveAt: timestamp("arrive_at", { withTimezone: true }).notNull(),
+  id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tripId:      uuid("trip_id").notNull().references(() => trips.id),
+  legIndex:    integer("leg_index").notNull(),
+  fromStopId:  uuid("from_stop_id").notNull().references(() => stops.id),
+  toStopId:    uuid("to_stop_id").notNull().references(() => stops.id),
+  departAt:    timestamp("depart_at", { withTimezone: true }).notNull(),
+  arriveAt:    timestamp("arrive_at", { withTimezone: true }).notNull(),
   durationMin: integer("duration_min").notNull()
 });
 
 // 10. Seat Inventory
 export const seatInventory = pgTable("seat_inventory", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  tripId: uuid("trip_id").notNull().references(() => trips.id),
-  seatNo: text("seat_no").notNull(),
+  id:       uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tripId:   uuid("trip_id").notNull().references(() => trips.id),
+  seatNo:   text("seat_no").notNull(),
   legIndex: integer("leg_index").notNull(),
-  booked: boolean("booked").default(false),
-  holdRef: text("hold_ref")
+  booked:   boolean("booked").default(false),
+  holdRef:  text("hold_ref")
 });
 
 // 10a. Seat Holds
 export const seatHolds = pgTable("seat_holds", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  holdRef: text("hold_ref").notNull().unique(),
-  tripId: uuid("trip_id").notNull().references(() => trips.id),
-  seatNo: text("seat_no").notNull(),
-  legIndexes: integer("leg_indexes").array().notNull(),
-  ttlClass: text("ttl_class").notNull(), // 'short' | 'long'
-  operatorId: text("operator_id").notNull(),
-  bookingId: text("booking_id"), // nullable for non-booking holds
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  holdRef:     text("hold_ref").notNull().unique(),
+  tripId:      uuid("trip_id").notNull().references(() => trips.id),
+  seatNo:      text("seat_no").notNull(),
+  legIndexes:  integer("leg_indexes").array().notNull(),
+  ttlClass:    text("ttl_class").notNull(), // 'short' | 'long'
+  operatorId:  text("operator_id").notNull(),
+  bookingId:   text("booking_id"), // nullable for non-booking holds
+  expiresAt:   timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
 // 11. Price Rules
 export const priceRules = pgTable("price_rules", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  scope: priceRuleScopeEnum("scope").notNull(),
+  id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  scope:     priceRuleScopeEnum("scope").notNull(),
   patternId: uuid("pattern_id").references(() => tripPatterns.id),
-  tripId: uuid("trip_id").references(() => trips.id),
-  legIndex: integer("leg_index"),
-  rule: jsonb("rule").notNull(), // base per leg, caps, discounts, peak %, promo
+  tripId:    uuid("trip_id").references(() => trips.id),
+  legIndex:  integer("leg_index"),
+  priority:  integer("priority").default(0),
+  rule:      jsonb("rule").notNull(), // base per leg, caps, discounts, peak %, promo
   validFrom: timestamp("valid_from", { withTimezone: true }),
-  validTo: timestamp("valid_to", { withTimezone: true }),
-  priority: integer("priority").default(0)
+  validTo:   timestamp("valid_to", { withTimezone: true })
 });
 
 // 12. Bookings
 export const bookings = pgTable("bookings", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  bookingCode: text("booking_code").unique(), // Human-readable PNR e.g. TRV-20240319-XYZ12
-  tripId: uuid("trip_id").notNull().references(() => trips.id),
-  originStopId: uuid("origin_stop_id").notNull().references(() => stops.id),
-  destinationStopId: uuid("destination_stop_id").notNull().references(() => stops.id),
-  originSeq: integer("origin_seq").notNull(),
-  destinationSeq: integer("destination_seq").notNull(),
-  outletId: uuid("outlet_id").references(() => outlets.id),
-  channel: channelEnum("channel").default('CSO'),
-  status: bookingStatusEnum("status").default('pending'),
-  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
-  currency: text("currency").default('IDR'),
-  appUserId: uuid("app_user_id").references(() => appUsers.id),
-  createdBy: text("created_by"),
-  pendingExpiresAt: timestamp("pending_expires_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  id:                 uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingCode:        text("booking_code").unique(), // Human-readable PNR e.g. TRV-20240319-XYZ12
+  status:             bookingStatusEnum("status").default('pending'),
+  tripId:             uuid("trip_id").notNull().references(() => trips.id),
+  originStopId:       uuid("origin_stop_id").notNull().references(() => stops.id),
+  destinationStopId:  uuid("destination_stop_id").notNull().references(() => stops.id),
+  originSeq:          integer("origin_seq").notNull(),
+  destinationSeq:     integer("destination_seq").notNull(),
+  channel:            channelEnum("channel").default('CSO'),
+  outletId:           uuid("outlet_id").references(() => outlets.id),
+  totalAmount:        numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
+  currency:           text("currency").default('IDR'),
+  createdBy:          text("created_by"),
+  appUserId:          uuid("app_user_id").references(() => appUsers.id),
+  pendingExpiresAt:   timestamp("pending_expires_at", { withTimezone: true }),
+  createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
 // 13. Passengers
 export const passengers = pgTable("passengers", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  ticketNumber: text("ticket_number").unique(), // Per-passenger ticket ID e.g. TKT-20240319-AB123
-  ticketStatus: ticketStatusEnum("ticket_status").default('active'), // Individual cancellation per passenger
-  bookingId: uuid("booking_id").notNull().references(() => bookings.id),
-  fullName: text("full_name").notNull(),
-  phone: text("phone"),
-  idNumber: text("id_number"),
-  seatNo: text("seat_no").notNull(),
-  fareAmount: numeric("fare_amount", { precision: 12, scale: 2 }).notNull(),
-  fareBreakdown: jsonb("fare_breakdown")
+  id:             uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketNumber:   text("ticket_number").unique(), // Per-passenger ticket ID e.g. TKT-20240319-AB123
+  ticketStatus:   ticketStatusEnum("ticket_status").default('active'), // Individual cancellation per passenger
+  bookingId:      uuid("booking_id").notNull().references(() => bookings.id),
+  seatNo:         text("seat_no").notNull(),
+  fullName:       text("full_name").notNull(),
+  phone:          text("phone"),
+  idNumber:       text("id_number"),
+  fareAmount:     numeric("fare_amount", { precision: 12, scale: 2 }).notNull(),
+  fareBreakdown:  jsonb("fare_breakdown")
 });
 
 // 14. Payments
 export const payments = pgTable("payments", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  bookingId: uuid("booking_id").notNull().references(() => bookings.id),
-  method: paymentMethodEnum("method").notNull(),
-  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
-  status: paymentStatusEnum("status").default('success'),
+  id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId:   uuid("booking_id").notNull().references(() => bookings.id),
+  method:      paymentMethodEnum("method").notNull(),
+  status:      paymentStatusEnum("status").default('success'),
+  amount:      numeric("amount", { precision: 12, scale: 2 }).notNull(),
   providerRef: text("provider_ref"),
-  paidAt: timestamp("paid_at", { withTimezone: true }).defaultNow()
+  paidAt:      timestamp("paid_at", { withTimezone: true }).defaultNow()
 });
 
 // 15. Print Jobs
 export const printJobs = pgTable("print_jobs", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   bookingId: uuid("booking_id").notNull().references(() => bookings.id),
-  status: printStatusEnum("status").default('queued'),
-  attempts: integer("attempts").default(0),
+  status:    printStatusEnum("status").default('queued'),
+  attempts:  integer("attempts").default(0),
   lastError: text("last_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
 });
@@ -486,13 +485,13 @@ export type InsertPrintJob = z.infer<typeof insertPrintJobSchema>;
 
 // 16. Cargo Types
 export const cargoTypes = pgTable("cargo_types", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  code: text("code").notNull().unique(),
-  name: text("name").notNull(),
-  description: text("description"),
-  maxWeightKg: numeric("max_weight_kg", { precision: 8, scale: 2 }),
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  id:           uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code:         text("code").notNull().unique(),
+  name:         text("name").notNull(),
+  isActive:     boolean("is_active").default(true),
+  description:  text("description"),
+  maxWeightKg:  numeric("max_weight_kg", { precision: 8, scale: 2 }),
+  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
 export const insertCargoTypeSchema = createInsertSchema(cargoTypes).omit({ id: true, createdAt: true });
@@ -503,17 +502,17 @@ export type InsertCargoType = z.infer<typeof insertCargoTypeSchema>;
 export const cargoRateScopeEnum = pgEnum('cargo_rate_scope', ['global', 'pattern', 'trip']);
 
 export const cargoRates = pgTable("cargo_rates", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  cargoTypeId: uuid("cargo_type_id").notNull().references(() => cargoTypes.id),
-  scope: cargoRateScopeEnum("scope").notNull().default('global'),
-  scopeRefId: uuid("scope_ref_id"),
-  originStopId: uuid("origin_stop_id").references(() => stops.id),
-  destinationStopId: uuid("destination_stop_id").references(() => stops.id),
-  pricePerKg: numeric("price_per_kg", { precision: 12, scale: 2 }).notNull(),
-  pricePerLeg: numeric("price_per_leg", { precision: 12, scale: 2 }).notNull().default('0'),
-  minCharge: numeric("min_charge", { precision: 12, scale: 2 }).notNull().default('0'),
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  id:                 uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  cargoTypeId:        uuid("cargo_type_id").notNull().references(() => cargoTypes.id),
+  scope:              cargoRateScopeEnum("scope").notNull().default('global'),
+  scopeRefId:         uuid("scope_ref_id"),
+  originStopId:       uuid("origin_stop_id").references(() => stops.id),
+  destinationStopId:  uuid("destination_stop_id").references(() => stops.id),
+  isActive:           boolean("is_active").default(true),
+  pricePerKg:         numeric("price_per_kg", { precision: 12, scale: 2 }).notNull(),
+  pricePerLeg:        numeric("price_per_leg", { precision: 12, scale: 2 }).notNull().default('0'),
+  minCharge:          numeric("min_charge", { precision: 12, scale: 2 }).notNull().default('0'),
+  createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
 export const cargoRatesRelations = relations(cargoRates, ({ one }) => ({
@@ -530,32 +529,32 @@ export type InsertCargoRate = z.infer<typeof insertCargoRateSchema>;
 export const cargoStatusEnum = pgEnum('cargo_status', ['pending', 'received', 'loaded', 'in_transit', 'arrived', 'delivered', 'returned', 'canceled']);
 
 export const cargoShipments = pgTable("cargo_shipments", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  waybillNumber: text("waybill_number").notNull().unique(),
-  tripId: uuid("trip_id").notNull().references(() => trips.id),
-  originStopId: uuid("origin_stop_id").notNull().references(() => stops.id),
-  destinationStopId: uuid("destination_stop_id").notNull().references(() => stops.id),
-  outletId: uuid("outlet_id").references(() => outlets.id),
-  cargoTypeId: uuid("cargo_type_id").references(() => cargoTypes.id),
-  senderName: text("sender_name").notNull(),
-  senderPhone: text("sender_phone").notNull(),
-  recipientName: text("recipient_name").notNull(),
-  recipientPhone: text("recipient_phone").notNull(),
-  itemDescription: text("item_description").notNull(),
-  quantity: integer("quantity").notNull().default(1),
-  weightKg: numeric("weight_kg", { precision: 8, scale: 2 }),
-  lengthCm: numeric("length_cm", { precision: 8, scale: 2 }),
-  widthCm: numeric("width_cm", { precision: 8, scale: 2 }),
-  heightCm: numeric("height_cm", { precision: 8, scale: 2 }),
-  declaredValue: numeric("declared_value", { precision: 12, scale: 2 }),
-  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
-  status: cargoStatusEnum("status").default('received'),
-  channel: channelEnum("channel").default('CSO'),
-  paymentMethod: paymentMethodEnum("payment_method"),
-  paidAt: timestamp("paid_at", { withTimezone: true }),
-  notes: text("notes"),
-  createdBy: text("created_by"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  id:                 uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  waybillNumber:      text("waybill_number").notNull().unique(),
+  status:             cargoStatusEnum("status").default('received'),
+  tripId:             uuid("trip_id").notNull().references(() => trips.id),
+  originStopId:       uuid("origin_stop_id").notNull().references(() => stops.id),
+  destinationStopId:  uuid("destination_stop_id").notNull().references(() => stops.id),
+  outletId:           uuid("outlet_id").references(() => outlets.id),
+  channel:            channelEnum("channel").default('CSO'),
+  cargoTypeId:        uuid("cargo_type_id").references(() => cargoTypes.id),
+  senderName:         text("sender_name").notNull(),
+  senderPhone:        text("sender_phone").notNull(),
+  recipientName:      text("recipient_name").notNull(),
+  recipientPhone:     text("recipient_phone").notNull(),
+  itemDescription:    text("item_description").notNull(),
+  quantity:           integer("quantity").notNull().default(1),
+  weightKg:           numeric("weight_kg", { precision: 8, scale: 2 }),
+  lengthCm:           numeric("length_cm", { precision: 8, scale: 2 }),
+  widthCm:            numeric("width_cm", { precision: 8, scale: 2 }),
+  heightCm:           numeric("height_cm", { precision: 8, scale: 2 }),
+  declaredValue:      numeric("declared_value", { precision: 12, scale: 2 }),
+  totalAmount:        numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
+  paymentMethod:      paymentMethodEnum("payment_method"),
+  paidAt:             timestamp("paid_at", { withTimezone: true }),
+  notes:              text("notes"),
+  createdBy:          text("created_by"),
+  createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
 export const cargoShipmentsRelations = relations(cargoShipments, ({ one }) => ({
@@ -576,14 +575,14 @@ export type InsertCargoShipment = z.infer<typeof insertCargoShipmentSchema>;
 
 // 19. App Users (B2C mobile customers)
 export const appUsers = pgTable("app_users", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: text("email").notNull().unique(),
+  id:           uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  email:        text("email").notNull().unique(),
+  name:         text("name").notNull(),
+  phone:        text("phone"),
+  isActive:     boolean("is_active").default(true),
+  avatar:       text("avatar"),
   passwordHash: text("password_hash").notNull(),
-  name: text("name").notNull(),
-  phone: text("phone"),
-  avatar: text("avatar"),
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
 export const appUsersRelations = relations(appUsers, ({ many }) => ({
@@ -597,12 +596,12 @@ export type InsertAppUser = z.infer<typeof insertAppUserSchema>;
 
 // 20. Reviews
 export const reviews = pgTable("reviews", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   appUserId: uuid("app_user_id").notNull().references(() => appUsers.id),
-  tripId: uuid("trip_id").notNull().references(() => trips.id),
+  tripId:    uuid("trip_id").notNull().references(() => trips.id),
   bookingId: uuid("booking_id").references(() => bookings.id),
-  rating: integer("rating").notNull(),
-  comment: text("comment"),
+  rating:    integer("rating").notNull(),
+  comment:   text("comment"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
 });
 
@@ -618,7 +617,7 @@ export type InsertReview = z.infer<typeof insertReviewSchema>;
 
 // Keep existing user schema for compatibility (can be removed later)
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id:       uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
 });
