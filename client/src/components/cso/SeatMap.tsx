@@ -3,10 +3,11 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { tripsApi, holdsApi } from '@/lib/api';
 import { useSeatHold } from '@/hooks/useSeatHold';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { RotateCcw, Loader2, Bus, Timer, CheckCircle2, AlertTriangle, Users } from 'lucide-react';
+import { RotateCcw, Loader2, Bus, Timer, CheckCircle2, AlertTriangle, Users, Settings2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Trip, SeatmapResponse } from '@/types';
 import PassengerDetailModal from './PassengerDetailModal';
+import { apiRequest } from '@/lib/queryClient';
 
 interface SeatMapProps {
   trip: Trip;
@@ -32,6 +33,7 @@ export default function SeatMap({
   const [selectedSeatForDetails, setSelectedSeatForDetails] = useState<string | null>(null);
   const [seatLoading, setSeatLoading] = useState<string | null>(null);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [precomputing, setPrecomputing] = useState(false);
   const { createHold, releaseHold, getHoldTTL, isHeld } = useSeatHold();
   const { toast } = useToast();
 
@@ -71,6 +73,19 @@ export default function SeatMap({
     const unsubHolds = addEventListener('HOLDS_RELEASED', (data) => { if (data.tripId === trip.id) refetch(); });
     return () => { unsubInventory(); unsubStatus(); unsubHolds(); };
   }, [isConnected, trip.id, addEventListener, refetch]);
+
+  const handlePrecompute = async () => {
+    setPrecomputing(true);
+    try {
+      await apiRequest('POST', `/api/trips/${trip.id}/precompute-seat-inventory`);
+      toast({ title: 'Inventori Berhasil Diinisialisasi', description: 'Klik kursi sekarang sudah bisa dilakukan.' });
+      await refetch();
+    } catch {
+      toast({ title: 'Gagal Inisialisasi', description: 'Coba lagi atau hubungi administrator.', variant: 'destructive' });
+    } finally {
+      setPrecomputing(false);
+    }
+  };
 
   const releaseHoldDirectly = async (holdRef: string, seatNo: string) => {
     try {
@@ -249,6 +264,25 @@ export default function SeatMap({
           {isRefetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
         </button>
       </div>
+
+      {!(seatmap as any).inventoryInitialized && !isPastTrip && (
+        <div className="flex items-start gap-2.5 px-3 py-2.5 bg-amber-50 border border-amber-300 rounded-lg">
+          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-amber-800">Inventori kursi belum disiapkan</p>
+            <p className="text-[11px] text-amber-700 mt-0.5">Kursi tidak bisa dipilih sebelum inventori diinisialisasi.</p>
+          </div>
+          <button
+            onClick={handlePrecompute}
+            disabled={precomputing}
+            data-testid="btn-precompute-inventory"
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-600 text-white text-[11px] font-semibold rounded-lg hover:bg-amber-700 transition-colors flex-shrink-0 disabled:opacity-60"
+          >
+            {precomputing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Settings2 className="w-3 h-3" />}
+            {precomputing ? 'Memproses...' : 'Inisialisasi'}
+          </button>
+        </div>
+      )}
 
       {isPastTrip && (
         <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg">

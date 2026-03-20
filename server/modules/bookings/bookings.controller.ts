@@ -190,9 +190,21 @@ export class BookingsController {
           message: 'Seat already held by you',
           ownedByYou: true
         });
+      } else if (result.reason === 'INCOMPLETE_INVENTORY') {
+        res.status(422).json({
+          error: 'Inventori kursi belum diinisialisasi',
+          code: 'INCOMPLETE_INVENTORY',
+          details: 'Jalankan Precompute Seat Inventory di halaman Trip terlebih dahulu'
+        });
+      } else if (result.reason === 'TRANSACTION_ERROR') {
+        res.status(500).json({
+          error: 'Terjadi kesalahan sistem saat memegang kursi',
+          code: 'TRANSACTION_ERROR',
+          details: result.reason
+        });
       } else {
         res.status(409).json({
-          error: 'Hold creation failed',
+          error: 'Kursi sedang dipegang oleh agen lain',
           code: 'HELD_BY_OTHER',
           details: result.reason
         });

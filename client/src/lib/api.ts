@@ -184,7 +184,9 @@ export const holdsApi = {
         const body = JSON.parse(errorText);
         errorCode = body.code || errorCode;
 
-        if (body.code === 'HELD_BY_OTHER') {
+        if (body.code === 'INCOMPLETE_INVENTORY') {
+          errorMessage = 'Inventori kursi belum diinisialisasi. Jalankan Precompute Seat Inventory di halaman Master Data → Trip.';
+        } else if (body.code === 'HELD_BY_OTHER') {
           errorMessage = 'Kursi sedang dipegang oleh agen lain. Coba kursi lain atau tunggu hold berakhir.';
         } else if (body.code === 'NO_PRICE_RULE' || body.code === 'PRICE_NOT_CONFIGURED') {
           errorMessage = 'Belum ada aturan harga untuk rute ini. Silakan konfigurasi di menu Aturan Harga terlebih dahulu.';

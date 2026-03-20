@@ -301,7 +301,8 @@ export class TripsService {
       trip,
       layout,
       seatAvailability,
-      legIndexes
+      legIndexes,
+      inventoryInitialized: inventory.length > 0
     };
   }
 
