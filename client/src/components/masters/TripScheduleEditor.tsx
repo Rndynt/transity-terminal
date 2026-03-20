@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Save, Zap, AlertTriangle, Clock, ArrowDown } from 'lucide-react';
+import { Save, Zap, AlertTriangle, Clock, ArrowDown, ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Trip, TripStopTimeWithEffectiveFlags } from '@shared/schema';
 
@@ -51,11 +51,13 @@ type OverrideState = boolean | null;
 
 function OverridePill({
   label,
+  icon,
   value,
   onChange,
   testId,
 }: {
   label: string;
+  icon: React.ReactNode;
   value: OverrideState;
   onChange: (v: OverrideState) => void;
   testId?: string;
@@ -65,23 +67,37 @@ function OverridePill({
     else if (value === true) onChange(false);
     else onChange(null);
   };
+
+  const activeClass =
+    value === null
+      ? 'bg-muted text-muted-foreground'
+      : value === true
+      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+      : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+
+  const title =
+    value === null
+      ? `${label}: warisi pola (klik untuk override)`
+      : value === true
+      ? `${label}: diizinkan (override aktif — klik untuk larang)`
+      : `${label}: dilarang (override aktif — klik untuk reset)`;
+
   return (
     <button
       type="button"
       onClick={cycle}
       data-testid={testId}
-      title={value === null ? `${label}: warisi pola` : value ? `${label}: izinkan (override)` : `${label}: larang (override)`}
+      title={title}
       className={cn(
-        'text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors select-none cursor-pointer',
-        value === null
-          ? 'bg-muted text-muted-foreground border-border'
-          : value === true
-          ? 'bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400'
-          : 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400'
+        'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all select-none',
+        activeClass
       )}
     >
+      {icon}
       {label}
-      {value === null ? '' : value ? ' ✓' : ' ✗'}
+      {value !== null && (
+        <span className="text-[10px] opacity-70">{value ? '✓' : '✗'}</span>
+      )}
     </button>
   );
 }
@@ -217,8 +233,6 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
     return {
       name: st?.stopName || 'Halte tidak dikenal',
       code: st?.stopCode || '',
-      effectiveBoarding: st?.effectiveBoardingAllowed ?? true,
-      effectiveAlighting: st?.effectiveAlightingAllowed ?? true,
     };
   };
 
@@ -261,146 +275,178 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
         </Alert>
       )}
 
-      {/* Timeline */}
-      <div className="relative">
-        {/* Vertical line */}
-        <div className="absolute left-[19px] top-4 bottom-4 w-px bg-border" />
+      {/* Stop cards */}
+      <div className="space-y-1">
+        {stopTimes.map((st, index) => {
+          const info = getStopInfo(st.stopId);
+          const isFirst = index === 0;
+          const isLast = index === stopTimes.length - 1;
+          const isTransit = !isFirst && !isLast;
+          const rowErrs = validationErrors[index] || [];
+          const beErrors = backendErrors.filter(e => e.stopSequence === st.stopSequence);
+          const allErrs = [...rowErrs, ...beErrors.map(e => e.message)];
+          const hasErr = allErrs.length > 0;
 
-        <div className="space-y-0">
-          {stopTimes.map((st, index) => {
-            const info = getStopInfo(st.stopId);
-            const isFirst = index === 0;
-            const isLast = index === stopTimes.length - 1;
-            const rowErrs = validationErrors[index] || [];
-            const beErrors = backendErrors.filter(e => e.stopSequence === st.stopSequence);
-            const allErrs = [...rowErrs, ...beErrors.map(e => e.message)];
-            const hasErr = allErrs.length > 0;
+          const roleLabel = isFirst ? 'Asal' : isLast ? 'Tujuan' : 'Transit';
+          const rolePillClass = isFirst
+            ? 'bg-primary/10 text-primary border border-primary/20'
+            : isLast
+            ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200 dark:border-orange-800'
+            : 'bg-muted text-muted-foreground border border-border';
 
-            const nextStop = stopTimes[index + 1];
-            const legDur = nextStop
-              ? calcLegDuration(st.departAt || st.arriveAt, nextStop.arriveAt || nextStop.departAt)
-              : null;
+          const nextStop = stopTimes[index + 1];
+          const legDur = nextStop
+            ? calcLegDuration(st.departAt || st.arriveAt, nextStop.arriveAt || nextStop.departAt)
+            : null;
 
-            return (
-              <div key={`${st.stopId}-${index}`}>
-                {/* Stop row */}
-                <div className={cn(
-                  'relative flex gap-3 pl-10 pr-2 py-3 rounded-lg transition-colors',
-                  hasErr ? 'bg-red-50 dark:bg-red-950/20' : 'hover:bg-muted/40'
-                )}>
-                  {/* Dot */}
-                  <div className={cn(
-                    'absolute left-3.5 top-4 w-3 h-3 rounded-full border-2 bg-background shrink-0',
-                    isFirst ? 'border-primary' : isLast ? 'border-green-500' : 'border-border'
-                  )} />
+          return (
+            <div key={`${st.stopId}-${index}`}>
+              {/* Stop card */}
+              <div className={cn(
+                'rounded-xl border bg-card p-3 space-y-2.5',
+                hasErr && 'border-destructive/50 bg-destructive/5'
+              )}>
+                {/* Row 1: role badge + stop name + code + override pills */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0', rolePillClass)}>
+                    {roleLabel}
+                  </span>
+                  <span className="font-semibold text-sm text-foreground truncate flex-1 min-w-0">
+                    {info.name}
+                  </span>
+                  {info.code && (
+                    <span className="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
+                      {info.code}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+                    <OverridePill
+                      label="Naik"
+                      icon={<ArrowUp className="h-3 w-3" />}
+                      value={st.boardingAllowed}
+                      onChange={v => updateStop(index, 'boardingAllowed', v)}
+                      testId={`boarding-override-${index}`}
+                    />
+                    <OverridePill
+                      label="Turun"
+                      icon={<ArrowDown className="h-3 w-3" />}
+                      value={st.alightingAllowed}
+                      onChange={v => updateStop(index, 'alightingAllowed', v)}
+                      testId={`alighting-override-${index}`}
+                    />
+                  </div>
+                </div>
 
-                  {/* Stop info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                        {st.stopSequence}
-                      </span>
-                      <span className="font-semibold text-sm text-foreground truncate">{info.name}</span>
-                      {info.code && (
-                        <span className="text-[10px] text-muted-foreground font-mono">{info.code}</span>
-                      )}
-                      <div className="flex items-center gap-1 ml-auto shrink-0">
-                        <OverridePill
-                          label="Naik"
-                          value={st.boardingAllowed}
-                          onChange={v => updateStop(index, 'boardingAllowed', v)}
-                          testId={`boarding-override-${index}`}
-                        />
-                        <OverridePill
-                          label="Turun"
-                          value={st.alightingAllowed}
-                          onChange={v => updateStop(index, 'alightingAllowed', v)}
-                          testId={`alighting-override-${index}`}
-                        />
+                {/* Row 2: time inputs */}
+                <div className="flex items-end gap-3 flex-wrap pl-1">
+                  {/* Tiba */}
+                  <div className="space-y-1">
+                    <span className={cn(
+                      'block text-xs font-medium',
+                      isFirst ? 'text-muted-foreground/40' : 'text-muted-foreground'
+                    )}>
+                      Tiba{!isFirst && <span className="text-destructive ml-0.5">*</span>}
+                    </span>
+                    {isFirst ? (
+                      <div className="h-8 w-44 flex items-center justify-center rounded-md border border-dashed border-muted-foreground/20 bg-muted/30">
+                        <span className="text-xs text-muted-foreground/40">—</span>
                       </div>
-                    </div>
+                    ) : (
+                      <Input
+                        type="datetime-local"
+                        value={st.arriveAt}
+                        onChange={e => updateStop(index, 'arriveAt', e.target.value)}
+                        className="h-8 text-xs w-44 px-2"
+                        data-testid={`arrive-time-${index}`}
+                      />
+                    )}
+                  </div>
 
-                    {/* Time inputs */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {!isFirst && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-muted-foreground font-medium w-9 text-right">Tiba</span>
-                          <Input
-                            type="datetime-local"
-                            value={st.arriveAt}
-                            onChange={e => updateStop(index, 'arriveAt', e.target.value)}
-                            className="h-7 text-xs w-44 px-2"
-                            data-testid={`arrive-time-${index}`}
-                          />
-                        </div>
-                      )}
-                      {!isLast && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-muted-foreground font-medium w-9 text-right">
-                            Brkt{isFirst ? '*' : ''}
-                          </span>
-                          <Input
-                            type="datetime-local"
-                            value={st.departAt}
-                            onChange={e => updateStop(index, 'departAt', e.target.value)}
-                            className={cn('h-7 text-xs w-44 px-2', isFirst && !st.departAt && 'border-amber-400')}
-                            data-testid={`depart-time-${index}`}
-                          />
-                        </div>
-                      )}
+                  {/* Berangkat */}
+                  <div className="space-y-1">
+                    <span className={cn(
+                      'block text-xs font-medium',
+                      isLast ? 'text-muted-foreground/40' : 'text-muted-foreground'
+                    )}>
+                      Berangkat{!isLast && <span className="text-destructive ml-0.5">*</span>}
+                    </span>
+                    {isLast ? (
+                      <div className="h-8 w-44 flex items-center justify-center rounded-md border border-dashed border-muted-foreground/20 bg-muted/30">
+                        <span className="text-xs text-muted-foreground/40">—</span>
+                      </div>
+                    ) : (
+                      <Input
+                        type="datetime-local"
+                        value={st.departAt}
+                        onChange={e => updateStop(index, 'departAt', e.target.value)}
+                        className={cn(
+                          'h-8 text-xs w-44 px-2',
+                          isFirst && !st.departAt && 'border-amber-400'
+                        )}
+                        data-testid={`depart-time-${index}`}
+                      />
+                    )}
+                  </div>
+
+                  {/* Singgah — hanya transit */}
+                  {isTransit && (
+                    <div className="space-y-1">
+                      <span className="block text-xs font-medium text-muted-foreground">
+                        <Clock className="inline w-3 h-3 mr-0.5 opacity-60" />
+                        Singgah
+                      </span>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-muted-foreground font-medium w-9 text-right">Singgah</span>
                         <Input
                           type="number"
                           value={st.dwellSeconds}
                           onChange={e => updateStop(index, 'dwellSeconds', parseInt(e.target.value) || 0)}
                           min="0"
-                          className="h-7 text-xs w-20 px-2"
+                          className="h-8 text-xs w-20 px-2"
                           data-testid={`dwell-${index}`}
                         />
-                        <span className="text-[10px] text-muted-foreground">dtk</span>
+                        <span className="text-xs text-muted-foreground">dtk</span>
                       </div>
                     </div>
-
-                    {/* Inline errors */}
-                    {allErrs.length > 0 && (
-                      <div className="mt-1.5 space-y-0.5">
-                        {allErrs.map((err, i) => (
-                          <p key={i} className="text-[10px] text-red-600 flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3 shrink-0" />
-                            {err}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
 
-                {/* Leg duration between stops */}
-                {!isLast && (
-                  <div className="flex items-center gap-2 pl-10 py-0.5">
-                    <ArrowDown className="w-3 h-3 text-muted-foreground/50 shrink-0" />
-                    {legDur ? (
-                      <span className={cn(
-                        'text-[10px] font-medium px-2 py-0.5 rounded-full',
-                        legDur === 'Invalid'
-                          ? 'bg-red-100 text-red-600 dark:bg-red-900/20'
-                          : 'bg-muted text-muted-foreground'
-                      )}>
-                        {legDur}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground/40">— belum ada waktu —</span>
-                    )}
+                {/* Inline validation errors */}
+                {allErrs.length > 0 && (
+                  <div className="space-y-0.5 pl-1">
+                    {allErrs.map((err, i) => (
+                      <p key={i} className="text-[10px] text-destructive flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 shrink-0" />
+                        {err}
+                      </p>
+                    ))}
                   </div>
                 )}
               </div>
-            );
-          })}
-        </div>
+
+              {/* Leg duration connector */}
+              {!isLast && (
+                <div className="flex items-center gap-2 px-3 py-1">
+                  <div className="w-px h-3 bg-border ml-3" />
+                  {legDur ? (
+                    <span className={cn(
+                      'text-[10px] font-medium px-2 py-0.5 rounded-full',
+                      legDur === 'Invalid'
+                        ? 'bg-destructive/10 text-destructive'
+                        : 'bg-muted text-muted-foreground'
+                    )}>
+                      {legDur}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground/40">— belum ada waktu —</span>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Override legend */}
+      {/* Legend */}
       <p className="text-[10px] text-muted-foreground px-1">
         Pill <strong>Naik</strong> / <strong>Turun</strong>: klik untuk override aturan pola. Abu = warisi pola, Hijau = izinkan, Merah = larang.
       </p>
