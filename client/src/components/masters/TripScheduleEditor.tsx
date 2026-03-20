@@ -54,12 +54,14 @@ function OverridePill({
   icon,
   value,
   onChange,
+  allowedClass,
   testId,
 }: {
   label: string;
   icon: React.ReactNode;
   value: OverrideState;
   onChange: (v: OverrideState) => void;
+  allowedClass: string;
   testId?: string;
 }) {
   const cycle = () => {
@@ -68,19 +70,19 @@ function OverridePill({
     else onChange(null);
   };
 
-  const activeClass =
+  const colorClass =
     value === null
       ? 'bg-muted text-muted-foreground'
       : value === true
-      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+      ? allowedClass
       : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
 
   const title =
     value === null
       ? `${label}: warisi pola (klik untuk override)`
       : value === true
-      ? `${label}: diizinkan (override aktif — klik untuk larang)`
-      : `${label}: dilarang (override aktif — klik untuk reset)`;
+      ? `${label}: diizinkan — override aktif (klik untuk larang)`
+      : `${label}: dilarang — override aktif (klik untuk reset ke pola)`;
 
   return (
     <button
@@ -90,14 +92,11 @@ function OverridePill({
       title={title}
       className={cn(
         'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all select-none',
-        activeClass
+        colorClass
       )}
     >
       {icon}
       {label}
-      {value !== null && (
-        <span className="text-[10px] opacity-70">{value ? '✓' : '✗'}</span>
-      )}
     </button>
   );
 }
@@ -325,6 +324,7 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
                       icon={<ArrowUp className="h-3 w-3" />}
                       value={st.boardingAllowed}
                       onChange={v => updateStop(index, 'boardingAllowed', v)}
+                      allowedClass="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
                       testId={`boarding-override-${index}`}
                     />
                     <OverridePill
@@ -332,6 +332,7 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
                       icon={<ArrowDown className="h-3 w-3" />}
                       value={st.alightingAllowed}
                       onChange={v => updateStop(index, 'alightingAllowed', v)}
+                      allowedClass="bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400"
                       testId={`alighting-override-${index}`}
                     />
                   </div>
