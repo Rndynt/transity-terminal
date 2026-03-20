@@ -165,6 +165,7 @@ export interface IStorage {
 
   // Price Rules
   getPriceRules(): Promise<PriceRule[]>;
+  getPriceRulesForTrip(tripId: string, patternId: string): Promise<PriceRule[]>;
   createPriceRule(data: InsertPriceRule): Promise<PriceRule>;
   updatePriceRule(id: string, data: Partial<InsertPriceRule>): Promise<PriceRule>;
   deletePriceRule(id: string): Promise<void>;

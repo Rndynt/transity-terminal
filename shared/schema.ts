@@ -429,20 +429,22 @@ export type TripWithDetails = Trip & {
 };
 
 // CSO Available Trip type for filtered trips by outlet (updated for virtual scheduling)
+// NOTE: hasPriceRule=false means the trip cannot be booked — no price rule record exists.
 export type CsoAvailableTrip = {
-  tripId?: string;                 // present if real
-  baseId?: string;                 // present if virtual (and also present for real trip that came from a base)
-  isVirtual: boolean;              // true for base-derived items (no real trip yet)
+  tripId?: string;
+  baseId?: string;
+  isVirtual: boolean;
   patternCode: string;
-  patternPath: string;             // "A → C → B"
+  patternPath: string;
   vehicle: { code?: string; plate?: string } | null;
   capacity: number | null;
   status: "scheduled" | "canceled" | "closed" | "draft" | "unknown";
-  departAtAtOutlet: string | null; // ISO if real; or computed from base if virtual
-  finalArrivalAt: string | null;   // ISO if real; or computed from base if virtual
+  departAtAtOutlet: string | null;
+  finalArrivalAt: string | null;
   stopCount: number;
-  outletStopSequence: number;      // stop_sequence of the outlet in the trip (1 = origin, >1 = transit)
-  availableSeats?: number;         // available seat count (for real trips); undefined for virtual trips
+  outletStopSequence: number;
+  availableSeats?: number;
+  hasPriceRule: boolean;
 };
 
 // Extended TripStopTime with effective flags and stop details

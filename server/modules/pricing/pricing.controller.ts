@@ -48,6 +48,22 @@ export class PricingController {
         });
       }
       
+      if (error.message === 'NO_PRICE_RULE') {
+        return res.status(422).json({
+          error: 'Tidak ada aturan harga untuk trip ini',
+          code: 'NO_PRICE_RULE',
+          details: 'Tambahkan aturan harga (pola atau trip) sebelum memesan tiket.'
+        });
+      }
+
+      if (error.message === 'TRIP_NOT_FOUND') {
+        return res.status(404).json({
+          error: 'Trip tidak ditemukan',
+          code: 'TRIP_NOT_FOUND',
+          details: ''
+        });
+      }
+
       res.status(500).json({
         error: 'Internal server error',
         code: 'INTERNAL_ERROR',

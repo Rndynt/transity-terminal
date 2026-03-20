@@ -19,7 +19,7 @@ import {
   type InsertCargoType, type InsertCargoRate
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, sql, inArray, isNull } from "drizzle-orm";
+import { eq, and, or, desc, sql, inArray, isNull } from "drizzle-orm";
 import { fromZonedHHMMToUtc } from "./utils/timezone";
 
 export class DatabaseStorage implements IStorage {
@@ -373,7 +373,12 @@ export class DatabaseStorage implements IStorage {
              WHERE leg_origin_tst.stop_sequence <= outlet_tst.stop_sequence
              AND outlet_tst.stop_sequence < leg_dest_tst.stop_sequence
            )), 0)
-      )`.as('available_seats')
+      )`.as('available_seats'),
+      hasPriceRule: sql<boolean>`EXISTS (
+        SELECT 1 FROM ${priceRules} pr
+        WHERE pr.trip_id = ${trips.id}
+        OR (pr.pattern_id = ${trips.patternId} AND pr.trip_id IS NULL)
+      )`.as('has_price_rule')
     })
     .from(trips)
     .innerJoin(tripPatterns, eq(trips.patternId, tripPatterns.id))
@@ -431,13 +436,17 @@ export class DatabaseStorage implements IStorage {
       finalArrivalAt: row.finalArrivalAt,
       stopCount: row.stopCount,
       outletStopSequence: row.outletStopSequence || 1,
-      availableSeats: Math.max(0, row.availableSeats || row.capacity || 0)
+      availableSeats: Math.max(0, row.availableSeats || row.capacity || 0),
+      hasPriceRule: Boolean(row.hasPriceRule)
     }));
   }
 
   private async getVirtualTripsForCso(serviceDate: string, outletStopId: string): Promise<CsoAvailableTrip[]> {
     // Get all eligible trip bases for this date
     const eligibleBases = await this.getEligibleTripBases(serviceDate);
+    
+    // Fetch all price rules once to avoid N+1 queries
+    const allPriceRules = await this.getPriceRules();
     
     const virtualTrips: CsoAvailableTrip[] = [];
     
@@ -465,6 +474,10 @@ export class DatabaseStorage implements IStorage {
         // Get pattern path - use the same logic as real trips
         const patternPath = await this.getPatternPath(base.patternId);
         
+        const hasPriceRule = allPriceRules.some(r =>
+          (r.patternId === base.patternId && !r.tripId)
+        );
+
         virtualTrips.push({
           baseId: base.id,
           isVirtual: true,
@@ -477,7 +490,8 @@ export class DatabaseStorage implements IStorage {
           finalArrivalAt,
           stopCount: patternStopsForBase.length,
           outletStopSequence: outletStop.stopSequence,
-          availableSeats: base.capacity ?? undefined // Virtual trips show full capacity as available (estimated)
+          availableSeats: base.capacity ?? undefined, // Virtual trips show full capacity as available (estimated)
+          hasPriceRule
         });
       } catch (error) {
         // Skip this base if there's an error (e.g., invalid default times)
@@ -739,6 +753,17 @@ export class DatabaseStorage implements IStorage {
   // Price Rules
   async getPriceRules(): Promise<PriceRule[]> {
     return await db.select().from(priceRules).orderBy(desc(priceRules.priority));
+  }
+
+  async getPriceRulesForTrip(tripId: string, patternId: string): Promise<PriceRule[]> {
+    return await db.select().from(priceRules)
+      .where(
+        or(
+          eq(priceRules.tripId, tripId),
+          and(eq(priceRules.patternId, patternId), isNull(priceRules.tripId))
+        )
+      )
+      .orderBy(desc(priceRules.priority));
   }
 
   async createPriceRule(data: InsertPriceRule): Promise<PriceRule> {

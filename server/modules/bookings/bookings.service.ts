@@ -133,11 +133,19 @@ export class BookingsService {
     }
 
     // Calculate pricing
-    const fareQuote = await this.pricingService.quoteFare(
-      bookingData.tripId,
-      bookingData.originSeq,
-      bookingData.destinationSeq
-    );
+    let fareQuote: Awaited<ReturnType<typeof this.pricingService.quoteFare>>;
+    try {
+      fareQuote = await this.pricingService.quoteFare(
+        bookingData.tripId,
+        bookingData.originSeq,
+        bookingData.destinationSeq
+      );
+    } catch (err: any) {
+      if (err.message === 'NO_PRICE_RULE') {
+        throw new Error('Trip ini belum memiliki aturan harga. Hubungi admin untuk mengatur harga sebelum memesan tiket.');
+      }
+      throw err;
+    }
 
     const expectedTotal = Number(fareQuote.total) * passengers.length;
     const paymentAmount = Number(payment.amount);
@@ -317,11 +325,19 @@ export class BookingsService {
     }
 
     // Calculate pricing
-    const fareQuote = await this.pricingService.quoteFare(
-      bookingData.tripId,
-      bookingData.originSeq,
-      bookingData.destinationSeq
-    );
+    let fareQuote: Awaited<ReturnType<typeof this.pricingService.quoteFare>>;
+    try {
+      fareQuote = await this.pricingService.quoteFare(
+        bookingData.tripId,
+        bookingData.originSeq,
+        bookingData.destinationSeq
+      );
+    } catch (err: any) {
+      if (err.message === 'NO_PRICE_RULE') {
+        throw new Error('Trip ini belum memiliki aturan harga. Hubungi admin untuk mengatur harga sebelum memesan tiket.');
+      }
+      throw err;
+    }
 
     // Set pending expiration
     const now = new Date();

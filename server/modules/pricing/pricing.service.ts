@@ -8,44 +8,37 @@ export class PricingService {
     perPassenger: number;
     breakdown: any;
   }> {
-    // Get trip legs for the journey
+    const trip = await this.storage.getTripById(tripId);
+    if (!trip) throw new Error('TRIP_NOT_FOUND');
+
+    const rules = await this.storage.getPriceRulesForTrip(tripId, trip.patternId!);
+    if (rules.length === 0) {
+      throw new Error('NO_PRICE_RULE');
+    }
+
+    const rule = rules[0];
+    const ruleData = rule.rule as any;
+    const basePricePerLeg: number = ruleData.basePricePerLeg ?? 0;
+    const multiplier: number = ruleData.multiplier ?? 1;
+
     const legs = await this.storage.getTripLegs(tripId);
-    const journeyLegs = legs.filter(leg => 
+    const journeyLegs = legs.filter(leg =>
       leg.legIndex >= originSeq && leg.legIndex < destinationSeq
     );
 
-    // Simple base pricing: 25,000 IDR per leg
-    const basePricePerLeg = 25000;
     const totalBase = journeyLegs.length * basePricePerLeg;
-
-    // Apply any price rules (simplified)
-    const priceRules = await this.storage.getPriceRules();
-    let totalAmount = totalBase;
-    
-    // Apply pattern-level rules
-    const trip = await this.storage.getTripById(tripId);
-    const patternRules = priceRules.filter(rule => 
-      rule.scope === 'pattern' && rule.patternId === trip?.patternId
-    );
-
-    for (const rule of patternRules) {
-      const ruleData = rule.rule as any;
-      if (ruleData.multiplier) {
-        totalAmount *= ruleData.multiplier;
-      }
-      if (ruleData.discount) {
-        totalAmount -= ruleData.discount;
-      }
-    }
+    const totalAmount = Math.round(totalBase * multiplier);
 
     return {
-      total: Math.round(totalAmount),
-      perPassenger: Math.round(totalAmount),
+      total: totalAmount,
+      perPassenger: totalAmount,
       breakdown: {
         base: totalBase,
         legs: journeyLegs.length,
         pricePerLeg: basePricePerLeg,
-        rulesApplied: patternRules.length
+        multiplier,
+        ruleId: rule.id,
+        ruleScope: rule.scope,
       }
     };
   }
