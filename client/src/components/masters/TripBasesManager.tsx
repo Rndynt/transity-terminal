@@ -1024,58 +1024,91 @@ export default function TripBasesManager() {
                   <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Waktu Henti Default</span>
                   <div className="flex-1 h-px bg-border" />
                 </div>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Henti pertama wajib isi <strong>Berangkat</strong>, henti terakhir wajib isi <strong>Tiba</strong>.
-                </p>
+                <div className="rounded-lg bg-muted/40 border border-dashed px-3 py-2 mb-3 space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground">Asal</span> → hanya isi <strong>Berangkat</strong> (waktu bus mulai jalan dari titik awal).
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground">Transit</span> → isi <strong>Tiba</strong> dan <strong>Berangkat</strong> (bus singgah lalu lanjut).
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground">Tujuan</span> → hanya isi <strong>Tiba</strong> (waktu bus tiba di titik akhir).
+                  </p>
+                </div>
                 <div className="rounded-lg border overflow-hidden">
                   {stopTimes.map((stopTime, index) => {
                     const isFirst = index === 0;
                     const isLast = index === stopTimes.length - 1;
+                    const isTransit = !isFirst && !isLast;
                     const role = isFirst ? 'Asal' : isLast ? 'Tujuan' : 'Transit';
-                    const roleColor = isFirst ? 'bg-primary/10 text-primary border-primary/20' : isLast ? 'bg-secondary/10 text-secondary border-secondary/20' : 'bg-muted text-muted-foreground border-border';
+                    const roleColor = isFirst
+                      ? 'bg-primary/10 text-primary border-primary/20'
+                      : isLast
+                      ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200 dark:border-orange-800'
+                      : 'bg-muted text-muted-foreground border-border';
                     return (
                       <div
                         key={stopTime.stopSequence}
                         className={`flex flex-wrap items-center gap-3 px-4 py-3 ${index < stopTimes.length - 1 ? 'border-b' : ''}`}
                       >
-                        <div className="flex items-center gap-2 min-w-[120px] flex-1">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${roleColor}`}>
+                        {/* Nama halte + role badge */}
+                        <div className="flex items-center gap-2 min-w-[140px] flex-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${roleColor}`}>
                             {role}
                           </span>
-                          <span className="text-sm font-medium text-foreground">
-                            #{stopTime.stopSequence} {stopTime.stopName && stopTime.stopName !== `Stop ${stopTime.stopSequence}` ? `— ${stopTime.stopName}` : ''}
+                          <span className="text-sm font-medium text-foreground truncate">
+                            {stopTime.stopName && stopTime.stopName !== `Stop ${stopTime.stopSequence}`
+                              ? stopTime.stopName
+                              : `Halte #${stopTime.stopSequence}`}
                           </span>
                         </div>
+
+                        {/* Input fields */}
                         <div className="flex gap-3 flex-wrap">
+                          {/* Tiba */}
                           <div className="space-y-1">
-                            <Label htmlFor={`arrive-${stopTime.stopSequence}`} className="text-xs text-muted-foreground">
-                              Tiba{isLast ? ' *' : ''}
+                            <Label className={`text-xs ${isFirst ? 'text-muted-foreground/40' : 'text-muted-foreground'}`}>
+                              Tiba{isLast ? <span className="text-destructive ml-0.5">*</span> : ''}
+                              {isTransit && <span className="text-destructive ml-0.5">*</span>}
                             </Label>
-                            <Input
-                              id={`arrive-${stopTime.stopSequence}`}
-                              type="time"
-                              step="60"
-                              value={stopTime.arriveAt}
-                              onChange={(e) => updateStopTime(stopTime.stopSequence, 'arriveAt', e.target.value)}
-                              disabled={isFirst}
-                              className="h-8 w-28 text-sm disabled:opacity-30"
-                              data-testid={`input-arrive-${stopTime.stopSequence}`}
-                            />
+                            {isFirst ? (
+                              <div className="h-8 w-28 flex items-center justify-center rounded-md border border-dashed border-muted-foreground/20 bg-muted/30">
+                                <span className="text-xs text-muted-foreground/40">—</span>
+                              </div>
+                            ) : (
+                              <Input
+                                id={`arrive-${stopTime.stopSequence}`}
+                                type="time"
+                                step="60"
+                                value={stopTime.arriveAt}
+                                onChange={(e) => updateStopTime(stopTime.stopSequence, 'arriveAt', e.target.value)}
+                                className="h-8 w-28 text-sm"
+                                data-testid={`input-arrive-${stopTime.stopSequence}`}
+                              />
+                            )}
                           </div>
+
+                          {/* Berangkat */}
                           <div className="space-y-1">
-                            <Label htmlFor={`depart-${stopTime.stopSequence}`} className="text-xs text-muted-foreground">
-                              Berangkat{isFirst ? ' *' : ''}
+                            <Label className={`text-xs ${isLast ? 'text-muted-foreground/40' : 'text-muted-foreground'}`}>
+                              Berangkat{isFirst ? <span className="text-destructive ml-0.5">*</span> : ''}
+                              {isTransit && <span className="text-destructive ml-0.5">*</span>}
                             </Label>
-                            <Input
-                              id={`depart-${stopTime.stopSequence}`}
-                              type="time"
-                              step="60"
-                              value={stopTime.departAt}
-                              onChange={(e) => updateStopTime(stopTime.stopSequence, 'departAt', e.target.value)}
-                              disabled={isLast}
-                              className="h-8 w-28 text-sm disabled:opacity-30"
-                              data-testid={`input-depart-${stopTime.stopSequence}`}
-                            />
+                            {isLast ? (
+                              <div className="h-8 w-28 flex items-center justify-center rounded-md border border-dashed border-muted-foreground/20 bg-muted/30">
+                                <span className="text-xs text-muted-foreground/40">—</span>
+                              </div>
+                            ) : (
+                              <Input
+                                id={`depart-${stopTime.stopSequence}`}
+                                type="time"
+                                step="60"
+                                value={stopTime.departAt}
+                                onChange={(e) => updateStopTime(stopTime.stopSequence, 'departAt', e.target.value)}
+                                className="h-8 w-28 text-sm"
+                                data-testid={`input-depart-${stopTime.stopSequence}`}
+                              />
+                            )}
                           </div>
                         </div>
                       </div>

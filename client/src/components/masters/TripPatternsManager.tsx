@@ -500,78 +500,101 @@ export default function TripPatternsManager() {
             </div>
 
             <div className="space-y-2">
-              {patternStops.map((stop, index) => (
-                <div key={index} className="rounded-xl border bg-card p-3 space-y-2">
-                  {/* Row 1: sequence + stop selector + delete */}
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-primary bg-primary/10 rounded-lg w-7 h-7 flex items-center justify-center flex-shrink-0">
-                      {index + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <SearchableSelect
-                        value={stop.stopId}
-                        options={stopOptions}
-                        placeholder="Pilih halte..."
-                        searchPlaceholder="Cari nama atau kota..."
-                        onChange={(value) => updatePatternStop(index, 'stopId', value)}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removePatternStop(index)}
-                      data-testid={`remove-stop-${index}`}
-                      className="h-7 w-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+              {patternStops.map((stop, index) => {
+                const isFirst = index === 0;
+                const isLast = index === patternStops.length - 1;
+                const isTransit = !isFirst && !isLast;
+                const roleLabel = isFirst ? 'Asal' : isLast ? 'Tujuan' : 'Transit';
+                const rolePillClass = isFirst
+                  ? 'bg-primary/10 text-primary border border-primary/20'
+                  : isLast
+                  ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200 dark:border-orange-800'
+                  : 'bg-muted text-muted-foreground border border-border';
 
-                  {/* Row 2: dwell + boarding/alighting pills */}
-                  <div className="flex items-center gap-2 pl-9 flex-wrap">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                      <input
-                        type="number"
-                        value={stop.dwellSeconds}
-                        onChange={(e) => updatePatternStop(index, 'dwellSeconds', parseInt(e.target.value, 10) || 0)}
-                        min="0"
-                        className="w-14 h-6 text-xs text-center rounded-md border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary/40"
-                        data-testid={`input-dwell-${index}`}
-                      />
-                      <span className="text-xs text-muted-foreground">dtk</span>
+                return (
+                  <div key={index} className="rounded-xl border bg-card p-3 space-y-2">
+                    {/* Row 1: role pill + stop selector + delete */}
+                    <div className="flex items-center gap-2">
+                      <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0', rolePillClass)}>
+                        {roleLabel}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <SearchableSelect
+                          value={stop.stopId}
+                          options={stopOptions}
+                          placeholder="Pilih halte..."
+                          searchPlaceholder="Cari nama atau kota..."
+                          onChange={(value) => updatePatternStop(index, 'stopId', value)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removePatternStop(index)}
+                        data-testid={`remove-stop-${index}`}
+                        className="h-7 w-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                    <div className="w-px h-3.5 bg-border flex-shrink-0" />
-                    <button
-                      type="button"
-                      onClick={() => updatePatternStop(index, 'boardingAllowed', stop.boardingAllowed === false ? true : false)}
-                      data-testid={`switch-boarding-${index}`}
-                      className={cn(
-                        'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all select-none',
-                        stop.boardingAllowed !== false
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                          : 'bg-muted text-muted-foreground'
+
+                    {/* Row 2: dwell (transit only) + boarding/alighting pills */}
+                    <div className="flex items-center gap-2 pl-1 flex-wrap">
+                      {/* Dwell seconds hanya untuk halte transit */}
+                      {isTransit && (
+                        <>
+                          <div className="flex items-center gap-1.5" title="Waktu singgah minimum di halte ini (antara tiba dan berangkat)">
+                            <Clock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                            <input
+                              type="number"
+                              value={stop.dwellSeconds}
+                              onChange={(e) => updatePatternStop(index, 'dwellSeconds', parseInt(e.target.value, 10) || 0)}
+                              min="0"
+                              className="w-14 h-6 text-xs text-center rounded-md border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                              data-testid={`input-dwell-${index}`}
+                            />
+                            <span className="text-xs text-muted-foreground">dtk singgah</span>
+                          </div>
+                          <div className="w-px h-3.5 bg-border flex-shrink-0" />
+                        </>
                       )}
-                    >
-                      <ArrowUp className="h-3 w-3" />
-                      Naik
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updatePatternStop(index, 'alightingAllowed', stop.alightingAllowed === false ? true : false)}
-                      data-testid={`switch-alighting-${index}`}
-                      className={cn(
-                        'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all select-none',
-                        stop.alightingAllowed !== false
-                          ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
-                          : 'bg-muted text-muted-foreground'
+                      <button
+                        type="button"
+                        onClick={() => updatePatternStop(index, 'boardingAllowed', stop.boardingAllowed === false ? true : false)}
+                        data-testid={`switch-boarding-${index}`}
+                        className={cn(
+                          'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all select-none',
+                          stop.boardingAllowed !== false
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                            : 'bg-muted text-muted-foreground'
+                        )}
+                      >
+                        <ArrowUp className="h-3 w-3" />
+                        Naik
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updatePatternStop(index, 'alightingAllowed', stop.alightingAllowed === false ? true : false)}
+                        data-testid={`switch-alighting-${index}`}
+                        className={cn(
+                          'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all select-none',
+                          stop.alightingAllowed !== false
+                            ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
+                            : 'bg-muted text-muted-foreground'
+                        )}
+                      >
+                        <ArrowDown className="h-3 w-3" />
+                        Turun
+                      </button>
+                      {isFirst && (
+                        <span className="text-[10px] text-muted-foreground italic">Titik awal — tidak ada waktu singgah</span>
                       )}
-                    >
-                      <ArrowDown className="h-3 w-3" />
-                      Turun
-                    </button>
+                      {isLast && (
+                        <span className="text-[10px] text-muted-foreground italic">Titik akhir — tidak ada waktu singgah</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {patternStops.length === 0 && (
                 <div className="text-center py-8 text-muted-foreground border border-dashed rounded-xl">
                   <MapPin className="w-8 h-8 mx-auto mb-2 opacity-30" />
