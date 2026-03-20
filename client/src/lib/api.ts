@@ -167,7 +167,45 @@ export const bookingsApi = {
 
 // Holds API
 export const holdsApi = {
-  create: (data: CreateHoldRequest) => apiRequest('POST', '/api/holds', data).then(res => res.json()) as Promise<HoldResponse>,
+  create: async (data: CreateHoldRequest): Promise<HoldResponse> => {
+    const response = await fetch('/api/holds', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorCode = 'UNKNOWN';
+      let errorMessage = 'Gagal memegang kursi';
+
+      try {
+        const body = JSON.parse(errorText);
+        errorCode = body.code || errorCode;
+
+        if (body.code === 'HELD_BY_OTHER') {
+          errorMessage = 'Kursi sedang dipegang oleh agen lain. Coba kursi lain atau tunggu hold berakhir.';
+        } else if (body.code === 'NO_PRICE_RULE' || body.code === 'PRICE_NOT_CONFIGURED') {
+          errorMessage = 'Belum ada aturan harga untuk rute ini. Silakan konfigurasi di menu Aturan Harga terlebih dahulu.';
+        } else if (body.code === 'TRIP_CLOSED' || body.code === 'TRIP_CANCELLED') {
+          errorMessage = 'Trip ini sudah ditutup atau dibatalkan.';
+        } else if (body.details && typeof body.details === 'string') {
+          errorMessage = body.details;
+        } else if (body.error && typeof body.error === 'string') {
+          errorMessage = body.error;
+        }
+      } catch {
+        errorMessage = errorText || `Error ${response.status}`;
+      }
+
+      const err = new Error(errorMessage) as Error & { code: string };
+      err.code = errorCode;
+      throw err;
+    }
+
+    return response.json();
+  },
   release: (holdRef: string) => apiRequest('DELETE', `/api/holds/${holdRef}`)
 };
 

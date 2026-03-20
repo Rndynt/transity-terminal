@@ -113,8 +113,8 @@ export function useSeatHold() {
     } catch (error) {
       console.error('[useSeatHold] Failed to create hold:', error);
       toast({
-        title: "Gagal Mempengang Kursi",
-        description: error instanceof Error ? error.message : "Terjadi kesalahan",
+        title: "Gagal Memegang Kursi",
+        description: error instanceof Error ? error.message : "Terjadi kesalahan saat memegang kursi",
         variant: "destructive"
       });
       throw error;
