@@ -146,10 +146,12 @@ export default function RouteTimeline({
                       ? formatTime(stopTime.departAt)
                       : isLast
                       ? formatTime(stopTime.arriveAt)
+                      : !canBoard && canAlight
+                      ? formatTime(stopTime.arriveAt)
                       : formatTime(stopTime.departAt ?? stopTime.arriveAt)}
                     {isFirst && <span className="text-gray-300 ml-1.5">&middot; Keberangkatan</span>}
                     {isLast && <span className="text-gray-300 ml-1.5">&middot; Tujuan akhir</span>}
-                    {!isFirst && !isLast && stopTime.arriveAt && stopTime.departAt && stopTime.arriveAt !== stopTime.departAt && (
+                    {!isFirst && !isLast && canBoard && stopTime.arriveAt && stopTime.departAt && stopTime.arriveAt !== stopTime.departAt && (
                       <span className="text-gray-300 ml-1.5">&middot; Berangkat</span>
                     )}
                   </p>

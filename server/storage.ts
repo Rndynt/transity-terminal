@@ -317,7 +317,7 @@ export class DatabaseStorage implements IStorage {
       capacity: trips.capacity,
       status: trips.status,
       departAtOutlet: sql<string>`(
-        SELECT tst.depart_at 
+        SELECT COALESCE(tst.depart_at, tst.arrive_at)
         FROM ${tripStopTimes} tst 
         WHERE tst.trip_id = ${trips.id} 
         AND tst.stop_id = ${outletStopId}
@@ -381,20 +381,34 @@ export class DatabaseStorage implements IStorage {
     .where(
       and(
         eq(trips.serviceDate, serviceDate),
-        // Check that this trip has a stop time for this outlet's stop with boarding allowed
-        // AND it's not the final destination (there must be stops after this one)
+        // Check that this trip has a stop time for this outlet's stop with either
+        // boarding allowed (pickup outlet) or alighting allowed (drop-only outlet)
         sql`EXISTS (
           SELECT 1 
           FROM ${tripStopTimes} tst
           LEFT JOIN ${patternStops} ps ON ps.pattern_id = ${trips.patternId} AND ps.stop_id = tst.stop_id
           WHERE tst.trip_id = ${trips.id} 
           AND tst.stop_id = ${outletStopId}
-          AND tst.depart_at IS NOT NULL
-          AND COALESCE(tst.boarding_allowed, ps.boarding_allowed, true) = true
-          AND tst.stop_sequence < (
-            SELECT MAX(tst2.stop_sequence) 
-            FROM ${tripStopTimes} tst2 
-            WHERE tst2.trip_id = ${trips.id}
+          AND (
+            (
+              COALESCE(tst.boarding_allowed, ps.boarding_allowed, true) = true
+              AND tst.depart_at IS NOT NULL
+              AND tst.stop_sequence < (
+                SELECT MAX(tst2.stop_sequence) 
+                FROM ${tripStopTimes} tst2 
+                WHERE tst2.trip_id = ${trips.id}
+              )
+            )
+            OR
+            (
+              COALESCE(tst.alighting_allowed, ps.alighting_allowed, true) = true
+              AND tst.arrive_at IS NOT NULL
+              AND tst.stop_sequence > (
+                SELECT MIN(tst2.stop_sequence) 
+                FROM ${tripStopTimes} tst2 
+                WHERE tst2.trip_id = ${trips.id}
+              )
+            )
           )
         )`
       )
