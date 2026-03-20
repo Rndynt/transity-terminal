@@ -9,6 +9,7 @@ import MastersPage from "@/pages/masters/MastersPage";
 import CsoPage from "@/pages/cso/CsoPage";
 import CargoListPage from "@/pages/cargo/CargoListPage";
 import ManifestPage from "@/pages/manifest/ManifestPage";
+import AllBookingsPage from "@/pages/bookings/AllBookingsPage";
 
 function Router() {
   return (
@@ -18,6 +19,7 @@ function Router() {
         <Route path="/cso" component={CsoPage} />
         <Route path="/cargo" component={CargoListPage} />
         <Route path="/manifest" component={ManifestPage} />
+        <Route path="/bookings" component={AllBookingsPage} />
         <Route path="/masters" component={MastersPage} />
         <Route component={NotFound} />
       </Switch>
