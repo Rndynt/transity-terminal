@@ -142,9 +142,16 @@ export default function RouteTimeline({
                   </div>
                   <p className="text-[11px] text-gray-400 font-mono mt-0.5">
                     <Clock className="w-3 h-3 inline -mt-px mr-0.5" />
-                    {isFirst ? formatTime(stopTime.departAt) : isLast ? formatTime(stopTime.arriveAt) : formatTime(stopTime.arriveAt)}
+                    {isFirst
+                      ? formatTime(stopTime.departAt)
+                      : isLast
+                      ? formatTime(stopTime.arriveAt)
+                      : formatTime(stopTime.departAt ?? stopTime.arriveAt)}
                     {isFirst && <span className="text-gray-300 ml-1.5">&middot; Keberangkatan</span>}
                     {isLast && <span className="text-gray-300 ml-1.5">&middot; Tujuan akhir</span>}
+                    {!isFirst && !isLast && stopTime.arriveAt && stopTime.departAt && stopTime.arriveAt !== stopTime.departAt && (
+                      <span className="text-gray-300 ml-1.5">&middot; Berangkat</span>
+                    )}
                   </p>
                 </div>
 

@@ -297,6 +297,22 @@ export class TripsService {
       }
     });
 
+    // Safety fallback: if a seat appears in active bookings but inventory.booked
+    // was wrongly reset (e.g. precompute ran after booking), still mark it unavailable.
+    // This prevents "phantom available" seats when inventory gets rebuilt.
+    for (const [seatNo, bookingInfo] of seatBookingMap.entries()) {
+      if (seatAvailability[seatNo]?.available) {
+        const bookingCount = seatBookingIds.get(seatNo)?.size ?? 0;
+        seatAvailability[seatNo] = {
+          available: false,
+          held: false,
+          bookedType: bookingInfo.type,
+          bookingStatus: bookingInfo.status,
+          isMultiSeat: bookingCount > 1
+        };
+      }
+    }
+
     return {
       trip,
       layout,
