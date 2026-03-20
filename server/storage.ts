@@ -661,6 +661,10 @@ export class DatabaseStorage implements IStorage {
     // Calculate effective flags using coalesce logic
     return result.map(row => ({
       ...row,
+      // Expose raw trip-level overrides under canonical field names
+      boardingAllowed: row.tripBoardingAllowed,
+      alightingAllowed: row.tripAlightingAllowed,
+      // Resolved values after inheriting from pattern
       effectiveBoardingAllowed: row.tripBoardingAllowed ?? row.patternBoardingAllowed ?? true,
       effectiveAlightingAllowed: row.tripAlightingAllowed ?? row.patternAlightingAllowed ?? true,
     }));

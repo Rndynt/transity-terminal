@@ -70,17 +70,19 @@ function OverridePill({
     else onChange(null);
   };
 
+  const normalized = value === undefined ? null : value;
+
   const colorClass =
-    value === null
+    normalized === null
       ? 'bg-muted text-muted-foreground'
-      : value === true
+      : normalized === true
       ? allowedClass
       : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
 
   const title =
-    value === null
+    normalized === null
       ? `${label}: warisi pola (klik untuk override)`
-      : value === true
+      : normalized === true
       ? `${label}: diizinkan — override aktif (klik untuk larang)`
       : `${label}: dilarang — override aktif (klik untuk reset ke pola)`;
 
@@ -448,9 +450,13 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
       </div>
 
       {/* Legend */}
-      <p className="text-[10px] text-muted-foreground px-1">
-        Pill <strong>Naik</strong> / <strong>Turun</strong>: klik untuk override aturan pola. Abu = warisi pola, Hijau = izinkan, Merah = larang.
-      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground px-1">
+        <span className="font-semibold">Pill Naik/Turun:</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-muted border border-border" /> Abu = warisi aturan pola (default)</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400" /> Hijau = izinkan (override)</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-red-400" /> Merah = larang (override)</span>
+        <span className="text-muted-foreground/60">· Klik pill untuk ubah</span>
+      </div>
 
       {/* Action bar */}
       <div className="flex items-center justify-between gap-2 pt-2 border-t">
