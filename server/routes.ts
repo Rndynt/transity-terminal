@@ -440,7 +440,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/bookings/pending/:id', asyncHandler(bookingsController.releasePendingBooking.bind(bookingsController)));
 
   app.post('/api/passengers/:passengerId/unseat', asyncHandler(bookingsController.unseatPassenger.bind(bookingsController)));
-  app.post('/api/passengers/:passengerId/reassign', asyncHandler(bookingsController.reassignSeat.bind(bookingsController)));
   app.post('/api/passengers/:passengerId/assign-seat', asyncHandler(bookingsController.assignSeatToUnseated.bind(bookingsController)));
   app.post('/api/passengers/:passengerId/reschedule', asyncHandler(bookingsController.reschedulePassenger.bind(bookingsController)));
   app.post('/api/bookings/:bookingId/unseat-all', asyncHandler(bookingsController.unseatAllPassengers.bind(bookingsController)));

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
-import { bookingsApi, stopsApi, passengersApi } from '@/lib/api';
+import { bookingsApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import type { Booking, Stop } from '@/types';
@@ -19,8 +19,9 @@ import {
   List, Search, X, Loader2, RefreshCw,
   ArrowRight, User, CreditCard, Phone, Hash,
   Calendar, Ticket, MapPin, Armchair, ChevronDown, ChevronUp,
-  Bus, Package, ExternalLink, UserMinus, ArrowLeftRight, History
+  Bus, Package, ExternalLink, UserMinus, History
 } from 'lucide-react';
+import PassengerActions from '@/components/cso/PassengerActions';
 
 type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'canceled' | 'refunded' | 'unseated';
 type BookingChannel = 'CSO' | 'WEB' | 'APP' | 'OTA';
@@ -121,12 +122,8 @@ function BookingDetailModal({
 }) {
   const [passengersOpen, setPassengersOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [confirmUnseatId, setConfirmUnseatId] = useState<string | null>(null);
-  const [unseatReason, setUnseatReason] = useState('');
   const [confirmUnseatAll, setConfirmUnseatAll] = useState(false);
   const [unseatAllReason, setUnseatAllReason] = useState('');
-  const [activeReassignId, setActiveReassignId] = useState<string | null>(null);
-  const [reassignSeatNo, setReassignSeatNo] = useState('');
   const { toast } = useToast();
 
   const { data: detail, isLoading, isError } = useQuery<BookingDetail>({
@@ -141,19 +138,6 @@ function BookingDetailModal({
     enabled: !!bookingId && isOpen && historyOpen,
   });
 
-  const unseatMutation = useMutation({
-    mutationFn: ({ passengerId, reason }: { passengerId: string; reason: string }) =>
-      passengersApi.unseat(passengerId, reason),
-    onSuccess: () => {
-      toast({ title: 'Berhasil', description: 'Penumpang berhasil di-unseat.' });
-      queryClient.invalidateQueries({ queryKey: ['/api/bookings', bookingId] });
-      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
-      setConfirmUnseatId(null);
-      setUnseatReason('');
-    },
-    onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' })
-  });
-
   const unseatAllMutation = useMutation({
     mutationFn: ({ bId, reason }: { bId: string; reason: string }) =>
       bookingsApi.unseatAll(bId, reason),
@@ -163,19 +147,6 @@ function BookingDetailModal({
       queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
       setConfirmUnseatAll(false);
       setUnseatAllReason('');
-    },
-    onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' })
-  });
-
-  const reassignMutation = useMutation({
-    mutationFn: ({ passengerId, newSeatNo }: { passengerId: string; newSeatNo: string }) =>
-      passengersApi.reassign(passengerId, newSeatNo),
-    onSuccess: () => {
-      toast({ title: 'Berhasil', description: 'Kursi berhasil dipindahkan.' });
-      queryClient.invalidateQueries({ queryKey: ['/api/bookings', bookingId] });
-      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
-      setActiveReassignId(null);
-      setReassignSeatNo('');
     },
     onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' })
   });
@@ -338,70 +309,28 @@ function BookingDetailModal({
                           </div>
                           <p className="text-xs font-medium text-emerald-700">{fmt(p.fareAmount ?? 0)}</p>
 
-                          {p.ticketStatus !== 'canceled' && (
-                            <div className="pt-1 space-y-2">
-                              {p.ticketStatus === 'unseated' ? (
-                                <>
-                                  <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-50 border border-orange-200 rounded text-xs text-orange-700 font-medium">
-                                    <Armchair className="w-3 h-3 text-orange-500 flex-shrink-0" />
-                                    Belum memiliki kursi — assign ke kursi baru
-                                  </div>
-                                  {detail.tripId && detail.outletId && detail.tripDetails?.serviceDate && detail.originStopId && detail.destinationStopId && onAssignInCso ? (
-                                    <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 w-full"
-                                      onClick={() => onAssignInCso(detail.tripId, detail.outletId!, detail.tripDetails.serviceDate, detail.originStopId, detail.destinationStopId, p.id, p.fullName, detail.bookingCode ?? detail.id.slice(0, 8).toUpperCase(), p.ticketNumber)}
-                                      data-testid={`btn-assign-${p.id}`}>
-                                      <Armchair className="w-3 h-3" /> Pilih Kursi di Reservasi
-                                    </Button>
-                                  ) : (
-                                    <p className="text-[11px] text-gray-400 italic">Data trip tidak lengkap untuk assign kursi</p>
-                                  )}
-                                </>
-                              ) : isActive ? (
-                                <>
-                                  {confirmUnseatId === p.id ? (
-                                    <div className="space-y-2 p-2 bg-red-50 border border-red-200 rounded-lg">
-                                      <p className="text-xs text-red-700 font-semibold">Yakin unseat penumpang ini?</p>
-                                      <Textarea
-                                        placeholder="Alasan unseat (wajib diisi)..."
-                                        value={unseatReason}
-                                        onChange={e => setUnseatReason(e.target.value)}
-                                        className="min-h-[50px] text-xs border-red-200 focus:border-red-400 focus:ring-red-100"
-                                        data-testid={`input-unseat-reason-${p.id}`}
-                                      />
-                                      <div className="flex items-center gap-2">
-                                        <Button size="sm" variant="destructive" className="h-6 text-xs gap-1" disabled={!unseatReason.trim() || unseatMutation.isPending}
-                                          onClick={() => unseatMutation.mutate({ passengerId: p.id, reason: unseatReason.trim() })} data-testid={`btn-confirm-unseat-${p.id}`}>
-                                          {unseatMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />} Ya, Unseat
-                                        </Button>
-                                        <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setConfirmUnseatId(null); setUnseatReason(''); }}>Batal</Button>
-                                      </div>
-                                    </div>
-                                  ) : activeReassignId === p.id ? (
-                                    <div className="flex items-center gap-2">
-                                      <Input placeholder="Kursi baru" value={reassignSeatNo} onChange={e => setReassignSeatNo(e.target.value.toUpperCase())}
-                                        className="h-6 w-20 text-xs font-mono" data-testid={`input-reassign-${p.id}`} />
-                                      <Button size="sm" className="h-6 text-xs gap-1" disabled={!reassignSeatNo || reassignMutation.isPending}
-                                        onClick={() => reassignMutation.mutate({ passengerId: p.id, newSeatNo: reassignSeatNo })} data-testid={`btn-confirm-reassign-${p.id}`}>
-                                        {reassignMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowLeftRight className="w-3 h-3" />} Pindah
-                                      </Button>
-                                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setActiveReassignId(null); setReassignSeatNo(''); }}>Batal</Button>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-1.5">
-                                      <Button size="sm" variant="outline" className="h-6 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                                        onClick={() => setConfirmUnseatId(p.id)} data-testid={`btn-unseat-${p.id}`}>
-                                        <UserMinus className="w-3 h-3" /> Unseat
-                                      </Button>
-                                      <Button size="sm" variant="outline" className="h-6 text-xs gap-1"
-                                        onClick={() => setActiveReassignId(p.id)} data-testid={`btn-reassign-${p.id}`}>
-                                        <ArrowLeftRight className="w-3 h-3" /> Pindah Kursi
-                                      </Button>
-                                    </div>
-                                  )}
-                                </>
-                              ) : null}
-                            </div>
-                          )}
+                          <div className="pt-1">
+                            <PassengerActions
+                              passenger={{
+                                id: p.id,
+                                fullName: p.fullName,
+                                seatNo: p.seatNo,
+                                ticketNumber: p.ticketNumber,
+                                ticketStatus: p.ticketStatus ?? 'active',
+                                bookingCode: detail.bookingCode ?? detail.id.slice(0, 8).toUpperCase(),
+                                bookingId: detail.id,
+                                originStopName: detail.originStop?.name,
+                                destinationStopName: detail.destinationStop?.name,
+                              }}
+                              onClose={onClose}
+                              onAssignInCso={
+                                detail.tripId && detail.outletId && detail.tripDetails?.serviceDate && detail.originStopId && detail.destinationStopId && onAssignInCso
+                                  ? (passengerId, passengerName, bookingCode, ticketNumber) =>
+                                    onAssignInCso(detail.tripId, detail.outletId!, detail.tripDetails.serviceDate, detail.originStopId, detail.destinationStopId, passengerId, passengerName, bookingCode, ticketNumber)
+                                  : undefined
+                              }
+                            />
+                          </div>
                         </div>
                       );
                     })}

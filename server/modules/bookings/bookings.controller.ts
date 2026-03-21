@@ -60,10 +60,6 @@ const unseatPassengerSchema = z.object({
   reason: z.string().min(1, 'Alasan unseat wajib diisi')
 });
 
-const reassignSeatSchema = z.object({
-  newSeatNo: z.string()
-});
-
 const reschedulePassengerSchema = z.object({
   newTripId: z.string().uuid(),
   newSeatNo: z.string(),
@@ -380,23 +376,6 @@ export class BookingsController {
     }
   }
 
-  async reassignSeat(req: Request, res: Response) {
-    try {
-      const { passengerId } = req.params;
-      const { newSeatNo } = reassignSeatSchema.parse(req.body);
-      const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
-      const result = await this.unseatService.reassignSeat(passengerId, newSeatNo, performedBy);
-      res.json(result);
-    } catch (error: any) {
-      console.error('Reassign seat error:', error);
-      const status = error.message.includes('tidak ditemukan') ? 404
-        : error.message.includes('tidak tersedia') ? 409 : 400;
-      res.status(status).json({
-        error: error.message,
-        code: 'REASSIGN_ERROR'
-      });
-    }
-  }
 
   async reschedulePassenger(req: Request, res: Response) {
     try {
@@ -429,7 +408,7 @@ export class BookingsController {
   async assignSeatToUnseated(req: Request, res: Response) {
     try {
       const { passengerId } = req.params;
-      const { newSeatNo } = reassignSeatSchema.parse(req.body);
+      const { newSeatNo } = z.object({ newSeatNo: z.string() }).parse(req.body);
       const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
       const result = await this.unseatService.assignSeatToUnseated(passengerId, newSeatNo, performedBy);
       res.json(result);
