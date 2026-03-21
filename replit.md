@@ -63,6 +63,15 @@ plan/              → Dokumentasi teknis fitur
 - `requireAuth` / `optionalAuth` middleware for protecting API routes
 - Dev bypass mode: auto-login when Realmio is unavailable
 
+**2026-03-21 — Reason Notes + Auto-Cancel Timer for Action Modes**
+- **Mandatory Reason Notes**: All destructive actions (unseat, reschedule, cancel/batal tiket) now require a reason/note field before executing. Backend validates and rejects requests without reasons.
+- **Unseat**: PassengerDetailModal and AllBookingsPage show textarea for reason in confirmation step. AllBookingsPage "Unseat Semua" also requires reason.
+- **Cancel Tiket (Batal)**: New "Batalkan Tiket" button in PassengerDetailModal with confirmation + reason textarea. Backend `PATCH /api/passengers/:id/cancel` now properly releases seat inventory legs, updates booking status if all passengers inactive, records accurate `previousStatus` in booking history, and emits WebSocket updates.
+- **Reschedule**: Reason collected in PassengerDetailModal before entering reschedule mode (step: click Reschedule → fill reason → "Lanjut Pilih Trip & Kursi"). Reason stored in `RescheduleModeState`, displayed in SeatMap purple banner, passed to API and recorded in booking history.
+- **Auto-Cancel Timer (ModeTimer)**: Assign mode and Reschedule mode auto-cancel after 60 seconds of inactivity. Circular SVG progress ring with countdown number shown in banner. CSO can also manually cancel via X button. Toast notification on auto-expire.
+- **`passengersApi.cancelTicket()`**: New frontend API function for cancel tiket with reason.
+- **State Hygiene**: Assign/reschedule mode states reset when CsoPage outlet changes.
+
 **2026-03-21 — Unseat & Reschedule + Bug Fixes**
 - **Schema**: Added `unseated` to `bookingStatusEnum` and `ticketStatusEnum`; new `booking_history` table for audit trail (action enum: unseated/reassigned/rescheduled/canceled/status_change)
 - **Backend**: `UnseatService` (`server/modules/bookings/unseat.service.ts`) — unseatPassenger, unseatAllPassengers, reassignSeat, reschedulePassenger, assignSeatToUnseated; all operations transactional with seat_inventory updates and WebSocket broadcasts

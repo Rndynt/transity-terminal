@@ -5,7 +5,7 @@ import { queryClient } from '@/lib/queryClient';
 import { cargoApi } from '@/lib/api';
 import TripSelector from '@/components/cso/TripSelector';
 import RouteTimeline from '@/components/cso/RouteTimeline';
-import SeatMap, { type AssignModeState } from '@/components/cso/SeatMap';
+import SeatMap, { type AssignModeState, type RescheduleModeState } from '@/components/cso/SeatMap';
 import PassengerForm from '@/components/cso/PassengerForm';
 import PrintPreview from '@/components/cso/PrintPreview';
 import CargoForm from '@/components/cso/CargoForm';
@@ -61,6 +61,7 @@ export default function CsoPage() {
       ? { passengerId: initialAssignPassengerId, passengerName: initialAssignPassengerName, ticketNumber: null, bookingCode: '' }
       : null
   );
+  const [rescheduleModeInfo, setRescheduleModeInfo] = useState<RescheduleModeState | null>(null);
 
   const [phase, setPhase] = useState<Phase>('select');
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('left');
@@ -141,6 +142,8 @@ export default function CsoPage() {
     clearPromoCode();
     setSelectedCsoTrip(undefined);
     setPhase('select');
+    setAssignModeInfo(null);
+    setRescheduleModeInfo(null);
     setMobilePanel('left');
     setShowPrint(false);
     setBookingResult(null);
@@ -580,6 +583,16 @@ export default function CsoPage() {
                         setAssignModeInfo(mode);
                         if (!mode) navigate('/cso');
                       }}
+                      rescheduleMode={rescheduleModeInfo}
+                      onRescheduleComplete={() => {
+                        setRescheduleModeInfo(null);
+                        navigate('/cso');
+                      }}
+                      onStartReschedule={(info) => {
+                        setRescheduleModeInfo(info);
+                      }}
+                      originStopId={state.originStop?.id}
+                      destinationStopId={state.destinationStop?.id}
                     />
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-gray-300">

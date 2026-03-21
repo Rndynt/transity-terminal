@@ -57,7 +57,7 @@ const createPendingBookingSchema = z.object({
 });
 
 const unseatPassengerSchema = z.object({
-  reason: z.string().optional()
+  reason: z.string().min(1, 'Alasan unseat wajib diisi')
 });
 
 const reassignSeatSchema = z.object({
@@ -70,7 +70,12 @@ const reschedulePassengerSchema = z.object({
   newOriginStopId: z.string().uuid(),
   newDestinationStopId: z.string().uuid(),
   newOriginSeq: z.number(),
-  newDestinationSeq: z.number()
+  newDestinationSeq: z.number(),
+  reason: z.string().min(1, 'Alasan reschedule wajib diisi')
+});
+
+const cancelTicketSchema = z.object({
+  reason: z.string().min(1, 'Alasan pembatalan wajib diisi')
 });
 
 export class BookingsController {
@@ -406,7 +411,8 @@ export class BookingsController {
         data.newDestinationStopId,
         data.newOriginSeq,
         data.newDestinationSeq,
-        performedBy
+        performedBy,
+        data.reason
       );
       res.json(result);
     } catch (error: any) {

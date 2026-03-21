@@ -14,6 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle
 } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import {
   List, Search, X, Loader2, RefreshCw,
   ArrowRight, User, CreditCard, Phone, Hash,
@@ -121,7 +122,9 @@ function BookingDetailModal({
   const [passengersOpen, setPassengersOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [confirmUnseatId, setConfirmUnseatId] = useState<string | null>(null);
+  const [unseatReason, setUnseatReason] = useState('');
   const [confirmUnseatAll, setConfirmUnseatAll] = useState(false);
+  const [unseatAllReason, setUnseatAllReason] = useState('');
   const [activeReassignId, setActiveReassignId] = useState<string | null>(null);
   const [reassignSeatNo, setReassignSeatNo] = useState('');
   const { toast } = useToast();
@@ -139,23 +142,27 @@ function BookingDetailModal({
   });
 
   const unseatMutation = useMutation({
-    mutationFn: (passengerId: string) => passengersApi.unseat(passengerId),
+    mutationFn: ({ passengerId, reason }: { passengerId: string; reason: string }) =>
+      passengersApi.unseat(passengerId, reason),
     onSuccess: () => {
       toast({ title: 'Berhasil', description: 'Penumpang berhasil di-unseat.' });
       queryClient.invalidateQueries({ queryKey: ['/api/bookings', bookingId] });
       queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
       setConfirmUnseatId(null);
+      setUnseatReason('');
     },
     onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' })
   });
 
   const unseatAllMutation = useMutation({
-    mutationFn: (bId: string) => bookingsApi.unseatAll(bId),
+    mutationFn: ({ bId, reason }: { bId: string; reason: string }) =>
+      bookingsApi.unseatAll(bId, reason),
     onSuccess: () => {
       toast({ title: 'Berhasil', description: 'Semua penumpang berhasil di-unseat.' });
       queryClient.invalidateQueries({ queryKey: ['/api/bookings', bookingId] });
       queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
       setConfirmUnseatAll(false);
+      setUnseatAllReason('');
     },
     onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' })
   });
@@ -352,13 +359,22 @@ function BookingDetailModal({
                               ) : isActive ? (
                                 <>
                                   {confirmUnseatId === p.id ? (
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs text-red-600 font-medium">Yakin unseat?</span>
-                                      <Button size="sm" variant="destructive" className="h-6 text-xs gap-1" disabled={unseatMutation.isPending}
-                                        onClick={() => unseatMutation.mutate(p.id)} data-testid={`btn-confirm-unseat-${p.id}`}>
-                                        {unseatMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />} Ya
-                                      </Button>
-                                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setConfirmUnseatId(null)}>Batal</Button>
+                                    <div className="space-y-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                                      <p className="text-xs text-red-700 font-semibold">Yakin unseat penumpang ini?</p>
+                                      <Textarea
+                                        placeholder="Alasan unseat (wajib diisi)..."
+                                        value={unseatReason}
+                                        onChange={e => setUnseatReason(e.target.value)}
+                                        className="min-h-[50px] text-xs border-red-200 focus:border-red-400 focus:ring-red-100"
+                                        data-testid={`input-unseat-reason-${p.id}`}
+                                      />
+                                      <div className="flex items-center gap-2">
+                                        <Button size="sm" variant="destructive" className="h-6 text-xs gap-1" disabled={!unseatReason.trim() || unseatMutation.isPending}
+                                          onClick={() => unseatMutation.mutate({ passengerId: p.id, reason: unseatReason.trim() })} data-testid={`btn-confirm-unseat-${p.id}`}>
+                                          {unseatMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />} Ya, Unseat
+                                        </Button>
+                                        <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setConfirmUnseatId(null); setUnseatReason(''); }}>Batal</Button>
+                                      </div>
                                     </div>
                                   ) : activeReassignId === p.id ? (
                                     <div className="flex items-center gap-2">
@@ -395,13 +411,22 @@ function BookingDetailModal({
                 {hasActivePassengers && detail.passengers.length > 1 && (
                   <div className="px-4 py-2 border-t bg-muted/10">
                     {confirmUnseatAll ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-red-600 font-medium">Unseat semua penumpang?</span>
-                        <Button size="sm" variant="destructive" className="h-6 text-xs gap-1" disabled={unseatAllMutation.isPending}
-                          onClick={() => unseatAllMutation.mutate(bookingId!)} data-testid="btn-confirm-unseat-all">
-                          {unseatAllMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />} Ya, Unseat Semua
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setConfirmUnseatAll(false)}>Batal</Button>
+                      <div className="space-y-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                        <p className="text-xs text-red-700 font-semibold">Unseat semua penumpang?</p>
+                        <Textarea
+                          placeholder="Alasan unseat semua (wajib diisi)..."
+                          value={unseatAllReason}
+                          onChange={e => setUnseatAllReason(e.target.value)}
+                          className="min-h-[50px] text-xs border-red-200 focus:border-red-400 focus:ring-red-100"
+                          data-testid="input-unseat-all-reason"
+                        />
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" variant="destructive" className="h-6 text-xs gap-1" disabled={!unseatAllReason.trim() || unseatAllMutation.isPending}
+                            onClick={() => unseatAllMutation.mutate({ bId: bookingId!, reason: unseatAllReason.trim() })} data-testid="btn-confirm-unseat-all">
+                            {unseatAllMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />} Ya, Unseat Semua
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setConfirmUnseatAll(false); setUnseatAllReason(''); }}>Batal</Button>
+                        </div>
                       </div>
                     ) : (
                       <Button size="sm" variant="outline" className="h-6 text-xs gap-1 w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"

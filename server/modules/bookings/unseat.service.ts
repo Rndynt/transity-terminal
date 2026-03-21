@@ -218,7 +218,8 @@ export class UnseatService {
     newDestinationStopId: string,
     newOriginSeq: number,
     newDestinationSeq: number,
-    performedBy: string
+    performedBy: string,
+    reason?: string
   ): Promise<{ success: boolean; oldBooking: any; newBooking: any }> {
     const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
     if (!passenger) throw new Error("Penumpang tidak ditemukan");
@@ -314,7 +315,8 @@ export class UnseatService {
           newTripId,
           newSeatNo,
           newBookingId: newBooking.id,
-          newPassengerId: newPassenger.id
+          newPassengerId: newPassenger.id,
+          reason: reason || 'Reschedule'
         },
         performedBy
       });
@@ -327,7 +329,8 @@ export class UnseatService {
           rescheduledFrom: oldBooking.id,
           originalPassengerId: passengerId,
           originalSeatNo: passenger.seatNo,
-          originalTripId: oldBooking.tripId
+          originalTripId: oldBooking.tripId,
+          reason: reason || 'Reschedule'
         },
         performedBy
       });

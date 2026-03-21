@@ -216,6 +216,7 @@ export const passengersApi = {
     newDestinationStopId: string;
     newOriginSeq: number;
     newDestinationSeq: number;
+    reason?: string;
   }) => {
     const res = await fetch(`/api/passengers/${passengerId}/reschedule`, {
       method: 'POST',
@@ -223,6 +224,15 @@ export const passengersApi = {
       body: JSON.stringify(data)
     });
     if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Reschedule failed'); }
+    return res.json();
+  },
+  cancelTicket: async (passengerId: string, reason: string) => {
+    const res = await fetch(`/api/passengers/${passengerId}/cancel`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason })
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Cancel failed'); }
     return res.json();
   }
 };

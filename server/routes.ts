@@ -448,8 +448,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Ticket (passenger-level) cancel — cancel satu penumpang tanpa batalkan booking
   app.patch('/api/passengers/:id/cancel', asyncHandler(async (req, res) => {
-    const passenger = await storage.updatePassenger(req.params.id, { ticketStatus: 'canceled' });
-    res.json(passenger);
+    const { reason } = req.body || {};
+    if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+      return res.status(400).json({ error: 'Alasan pembatalan wajib diisi' });
+    }
+    const { db } = await import('./db');
+    const { bookingHistory, passengers: passengersTable, seatInventory, bookings: bookingsTable } = await import('@shared/schema');
+    const { eq, and, inArray } = await import('drizzle-orm');
+
+    const [passengerRow] = await db.select().from(passengersTable).where(eq(passengersTable.id, req.params.id));
+    if (!passengerRow) return res.status(404).json({ error: 'Penumpang tidak ditemukan' });
+    if (passengerRow.ticketStatus === 'canceled') return res.status(400).json({ error: 'Tiket sudah dibatalkan' });
+
+    const booking = await storage.getBookingById(passengerRow.bookingId);
+    if (!booking) return res.status(404).json({ error: 'Booking tidak ditemukan' });
+
+    const previousStatus = passengerRow.ticketStatus || 'active';
+    const legIndexes: number[] = [];
+    for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
+
+    const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
+
+    const updatedPassenger = await db.transaction(async (tx) => {
+      const [updated] = await tx.update(passengersTable)
+        .set({ ticketStatus: 'canceled' })
+        .where(eq(passengersTable.id, req.params.id))
+        .returning();
+
+      if (passengerRow.seatNo && legIndexes.length > 0) {
+        await tx.update(seatInventory)
+          .set({ booked: false, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, booking.tripId),
+            eq(seatInventory.seatNo, passengerRow.seatNo),
+            inArray(seatInventory.legIndex, legIndexes)
+          ));
+      }
+
+      await tx.insert(bookingHistory).values({
+        bookingId: booking.id,
+        passengerId: req.params.id,
+        action: 'canceled',
+        details: {
+          seatNo: passengerRow.seatNo,
+          reason: reason.trim(),
+          previousStatus
+        },
+        performedBy
+      });
+
+      const allPassengers = await tx.select().from(passengersTable).where(eq(passengersTable.bookingId, booking.id));
+      const allInactive = allPassengers.every(p => p.ticketStatus === 'canceled' || p.ticketStatus === 'unseated');
+      if (allInactive) {
+        await tx.update(bookingsTable)
+          .set({ status: 'canceled' })
+          .where(eq(bookingsTable.id, booking.id));
+      }
+
+      return updated;
+    });
+
+    if (passengerRow.seatNo) {
+      const { webSocketService } = await import('./realtime/ws');
+      for (const legIdx of legIndexes) {
+        webSocketService.emitInventoryUpdated(booking.tripId, passengerRow.seatNo, [legIdx]);
+      }
+    }
+
+    res.json(updatedPassenger);
   }));
 
   // Lookup passenger by ticket number

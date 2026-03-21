@@ -1,20 +1,80 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { tripsApi, holdsApi, passengersApi } from '@/lib/api';
 import { useSeatHold } from '@/hooks/useSeatHold';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { RotateCcw, Loader2, Bus, Timer, CheckCircle2, AlertTriangle, Users, Settings2, Armchair, X, User, ChevronDown, ChevronUp, UserX } from 'lucide-react';
+import { RotateCcw, Loader2, Bus, Timer, CheckCircle2, AlertTriangle, Users, Settings2, Armchair, X, User, ChevronDown, ChevronUp, UserX, CalendarClock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
 import type { Trip, SeatmapResponse } from '@/types';
 import PassengerDetailModal from './PassengerDetailModal';
 import { apiRequest } from '@/lib/queryClient';
 
+const MODE_TIMEOUT_SECONDS = 60;
+
+function ModeTimer({ onExpire, colorClass = 'text-emerald-600' }: { onExpire: () => void; colorClass?: string }) {
+  const [remaining, setRemaining] = useState(MODE_TIMEOUT_SECONDS);
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
+
+  useEffect(() => {
+    setRemaining(MODE_TIMEOUT_SECONDS);
+    const interval = setInterval(() => {
+      setRemaining(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          onExpireRef.current();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const progress = remaining / MODE_TIMEOUT_SECONDS;
+  const radius = 14;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference * (1 - progress);
+
+  return (
+    <div className="flex items-center gap-1.5 flex-shrink-0">
+      <div className="relative w-9 h-9">
+        <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r={radius} fill="none" stroke="currentColor" strokeWidth="2.5" className="text-gray-200" />
+          <circle
+            cx="18" cy="18" r={radius} fill="none" strokeWidth="2.5"
+            stroke="currentColor"
+            className={`${colorClass} transition-all duration-1000 ease-linear`}
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            strokeLinecap="round"
+          />
+        </svg>
+        <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold ${colorClass}`}>
+          {remaining}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export interface AssignModeState {
   passengerId: string;
   passengerName: string;
   ticketNumber: string | null;
   bookingCode: string;
+}
+
+export interface RescheduleModeState {
+  passengerId: string;
+  passengerName: string;
+  ticketNumber: string | null;
+  bookingCode: string;
+  seatNo: string;
+  originStopName: string;
+  destinationStopName: string;
+  reason: string;
 }
 
 interface SeatMapProps {
@@ -27,6 +87,11 @@ interface SeatMapProps {
   isPastTrip?: boolean;
   externalAssignMode?: AssignModeState | null;
   onAssignModeChange?: (mode: AssignModeState | null) => void;
+  rescheduleMode?: RescheduleModeState | null;
+  onRescheduleComplete?: () => void;
+  onStartReschedule?: (info: RescheduleModeState) => void;
+  originStopId?: string;
+  destinationStopId?: string;
 }
 
 export default function SeatMap({
@@ -38,7 +103,12 @@ export default function SeatMap({
   onSeatDeselect,
   isPastTrip = false,
   externalAssignMode = null,
-  onAssignModeChange
+  onAssignModeChange,
+  rescheduleMode = null,
+  onRescheduleComplete,
+  onStartReschedule,
+  originStopId,
+  destinationStopId
 }: SeatMapProps) {
   const [localSelectedSeats, setLocalSelectedSeats] = useState<Set<string>>(new Set());
   const [showPassengerModal, setShowPassengerModal] = useState(false);
@@ -70,6 +140,30 @@ export default function SeatMap({
     },
     onError: (e: Error) => {
       toast({ title: 'Gagal Assign Kursi', description: e.message, variant: 'destructive' });
+    }
+  });
+
+  const rescheduleMutation = useMutation({
+    mutationFn: ({ passengerId, newSeatNo }: { passengerId: string; newSeatNo: string }) =>
+      passengersApi.reschedule(passengerId, {
+        newTripId: trip.id,
+        newSeatNo,
+        newOriginStopId: originStopId!,
+        newDestinationStopId: destinationStopId!,
+        newOriginSeq: originSeq,
+        newDestinationSeq: destinationSeq,
+        reason: rescheduleMode?.reason
+      }),
+    onSuccess: (_data, variables) => {
+      toast({ title: 'Berhasil', description: `Penumpang berhasil di-reschedule ke kursi ${variables.newSeatNo}.` });
+      queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+      refetch();
+      refetchUnseated();
+      onRescheduleComplete?.();
+    },
+    onError: (e: Error) => {
+      toast({ title: 'Gagal Reschedule', description: e.message, variant: 'destructive' });
     }
   });
 
@@ -164,6 +258,19 @@ export default function SeatMap({
     const seatAvailability = seatmap.seatAvailability[seatNo];
     const isHeldByMe = isHeld(seatNo);
 
+    if (rescheduleMode) {
+      if (!seatAvailability.available) {
+        toast({ title: 'Kursi Tidak Tersedia', description: `Kursi ${seatNo} sudah terisi atau sedang dipegang. Pilih kursi yang tersedia.`, variant: 'destructive' });
+        return;
+      }
+      if (!originStopId || !destinationStopId) {
+        toast({ title: 'Data Tidak Lengkap', description: 'Origin/destination stop belum dipilih.', variant: 'destructive' });
+        return;
+      }
+      rescheduleMutation.mutate({ passengerId: rescheduleMode.passengerId, newSeatNo: seatNo });
+      return;
+    }
+
     if (assignMode) {
       if (isPastTrip) {
         toast({ title: 'Tidak Bisa Assign', description: 'Jadwal sudah lewat. Tidak bisa assign kursi.', variant: 'destructive' });
@@ -247,13 +354,15 @@ export default function SeatMap({
     } finally { setSeatLoading(null); }
   };
 
+  const isPickingMode = !!(assignMode || rescheduleMode);
+
   const getSeatStatus = (seatNo: string) => {
     if (!seatmap) return 'available';
-    if (localSelectedSeats.has(seatNo)) return assignMode ? 'blocked' : 'selected';
+    if (localSelectedSeats.has(seatNo)) return isPickingMode ? 'blocked' : 'selected';
     const sa = seatmap.seatAvailability[seatNo];
-    if (sa.held) return isPastTrip ? 'past-locked' : (assignMode ? 'blocked' : 'held');
-    if (!sa.available) return assignMode ? 'blocked' : 'booked';
-    if (assignMode) return 'assign-available';
+    if (sa.held) return isPastTrip ? 'past-locked' : (isPickingMode ? 'blocked' : 'held');
+    if (!sa.available) return isPickingMode ? 'blocked' : 'booked';
+    if (isPickingMode) return rescheduleMode ? 'reschedule-available' : 'assign-available';
     return isPastTrip ? 'past-locked' : 'available';
   };
 
@@ -264,6 +373,7 @@ export default function SeatMap({
     held: 'bg-amber-100 border-amber-300 text-amber-600 cursor-pointer',
     'past-locked': 'bg-gray-100 border-gray-200 text-gray-300 cursor-not-allowed',
     'assign-available': 'bg-emerald-50 border-emerald-400 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-500 cursor-pointer ring-1 ring-emerald-300 animate-pulse',
+    'reschedule-available': 'bg-purple-50 border-purple-400 text-purple-700 hover:bg-purple-100 hover:border-purple-500 cursor-pointer ring-1 ring-purple-300 animate-pulse',
     'blocked': 'bg-gray-100 border-gray-200 text-gray-300 cursor-not-allowed opacity-50',
   };
 
@@ -364,7 +474,7 @@ export default function SeatMap({
       {assignMode && (
         <div className="relative rounded-xl border-2 border-emerald-400 bg-emerald-50 p-3 space-y-2 shadow-sm">
           <div className="flex items-start justify-between gap-2">
-            <div className="flex items-start gap-2.5">
+            <div className="flex items-start gap-2.5 flex-1 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
                 <Armchair className="w-4 h-4 text-emerald-600" />
               </div>
@@ -373,13 +483,23 @@ export default function SeatMap({
                 <p className="text-xs text-emerald-700 mt-0.5">Klik kursi <span className="font-semibold text-emerald-900">hijau</span> yang tersedia untuk assign ke penumpang ini</p>
               </div>
             </div>
-            <button
-              onClick={() => setAssignMode(null)}
-              className="p-1 rounded-md text-emerald-400 hover:text-emerald-600 hover:bg-emerald-100 transition-colors flex-shrink-0"
-              data-testid="btn-cancel-assign-mode"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <ModeTimer
+                key={`assign-${assignMode.passengerId}`}
+                onExpire={() => {
+                  setAssignMode(null);
+                  toast({ title: 'Mode Assign Berakhir', description: 'Waktu habis. Mode assign kursi dibatalkan otomatis.', variant: 'destructive' });
+                }}
+                colorClass="text-emerald-600"
+              />
+              <button
+                onClick={() => setAssignMode(null)}
+                className="p-1 rounded-md text-emerald-400 hover:text-emerald-600 hover:bg-emerald-100 transition-colors"
+                data-testid="btn-cancel-assign-mode"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-3 px-3 py-2 bg-white/80 rounded-lg border border-emerald-200">
             <User className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
@@ -400,6 +520,63 @@ export default function SeatMap({
         </div>
       )}
 
+      {rescheduleMode && (
+        <div className="relative rounded-xl border-2 border-purple-400 bg-purple-50 p-3 space-y-2 shadow-sm">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2.5 flex-1 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <CalendarClock className="w-4 h-4 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-purple-800">Mode Reschedule</p>
+                <p className="text-xs text-purple-700 mt-0.5">Klik kursi <span className="font-semibold text-purple-900">ungu</span> yang tersedia untuk pindahkan penumpang ke trip ini</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <ModeTimer
+                key={`reschedule-${rescheduleMode.passengerId}`}
+                onExpire={() => {
+                  onRescheduleComplete?.();
+                  toast({ title: 'Mode Reschedule Berakhir', description: 'Waktu habis. Mode reschedule dibatalkan otomatis.', variant: 'destructive' });
+                }}
+                colorClass="text-purple-600"
+              />
+              <button
+                onClick={() => onRescheduleComplete?.()}
+                className="p-1 rounded-md text-purple-400 hover:text-purple-600 hover:bg-purple-100 transition-colors"
+                data-testid="btn-cancel-reschedule-mode"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-3 py-2 bg-white/80 rounded-lg border border-purple-200">
+            <User className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-gray-800 truncate">{rescheduleMode.passengerName}</p>
+              <p className="text-[10px] text-gray-500">
+                Booking: <span className="font-mono font-semibold">{rescheduleMode.bookingCode}</span>
+                {rescheduleMode.ticketNumber && <> · Tiket: <span className="font-mono">{rescheduleMode.ticketNumber}</span></>}
+              </p>
+              <p className="text-[10px] text-purple-600 mt-0.5">
+                Sebelumnya: Kursi {rescheduleMode.seatNo} · {rescheduleMode.originStopName} → {rescheduleMode.destinationStopName}
+              </p>
+              {rescheduleMode.reason && (
+                <p className="text-[10px] text-purple-500 mt-0.5 italic">
+                  Alasan: {rescheduleMode.reason}
+                </p>
+              )}
+            </div>
+          </div>
+          {rescheduleMutation.isPending && (
+            <div className="flex items-center gap-2 text-xs text-purple-700">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>Memproses reschedule...</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {isPastTrip && (
         <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg">
           <AlertTriangle className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
@@ -408,7 +585,12 @@ export default function SeatMap({
       )}
 
       <div className="flex items-center justify-center gap-3 py-1.5 px-3 bg-gray-50 rounded-lg flex-wrap">
-        {assignMode ? (
+        {rescheduleMode ? (
+          <>
+            <LegendDot color="bg-purple-50 border-purple-400 ring-1 ring-purple-300" label="Tersedia (klik reschedule)" />
+            <LegendDot color="bg-gray-100 border-gray-200 opacity-50" label="Tidak tersedia" />
+          </>
+        ) : assignMode ? (
           <>
             <LegendDot color="bg-emerald-50 border-emerald-400 ring-1 ring-emerald-300" label="Tersedia (klik assign)" />
             <LegendDot color="bg-gray-100 border-gray-200 opacity-50" label="Tidak tersedia" />
@@ -450,8 +632,8 @@ export default function SeatMap({
                 return (
                   <div key={seat.seat_no} className="relative w-9 h-9">
                     <button
-                      onClick={() => !isLoading && !assignSeatMutation.isPending && handleSeatClick(seat.seat_no)}
-                      disabled={isLoading || assignSeatMutation.isPending || status === 'blocked'}
+                      onClick={() => !isLoading && !assignSeatMutation.isPending && !rescheduleMutation.isPending && handleSeatClick(seat.seat_no)}
+                      disabled={isLoading || assignSeatMutation.isPending || rescheduleMutation.isPending || status === 'blocked'}
                       data-testid={`seat-${seat.seat_no}`}
                       className={`w-9 h-9 rounded-lg border text-[10px] font-bold font-mono transition-all duration-100 flex items-center justify-center ${seatColors[status]} ${isLoading ? 'opacity-50' : ''}`}
                     >
@@ -512,7 +694,7 @@ export default function SeatMap({
         </div>
       )}
 
-      {unseatedPassengers.length > 0 && !assignMode && (
+      {unseatedPassengers.length > 0 && !assignMode && !rescheduleMode && (
         <div className="rounded-xl border-2 border-orange-300 bg-orange-50 overflow-hidden">
           <button
             onClick={() => setUnseatedOpen(o => !o)}
@@ -588,6 +770,21 @@ export default function SeatMap({
           setSelectedSeatForDetails(null);
           passengerDetailsMutation.reset();
         }}
+        onStartRescheduleMode={onStartReschedule ? (passenger) => {
+          setShowPassengerModal(false);
+          setSelectedSeatForDetails(null);
+          passengerDetailsMutation.reset();
+          onStartReschedule({
+            passengerId: passenger.id,
+            passengerName: passenger.name,
+            ticketNumber: passenger.ticketNumber,
+            bookingCode: passenger.bookingCode,
+            seatNo: passenger.seatNo,
+            originStopName: passenger.originStopName,
+            destinationStopName: passenger.destinationStopName,
+            reason: passenger.reason,
+          });
+        } : undefined}
       />
     </div>
   );

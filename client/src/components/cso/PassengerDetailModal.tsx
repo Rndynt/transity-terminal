@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import {
   Phone, CreditCard, MapPin, User, Armchair, Ticket, Hash,
   ChevronDown, ChevronUp, ArrowRight, Calendar, Building2, Bus,
-  UserMinus, ArrowLeftRight, Loader2
+  UserMinus, ArrowLeftRight, Loader2, CalendarClock, Ban
 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { passengersApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -60,6 +61,7 @@ interface PassengerDetailModalProps {
   selectedSeatNo?: string | null;
   tripId?: string;
   onStartAssignMode?: (passenger: { id: string; name: string; ticketNumber: string | null; bookingCode: string }) => void;
+  onStartRescheduleMode?: (passenger: { id: string; name: string; ticketNumber: string | null; bookingCode: string; seatNo: string; originStopName: string; destinationStopName: string; reason: string }) => void;
 }
 
 const fmt = (amount: string | number) =>
@@ -97,6 +99,7 @@ export default function PassengerDetailModal({
   isOpen,
   onClose,
   passengerDetails,
+  onStartRescheduleMode,
   isLoading = false,
   isError = false,
   selectedSeatNo = null,
@@ -107,19 +110,42 @@ export default function PassengerDetailModal({
   const [reassignSeatNo, setReassignSeatNo] = useState<string>('');
   const [activeReassignId, setActiveReassignId] = useState<string | null>(null);
   const [confirmUnseatId, setConfirmUnseatId] = useState<string | null>(null);
+  const [unseatReason, setUnseatReason] = useState<string>('');
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState<string>('');
+  const [rescheduleReasonId, setRescheduleReasonId] = useState<string | null>(null);
+  const [rescheduleReason, setRescheduleReason] = useState<string>('');
   const { toast } = useToast();
 
   const unseatMutation = useMutation({
-    mutationFn: (passengerId: string) => passengersApi.unseat(passengerId),
+    mutationFn: ({ passengerId, reason }: { passengerId: string; reason: string }) =>
+      passengersApi.unseat(passengerId, reason),
     onSuccess: () => {
       toast({ title: 'Berhasil', description: 'Penumpang berhasil di-unseat. Kursi sekarang tersedia.' });
       queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
       queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
       setConfirmUnseatId(null);
+      setUnseatReason('');
       onClose();
     },
     onError: (e: Error) => {
       toast({ title: 'Gagal Unseat', description: e.message, variant: 'destructive' });
+    }
+  });
+
+  const cancelTicketMutation = useMutation({
+    mutationFn: ({ passengerId, reason }: { passengerId: string; reason: string }) =>
+      passengersApi.cancelTicket(passengerId, reason),
+    onSuccess: () => {
+      toast({ title: 'Berhasil', description: 'Tiket berhasil dibatalkan.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+      setConfirmCancelId(null);
+      setCancelReason('');
+      onClose();
+    },
+    onError: (e: Error) => {
+      toast({ title: 'Gagal Batalkan Tiket', description: e.message, variant: 'destructive' });
     }
   });
 
@@ -354,22 +380,100 @@ export default function PassengerDetailModal({
                               ) : (
                                 <>
                                   {confirmUnseatId === p.id ? (
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs text-red-600 font-medium">Yakin unseat penumpang ini?</span>
-                                      <Button
-                                        size="sm"
-                                        variant="destructive"
-                                        className="h-7 text-xs gap-1"
-                                        disabled={unseatMutation.isPending}
-                                        onClick={() => unseatMutation.mutate(p.id)}
-                                        data-testid={`btn-confirm-unseat-${p.id}`}
-                                      >
-                                        {unseatMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />}
-                                        Ya, Unseat
-                                      </Button>
-                                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setConfirmUnseatId(null)} data-testid="btn-cancel-unseat">
-                                        Batal
-                                      </Button>
+                                    <div className="space-y-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                                      <p className="text-xs text-red-700 font-semibold">Yakin unseat penumpang ini?</p>
+                                      <Textarea
+                                        placeholder="Alasan unseat (wajib diisi)..."
+                                        value={unseatReason}
+                                        onChange={e => setUnseatReason(e.target.value)}
+                                        className="min-h-[50px] text-xs border-red-200 focus:border-red-400 focus:ring-red-100"
+                                        data-testid={`input-unseat-reason-${p.id}`}
+                                      />
+                                      <div className="flex items-center gap-2">
+                                        <Button
+                                          size="sm"
+                                          variant="destructive"
+                                          className="h-7 text-xs gap-1"
+                                          disabled={!unseatReason.trim() || unseatMutation.isPending}
+                                          onClick={() => unseatMutation.mutate({ passengerId: p.id, reason: unseatReason.trim() })}
+                                          data-testid={`btn-confirm-unseat-${p.id}`}
+                                        >
+                                          {unseatMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />}
+                                          Ya, Unseat
+                                        </Button>
+                                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setConfirmUnseatId(null); setUnseatReason(''); }} data-testid="btn-cancel-unseat">
+                                          Batal
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : confirmCancelId === p.id ? (
+                                    <div className="space-y-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                                      <p className="text-xs text-red-700 font-semibold">Yakin batalkan tiket penumpang ini?</p>
+                                      <Textarea
+                                        placeholder="Alasan pembatalan (wajib diisi)..."
+                                        value={cancelReason}
+                                        onChange={e => setCancelReason(e.target.value)}
+                                        className="min-h-[50px] text-xs border-red-200 focus:border-red-400 focus:ring-red-100"
+                                        data-testid={`input-cancel-reason-${p.id}`}
+                                      />
+                                      <div className="flex items-center gap-2">
+                                        <Button
+                                          size="sm"
+                                          variant="destructive"
+                                          className="h-7 text-xs gap-1"
+                                          disabled={!cancelReason.trim() || cancelTicketMutation.isPending}
+                                          onClick={() => cancelTicketMutation.mutate({ passengerId: p.id, reason: cancelReason.trim() })}
+                                          data-testid={`btn-confirm-cancel-${p.id}`}
+                                        >
+                                          {cancelTicketMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Ban className="w-3 h-3" />}
+                                          Ya, Batalkan
+                                        </Button>
+                                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setConfirmCancelId(null); setCancelReason(''); }} data-testid="btn-cancel-cancel">
+                                          Batal
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : rescheduleReasonId === p.id ? (
+                                    <div className="space-y-2 p-2 bg-purple-50 border border-purple-200 rounded-lg">
+                                      <p className="text-xs text-purple-700 font-semibold">Alasan reschedule</p>
+                                      <Textarea
+                                        placeholder="Alasan reschedule (wajib diisi)..."
+                                        value={rescheduleReason}
+                                        onChange={e => setRescheduleReason(e.target.value)}
+                                        className="min-h-[50px] text-xs border-purple-200 focus:border-purple-400 focus:ring-purple-100"
+                                        data-testid={`input-reschedule-reason-${p.id}`}
+                                      />
+                                      <div className="flex items-center gap-2">
+                                        <Button
+                                          size="sm"
+                                          className="h-7 text-xs gap-1 bg-purple-600 hover:bg-purple-700"
+                                          disabled={!rescheduleReason.trim()}
+                                          onClick={() => {
+                                            if (onStartRescheduleMode) {
+                                              onStartRescheduleMode({
+                                                id: p.id,
+                                                name: p.fullName,
+                                                ticketNumber: p.ticketNumber,
+                                                bookingCode: b.bookingCode ?? b.id?.slice(0, 8).toUpperCase(),
+                                                seatNo: p.seatNo,
+                                                originStopName: b.originStop?.name ?? '—',
+                                                destinationStopName: b.destinationStop?.name ?? '—',
+                                                reason: rescheduleReason.trim(),
+                                              });
+                                              setRescheduleReasonId(null);
+                                              setRescheduleReason('');
+                                              onClose();
+                                            }
+                                          }}
+                                          data-testid={`btn-confirm-reschedule-${p.id}`}
+                                        >
+                                          <CalendarClock className="w-3 h-3" />
+                                          Lanjut Pilih Trip & Kursi
+                                        </Button>
+                                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setRescheduleReasonId(null); setRescheduleReason(''); }} data-testid="btn-cancel-reschedule-reason">
+                                          Batal
+                                        </Button>
+                                      </div>
                                     </div>
                                   ) : activeReassignId === p.id ? (
                                     <div className="flex items-center gap-2">
@@ -395,7 +499,7 @@ export default function PassengerDetailModal({
                                       </Button>
                                     </div>
                                   ) : (
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                       <Button
                                         size="sm"
                                         variant="outline"
@@ -415,6 +519,28 @@ export default function PassengerDetailModal({
                                       >
                                         <ArrowLeftRight className="w-3 h-3" />
                                         Pindah Kursi
+                                      </Button>
+                                      {onStartRescheduleMode && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 text-xs gap-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50 border-purple-200"
+                                          onClick={() => setRescheduleReasonId(p.id)}
+                                          data-testid={`btn-reschedule-${p.id}`}
+                                        >
+                                          <CalendarClock className="w-3 h-3" />
+                                          Reschedule
+                                        </Button>
+                                      )}
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 text-xs gap-1 text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
+                                        onClick={() => setConfirmCancelId(p.id)}
+                                        data-testid={`btn-cancel-ticket-${p.id}`}
+                                      >
+                                        <Ban className="w-3 h-3" />
+                                        Batalkan Tiket
                                       </Button>
                                     </div>
                                   )}
