@@ -372,7 +372,7 @@ export default function SchedulePage() {
                 ) : (
                   <SearchableSelect
                     value={selectedDriverId}
-                    onValueChange={setSelectedDriverId}
+                    onChange={setSelectedDriverId}
                     options={drivers.map(d => ({
                       value: d.id,
                       label: `${d.name} (${d.code})`,

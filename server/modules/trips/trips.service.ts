@@ -63,10 +63,15 @@ export class TripsService {
   async updateTrip(id: string, data: Partial<InsertTrip>): Promise<Trip> {
     await this.getTripById(id);
     
-    // Check if trip has bookings before allowing stop sequence changes
-    const hasBookings = await this.storage.tripHasBookings(id);
-    if (hasBookings) {
-      throw new Error("Cannot modify trip that has existing bookings");
+    const safeFields = new Set(['driverId', 'status', 'channelFlags']);
+    const changedFields = Object.keys(data);
+    const hasStructuralChange = changedFields.some(f => !safeFields.has(f));
+    
+    if (hasStructuralChange) {
+      const hasBookings = await this.storage.tripHasBookings(id);
+      if (hasBookings) {
+        throw new Error("Cannot modify trip structure (vehicle, layout, pattern) when bookings exist");
+      }
     }
     
     return await this.storage.updateTrip(id, data);
