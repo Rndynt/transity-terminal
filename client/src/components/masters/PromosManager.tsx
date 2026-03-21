@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { promotionsApi, vouchersApi, tripPatternsApi } from '@/lib/api';
+import { promotionsApi, vouchersApi, tripPatternsApi, tripsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { Tag, Plus, Pencil, Trash2, Ticket, Copy, Ban, ChevronDown, ChevronUp, Percent, DollarSign, Check, Search, X } from 'lucide-react';
@@ -15,7 +15,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
-import type { Promotion, Voucher, TripPattern } from '@shared/schema';
+import type { Promotion, Voucher, TripPattern, TripWithDetails } from '@shared/schema';
 
 const SCOPE_OPTIONS = [
   { value: 'global', label: 'Global (Semua)' },
@@ -179,6 +179,11 @@ export default function PromosManager() {
   const { data: tripPatterns = [] } = useQuery<TripPattern[]>({
     queryKey: ['/api/trip-patterns'],
     queryFn: tripPatternsApi.getAll,
+  });
+
+  const { data: allTrips = [] } = useQuery<TripWithDetails[]>({
+    queryKey: ['/api/trips'],
+    queryFn: () => tripsApi.getAll(),
   });
 
   const createMutation = useMutation({
@@ -489,6 +494,22 @@ export default function PromosManager() {
             placeholder="Cari rute..."
             emptyText="Belum ada pola rute"
             testId="scope-pattern"
+          />
+        )}
+
+        {form.scope === 'trip' && (
+          <MultiSearchSelect
+            label="Pilih Trip (bisa pilih lebih dari satu)"
+            options={allTrips.map(t => ({
+              value: t.id,
+              label: `${t.patternName || 'Trip'} — ${t.serviceDate}`,
+              sub: t.vehiclePlate || t.vehicleCode || undefined,
+            }))}
+            selected={form.scopeRefIds}
+            onToggle={toggleScopeRef}
+            placeholder="Cari trip..."
+            emptyText="Belum ada trip"
+            testId="scope-trip"
           />
         )}
 
