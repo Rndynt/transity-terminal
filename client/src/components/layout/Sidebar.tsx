@@ -3,8 +3,9 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   MapPin, Store, Truck, UserCheck, LayoutGrid, Route, Calendar, DollarSign,
-  Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText, BadgePercent, ClipboardList, CalendarDays
+  Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText, BadgePercent, ClipboardList, CalendarDays, LogOut
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 
 const NAV_SECTIONS = [
   {
@@ -47,6 +48,7 @@ interface SidebarProps {
 export default function Sidebar({ isOpen = true, onClose, isMobile = false, isCollapsed = false, onToggleCollapse }: SidebarProps) {
   const [location] = useLocation();
   const search = useSearch();
+  const { user, signOut } = useAuth();
 
   const handleLinkClick = () => {
     if (isMobile && onClose) onClose();
@@ -194,16 +196,43 @@ export default function Sidebar({ isOpen = true, onClose, isMobile = false, isCo
 
       <div className={cn("py-3 border-t border-gray-100", isCollapsed && !isMobile ? "px-2" : "px-3")}>
         {isCollapsed && !isMobile ? (
-          <div className="flex justify-center">
-            <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center">
-              <span className="text-[8px] font-bold text-gray-400">v1</span>
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
+              <span className="text-xs font-bold text-blue-600">
+                {user?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || "U"}
+              </span>
             </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={signOut}
+                  className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="font-medium text-xs">Keluar</TooltipContent>
+            </Tooltip>
           </div>
         ) : (
-          <>
-            <p className="text-[10px] text-gray-400 px-2">Demo Transport</p>
-            <p className="text-[10px] text-gray-300 px-2">Version: 1.0.0-MVP</p>
-          </>
+          <div className="flex items-center gap-2.5 px-2">
+            <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-bold text-blue-600">
+                {user?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || "U"}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-gray-700 truncate">{user?.name || "User"}</p>
+              <p className="text-[10px] text-gray-400 truncate">{user?.email || ""}</p>
+            </div>
+            <button
+              onClick={signOut}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+              title="Keluar"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
         )}
       </div>
     </div>

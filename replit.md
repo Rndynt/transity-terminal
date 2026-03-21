@@ -43,7 +43,25 @@ plan/              → Dokumentasi teknis fitur
 - `npm run db:push` → sync schema ke database
 - `npm run build` → production build
 
+## Authentication (Realmio Integration)
+- **Model**: Whitelabel — 1 operator = 1 TransityTerminal instance; semua instance auth ke 1 Realmio
+- **Backend**: `server/modules/auth/realmio.ts` (middleware), `server/modules/auth/auth.routes.ts` (proxy routes)
+- **Frontend**: `client/src/lib/auth.tsx` (AuthProvider + useAuth), `client/src/pages/auth/LoginPage.tsx`
+- **Dev Mode**: Jika `AUTHCORE_BASE_URL` kosong atau `DEV_BYPASS_AUTH=true`, login auto-sukses dengan user dev
+- **Env Vars**: `AUTHCORE_BASE_URL`, `AUTHCORE_TENANT_ID`, `DEV_BYPASS_AUTH`
+- **Endpoints**: `/api/auth/sign-in/email`, `/api/auth/sign-up/email`, `/api/auth/sign-out`, `/api/auth/session`, `/api/auth/me`
+- **Protected Routes**: Semua route CSO dashboard wrapped dalam `ProtectedRoute` — redirect ke `/login` jika belum auth
+
 ## Recent Changes
+
+**2026-03-21 — Realmio Auth Integration**
+- Login page at `/login` with email/password form
+- `AuthProvider` context wrapping entire app with session management
+- `ProtectedRoute` wrapper — redirects unauthenticated users to login
+- Sidebar shows user avatar + name + email + logout button
+- Backend auth routes proxy to Realmio with `X-Tenant-Id` header injection
+- `requireAuth` / `optionalAuth` middleware for protecting API routes
+- Dev bypass mode: auto-login when Realmio is unavailable
 
 **2026-03-21 — Unseat & Reschedule + Bug Fixes**
 - **Schema**: Added `unseated` to `bookingStatusEnum` and `ticketStatusEnum`; new `booking_history` table for audit trail (action enum: unseated/reassigned/rescheduled/canceled/status_change)

@@ -276,8 +276,19 @@ import { AppController } from "./modules/app/app.controller";
 import { PromosController } from "./modules/promos/promos.controller";
 import { SpjController } from "./modules/spj/spj.controller";
 import { appAuthMiddleware, optionalAuthMiddleware } from "./modules/app/app.auth";
+import { registerAuthRoutes } from "./modules/auth/auth.routes";
+import { requireAuth } from "./modules/auth/realmio";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  registerAuthRoutes(app);
+
+  app.use("/api", (req, res, next) => {
+    if (req.path.startsWith("/auth/") || req.path.startsWith("/app/")) {
+      return next();
+    }
+    requireAuth(req, res, next);
+  });
+
   // Initialize controllers
   const driversController = new DriversController(storage);
   const stopsController = new StopsController(storage);
