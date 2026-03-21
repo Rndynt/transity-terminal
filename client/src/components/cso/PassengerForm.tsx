@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Check, CreditCard, Clock, Loader2, Banknote, QrCode, Wallet, Building2, Tag, X, AlertCircle } from 'lucide-react';
+import { fmtCurrency } from '@/lib/constants';
 
 interface PassengerData { fullName: string; phone?: string; idNumber?: string; seatNo: string }
 
@@ -44,9 +45,6 @@ const PAYMENT_METHODS = [
   { id: 'ewallet', label: 'E-Wallet', icon: Wallet },
   { id: 'bank', label: 'Transfer', icon: Building2 },
 ];
-
-const fmt = (amount: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
 
 export default function PassengerForm({
   selectedSeats,
@@ -283,7 +281,7 @@ export default function PassengerForm({
                 <div className="flex items-center gap-1.5">
                   <Check className="w-3.5 h-3.5 text-emerald-600" />
                   <span className="font-mono font-bold text-xs text-emerald-700" data-testid="text-applied-promo-cso">{promoCode}</span>
-                  <span className="text-[10px] text-emerald-600 font-semibold">-{fmt(discountAmount)}</span>
+                  <span className="text-[10px] text-emerald-600 font-semibold">-{fmtCurrency(discountAmount)}</span>
                 </div>
                 <button onClick={handleClearPromo} className="p-0.5 hover:bg-emerald-100 rounded" data-testid="btn-clear-promo-cso">
                   <X className="w-3.5 h-3.5 text-emerald-600" />
@@ -320,7 +318,7 @@ export default function PassengerForm({
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="px-3 py-2 flex items-center justify-between border-b border-gray-100">
             <span className="text-xs text-gray-500">Harga per kursi</span>
-            <span className="text-xs font-semibold text-gray-700 font-mono">{fmt(pricePerSeat)}</span>
+            <span className="text-xs font-semibold text-gray-700 font-mono">{fmtCurrency(pricePerSeat)}</span>
           </div>
           <div className="px-3 py-2 flex items-center justify-between border-b border-gray-100">
             <span className="text-xs text-gray-500">Jumlah kursi</span>
@@ -330,17 +328,17 @@ export default function PassengerForm({
             <>
               <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-100">
                 <span className="text-xs text-gray-500">Subtotal</span>
-                <span className="text-xs font-semibold text-gray-400 font-mono">{fmt(totalAmount)}</span>
+                <span className="text-xs font-semibold text-gray-400 font-mono">{fmtCurrency(totalAmount)}</span>
               </div>
               <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-100 bg-emerald-50/50">
                 <span className="text-xs text-emerald-600">Diskon</span>
-                <span className="text-xs font-semibold text-emerald-600 font-mono">-{fmt(discountAmount)}</span>
+                <span className="text-xs font-semibold text-emerald-600 font-mono">-{fmtCurrency(discountAmount)}</span>
               </div>
             </>
           )}
           <div className="px-3 py-2.5 flex items-center justify-between bg-blue-50">
             <span className="text-sm font-bold text-gray-700">Total</span>
-            <span className="text-lg font-black text-blue-700 font-mono" data-testid="text-final-total">{fmt(finalAmount)}</span>
+            <span className="text-lg font-black text-blue-700 font-mono" data-testid="text-final-total">{fmtCurrency(finalAmount)}</span>
           </div>
         </div>
 
@@ -387,7 +385,7 @@ export default function PassengerForm({
               {parseFloat(cashReceived) >= finalAmount && (
                 <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-center">
                   <span className="text-[10px] text-gray-500 block">Kembalian</span>
-                  <span className="text-lg font-black text-emerald-600 font-mono">{fmt(cashChange)}</span>
+                  <span className="text-lg font-black text-emerald-600 font-mono">{fmtCurrency(cashChange)}</span>
                 </div>
               )}
             </div>
@@ -404,7 +402,7 @@ export default function PassengerForm({
                   }`}
                   data-testid={`cash-preset-${preset}`}
                 >
-                  {fmt(preset)}
+                  {fmtCurrency(preset)}
                 </button>
               ))}
               <button

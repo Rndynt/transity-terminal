@@ -8,6 +8,7 @@ import {
   Banknote, QrCode, Wallet, Building2, Loader2,
   ArrowRight, Ruler, ShieldCheck
 } from 'lucide-react';
+import { fmtCurrency } from '@/lib/constants';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { Stop, Outlet, CsoAvailableTrip, CargoType, CargoShipmentWithStops } from '@/types';
 
@@ -27,9 +28,6 @@ const PAYMENT_METHODS = [
   { id: 'ewallet', label: 'E-Wallet', icon: Wallet },
   { id: 'bank', label: 'Transfer', icon: Building2 },
 ];
-
-const fmt = (amount: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
 
 export default function CargoForm({ trip, originStop, destinationStop, outletId, outlet, csoTrip, onSuccess }: CargoFormProps) {
   const { toast } = useToast();
@@ -423,8 +421,8 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
 
         {tariffQuote?.found && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-[11px] text-emerald-700">
-            Tarif otomatis: {fmt(tariffQuote.pricePerKg || 0)}/kg
-            {tariffQuote.minCharge && parseFloat(String(tariffQuote.minCharge)) > 0 ? ` (min. ${fmt(tariffQuote.minCharge)})` : ''}
+            Tarif otomatis: {fmtCurrency(tariffQuote.pricePerKg || 0)}/kg
+            {tariffQuote.minCharge && parseFloat(String(tariffQuote.minCharge)) > 0 ? ` (min. ${fmtCurrency(tariffQuote.minCharge)})` : ''}
           </div>
         )}
 
@@ -443,7 +441,7 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
           </div>
           {parseFloat(totalAmount) > 0 && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5 text-center">
-              <span className="text-lg font-black text-blue-700 font-mono">{fmt(parseFloat(totalAmount))}</span>
+              <span className="text-lg font-black text-blue-700 font-mono">{fmtCurrency(parseFloat(totalAmount))}</span>
             </div>
           )}
         </div>

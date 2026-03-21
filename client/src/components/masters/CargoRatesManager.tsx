@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { cargoRatesApi, cargoTypesApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { fmtCurrency } from '@/lib/constants';
 import { DollarSign, Plus, Pencil, Trash2, ArrowRight, Filter, X } from 'lucide-react';
 import { RowActionsMenu } from './RowActionsMenu';
 import type { CargoType, CargoRate, Stop, TripPattern, TripWithDetails } from '@shared/schema';
@@ -18,9 +19,6 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
-
-const fmt = (amount: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
 
 const SCOPE_LABELS: Record<string, string> = {
   global: 'Global',
@@ -446,9 +444,9 @@ export default function CargoRatesManager() {
                     <span>{getStopName(cr.destinationStopId)}</span>
                   </div>
                   <div className="flex gap-3 text-[11px] text-muted-foreground mt-1">
-                    <span className="font-semibold text-foreground">{fmt(parseFloat(cr.pricePerKg))}/kg</span>
-                    {parseFloat(cr.pricePerLeg || '0') > 0 && <span>{fmt(parseFloat(cr.pricePerLeg))}/leg</span>}
-                    {parseFloat(cr.minCharge) > 0 && <span>Min. {fmt(parseFloat(cr.minCharge))}</span>}
+                    <span className="font-semibold text-foreground">{fmtCurrency(parseFloat(cr.pricePerKg))}/kg</span>
+                    {parseFloat(cr.pricePerLeg || '0') > 0 && <span>{fmtCurrency(parseFloat(cr.pricePerLeg))}/leg</span>}
+                    {parseFloat(cr.minCharge) > 0 && <span>Min. {fmtCurrency(parseFloat(cr.minCharge))}</span>}
                   </div>
                 </div>
                 <RowActionsMenu

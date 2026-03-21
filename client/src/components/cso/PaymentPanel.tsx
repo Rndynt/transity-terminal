@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Tag, X, Check, AlertCircle } from 'lucide-react';
+import { fmtCurrency } from '@/lib/constants';
 
 interface PaymentPanelProps {
   totalAmount: number;
@@ -94,8 +95,6 @@ export default function PaymentPanel({
     }
   };
 
-  const formatCurrency = (amount: number) => 
-    new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
 
   return (
     <div className="space-y-4">
@@ -110,7 +109,7 @@ export default function PaymentPanel({
                 <Check className="w-4 h-4 text-green-600" />
                 <span className="font-mono font-semibold text-green-700" data-testid="text-applied-promo">{promoCode}</span>
                 <Badge variant="secondary" className="text-xs">
-                  -{formatCurrency(discountAmount)}
+                  -{fmtCurrency(discountAmount)}
                 </Badge>
               </div>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClearPromo} data-testid="btn-clear-promo">
@@ -149,17 +148,17 @@ export default function PaymentPanel({
       <div className="p-4 bg-primary/5 rounded-lg space-y-2">
         <div className="flex justify-between items-center text-sm text-muted-foreground">
           <span>Subtotal</span>
-          <span>{formatCurrency(totalAmount)}</span>
+          <span>{fmtCurrency(totalAmount)}</span>
         </div>
         {discountAmount > 0 && (
           <div className="flex justify-between items-center text-sm text-green-600">
             <span>Diskon</span>
-            <span>-{formatCurrency(discountAmount)}</span>
+            <span>-{fmtCurrency(discountAmount)}</span>
           </div>
         )}
         <div className="flex justify-between items-center pt-1 border-t border-primary/10">
           <span className="text-lg">Total Pembayaran</span>
-          <span className="text-2xl font-bold text-primary" data-testid="text-final-amount">{formatCurrency(finalAmount)}</span>
+          <span className="text-2xl font-bold text-primary" data-testid="text-final-amount">{fmtCurrency(finalAmount)}</span>
         </div>
       </div>
 
@@ -196,7 +195,7 @@ export default function PaymentPanel({
           />
           {cashReceived && parseFloat(cashReceived) >= finalAmount && (
             <div className="mt-2 p-3 bg-green-50 text-green-700 rounded-lg text-sm">
-              Kembalian: <strong>{formatCurrency(change)}</strong>
+              Kembalian: <strong>{fmtCurrency(change)}</strong>
             </div>
           )}
         </div>

@@ -8,6 +8,7 @@ import {
   MapPin, Bus, Store, ChevronRight, Clock 
 } from 'lucide-react';
 import { format, isToday, parseISO } from 'date-fns';
+import { fmtCurrency } from '@/lib/constants';
 import { id } from 'date-fns/locale';
 
 interface DashboardStats {
@@ -31,12 +32,6 @@ export default function DashboardPage() {
     }
   });
 
-  const formatCurrency = (amount: number) => 
-    new Intl.NumberFormat('id-ID', { 
-      style: 'currency', 
-      currency: 'IDR', 
-      minimumFractionDigits: 0 
-    }).format(amount || 0);
 
   const formatTime = (timestamp: string) => {
     if (!timestamp) return '--:--';
@@ -96,7 +91,7 @@ export default function DashboardPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Total Revenue</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(stats?.todayRevenue || 0)}
+                  {fmtCurrency(stats?.todayRevenue || 0)}
                 </p>
               </div>
               <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
@@ -238,7 +233,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-sm">
-                      {formatCurrency(booking.totalAmount)}
+                      {fmtCurrency(booking.totalAmount)}
                     </p>
                     <Badge 
                       variant={booking.status === 'paid' ? 'default' : 'secondary'}

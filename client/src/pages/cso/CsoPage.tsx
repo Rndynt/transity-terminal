@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSearch, useLocation } from 'wouter';
 import { queryClient } from '@/lib/queryClient';
 import { cargoApi } from '@/lib/api';
+import { fmtCurrency } from '@/lib/constants';
 import TripSelector from '@/components/cso/TripSelector';
 import RouteTimeline from '@/components/cso/RouteTimeline';
 import SeatMap, { type AssignModeState, type RescheduleModeState } from '@/components/cso/SeatMap';
@@ -40,9 +41,6 @@ const formatTime = (isoString: string | null | undefined): string => {
     return '--:--';
   }
 };
-
-const fmt = (n: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
 
 export default function CsoPage() {
   const searchString = useSearch();
@@ -564,7 +562,7 @@ export default function CsoPage() {
                     }`}
                     data-testid="mobile-tab-passenger"
                   >
-                    Data & Bayar {totalAmount > 0 && `(${fmt(totalAmount)})`}
+                    Data & Bayar {totalAmount > 0 && `(${fmtCurrency(totalAmount)})`}
                   </button>
                 </div>
               </div>
@@ -788,7 +786,7 @@ export default function CsoPage() {
                   <span className="hidden sm:inline">Kursi: </span>
                   <span className="font-semibold text-blue-600">{sortedSeats.join(', ')}</span>
                   <span className="mx-0.5">|</span>
-                  <span className="font-bold text-blue-700">{fmt(totalAmount)}</span>
+                  <span className="font-bold text-blue-700">{fmtCurrency(totalAmount)}</span>
                 </span>
               )}
             </div>

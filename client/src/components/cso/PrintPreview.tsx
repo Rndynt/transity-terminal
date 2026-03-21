@@ -2,6 +2,7 @@ import {
   CheckCircle2, Printer, RotateCcw, AlertCircle,
   Calendar, Bus, Store, Users, CreditCard, QrCode
 } from 'lucide-react';
+import { fmtCurrency } from '@/lib/constants';
 
 interface PrintPreviewProps {
   booking: any;
@@ -9,9 +10,6 @@ interface PrintPreviewProps {
   onNewBooking: () => void;
   onPrint: () => void;
 }
-
-const fmt = (amount: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
 
 export default function PrintPreview({ booking, onNewBooking, onPrint }: PrintPreviewProps) {
   if (!booking) {
@@ -139,7 +137,7 @@ export default function PrintPreview({ booking, onNewBooking, onPrint }: PrintPr
                       <td className="py-1.5 text-center">
                         <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-mono font-bold">{p.seatNo}</span>
                       </td>
-                      <td className="py-1.5 text-right font-mono text-gray-600">{fmt(p.fareAmount)}</td>
+                      <td className="py-1.5 text-right font-mono text-gray-600">{fmtCurrency(p.fareAmount)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -161,20 +159,20 @@ export default function PrintPreview({ booking, onNewBooking, onPrint }: PrintPr
                     <>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-500">Subtotal</span>
-                        <span className="font-mono text-gray-600">{fmt(subtotal)}</span>
+                        <span className="font-mono text-gray-600">{fmtCurrency(subtotal)}</span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-orange-600 flex items-center gap-1">
                           Diskon {booking.voucherCode ? <span className="font-mono text-[10px]">({booking.voucherCode})</span> : ''}
                         </span>
-                        <span className="font-mono text-orange-600">-{fmt(discount)}</span>
+                        <span className="font-mono text-orange-600">-{fmtCurrency(discount)}</span>
                       </div>
                       <div className="border-t border-dashed border-gray-200 my-1" />
                     </>
                   )}
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-semibold text-gray-600">Total Pembayaran</span>
-                    <span className={`text-lg font-black font-mono ${isPaid ? 'text-blue-700' : 'text-amber-700'}`}>{fmt(total)}</span>
+                    <span className={`text-lg font-black font-mono ${isPaid ? 'text-blue-700' : 'text-amber-700'}`}>{fmtCurrency(total)}</span>
                   </div>
                 </>
               );

@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { costTemplatesApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { fmtCurrency } from '@/lib/constants';
 import {
   Wallet, Plus, Pencil, Trash2, ChevronDown, ChevronRight,
   Fuel, CircleDollarSign, Utensils, ParkingSquare, MoreHorizontal
@@ -21,9 +22,6 @@ import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
 import type { TripPattern, TripCostTemplate, TripCostItem } from '@shared/schema';
-
-const fmt = (amount: string | number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(Number(amount) || 0);
 
 const CATEGORY_LABELS: Record<string, string> = {
   bbm: 'BBM',
@@ -81,7 +79,7 @@ function ItemRow({
         </div>
       </div>
       <div className="flex items-center gap-3 shrink-0">
-        <span className="text-sm font-semibold text-foreground">{fmt(item.amount)}</span>
+        <span className="text-sm font-semibold text-foreground">{fmtCurrency(item.amount)}</span>
         <RowActionsMenu
           actions={[
             { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => onEdit(item) },
@@ -494,7 +492,7 @@ export default function TripCostTemplatesManager() {
                   <div className="flex items-center gap-3 shrink-0 ml-2">
                     <div className="text-right hidden sm:block">
                       <p className="text-xs text-muted-foreground">{items.length} item</p>
-                      <p className="text-sm font-semibold text-foreground">{fmt(totalEstimasi)}</p>
+                      <p className="text-sm font-semibold text-foreground">{fmtCurrency(totalEstimasi)}</p>
                     </div>
                     <RowActionsMenu
                       actions={[
@@ -511,9 +509,9 @@ export default function TripCostTemplatesManager() {
                   <div className="border-t bg-muted/10 p-3 space-y-2">
                     {/* Summary */}
                     <div className="flex gap-4 text-xs text-muted-foreground pb-2 flex-wrap">
-                      <span>Total estimasi: <strong className="text-foreground">{fmt(totalEstimasi)}</strong></span>
-                      <span>Uang muka: <strong className="text-blue-600 dark:text-blue-400">{fmt(uangMuka)}</strong></span>
-                      <span>Reimbursable: <strong className="text-orange-600 dark:text-orange-400">{fmt(totalEstimasi - uangMuka)}</strong></span>
+                      <span>Total estimasi: <strong className="text-foreground">{fmtCurrency(totalEstimasi)}</strong></span>
+                      <span>Uang muka: <strong className="text-blue-600 dark:text-blue-400">{fmtCurrency(uangMuka)}</strong></span>
+                      <span>Reimbursable: <strong className="text-orange-600 dark:text-orange-400">{fmtCurrency(totalEstimasi - uangMuka)}</strong></span>
                     </div>
 
                     {items.length === 0 ? (

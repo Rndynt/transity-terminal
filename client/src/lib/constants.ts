@@ -78,9 +78,12 @@ export const CARGO_STATUS_TRANSITIONS: Record<CargoStatus, CargoStatus[]> = {
   canceled: [],
 };
 
-export const fmtCurrency = (amount: string | number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })
-    .format(typeof amount === 'string' ? parseFloat(amount) : amount);
+export const fmtCurrency = (amount: string | number | null | undefined) => {
+  if (amount == null) return '—';
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return '—';
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
+};
 
 export const fmtDate = (d: string | Date | null | undefined) => {
   if (!d) return '—';

@@ -2,6 +2,7 @@ import {
   CheckCircle2, Printer, RotateCcw, Package,
   User, Phone, MapPin, Bus, Calendar, FileText, QrCode
 } from 'lucide-react';
+import { fmtCurrency } from '@/lib/constants';
 import type { CargoShipmentWithStops } from '@/types';
 
 interface CargoWaybillPreviewProps {
@@ -9,9 +10,6 @@ interface CargoWaybillPreviewProps {
   onNewShipment: () => void;
   onPrint: () => void;
 }
-
-const fmt = (amount: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
 
 export default function CargoWaybillPreview({ shipment, onNewShipment, onPrint }: CargoWaybillPreviewProps) {
   if (!shipment) {
@@ -136,7 +134,7 @@ export default function CargoWaybillPreview({ shipment, onNewShipment, onPrint }
             </div>
             <div className="text-right">
               <span className="text-[10px] text-gray-400 block">Total Biaya</span>
-              <span className="text-lg font-black text-amber-700 font-mono">{fmt(parseFloat(shipment.totalAmount))}</span>
+              <span className="text-lg font-black text-amber-700 font-mono">{fmtCurrency(parseFloat(shipment.totalAmount))}</span>
             </div>
           </div>
 

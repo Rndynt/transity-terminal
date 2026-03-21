@@ -8,6 +8,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, outletsApi, stopsApi } from '@/lib/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { fmtCurrency } from '@/lib/constants';
 import type { Outlet, CsoAvailableTrip, Stop } from '@/types';
 
 interface TripSelectorProps {
@@ -20,9 +21,6 @@ interface TripSelectorProps {
   initialTripId?: string;
   onInitialConsumed?: () => void;
 }
-
-const fmt = (n: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
 
 const MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 const DAYS_ID = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -785,7 +783,7 @@ export default function TripSelector({
                               )}
                             </div>
                             {(trip as any).pricePerSeat != null && (
-                              <span className="text-xs font-bold text-gray-700 font-mono">{fmt((trip as any).pricePerSeat)}</span>
+                              <span className="text-xs font-bold text-gray-700 font-mono">{fmtCurrency((trip as any).pricePerSeat)}</span>
                             )}
                           </div>
 

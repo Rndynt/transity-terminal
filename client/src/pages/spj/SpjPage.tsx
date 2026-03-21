@@ -18,19 +18,13 @@ import {
 } from 'lucide-react';
 import type { SpjWithDetails, SpjCostLine, TripWithDetails, TripPattern } from '@/types';
 import { SpjStatusBadge } from '@/components/shared/StatusBadges';
+import { fmtCurrency } from '@/lib/constants';
 
 function formatDate(d: string | Date | null | undefined) {
   if (!d) return '—';
   try {
     return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
   } catch { return '—'; }
-}
-
-function formatCurrency(amount: string | number | null | undefined) {
-  if (amount == null) return '—';
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  if (isNaN(num)) return '—';
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -521,10 +515,10 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
 
         {profit && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <SummaryCard icon={CircleDollarSign} label="Pendapatan Tiket" value={formatCurrency(profit.ticketRevenue)} color="text-green-600" />
-            <SummaryCard icon={Banknote} label="Total Biaya (Estimasi)" value={formatCurrency(totalEstimated)} color="text-amber-600" />
-            <SummaryCard icon={Banknote} label="Total Biaya (Aktual)" value={formatCurrency(totalActual)} color="text-red-600" />
-            <SummaryCard icon={TrendingUp} label="Laba Bersih" value={formatCurrency(profit.ticketRevenue + profit.cargoRevenue - totalActual)} color="text-primary" />
+            <SummaryCard icon={CircleDollarSign} label="Pendapatan Tiket" value={fmtCurrency(profit.ticketRevenue)} color="text-green-600" />
+            <SummaryCard icon={Banknote} label="Total Biaya (Estimasi)" value={fmtCurrency(totalEstimated)} color="text-amber-600" />
+            <SummaryCard icon={Banknote} label="Total Biaya (Aktual)" value={fmtCurrency(totalActual)} color="text-red-600" />
+            <SummaryCard icon={TrendingUp} label="Laba Bersih" value={fmtCurrency(profit.ticketRevenue + profit.cargoRevenue - totalActual)} color="text-primary" />
           </div>
         )}
 
@@ -565,7 +559,7 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
                           <Badge variant="outline" className="text-xs">{CATEGORY_LABELS[line.category] || line.category}</Badge>
                         </TableCell>
                         <TableCell className="text-sm">{line.label}</TableCell>
-                        <TableCell className="text-right text-sm font-medium tabular-nums">{formatCurrency(line.estimatedAmount)}</TableCell>
+                        <TableCell className="text-right text-sm font-medium tabular-nums">{fmtCurrency(line.estimatedAmount)}</TableCell>
                         <TableCell className="text-right">
                           {editingLine === line.id ? (
                             <Input
@@ -577,7 +571,7 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
                             />
                           ) : (
                             <span className={`text-sm font-medium tabular-nums ${line.actualAmount ? '' : 'text-muted-foreground'}`}>
-                              {line.actualAmount ? formatCurrency(line.actualAmount) : '—'}
+                              {line.actualAmount ? fmtCurrency(line.actualAmount) : '—'}
                             </span>
                           )}
                         </TableCell>
@@ -630,8 +624,8 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
                     ))}
                     <TableRow className="bg-muted/30 font-semibold">
                       <TableCell className="pl-4" colSpan={2}>Total</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatCurrency(totalEstimated)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatCurrency(totalActual)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmtCurrency(totalEstimated)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmtCurrency(totalActual)}</TableCell>
                       <TableCell />
                       <TableCell />
                       {!isSettled && <TableCell />}
@@ -644,17 +638,17 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
             <div className="mt-4 p-3 rounded-lg bg-muted/30 border space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Uang muka (advance)</span>
-                <span className="font-medium tabular-nums">{formatCurrency(totalAdvance)}</span>
+                <span className="font-medium tabular-nums">{fmtCurrency(totalAdvance)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total biaya aktual</span>
-                <span className="font-medium tabular-nums">{formatCurrency(totalActual)}</span>
+                <span className="font-medium tabular-nums">{fmtCurrency(totalActual)}</span>
               </div>
               <div className="h-px bg-border my-1" />
               <div className="flex justify-between text-sm font-semibold">
                 <span>{settlement >= 0 ? 'Sisa dikembalikan' : 'Kurang bayar'}</span>
                 <span className={`tabular-nums ${settlement >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatCurrency(Math.abs(settlement))}
+                  {fmtCurrency(Math.abs(settlement))}
                 </span>
               </div>
             </div>
@@ -735,17 +729,17 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
             <div className="p-3 rounded-lg bg-muted/30 border space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Uang muka</span>
-                <span className="font-medium tabular-nums">{formatCurrency(totalAdvance)}</span>
+                <span className="font-medium tabular-nums">{fmtCurrency(totalAdvance)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total biaya aktual</span>
-                <span className="font-medium tabular-nums">{formatCurrency(totalActual)}</span>
+                <span className="font-medium tabular-nums">{fmtCurrency(totalActual)}</span>
               </div>
               <div className="h-px bg-border" />
               <div className="flex justify-between text-sm font-semibold">
                 <span>{settlement >= 0 ? 'Sisa dikembalikan' : 'Kurang bayar'}</span>
                 <span className={`tabular-nums ${settlement >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatCurrency(Math.abs(settlement))}
+                  {fmtCurrency(Math.abs(settlement))}
                 </span>
               </div>
             </div>

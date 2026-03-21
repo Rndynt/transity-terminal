@@ -6,16 +6,12 @@ import { Separator } from '@/components/ui/separator';
 import { manifestApi } from '@/lib/api';
 import { Printer, X, Bus, User, Clock, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
 import { TicketStatusBadge } from '@/components/shared/StatusBadges';
+import { fmtCurrency } from '@/lib/constants';
 
 interface ManifestDialogProps {
   tripId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function formatCurrency(amount: number | string | null) {
-  const num = parseFloat(String(amount || '0'));
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
 }
 
 function formatDate(dateStr: string) {
@@ -109,11 +105,11 @@ function ThermalManifest({ manifest }: { manifest: any }) {
       {manifest.summary.totalCargoItems > 0 && (
         <div>Kargo     : {manifest.summary.totalCargoItems} kiriman ({manifest.summary.totalCargoWeight} kg)</div>
       )}
-      <div>Pend. Tiket: {formatCurrency(manifest.summary.totalTicketRevenue)}</div>
+      <div>Pend. Tiket: {fmtCurrency(manifest.summary.totalTicketRevenue)}</div>
       {manifest.summary.totalCargoRevenue > 0 && (
-        <div>Pend. Kargo: {formatCurrency(manifest.summary.totalCargoRevenue)}</div>
+        <div>Pend. Kargo: {fmtCurrency(manifest.summary.totalCargoRevenue)}</div>
       )}
-      <div>TOTAL      : {formatCurrency(manifest.summary.totalRevenue)}</div>
+      <div>TOTAL      : {fmtCurrency(manifest.summary.totalRevenue)}</div>
       <div>{line}</div>
 
       {/* Print info */}
@@ -311,7 +307,7 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
                             <td className="px-3 py-2">{p.destinationStopName || '—'}</td>
                             <td className="px-3 py-2 text-muted-foreground">{p.phone || '—'}</td>
                             <td className="px-3 py-2"><TicketStatusBadge status={p.ticketStatus} /></td>
-                            <td className="px-3 py-2 text-right">{formatCurrency(p.fareAmount)}</td>
+                            <td className="px-3 py-2 text-right">{fmtCurrency(p.fareAmount)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -359,7 +355,7 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
                             <td className="px-3 py-2">{c.originStopName || '—'}</td>
                             <td className="px-3 py-2">{c.destinationStopName || '—'}</td>
                             <td className="px-3 py-2 text-right">{c.weightKg ? parseFloat(c.weightKg).toFixed(1) : '—'}</td>
-                            <td className="px-3 py-2 text-right">{formatCurrency(c.totalAmount)}</td>
+                            <td className="px-3 py-2 text-right">{fmtCurrency(c.totalAmount)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -384,9 +380,9 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
                   </div>
                   <div className="bg-muted/40 border rounded-lg p-3 text-center col-span-2 md:col-span-1">
                     <div className="text-xs text-muted-foreground mb-1">Total Pendapatan</div>
-                    <div className="text-lg font-bold">{formatCurrency(manifest.summary.totalRevenue)}</div>
+                    <div className="text-lg font-bold">{fmtCurrency(manifest.summary.totalRevenue)}</div>
                     <div className="text-xs text-muted-foreground">
-                      Tiket: {formatCurrency(manifest.summary.totalTicketRevenue)} &bull; Kargo: {formatCurrency(manifest.summary.totalCargoRevenue)}
+                      Tiket: {fmtCurrency(manifest.summary.totalTicketRevenue)} &bull; Kargo: {fmtCurrency(manifest.summary.totalCargoRevenue)}
                     </div>
                   </div>
                 </div>
