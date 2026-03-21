@@ -133,6 +133,16 @@ export const bookingsApi = {
     return fetch(url).then(res => res.json()) as Promise<Booking[]>;
   },
   getById: (id: string) => fetch(`/api/bookings/${id}`).then(res => res.json()) as Promise<Booking>,
+  getHistory: (bookingId: string) => fetch(`/api/bookings/${bookingId}/history`).then(res => res.json()),
+  unseatAll: async (bookingId: string, reason?: string) => {
+    const res = await fetch(`/api/bookings/${bookingId}/unseat-all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason })
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Unseat failed'); }
+    return res.json();
+  },
   create: async (data: CreateBookingRequest, idempotencyKey?: string) => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
@@ -162,6 +172,44 @@ export const bookingsApi = {
     }
     
     return response.json();
+  }
+};
+
+// Passengers API
+export const passengersApi = {
+  unseat: async (passengerId: string, reason?: string) => {
+    const res = await fetch(`/api/passengers/${passengerId}/unseat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason })
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Unseat failed'); }
+    return res.json();
+  },
+  reassign: async (passengerId: string, newSeatNo: string) => {
+    const res = await fetch(`/api/passengers/${passengerId}/reassign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newSeatNo })
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Reassign failed'); }
+    return res.json();
+  },
+  reschedule: async (passengerId: string, data: {
+    newTripId: string;
+    newSeatNo: string;
+    newOriginStopId: string;
+    newDestinationStopId: string;
+    newOriginSeq: number;
+    newDestinationSeq: number;
+  }) => {
+    const res = await fetch(`/api/passengers/${passengerId}/reschedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Reschedule failed'); }
+    return res.json();
   }
 };
 

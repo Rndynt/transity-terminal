@@ -26,7 +26,7 @@ server/
   storage.ts       → DatabaseStorage implementation
   modules/
     pricing/       → PricingService + PricingController
-    bookings/      → BookingsService + BookingsController
+    bookings/      → BookingsService + BookingsController + UnseatService
     tripBases/     → TripBasesService (materialisasi virtual → real)
     cargo/         → CargoService + CargoController
     seatInventory/ → SeatInventoryService
@@ -44,6 +44,13 @@ plan/              → Dokumentasi teknis fitur
 - `npm run build` → production build
 
 ## Recent Changes
+
+**2026-03-21 — Unseat & Reschedule**
+- **Schema**: Added `unseated` to `bookingStatusEnum` and `ticketStatusEnum`; new `booking_history` table for audit trail (action enum: unseated/reassigned/rescheduled/canceled/status_change)
+- **Backend**: `UnseatService` (`server/modules/bookings/unseat.service.ts`) — unseatPassenger, unseatAllPassengers, reassignSeat, reschedulePassenger; all operations transactional with seat_inventory updates and WebSocket broadcasts
+- **API Routes**: `POST /api/passengers/:passengerId/unseat`, `POST /api/passengers/:passengerId/reassign`, `POST /api/passengers/:passengerId/reschedule`, `POST /api/bookings/:bookingId/unseat-all`, `GET /api/bookings/:bookingId/history`
+- **Frontend**: PassengerDetailModal (CSO seat map click) has Unseat and Pindah Kursi buttons per passenger; AllBookingsPage BookingDetailModal has per-passenger Unseat/Reassign + Unseat All + Booking History timeline
+- **Manifest**: Unseated passengers/bookings excluded from manifest queries
 
 **2026-03-21 — Deep-Link All Bookings → CSO**
 - **"Buka di Reservasi" button** in AllBookingsPage `BookingDetailModal` — navigates to `/cso?tripId=&outletId=&date=&originStopId=&destinationStopId=`

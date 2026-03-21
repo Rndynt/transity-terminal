@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { BookingsService } from "./bookings.service";
+import { UnseatService } from "./unseat.service";
 import { IStorage } from "../../routes";
 import { insertBookingSchema, insertPassengerSchema, insertPaymentSchema } from "@shared/schema";
 import { z } from "zod";
@@ -55,11 +56,30 @@ const createPendingBookingSchema = z.object({
   }))
 });
 
+const unseatPassengerSchema = z.object({
+  reason: z.string().optional()
+});
+
+const reassignSeatSchema = z.object({
+  newSeatNo: z.string()
+});
+
+const reschedulePassengerSchema = z.object({
+  newTripId: z.string().uuid(),
+  newSeatNo: z.string(),
+  newOriginStopId: z.string().uuid(),
+  newDestinationStopId: z.string().uuid(),
+  newOriginSeq: z.number(),
+  newDestinationSeq: z.number()
+});
+
 export class BookingsController {
   private bookingsService: BookingsService;
+  private unseatService: UnseatService;
 
   constructor(storage: IStorage) {
     this.bookingsService = new BookingsService(storage);
+    this.unseatService = new UnseatService(storage);
   }
 
   async getAll(req: Request, res: Response) {
@@ -319,6 +339,97 @@ export class BookingsController {
         error: 'Internal server error',
         code: 'INTERNAL_ERROR',
         details: error.message
+      });
+    }
+  }
+
+  async unseatPassenger(req: Request, res: Response) {
+    try {
+      const { passengerId } = req.params;
+      const { reason } = unseatPassengerSchema.parse(req.body || {});
+      const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
+      const result = await this.unseatService.unseatPassenger(passengerId, performedBy, reason);
+      res.json(result);
+    } catch (error: any) {
+      console.error('Unseat passenger error:', error);
+      res.status(error.message.includes('tidak ditemukan') ? 404 : 400).json({
+        error: error.message,
+        code: 'UNSEAT_ERROR'
+      });
+    }
+  }
+
+  async unseatAllPassengers(req: Request, res: Response) {
+    try {
+      const { bookingId } = req.params;
+      const { reason } = unseatPassengerSchema.parse(req.body || {});
+      const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
+      const result = await this.unseatService.unseatAllPassengers(bookingId, performedBy, reason);
+      res.json(result);
+    } catch (error: any) {
+      console.error('Unseat all passengers error:', error);
+      res.status(error.message.includes('tidak ditemukan') ? 404 : 400).json({
+        error: error.message,
+        code: 'UNSEAT_ERROR'
+      });
+    }
+  }
+
+  async reassignSeat(req: Request, res: Response) {
+    try {
+      const { passengerId } = req.params;
+      const { newSeatNo } = reassignSeatSchema.parse(req.body);
+      const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
+      const result = await this.unseatService.reassignSeat(passengerId, newSeatNo, performedBy);
+      res.json(result);
+    } catch (error: any) {
+      console.error('Reassign seat error:', error);
+      const status = error.message.includes('tidak ditemukan') ? 404
+        : error.message.includes('tidak tersedia') ? 409 : 400;
+      res.status(status).json({
+        error: error.message,
+        code: 'REASSIGN_ERROR'
+      });
+    }
+  }
+
+  async reschedulePassenger(req: Request, res: Response) {
+    try {
+      const { passengerId } = req.params;
+      const data = reschedulePassengerSchema.parse(req.body);
+      const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
+      const result = await this.unseatService.reschedulePassenger(
+        passengerId,
+        data.newTripId,
+        data.newSeatNo,
+        data.newOriginStopId,
+        data.newDestinationStopId,
+        data.newOriginSeq,
+        data.newDestinationSeq,
+        performedBy
+      );
+      res.json(result);
+    } catch (error: any) {
+      console.error('Reschedule passenger error:', error);
+      const status = error.message.includes('tidak ditemukan') ? 404
+        : error.message.includes('tidak tersedia') ? 409 : 400;
+      res.status(status).json({
+        error: error.message,
+        code: 'RESCHEDULE_ERROR'
+      });
+    }
+  }
+
+  async getBookingHistory(req: Request, res: Response) {
+    try {
+      const { bookingId } = req.params;
+      const history = await this.unseatService.getBookingHistory(bookingId);
+      res.json(history);
+    } catch (error: any) {
+      console.error('Get booking history error:', error);
+      res.status(500).json({
+        error: error.message,
+        code: 'HISTORY_ERROR'
       });
     }
   }

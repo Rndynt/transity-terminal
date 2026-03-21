@@ -17,13 +17,13 @@ import { z } from "zod";
 
 // Enums
 export const tripStatusEnum = pgEnum('trip_status', ['scheduled', 'canceled', 'closed']);
-export const bookingStatusEnum = pgEnum('booking_status', ['pending', 'confirmed', 'checked_in', 'paid', 'canceled', 'refunded']);
+export const bookingStatusEnum = pgEnum('booking_status', ['pending', 'confirmed', 'checked_in', 'paid', 'canceled', 'refunded', 'unseated']);
 export const channelEnum = pgEnum('channel', ['CSO', 'WEB', 'APP', 'OTA']);
 export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'qr', 'ewallet', 'bank']);
 export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'success', 'failed']);
 export const printStatusEnum = pgEnum('print_status', ['queued', 'sent', 'failed']);
 export const priceRuleScopeEnum = pgEnum('price_rule_scope', ['pattern', 'trip', 'leg', 'time']);
-export const ticketStatusEnum = pgEnum('ticket_status', ['active', 'canceled', 'refunded', 'checked_in', 'no_show']);
+export const ticketStatusEnum = pgEnum('ticket_status', ['active', 'canceled', 'refunded', 'checked_in', 'no_show', 'unseated']);
 export const promoTypeEnum = pgEnum('promo_type', ['percentage', 'fixed']);
 export const promoScopeEnum = pgEnum('promo_scope', ['global', 'pattern', 'trip', 'outlet', 'channel']);
 export const voucherStatusEnum = pgEnum('voucher_status', ['active', 'used', 'expired', 'revoked']);
@@ -813,6 +813,28 @@ export type SpjWithDetails = Spj & {
   tripPatternCode?: string | null;
   costLines?: SpjCostLine[];
 };
+
+// 26. Booking History (audit trail for unseat/reschedule/reassign)
+export const bookingHistoryActionEnum = pgEnum('booking_history_action', ['unseated', 'reassigned', 'rescheduled', 'canceled', 'status_change']);
+
+export const bookingHistory = pgTable("booking_history", {
+  id:            uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId:     uuid("booking_id").notNull().references(() => bookings.id),
+  passengerId:   uuid("passenger_id").references(() => passengers.id),
+  action:        bookingHistoryActionEnum("action").notNull(),
+  details:       jsonb("details"),
+  performedBy:   text("performed_by"),
+  createdAt:     timestamp("created_at", { withTimezone: true }).defaultNow()
+});
+
+export const bookingHistoryRelations = relations(bookingHistory, ({ one }) => ({
+  booking: one(bookings, { fields: [bookingHistory.bookingId], references: [bookings.id] }),
+  passenger: one(passengers, { fields: [bookingHistory.passengerId], references: [passengers.id] })
+}));
+
+export const insertBookingHistorySchema = createInsertSchema(bookingHistory).omit({ id: true, createdAt: true });
+export type BookingHistory = typeof bookingHistory.$inferSelect;
+export type InsertBookingHistory = z.infer<typeof insertBookingHistorySchema>;
 
 // Keep existing user schema for compatibility (can be removed later)
 export const users = pgTable("users", {

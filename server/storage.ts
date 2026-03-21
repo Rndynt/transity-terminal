@@ -854,7 +854,8 @@ export class DatabaseStorage implements IStorage {
       LEFT JOIN ${stops} os ON os.id = b.origin_stop_id
       LEFT JOIN ${stops} ds ON ds.id = b.destination_stop_id
       WHERE b.trip_id = ${tripId}
-        AND b.status NOT IN ('canceled', 'refunded')
+        AND b.status NOT IN ('canceled', 'refunded', 'unseated')
+        AND COALESCE(p.ticket_status, 'active') NOT IN ('unseated', 'canceled')
       ORDER BY p.seat_no ASC
     `);
 
@@ -929,7 +930,8 @@ export class DatabaseStorage implements IStorage {
       LEFT JOIN ${stops} os ON os.id = b.origin_stop_id
       LEFT JOIN ${stops} ds ON ds.id = b.destination_stop_id
       WHERE b.trip_id = ${tripId}
-        AND b.status NOT IN ('canceled', 'refunded')
+        AND b.status NOT IN ('canceled', 'refunded', 'unseated')
+        AND COALESCE(p.ticket_status, 'active') NOT IN ('unseated', 'canceled')
       ORDER BY p.seat_no ASC
     `);
 

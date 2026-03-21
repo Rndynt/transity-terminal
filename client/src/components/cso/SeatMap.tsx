@@ -398,6 +398,7 @@ export default function SeatMap({
         isLoading={passengerDetailsMutation.isPending}
         isError={passengerDetailsMutation.isError}
         selectedSeatNo={selectedSeatForDetails}
+        tripId={trip.id}
       />
     </div>
   );

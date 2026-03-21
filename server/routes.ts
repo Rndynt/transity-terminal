@@ -423,6 +423,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/bookings/pending', asyncHandler(bookingsController.getPendingBookings.bind(bookingsController)));
   app.delete('/api/bookings/pending/:id', asyncHandler(bookingsController.releasePendingBooking.bind(bookingsController)));
 
+  app.post('/api/passengers/:passengerId/unseat', asyncHandler(bookingsController.unseatPassenger.bind(bookingsController)));
+  app.post('/api/passengers/:passengerId/reassign', asyncHandler(bookingsController.reassignSeat.bind(bookingsController)));
+  app.post('/api/passengers/:passengerId/reschedule', asyncHandler(bookingsController.reschedulePassenger.bind(bookingsController)));
+  app.post('/api/bookings/:bookingId/unseat-all', asyncHandler(bookingsController.unseatAllPassengers.bind(bookingsController)));
+  app.get('/api/bookings/:bookingId/history', asyncHandler(bookingsController.getBookingHistory.bind(bookingsController)));
+
   // Ticket (passenger-level) cancel — cancel satu penumpang tanpa batalkan booking
   app.patch('/api/passengers/:id/cancel', asyncHandler(async (req, res) => {
     const passenger = await storage.updatePassenger(req.params.id, { ticketStatus: 'canceled' });

@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
-import { bookingsApi, stopsApi } from '@/lib/api';
+import { bookingsApi, stopsApi, passengersApi } from '@/lib/api';
+import { queryClient } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 import type { Booking, Stop } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -16,10 +18,10 @@ import {
   List, Search, X, Loader2, RefreshCw,
   ArrowRight, User, CreditCard, Phone, Hash,
   Calendar, Ticket, MapPin, Armchair, ChevronDown, ChevronUp,
-  Bus, Package, ExternalLink
+  Bus, Package, ExternalLink, UserMinus, ArrowLeftRight, History
 } from 'lucide-react';
 
-type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'canceled' | 'refunded';
+type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'canceled' | 'refunded' | 'unseated';
 type BookingChannel = 'CSO' | 'WEB' | 'APP' | 'OTA';
 
 const STATUS_MAP: Record<BookingStatus, { label: string; color: string; bg: string }> = {
@@ -29,6 +31,7 @@ const STATUS_MAP: Record<BookingStatus, { label: string; color: string; bg: stri
   paid:       { label: 'Lunas',      color: 'text-emerald-700',bg: 'bg-emerald-50 border border-emerald-200' },
   canceled:   { label: 'Dibatalkan', color: 'text-red-700',    bg: 'bg-red-50 border border-red-200' },
   refunded:   { label: 'Refund',     color: 'text-purple-700', bg: 'bg-purple-50 border border-purple-200' },
+  unseated:   { label: 'Unseated',   color: 'text-orange-700', bg: 'bg-orange-50 border border-orange-200' },
 };
 
 const CHANNEL_MAP: Record<BookingChannel, { label: string; color: string }> = {
@@ -38,7 +41,7 @@ const CHANNEL_MAP: Record<BookingChannel, { label: string; color: string }> = {
   OTA: { label: 'OTA',  color: 'text-orange-600' },
 };
 
-const ALL_STATUSES: BookingStatus[] = ['pending', 'confirmed', 'checked_in', 'paid', 'canceled', 'refunded'];
+const ALL_STATUSES: BookingStatus[] = ['pending', 'confirmed', 'checked_in', 'paid', 'canceled', 'refunded', 'unseated'];
 const ALL_CHANNELS: BookingChannel[] = ['CSO', 'WEB', 'APP', 'OTA'];
 
 const fmt = (amount: string | number) =>
@@ -94,6 +97,14 @@ type BookingDetail = Booking & {
   arriveAt?: string | null;
 };
 
+const HISTORY_ACTION_LABELS: Record<string, { label: string; color: string }> = {
+  unseated: { label: 'Unseat', color: 'text-orange-600' },
+  reassigned: { label: 'Pindah Kursi', color: 'text-blue-600' },
+  rescheduled: { label: 'Reschedule', color: 'text-purple-600' },
+  canceled: { label: 'Dibatalkan', color: 'text-red-600' },
+  status_change: { label: 'Status Berubah', color: 'text-gray-600' },
+};
+
 function BookingDetailModal({
   bookingId,
   isOpen,
@@ -106,12 +117,63 @@ function BookingDetailModal({
   onOpenInCso?: (tripId: string, outletId: string, serviceDate: string, originStopId: string, destinationStopId: string) => void;
 }) {
   const [passengersOpen, setPassengersOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [confirmUnseatId, setConfirmUnseatId] = useState<string | null>(null);
+  const [confirmUnseatAll, setConfirmUnseatAll] = useState(false);
+  const [activeReassignId, setActiveReassignId] = useState<string | null>(null);
+  const [reassignSeatNo, setReassignSeatNo] = useState('');
+  const { toast } = useToast();
 
   const { data: detail, isLoading, isError } = useQuery<BookingDetail>({
     queryKey: ['/api/bookings', bookingId],
     queryFn: () => bookingsApi.getById(bookingId!),
     enabled: !!bookingId && isOpen,
   });
+
+  const { data: history = [] } = useQuery({
+    queryKey: ['/api/bookings', bookingId, 'history'],
+    queryFn: () => bookingsApi.getHistory(bookingId!),
+    enabled: !!bookingId && isOpen && historyOpen,
+  });
+
+  const unseatMutation = useMutation({
+    mutationFn: (passengerId: string) => passengersApi.unseat(passengerId),
+    onSuccess: () => {
+      toast({ title: 'Berhasil', description: 'Penumpang berhasil di-unseat.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings', bookingId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+      setConfirmUnseatId(null);
+    },
+    onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' })
+  });
+
+  const unseatAllMutation = useMutation({
+    mutationFn: (bId: string) => bookingsApi.unseatAll(bId),
+    onSuccess: () => {
+      toast({ title: 'Berhasil', description: 'Semua penumpang berhasil di-unseat.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings', bookingId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+      setConfirmUnseatAll(false);
+    },
+    onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' })
+  });
+
+  const reassignMutation = useMutation({
+    mutationFn: ({ passengerId, newSeatNo }: { passengerId: string; newSeatNo: string }) =>
+      passengersApi.reassign(passengerId, newSeatNo),
+    onSuccess: () => {
+      toast({ title: 'Berhasil', description: 'Kursi berhasil dipindahkan.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings', bookingId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+      setActiveReassignId(null);
+      setReassignSeatNo('');
+    },
+    onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' })
+  });
+
+  const hasActivePassengers = detail?.passengers?.some(
+    (p: any) => p.ticketStatus !== 'unseated' && p.ticketStatus !== 'canceled'
+  );
 
   const getPaymentLabel = (method: string) => ({
     cash: 'Tunai', qr: 'QRIS', ewallet: 'E-Wallet', bank: 'Transfer Bank'
@@ -232,35 +294,99 @@ function BookingDetailModal({
                 </button>
                 {passengersOpen && (
                   <div className="divide-y">
-                    {detail.passengers.map((p: any, idx: number) => (
-                      <div key={p.id ?? idx} className="px-4 py-3 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{p.fullName}</span>
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Armchair className="w-3 h-3" />
-                            {p.seatNo}
-                          </span>
+                    {detail.passengers.map((p: any, idx: number) => {
+                      const isActive = p.ticketStatus !== 'unseated' && p.ticketStatus !== 'canceled';
+                      return (
+                        <div key={p.id ?? idx} className="px-4 py-3 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className={`text-sm font-medium ${!isActive ? 'line-through text-muted-foreground' : ''}`}>{p.fullName}</span>
+                            <div className="flex items-center gap-2">
+                              {p.ticketStatus && p.ticketStatus !== 'active' && (
+                                <StatusBadge status={p.ticketStatus} />
+                              )}
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Armchair className="w-3 h-3" />
+                                {p.seatNo}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            {p.phone && (
+                              <span className="flex items-center gap-1">
+                                <Phone className="w-3 h-3" /> {p.phone}
+                              </span>
+                            )}
+                            {p.idNumber && (
+                              <span className="flex items-center gap-1">
+                                <CreditCard className="w-3 h-3" /> {p.idNumber}
+                              </span>
+                            )}
+                            {p.ticketNumber && (
+                              <span className="flex items-center gap-1">
+                                <Hash className="w-3 h-3" /> {p.ticketNumber}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs font-medium text-emerald-700">{fmt(p.fareAmount ?? 0)}</p>
+
+                          {isActive && (
+                            <div className="pt-1 space-y-2">
+                              {confirmUnseatId === p.id ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-red-600 font-medium">Yakin unseat?</span>
+                                  <Button size="sm" variant="destructive" className="h-6 text-xs gap-1" disabled={unseatMutation.isPending}
+                                    onClick={() => unseatMutation.mutate(p.id)} data-testid={`btn-confirm-unseat-${p.id}`}>
+                                    {unseatMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />} Ya
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setConfirmUnseatId(null)}>Batal</Button>
+                                </div>
+                              ) : activeReassignId === p.id ? (
+                                <div className="flex items-center gap-2">
+                                  <Input placeholder="Kursi baru" value={reassignSeatNo} onChange={e => setReassignSeatNo(e.target.value.toUpperCase())}
+                                    className="h-6 w-20 text-xs font-mono" data-testid={`input-reassign-${p.id}`} />
+                                  <Button size="sm" className="h-6 text-xs gap-1" disabled={!reassignSeatNo || reassignMutation.isPending}
+                                    onClick={() => reassignMutation.mutate({ passengerId: p.id, newSeatNo: reassignSeatNo })} data-testid={`btn-confirm-reassign-${p.id}`}>
+                                    {reassignMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowLeftRight className="w-3 h-3" />} Pindah
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setActiveReassignId(null); setReassignSeatNo(''); }}>Batal</Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5">
+                                  <Button size="sm" variant="outline" className="h-6 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                                    onClick={() => setConfirmUnseatId(p.id)} data-testid={`btn-unseat-${p.id}`}>
+                                    <UserMinus className="w-3 h-3" /> Unseat
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-6 text-xs gap-1"
+                                    onClick={() => setActiveReassignId(p.id)} data-testid={`btn-reassign-${p.id}`}>
+                                    <ArrowLeftRight className="w-3 h-3" /> Pindah Kursi
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                          {p.phone && (
-                            <span className="flex items-center gap-1">
-                              <Phone className="w-3 h-3" /> {p.phone}
-                            </span>
-                          )}
-                          {p.idNumber && (
-                            <span className="flex items-center gap-1">
-                              <CreditCard className="w-3 h-3" /> {p.idNumber}
-                            </span>
-                          )}
-                          {p.ticketNumber && (
-                            <span className="flex items-center gap-1">
-                              <Hash className="w-3 h-3" /> {p.ticketNumber}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs font-medium text-emerald-700">{fmt(p.fareAmount ?? 0)}</p>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {hasActivePassengers && detail.passengers.length > 1 && (
+                  <div className="px-4 py-2 border-t bg-muted/10">
+                    {confirmUnseatAll ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-red-600 font-medium">Unseat semua penumpang?</span>
+                        <Button size="sm" variant="destructive" className="h-6 text-xs gap-1" disabled={unseatAllMutation.isPending}
+                          onClick={() => unseatAllMutation.mutate(bookingId!)} data-testid="btn-confirm-unseat-all">
+                          {unseatAllMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />} Ya, Unseat Semua
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setConfirmUnseatAll(false)}>Batal</Button>
                       </div>
-                    ))}
+                    ) : (
+                      <Button size="sm" variant="outline" className="h-6 text-xs gap-1 w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                        onClick={() => setConfirmUnseatAll(true)} data-testid="btn-unseat-all">
+                        <UserMinus className="w-3 h-3" /> Unseat Semua Penumpang
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -313,6 +439,55 @@ function BookingDetailModal({
                 </div>
               );
             })()}
+
+            {/* Booking History */}
+            <div className="rounded-lg border overflow-hidden">
+              <button
+                className="w-full flex items-center justify-between px-4 py-3 bg-muted/20 hover:bg-muted/40 transition-colors text-sm font-semibold"
+                onClick={() => setHistoryOpen(o => !o)}
+                data-testid="btn-toggle-history"
+              >
+                <span className="flex items-center gap-2">
+                  <History className="w-3.5 h-3.5 text-muted-foreground" />
+                  Riwayat Perubahan
+                </span>
+                {historyOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+              </button>
+              {historyOpen && (
+                <div className="px-4 py-3">
+                  {(history as any[]).length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-2">Belum ada riwayat perubahan</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {(history as any[]).map((h: any, i: number) => {
+                        const actionInfo = HISTORY_ACTION_LABELS[h.action] || { label: h.action, color: 'text-gray-600' };
+                        const details = h.details as any;
+                        return (
+                          <div key={h.id || i} className="flex gap-3 text-xs" data-testid={`history-${i}`}>
+                            <div className="flex flex-col items-center">
+                              <div className={`w-2 h-2 rounded-full mt-1.5 ${h.action === 'unseated' ? 'bg-orange-400' : h.action === 'reassigned' ? 'bg-blue-400' : h.action === 'rescheduled' ? 'bg-purple-400' : 'bg-gray-400'}`} />
+                              {i < (history as any[]).length - 1 && <div className="w-px flex-1 bg-gray-200 mt-1" />}
+                            </div>
+                            <div className="flex-1 pb-3">
+                              <span className={`font-semibold ${actionInfo.color}`}>{actionInfo.label}</span>
+                              {details?.seatNo && <span className="text-muted-foreground ml-1">Kursi {details.seatNo}</span>}
+                              {details?.oldSeatNo && details?.newSeatNo && (
+                                <span className="text-muted-foreground ml-1">{details.oldSeatNo} → {details.newSeatNo}</span>
+                              )}
+                              {details?.reason && <span className="text-muted-foreground ml-1">— {details.reason}</span>}
+                              <div className="text-muted-foreground mt-0.5">
+                                {h.performedBy && <span>{h.performedBy}</span>}
+                                {h.createdAt && <span className="ml-2">{fmtDate(h.createdAt)}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </DialogContent>

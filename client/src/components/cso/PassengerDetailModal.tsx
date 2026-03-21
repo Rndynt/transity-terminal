@@ -1,13 +1,20 @@
 import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Phone, CreditCard, MapPin, User, Armchair, Ticket, Hash,
-  ChevronDown, ChevronUp, ArrowRight, Calendar, Building2, Bus
+  ChevronDown, ChevronUp, ArrowRight, Calendar, Building2, Bus,
+  UserMinus, ArrowLeftRight, Loader2
 } from 'lucide-react';
+import { passengersApi } from '@/lib/api';
+import { queryClient } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 import type { Passenger, Booking, Payment, Stop } from '@/types';
 
-type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'canceled' | 'refunded';
+type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'canceled' | 'refunded' | 'unseated';
 
 const STATUS_MAP: Record<BookingStatus, { label: string; color: string; bg: string }> = {
   pending:    { label: 'Pending',    color: 'text-amber-700',  bg: 'bg-amber-50 border border-amber-200' },
@@ -16,6 +23,7 @@ const STATUS_MAP: Record<BookingStatus, { label: string; color: string; bg: stri
   paid:       { label: 'Lunas',      color: 'text-emerald-700',bg: 'bg-emerald-50 border border-emerald-200' },
   canceled:   { label: 'Dibatalkan', color: 'text-red-700',    bg: 'bg-red-50 border border-red-200' },
   refunded:   { label: 'Refund',     color: 'text-purple-700', bg: 'bg-purple-50 border border-purple-200' },
+  unseated:   { label: 'Unseated',   color: 'text-orange-700', bg: 'bg-orange-50 border border-orange-200' },
 };
 
 const CHANNEL_MAP: Record<string, { label: string; color: string }> = {
@@ -50,6 +58,7 @@ interface PassengerDetailModalProps {
   isLoading?: boolean;
   isError?: boolean;
   selectedSeatNo?: string | null;
+  tripId?: string;
 }
 
 const fmt = (amount: string | number) =>
@@ -89,9 +98,44 @@ export default function PassengerDetailModal({
   passengerDetails,
   isLoading = false,
   isError = false,
-  selectedSeatNo = null
+  selectedSeatNo = null,
+  tripId
 }: PassengerDetailModalProps) {
   const [openIndices, setOpenIndices] = useState<Set<number>>(new Set([0]));
+  const [reassignSeatNo, setReassignSeatNo] = useState<string>('');
+  const [activeReassignId, setActiveReassignId] = useState<string | null>(null);
+  const [confirmUnseatId, setConfirmUnseatId] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const unseatMutation = useMutation({
+    mutationFn: (passengerId: string) => passengersApi.unseat(passengerId),
+    onSuccess: () => {
+      toast({ title: 'Berhasil', description: 'Penumpang berhasil di-unseat. Kursi sekarang tersedia.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+      setConfirmUnseatId(null);
+      onClose();
+    },
+    onError: (e: Error) => {
+      toast({ title: 'Gagal Unseat', description: e.message, variant: 'destructive' });
+    }
+  });
+
+  const reassignMutation = useMutation({
+    mutationFn: ({ passengerId, newSeatNo }: { passengerId: string; newSeatNo: string }) =>
+      passengersApi.reassign(passengerId, newSeatNo),
+    onSuccess: () => {
+      toast({ title: 'Berhasil', description: 'Kursi berhasil dipindahkan.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+      setActiveReassignId(null);
+      setReassignSeatNo('');
+      onClose();
+    },
+    onError: (e: Error) => {
+      toast({ title: 'Gagal Pindah Kursi', description: e.message, variant: 'destructive' });
+    }
+  });
 
   const toggle = (index: number) => {
     setOpenIndices(prev => {
@@ -268,7 +312,84 @@ export default function PassengerDetailModal({
                               )}
                             </div>
                             <p className="text-xs font-medium text-emerald-700" data-testid="fare-amount">{fmt(p.fareAmount ?? 0)}</p>
+                            {p.ticketStatus && p.ticketStatus !== 'active' && (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium mt-1 ${
+                                STATUS_MAP[p.ticketStatus as BookingStatus]?.bg || 'bg-gray-50 border border-gray-200'
+                              } ${STATUS_MAP[p.ticketStatus as BookingStatus]?.color || 'text-gray-700'}`}>
+                                Tiket: {STATUS_MAP[p.ticketStatus as BookingStatus]?.label || p.ticketStatus}
+                              </span>
+                            )}
                           </div>
+
+                          {p.ticketStatus !== 'unseated' && p.ticketStatus !== 'canceled' && (
+                            <div className="px-4 py-2 border-t bg-muted/10 space-y-2">
+                              {confirmUnseatId === p.id ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-red-600 font-medium">Yakin unseat penumpang ini?</span>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-7 text-xs gap-1"
+                                    disabled={unseatMutation.isPending}
+                                    onClick={() => unseatMutation.mutate(p.id)}
+                                    data-testid={`btn-confirm-unseat-${p.id}`}
+                                  >
+                                    {unseatMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />}
+                                    Ya, Unseat
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setConfirmUnseatId(null)} data-testid="btn-cancel-unseat">
+                                    Batal
+                                  </Button>
+                                </div>
+                              ) : activeReassignId === p.id ? (
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    placeholder="No. kursi baru"
+                                    value={reassignSeatNo}
+                                    onChange={e => setReassignSeatNo(e.target.value.toUpperCase())}
+                                    className="h-7 w-24 text-xs font-mono"
+                                    data-testid={`input-reassign-seat-${p.id}`}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    className="h-7 text-xs gap-1"
+                                    disabled={!reassignSeatNo || reassignMutation.isPending}
+                                    onClick={() => reassignMutation.mutate({ passengerId: p.id, newSeatNo: reassignSeatNo })}
+                                    data-testid={`btn-confirm-reassign-${p.id}`}
+                                  >
+                                    {reassignMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowLeftRight className="w-3 h-3" />}
+                                    Pindah
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setActiveReassignId(null); setReassignSeatNo(''); }} data-testid="btn-cancel-reassign">
+                                    Batal
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                                    onClick={() => setConfirmUnseatId(p.id)}
+                                    data-testid={`btn-unseat-${p.id}`}
+                                  >
+                                    <UserMinus className="w-3 h-3" />
+                                    Unseat
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs gap-1"
+                                    onClick={() => setActiveReassignId(p.id)}
+                                    data-testid={`btn-reassign-${p.id}`}
+                                  >
+                                    <ArrowLeftRight className="w-3 h-3" />
+                                    Pindah Kursi
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* Payment Summary */}
