@@ -117,7 +117,7 @@ function BookingDetailModal({
   isOpen: boolean;
   onClose: () => void;
   onOpenInCso?: (tripId: string, outletId: string, serviceDate: string, originStopId: string, destinationStopId: string) => void;
-  onAssignInCso?: (tripId: string, outletId: string, serviceDate: string, originStopId: string, destinationStopId: string, passengerId: string, passengerName: string) => void;
+  onAssignInCso?: (tripId: string, outletId: string, serviceDate: string, originStopId: string, destinationStopId: string, passengerId: string, passengerName: string, bookingCode: string, ticketNumber: string | null) => void;
 }) {
   const [passengersOpen, setPassengersOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -348,7 +348,7 @@ function BookingDetailModal({
                                   </div>
                                   {detail.tripId && detail.outletId && detail.tripDetails?.serviceDate && detail.originStopId && detail.destinationStopId && onAssignInCso ? (
                                     <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 w-full"
-                                      onClick={() => onAssignInCso(detail.tripId, detail.outletId!, detail.tripDetails.serviceDate, detail.originStopId, detail.destinationStopId, p.id, p.fullName)}
+                                      onClick={() => onAssignInCso(detail.tripId, detail.outletId!, detail.tripDetails.serviceDate, detail.originStopId, detail.destinationStopId, p.id, p.fullName, detail.bookingCode ?? detail.id.slice(0, 8).toUpperCase(), p.ticketNumber)}
                                       data-testid={`btn-assign-${p.id}`}>
                                       <Armchair className="w-3 h-3" /> Pilih Kursi di Reservasi
                                     </Button>
@@ -814,9 +814,16 @@ export default function AllBookingsPage() {
           setSelectedId(null);
           navigate(`/cso?tripId=${tripId}&outletId=${outletId}&date=${serviceDate}&originStopId=${originStopId}&destinationStopId=${destinationStopId}`);
         }}
-        onAssignInCso={(tripId, outletId, serviceDate, originStopId, destinationStopId, passengerId, passengerName) => {
+        onAssignInCso={(tripId, outletId, serviceDate, originStopId, destinationStopId, passengerId, passengerName, bookingCode, ticketNumber) => {
           setSelectedId(null);
-          navigate(`/cso?tripId=${tripId}&outletId=${outletId}&date=${serviceDate}&originStopId=${originStopId}&destinationStopId=${destinationStopId}&assignPassengerId=${passengerId}&assignPassengerName=${encodeURIComponent(passengerName)}`);
+          const params = new URLSearchParams({
+            tripId, outletId, date: serviceDate, originStopId, destinationStopId,
+            assignPassengerId: passengerId,
+            assignPassengerName: passengerName,
+            assignBookingCode: bookingCode,
+          });
+          if (ticketNumber) params.set('assignTicketNumber', ticketNumber);
+          navigate(`/cso?${params.toString()}`);
         }}
       />
     </div>

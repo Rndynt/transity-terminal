@@ -55,10 +55,12 @@ export default function CsoPage() {
   const initialDestinationStopId = urlParams.get('destinationStopId') || undefined;
   const initialAssignPassengerId = urlParams.get('assignPassengerId') || undefined;
   const initialAssignPassengerName = urlParams.get('assignPassengerName') || undefined;
+  const initialAssignBookingCode = urlParams.get('assignBookingCode') || '';
+  const initialAssignTicketNumber = urlParams.get('assignTicketNumber') || null;
 
   const [assignModeInfo, setAssignModeInfo] = useState<AssignModeState | null>(
     initialAssignPassengerId && initialAssignPassengerName
-      ? { passengerId: initialAssignPassengerId, passengerName: initialAssignPassengerName, ticketNumber: null, bookingCode: '' }
+      ? { passengerId: initialAssignPassengerId, passengerName: initialAssignPassengerName, ticketNumber: initialAssignTicketNumber, bookingCode: initialAssignBookingCode }
       : null
   );
   const [rescheduleModeInfo, setRescheduleModeInfo] = useState<RescheduleModeState | null>(null);
