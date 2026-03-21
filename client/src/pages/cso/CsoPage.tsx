@@ -50,6 +50,8 @@ export default function CsoPage() {
   const initialTripId = urlParams.get('tripId') || undefined;
   const initialOutletId = urlParams.get('outletId') || undefined;
   const initialDate = urlParams.get('date') || undefined;
+  const initialOriginStopId = urlParams.get('originStopId') || undefined;
+  const initialDestinationStopId = urlParams.get('destinationStopId') || undefined;
 
   const [phase, setPhase] = useState<Phase>('select');
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('left');
@@ -63,6 +65,14 @@ export default function CsoPage() {
   const [showCargoWaybill, setShowCargoWaybill] = useState(false);
   const [mobileCargoPanel, setMobileCargoPanel] = useState<'left' | 'right'>('left');
   const [manifestDialogTripId, setManifestDialogTripId] = useState<string | null>(null);
+  const [pendingRouteAutoSelect, setPendingRouteAutoSelect] = useState<{
+    originStopId: string;
+    destinationStopId: string;
+  } | null>(
+    initialOriginStopId && initialDestinationStopId
+      ? { originStopId: initialOriginStopId, destinationStopId: initialDestinationStopId }
+      : null
+  );
 
   const tripId = selectedCsoTrip?.tripId;
   const isPastCsoTrip = selectedCsoTrip?.departAtAtOutlet
@@ -493,6 +503,16 @@ export default function CsoPage() {
                       onOriginSelect={handleOriginSelect}
                       onDestinationSelect={handleDestinationSelect}
                       onProceed={handleProceedToBook}
+                      initialOriginStopId={pendingRouteAutoSelect?.originStopId}
+                      initialDestinationStopId={pendingRouteAutoSelect?.destinationStopId}
+                      onInitialRouteConsumed={() => {
+                        setPendingRouteAutoSelect(null);
+                        setTimeout(() => {
+                          setPhase('book');
+                          setCurrentStep(3);
+                          setMobilePanel('left');
+                        }, 100);
+                      }}
                     />
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-gray-300 py-12 md:py-0">

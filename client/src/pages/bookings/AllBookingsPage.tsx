@@ -103,7 +103,7 @@ function BookingDetailModal({
   bookingId: string | null;
   isOpen: boolean;
   onClose: () => void;
-  onOpenInCso?: (tripId: string, outletId: string, serviceDate: string) => void;
+  onOpenInCso?: (tripId: string, outletId: string, serviceDate: string, originStopId: string, destinationStopId: string) => void;
 }) {
   const [passengersOpen, setPassengersOpen] = useState(true);
 
@@ -202,12 +202,12 @@ function BookingDetailModal({
                 )}
               </div>
 
-              {detail.tripId && detail.outletId && detail.tripDetails?.serviceDate && onOpenInCso && (
+              {detail.tripId && detail.outletId && detail.tripDetails?.serviceDate && detail.originStopId && detail.destinationStopId && onOpenInCso && (
                 <Button
                   variant="outline"
                   size="sm"
                   className="w-full gap-2 mt-1"
-                  onClick={() => onOpenInCso(detail.tripId, detail.outletId!, detail.tripDetails.serviceDate)}
+                  onClick={() => onOpenInCso(detail.tripId, detail.outletId!, detail.tripDetails.serviceDate, detail.originStopId, detail.destinationStopId)}
                   data-testid="btn-open-in-cso"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -588,9 +588,9 @@ export default function AllBookingsPage() {
         bookingId={selectedId}
         isOpen={!!selectedId}
         onClose={() => setSelectedId(null)}
-        onOpenInCso={(tripId, outletId, serviceDate) => {
+        onOpenInCso={(tripId, outletId, serviceDate, originStopId, destinationStopId) => {
           setSelectedId(null);
-          navigate(`/cso?tripId=${tripId}&outletId=${outletId}&date=${serviceDate}`);
+          navigate(`/cso?tripId=${tripId}&outletId=${outletId}&date=${serviceDate}&originStopId=${originStopId}&destinationStopId=${destinationStopId}`);
         }}
       />
     </div>

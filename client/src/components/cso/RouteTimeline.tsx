@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { tripsApi, stopsApi } from '@/lib/api';
 import {
@@ -12,6 +13,9 @@ interface RouteTimelineProps {
   onOriginSelect: (stop: Stop, sequence: number) => void;
   onDestinationSelect: (stop: Stop, sequence: number) => void;
   onProceed?: () => void;
+  initialOriginStopId?: string;
+  initialDestinationStopId?: string;
+  onInitialRouteConsumed?: () => void;
 }
 
 const formatTime = (timestamp: string | Date | null | undefined): string => {
@@ -44,8 +48,13 @@ export default function RouteTimeline({
   selectedDestination,
   onOriginSelect,
   onDestinationSelect,
-  onProceed
+  onProceed,
+  initialOriginStopId,
+  initialDestinationStopId,
+  onInitialRouteConsumed
 }: RouteTimelineProps) {
+  const autoSelectDone = useRef(false);
+
   const { data: stopTimes = [], isLoading } = useQuery({
     queryKey: ['/api/trips', trip.id, 'stop-times', 'effective'],
     queryFn: () => tripsApi.getStopTimesWithEffectiveFlags(trip.id),
@@ -59,6 +68,26 @@ export default function RouteTimeline({
 
   const getStopById = (stopId: string) => stops.find(s => s.id === stopId);
   const sortedStopTimes = [...stopTimes].sort((a: any, b: any) => a.stopSequence - b.stopSequence);
+
+  useEffect(() => {
+    if (autoSelectDone.current) return;
+    if (!initialOriginStopId || !initialDestinationStopId) return;
+    if (sortedStopTimes.length === 0 || stops.length === 0) return;
+
+    const originSt = sortedStopTimes.find((st: any) => st.stopId === initialOriginStopId);
+    const destSt = sortedStopTimes.find((st: any) => st.stopId === initialDestinationStopId);
+    const originStop = originSt ? getStopById(originSt.stopId) : undefined;
+    const destStop = destSt ? getStopById(destSt.stopId) : undefined;
+
+    if (originStop && destStop && originSt && destSt) {
+      autoSelectDone.current = true;
+      onOriginSelect(originStop, originSt.stopSequence);
+      setTimeout(() => {
+        onDestinationSelect(destStop, destSt.stopSequence);
+        onInitialRouteConsumed?.();
+      }, 50);
+    }
+  }, [sortedStopTimes, stops, initialOriginStopId, initialDestinationStopId]);
 
   const originIdx = selectedOrigin ? sortedStopTimes.findIndex((st: any) => st.stopId === selectedOrigin.id) : -1;
   const destIdx = selectedDestination ? sortedStopTimes.findIndex((st: any) => st.stopId === selectedDestination.id) : -1;
