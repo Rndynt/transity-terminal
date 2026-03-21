@@ -18,7 +18,7 @@ import { queryClient } from '@/lib/queryClient';
 import { Plus, Pencil, Trash2, DollarSign, Tag, ArrowUpDown } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
-import type { PriceRule, TripPattern, Trip } from '@/types';
+import type { PriceRule, TripPattern, Trip, TripWithDetails } from '@/types';
 
 interface PriceRuleFormData {
   scope: 'pattern' | 'trip' | 'leg' | 'time';
@@ -101,11 +101,19 @@ export default function PriceRulesManager() {
     badge: p.code
   }));
 
-  const tripOptions = trips.slice(0, 50).map(t => ({
-    value: t.id,
-    label: `Trip ${t.id.slice(-8)}`,
-    badge: t.serviceDate
-  }));
+  const tripOptions = trips.map((t: TripWithDetails) => {
+    const patternLabel = t.patternCode || t.patternName || '';
+    const dateLabel = t.serviceDate
+      ? new Date(t.serviceDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+      : '';
+    return {
+      value: t.id,
+      label: `${dateLabel}${t.vehiclePlate ? ` · ${t.vehiclePlate}` : ''}`,
+      badge: t.status || 'scheduled',
+      subtitle: patternLabel ? `${patternLabel}${t.patternName && t.patternCode ? ` — ${t.patternName}` : ''}` : undefined,
+      group: patternLabel || 'Tanpa Pola',
+    };
+  });
 
   const buildRule = (data: PriceRuleFormData) => ({
     basePricePerLeg: parseFloat(data.basePricePerLeg) || 0,
@@ -214,13 +222,24 @@ export default function PriceRulesManager() {
     return p ? `${p.code} — ${p.name}` : '-';
   };
 
+  const getTripLabel = (tripId: string) => {
+    const t = trips.find((tr: TripWithDetails) => tr.id === tripId);
+    if (!t) return tripId.slice(0, 8);
+    const dateStr = t.serviceDate
+      ? new Date(t.serviceDate + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+      : '';
+    const parts = [t.patternCode || t.patternName, dateStr, t.vehiclePlate].filter(Boolean);
+    return parts.join(' · ') || tripId.slice(0, 8);
+  };
+
   const filteredPriceRules = priceRules.filter(rule => {
     const q = searchQuery.toLowerCase();
     if (!q) return true;
     const scope = rule.scope.toLowerCase();
     const target = (
       rule.scope === 'pattern' && rule.patternId ? getPatternName(rule.patternId) :
-      rule.scope === 'trip' && rule.tripId ? rule.tripId : ''
+      rule.scope === 'trip' && rule.tripId ? getTripLabel(rule.tripId) :
+      rule.scope === 'leg' && rule.tripId ? getTripLabel(rule.tripId) : ''
     ).toLowerCase();
     return scope.includes(q) || target.includes(q);
   });
@@ -469,9 +488,9 @@ export default function PriceRulesManager() {
                           {rule.scope === 'pattern' && rule.patternId
                             ? getPatternName(rule.patternId)
                             : rule.scope === 'trip' && rule.tripId
-                              ? `Trip ${rule.tripId.slice(-8)}`
+                              ? getTripLabel(rule.tripId)
                               : rule.scope === 'leg' && rule.tripId
-                                ? `Trip ${rule.tripId.slice(-8)} · Leg ${rule.legIndex}`
+                                ? <>{getTripLabel(rule.tripId)} <span className="text-muted-foreground">· Leg {rule.legIndex}</span></>
                                 : rule.scope === 'time'
                                   ? 'Time-based'
                                   : <span className="text-muted-foreground">—</span>}
