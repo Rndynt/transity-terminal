@@ -328,23 +328,6 @@ export class TripsService {
   }
 
   async getSeatPassengerDetails(tripId: string, seatNo: string, originSeq: number, destinationSeq: number) {
-    // Get required leg indexes for this O-D pair
-    const legIndexes = [];
-    for (let i = originSeq; i < destinationSeq; i++) {
-      legIndexes.push(i);
-    }
-
-    // Check if seat is booked for these legs
-    const inventory = await this.storage.getSeatInventory(tripId, legIndexes);
-    const seatInventory = inventory.filter(inv => inv.seatNo === seatNo && inv.booked);
-    
-    if (seatInventory.length === 0) {
-      return { 
-        error: 'Seat not booked or available for this journey',
-        available: true 
-      };
-    }
-
     // Find bookings for this trip and seat
     const allBookings = await this.storage.getBookings(tripId);
     const seatBookings = [];
