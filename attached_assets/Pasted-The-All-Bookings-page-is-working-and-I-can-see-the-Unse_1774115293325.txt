@@ -1,0 +1,46 @@
+The All Bookings page is working, and I can see the "Unseated (0)" filter tab has been added. Let me now run the code review and then test:
+
+const result = await architect({
+task: "Review the unseat & reschedule feature implementation: schema changes (unseated enum values, booking_history table), UnseatService (unseatPassenger, unseatAllPassengers, reassignSeat, reschedulePassenger), API routes, and frontend UI (unseat/reassign buttons in PassengerDetailModal and AllBookingsPage BookingDetailModal, booking history timeline). Check for correctness of seat inventory updates, transaction safety, WebSocket broadcasts, edge cases, and proper error handling.",
+relevantFiles: [
+"shared/schema.ts",
+"server/modules/bookings/unseat.service.ts",
+"server/modules/bookings/bookings.controller.ts",
+"server/routes.ts",
+"client/src/lib/api.ts",
+"client/src/components/cso/PassengerDetailModal.tsx",
+"client/src/pages/bookings/AllBookingsPage.tsx",
+"server/storage.ts"
+],
+includeGitDiff: true
+});
+
+Review the unseat & reschedule feature implementation: schema changes (unseated enum values, booking_history table), UnseatService (unseatPassenger, unseatAllPassengers, reassignSeat, reschedulePassenger), API routes, and frontend UI (unseat/reassign buttons in PassengerDetailModal and AllBookingsPage BookingDetailModal, booking history timeline). Check for correctness of seat inventory updates, transaction safety, WebSocket broadcasts, edge cases, and proper error handling.
+
+Thought for 1 minute
+Result
+Verdict: Fail — the feature is partially implemented but does not reliably guarantee correct seat/inventory state under real conditions and is missing required DB migration support.
+Critical findings:
+1. Schema/runtime mismatch (blocking):shared/schema.ts adds enum values (booking_status.unseated, ticket_status.unseated) and new booking_history table, but no corresponding migration exists in /migrations (latest is 0004_*). This will break on deployed DBs (enum/table absent), so unseat/reschedule endpoints can fail at runtime.
+2. Seat reassignment/reschedule concurrency safety is insufficient:
+    * reassignSeat and reschedulePassengercheck seat availability before transaction updates and without row locking; two concurrent requests can both pass and assign the same seat.
+    * reassignSeat treats empty availability as available (every() on empty array => true), so passenger seat can be changed to a seat with no initialized inventory rows.
+3. Seat inventory update correctness not verified:
+    * unseatPassenger, unseatAllPassengers, reassignSeat, and reschedulePassengerperform UPDATE seat_inventory ... but do not verify affected-row counts. If inventory is incomplete/missing for some legs, passenger/booking status still changes, creating divergence between passenger records and actual inventory.
+4. Reschedule data consistency gap:reschedulePassenger may create newBooking.status='paid' but does not create a payment record for that new booking, causing accounting/state inconsistency.
+5. Frontend/API error handling gap for history endpoint: bookingsApi.getHistory() does not check res.ok; error payloads can propagate as non-array data and break timeline rendering assumptions.
+WebSocket broadcasts:
+* Inventory broadcasts are present after unseat/reassign/reschedule and are emitted post-transaction (good), but only INVENTORY_UPDATED is emitted; no booking-status event is emitted when booking flips to unseated.
+Security (serious violations only):
+* None observed specific to this feature beyond existing app-wide auth model.
+Next actions (high-impact):
+1. Add and apply a migration for enum alterations + booking_history creation (and indexes/FKs as needed).
+2. Harden UnseatService with transactional locking/atomic checks (or conditional updates) and enforce inventory row-count validation (must equal expected leg count).
+3. Fix consistency/error handling: ensure reschedule payment/status rules are coherent, and make getHistory throw on non-2xx responses with safe UI fallback.
+
+
+The code review found several important issues in the unseat implementation. Let me fix them now:
+1. Concurrency safety - reassignSeat/reschedule need row locking
+2. Inventory row count verification - ensure updates match expected leg count
+3. History API error handling - check res.ok
+4. Empty array edge case in availability check
