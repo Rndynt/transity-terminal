@@ -11,15 +11,16 @@ import { Badge } from '@/components/ui/badge';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { RowActionsMenu } from './RowActionsMenu';
 import { useToast } from '@/hooks/use-toast';
-import { tripsApi, tripPatternsApi, vehiclesApi, layoutsApi } from '@/lib/api';
+import { tripsApi, tripPatternsApi, vehiclesApi, layoutsApi, driversApi, spjApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import {
   Plus, Pencil, Trash2, Clock, Route, Grid3X3, CalendarDays, FileText,
-  Search, X, Filter, Bus, MapPin, LayoutGrid, ChevronDown
+  Search, X, Filter, Bus, MapPin, LayoutGrid, ChevronDown, User, ClipboardList
 } from 'lucide-react';
+import { useLocation } from 'wouter';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterFormDialog from './MasterFormDialog';
-import type { Trip, TripPattern, Vehicle, Layout } from '@/types';
+import type { Trip, TripPattern, Vehicle, Layout, Driver } from '@/types';
 import TripScheduleEditor from './TripScheduleEditor';
 import ManifestDialog from '@/components/manifest/ManifestDialog';
 
@@ -29,6 +30,7 @@ interface TripFormData {
   vehicleId: string;
   layoutId: string;
   capacity: string;
+  driverId: string;
   status: 'scheduled' | 'canceled' | 'closed';
 }
 
@@ -169,6 +171,11 @@ export default function TripsManager() {
     queryFn: layoutsApi.getAll
   });
 
+  const { data: driversList = [] } = useQuery<Driver[]>({
+    queryKey: ['/api/drivers'],
+    queryFn: driversApi.getAll
+  });
+
   const patternOptions = patterns.map(p => ({
     value: p.id,
     label: p.active ? p.name : `${p.name} (Nonaktif)`,
@@ -242,20 +249,20 @@ export default function TripsManager() {
   });
 
   const resetForm = () => {
-    setFormData({ patternId: '', serviceDate: new Date().toISOString().split('T')[0], vehicleId: '', layoutId: '', capacity: '', status: 'scheduled' });
+    setFormData({ patternId: '', serviceDate: new Date().toISOString().split('T')[0], vehicleId: '', layoutId: '', capacity: '', driverId: '', status: 'scheduled' });
   };
 
   const handleCreate = () => { setEditingTrip(null); resetForm(); setIsDialogOpen(true); };
 
   const handleEdit = (trip: Trip) => {
     setEditingTrip(trip);
-    setFormData({ patternId: trip.patternId, serviceDate: trip.serviceDate, vehicleId: trip.vehicleId, layoutId: trip.layoutId || '', capacity: trip.capacity.toString(), status: trip.status || 'scheduled' });
+    setFormData({ patternId: trip.patternId, serviceDate: trip.serviceDate, vehicleId: trip.vehicleId, layoutId: trip.layoutId || '', capacity: trip.capacity.toString(), driverId: trip.driverId || '', status: trip.status || 'scheduled' });
     setIsDialogOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const submitData = { ...formData, capacity: parseInt(formData.capacity, 10) || 0, layoutId: formData.layoutId || null, vehicleId: formData.vehicleId || null, channelFlags: { CSO: true, WEB: false, APP: false, OTA: false } };
+    const submitData = { ...formData, capacity: parseInt(formData.capacity, 10) || 0, layoutId: formData.layoutId || null, vehicleId: formData.vehicleId || null, driverId: formData.driverId || null, channelFlags: { CSO: true, WEB: false, APP: false, OTA: false } };
     if (editingTrip) {
       updateMutation.mutate({ id: editingTrip.id, data: submitData });
     } else {
@@ -268,6 +275,31 @@ export default function TripsManager() {
   const handleDeriveLegs = (tripId: string) => deriveLegsMutation.mutate(tripId);
   const handlePrecomputeInventory = (tripId: string) => precomputeSeatInventoryMutation.mutate(tripId);
   const handleScheduling = (trip: Trip) => { setSchedulingTrip(trip); setIsSchedulingDialogOpen(true); };
+
+  const [, setLocation] = useLocation();
+
+  const createSpjMutation = useMutation({
+    mutationFn: (tripId: string) => spjApi.create({ tripId }),
+    onSuccess: () => {
+      toast({ title: 'SPJ berhasil dibuat', description: 'Mengalihkan ke halaman SPJ...' });
+      setLocation('/spj');
+    },
+    onError: (err: any) => {
+      toast({ title: 'Gagal membuat SPJ', description: err?.message || 'Terjadi kesalahan', variant: 'destructive' });
+    },
+  });
+
+  const handleCreateSpj = async (tripId: string) => {
+    try {
+      const existing = await spjApi.getByTripId(tripId);
+      if (existing) {
+        toast({ title: 'SPJ sudah ada', description: `SPJ ${existing.spjNumber} sudah dibuat untuk trip ini. Mengalihkan...` });
+        setLocation('/spj');
+        return;
+      }
+    } catch {}
+    createSpjMutation.mutate(tripId);
+  };
 
   const getPattern = (patternId: string) => patterns.find(p => p.id === patternId);
   const getVehicle = (vehicleId: string) => vehicles.find(v => v.id === vehicleId);
@@ -607,6 +639,7 @@ export default function TripsManager() {
                         <RowActionsMenu
                           actions={[
                             { label: 'Lihat Manifest', icon: <FileText className="h-3.5 w-3.5" />, onClick: () => setManifestTripId(trip.id) },
+                            { label: 'Buat SPJ', icon: <ClipboardList className="h-3.5 w-3.5" />, onClick: () => handleCreateSpj(trip.id), disabled: createSpjMutation.isPending },
                             { label: 'Atur Jadwal', icon: <Clock className="h-3.5 w-3.5" />, onClick: () => handleScheduling(trip) },
                             { label: 'Turunkan Leg', icon: <Route className="h-3.5 w-3.5" />, onClick: () => handleDeriveLegs(trip.id), disabled: deriveLegsMutation.isPending },
                             { label: 'Hitung Inventori', icon: <Grid3X3 className="h-3.5 w-3.5" />, onClick: () => handlePrecomputeInventory(trip.id), disabled: precomputeSeatInventoryMutation.isPending },
@@ -656,6 +689,21 @@ export default function TripsManager() {
                           )}
                         </div>
 
+                        {/* Driver */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-0.5">Driver</p>
+                          {(trip as any).driverName ? (
+                            <div className="flex items-center gap-1.5">
+                              <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              <span className="text-sm font-medium">{(trip as any).driverName}</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                              Belum ditugaskan
+                            </span>
+                          )}
+                        </div>
+
                         {/* Layout */}
                         <div>
                           <p className="text-xs text-muted-foreground mb-0.5">Layout</p>
@@ -697,6 +745,7 @@ export default function TripsManager() {
                     <TableHead>Tgl. Layanan</TableHead>
                     <TableHead>Jam Berangkat</TableHead>
                     <TableHead>Kendaraan</TableHead>
+                    <TableHead>Driver</TableHead>
                     <TableHead>Layout Kursi</TableHead>
                     <TableHead className="text-center">Kapasitas</TableHead>
                     <TableHead>Status</TableHead>
@@ -769,6 +818,20 @@ export default function TripsManager() {
                           )}
                         </TableCell>
 
+                        {/* Driver */}
+                        <TableCell className="py-3">
+                          {(trip as any).driverName ? (
+                            <div className="flex items-center gap-1.5">
+                              <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              <span className="text-sm font-medium">{(trip as any).driverName}</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800">
+                              Belum ditugaskan
+                            </span>
+                          )}
+                        </TableCell>
+
                         {/* Layout */}
                         <TableCell className="py-3">
                           <div className="flex items-center gap-1.5">
@@ -803,6 +866,7 @@ export default function TripsManager() {
                           <RowActionsMenu
                             actions={[
                               { label: 'Lihat Manifest', icon: <FileText className="h-3.5 w-3.5" />, onClick: () => setManifestTripId(trip.id) },
+                              { label: 'Buat SPJ', icon: <ClipboardList className="h-3.5 w-3.5" />, onClick: () => handleCreateSpj(trip.id), disabled: createSpjMutation.isPending },
                               { label: 'Atur Jadwal', icon: <Clock className="h-3.5 w-3.5" />, onClick: () => handleScheduling(trip) },
                               { label: 'Turunkan Leg', icon: <Route className="h-3.5 w-3.5" />, onClick: () => handleDeriveLegs(trip.id), disabled: deriveLegsMutation.isPending },
                               { label: 'Hitung Inventori', icon: <Grid3X3 className="h-3.5 w-3.5" />, onClick: () => handlePrecomputeInventory(trip.id), disabled: precomputeSeatInventoryMutation.isPending },
@@ -857,7 +921,7 @@ export default function TripsManager() {
           />
         </div>
 
-        <SectionDivider label="Armada & Kapasitas" />
+        <SectionDivider label="Armada & Pengemudi" />
         <div className="space-y-1.5">
           <Label>Kendaraan <span className="text-destructive">*</span></Label>
           <SearchableSelect
@@ -870,6 +934,26 @@ export default function TripsManager() {
           />
         </div>
 
+        <div className="space-y-1.5">
+          <Label>Driver / Pengemudi</Label>
+          <SearchableSelect
+            value={formData.driverId}
+            options={driversList.filter(d => d.status === 'active').map(d => ({
+              value: d.id,
+              label: d.name,
+              badge: d.code || undefined,
+              subtitle: d.phone || undefined
+            }))}
+            placeholder="Pilih driver..."
+            searchPlaceholder="Cari nama atau kode..."
+            onChange={(v) => setFormData(prev => ({ ...prev, driverId: v }))}
+            clearValue=""
+            data-testid="select-driver"
+          />
+          <p className="text-xs text-muted-foreground">Opsional — bisa diassign nanti</p>
+        </div>
+
+        <SectionDivider label="Kapasitas" />
         <div className="space-y-1.5">
           <Label>Override Layout Kursi</Label>
           <SearchableSelect

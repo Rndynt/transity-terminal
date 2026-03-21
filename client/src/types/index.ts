@@ -2,14 +2,14 @@ import {
   Driver, Stop, Outlet, Vehicle, Layout, TripPattern, PatternStop, TripBase,
   Trip, TripWithDetails, TripStopTime, TripLeg, SeatInventory, PriceRule, 
   Booking, Passenger, Payment, PrintJob, CsoAvailableTrip, CargoShipment,
-  CargoType, CargoRate
+  CargoType, CargoRate, Spj, SpjCostLine, SpjWithDetails
 } from "@shared/schema";
 
 export type {
   Driver, Stop, Outlet, Vehicle, Layout, TripPattern, PatternStop, TripBase,
   Trip, TripWithDetails, TripStopTime, TripLeg, SeatInventory, PriceRule,
   Booking, Passenger, Payment, PrintJob, CsoAvailableTrip, CargoShipment,
-  CargoType, CargoRate
+  CargoType, CargoRate, Spj, SpjCostLine, SpjWithDetails
 };
 
 export type CargoShipmentWithStops = CargoShipment & {

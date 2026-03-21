@@ -45,6 +45,15 @@ plan/              → Dokumentasi teknis fitur
 
 ## Recent Changes
 
+**2026-03-21 — SPJ (Surat Perintah Jalan) & Driver Assignment**
+- **Database**: `spj` table (spj_number, trip_id, driver_id, vehicle_id, status enum draft/issued/on_trip/settled) + `spj_cost_lines` table (category from cost_item_category enum, estimated/actual amounts, is_advance flag)
+- **Backend**: `SpjService` (create SPJ from trip with auto-populated cost lines from templates, issue, settle, CRUD cost lines, trip profit calculation) + `SpjController` — routes at `/api/spj/*`
+- **SPJ Page**: `/spj` route — list view with search, detail view with trip/driver/vehicle info cards, financial summary (revenue/costs/profit), cost line table with inline editing, add/delete cost lines, settlement calculation, issue/settle actions
+- **Driver Assignment**: Trip form now includes driver select (SearchableSelect), driver shown in trip list table and mobile cards ("Belum ditugaskan" badge when unassigned)
+- **Buat SPJ from Trip**: "Buat SPJ" action added to trip row action menus — creates SPJ and navigates to SPJ page, checks for existing SPJ first
+- **Sidebar**: New "KEUANGAN" section with SPJ link
+- **Files**: `server/modules/spj/`, `client/src/pages/spj/SpjPage.tsx`, `client/src/components/masters/TripsManager.tsx`, `shared/schema.ts`
+
 **2026-03-21 — Promo & Voucher System**
 - **Database**: `promotions` table (code, type, discountValue, scope, validity, usage limits) + `vouchers` table (individual codes linked to promos)
 - **Backend**: `PromosService` (validate, apply, generate vouchers), `PromosController` (REST endpoints), integrated into `BookingsService.createBooking` with `promoCode` support

@@ -315,6 +315,32 @@ export const vouchersApi = {
   delete: (id: string) => apiRequest('DELETE', `/api/vouchers/${id}`),
 };
 
+// SPJ API
+async function fetchJson(url: string) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export const spjApi = {
+  getAll: () => fetchJson('/api/spj'),
+  getById: (id: string) => fetchJson(`/api/spj/${id}`),
+  getByTripId: (tripId: string) => fetch(`/api/spj/trip/${tripId}`).then(res => { if (!res.ok && res.status === 404) return null; if (!res.ok) throw new Error('Failed'); return res.json(); }),
+  create: (data: { tripId: string; driverId?: string; vehicleId?: string; notes?: string }) =>
+    apiRequest('POST', '/api/spj', data).then(res => res.json()),
+  issue: (id: string) => apiRequest('PATCH', `/api/spj/${id}/issue`).then(res => res.json()),
+  settle: (id: string) => apiRequest('PATCH', `/api/spj/${id}/settle`).then(res => res.json()),
+  updateNotes: (id: string, notes: string) => apiRequest('PATCH', `/api/spj/${id}/notes`, { notes }).then(res => res.json()),
+  delete: (id: string) => apiRequest('DELETE', `/api/spj/${id}`),
+  addCostLine: (spjId: string, data: any) => apiRequest('POST', `/api/spj/${spjId}/cost-lines`, data).then(res => res.json()),
+  updateCostLine: (lineId: string, data: any) => apiRequest('PATCH', `/api/spj/cost-lines/${lineId}`, data).then(res => res.json()),
+  deleteCostLine: (lineId: string) => apiRequest('DELETE', `/api/spj/cost-lines/${lineId}`),
+  getTripProfit: (tripId: string) => fetchJson(`/api/spj/trip/${tripId}/profit`),
+};
+
 // Seed API
 export const seedApi = {
   run: () => apiRequest('POST', '/api/seed').then(res => res.json())

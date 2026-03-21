@@ -274,6 +274,7 @@ import { PaymentsController } from "./modules/payments/payments.controller";
 import { CargoController } from "./modules/cargo/cargo.controller";
 import { AppController } from "./modules/app/app.controller";
 import { PromosController } from "./modules/promos/promos.controller";
+import { SpjController } from "./modules/spj/spj.controller";
 import { appAuthMiddleware, optionalAuthMiddleware } from "./modules/app/app.auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -533,6 +534,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch('/api/vouchers/:id/revoke', asyncHandler(promosController.revokeVoucher.bind(promosController)));
   app.delete('/api/vouchers/:id', asyncHandler(promosController.deleteVoucher.bind(promosController)));
   app.post('/api/promos/validate', asyncHandler(promosController.validatePromoCode.bind(promosController)));
+
+  // SPJ routes
+  const spjController = new SpjController();
+  app.get('/api/spj', asyncHandler(spjController.getAll.bind(spjController)));
+  app.get('/api/spj/:id', asyncHandler(spjController.getById.bind(spjController)));
+  app.get('/api/spj/trip/:tripId', asyncHandler(spjController.getByTripId.bind(spjController)));
+  app.post('/api/spj', asyncHandler(spjController.create.bind(spjController)));
+  app.patch('/api/spj/:id/issue', asyncHandler(spjController.issue.bind(spjController)));
+  app.patch('/api/spj/:id/settle', asyncHandler(spjController.settle.bind(spjController)));
+  app.patch('/api/spj/:id/notes', asyncHandler(spjController.updateNotes.bind(spjController)));
+  app.delete('/api/spj/:id', asyncHandler(spjController.delete.bind(spjController)));
+  app.post('/api/spj/:spjId/cost-lines', asyncHandler(spjController.addCostLine.bind(spjController)));
+  app.patch('/api/spj/cost-lines/:id', asyncHandler(spjController.updateCostLine.bind(spjController)));
+  app.delete('/api/spj/cost-lines/:id', asyncHandler(spjController.deleteCostLine.bind(spjController)));
+  app.get('/api/spj/trip/:tripId/profit', asyncHandler(spjController.getTripProfit.bind(spjController)));
 
   // Seed data
   app.post('/api/seed', asyncHandler(async (req: any, res: any) => {
