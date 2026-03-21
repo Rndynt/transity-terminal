@@ -50,8 +50,8 @@ plan/              → Dokumentasi teknis fitur
 - **Backend**: `SpjService` (create SPJ from trip with auto-populated cost lines from templates, issue, settle, CRUD cost lines, trip profit calculation) + `SpjController` — routes at `/api/spj/*`
 - **SPJ Page**: `/spj` route — list view with search, detail view with trip/driver/vehicle info cards, financial summary (revenue/costs/profit), cost line table with inline editing, add/delete cost lines, settlement calculation, issue/settle actions
 - **Driver Assignment**: Trip form now includes driver select (SearchableSelect), driver shown in trip list table and mobile cards ("Belum ditugaskan" badge when unassigned)
-- **Buat SPJ from Trip**: "Buat SPJ" action added to trip row action menus — creates SPJ and navigates to SPJ page, checks for existing SPJ first
-- **Sidebar**: New "KEUANGAN" section with SPJ link
+- **Buat SPJ**: Dedicated "Buat SPJ" button on SPJ page opens trip picker dialog (date navigation + search); also available as shortcut in trip row action menus
+- **Sidebar**: Reorganized — "OPERASIONAL" section (Reservasi, Kargo, All Bookings, Manifest, SPJ) and "MASTER DATA" section; SPJ accessible directly from operations, not restricted to masters
 - **Files**: `server/modules/spj/`, `client/src/pages/spj/SpjPage.tsx`, `client/src/components/masters/TripsManager.tsx`, `shared/schema.ts`
 
 **2026-03-21 — Promo & Voucher System**

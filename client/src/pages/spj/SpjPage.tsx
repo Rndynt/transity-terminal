@@ -1,22 +1,22 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
-import { spjApi } from '@/lib/api';
+import { spjApi, tripsApi, tripPatternsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   ClipboardList, Search, Eye, CheckCircle, Trash2, ArrowLeft, Printer,
   User, Bus, MapPin, Calendar, FileText, Wallet, Plus, Pencil, X,
-  ArrowRight, CircleDollarSign, TrendingUp, ArrowUpDown, Banknote
+  ArrowRight, CircleDollarSign, TrendingUp, ArrowUpDown, Banknote, Clock
 } from 'lucide-react';
-import type { SpjWithDetails, SpjCostLine } from '@/types';
+import type { SpjWithDetails, SpjCostLine, TripWithDetails, TripPattern } from '@/types';
 
 function formatDate(d: string | Date | null | undefined) {
   if (!d) return '—';
@@ -57,15 +57,63 @@ const CATEGORY_LABELS: Record<string, string> = {
   lainnya: 'Lainnya',
 };
 
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function addDays(dateStr: string, days: number) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
 export default function SpjPage() {
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createDate, setCreateDate] = useState(todayStr());
+  const [tripSearch, setTripSearch] = useState('');
   const { toast } = useToast();
 
   const { data: spjList = [], isLoading } = useQuery<SpjWithDetails[]>({
     queryKey: ['/api/spj'],
     queryFn: spjApi.getAll,
+  });
+
+  const { data: tripsForCreate = [] } = useQuery<TripWithDetails[]>({
+    queryKey: ['/api/trips', createDate],
+    queryFn: () => tripsApi.getAll(createDate),
+    enabled: showCreateDialog,
+  });
+
+  const { data: patterns = [] } = useQuery<TripPattern[]>({
+    queryKey: ['/api/trip-patterns'],
+    queryFn: tripPatternsApi.getAll,
+    enabled: showCreateDialog,
+  });
+
+  const getPatternName = (patternId: string) => patterns.find(p => p.id === patternId)?.name ?? '—';
+
+  const existingTripIds = new Set(spjList.map(s => s.tripId));
+
+  const filteredTripsForCreate = tripsForCreate.filter(t => {
+    const name = getPatternName(t.patternId).toLowerCase();
+    return name.includes(tripSearch.toLowerCase()) || (t as any).vehiclePlate?.toLowerCase().includes(tripSearch.toLowerCase());
+  });
+
+  const createSpjMutation = useMutation({
+    mutationFn: (tripId: string) => spjApi.create({ tripId }),
+    onSuccess: (spj: SpjWithDetails) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/spj'] });
+      setShowCreateDialog(false);
+      toast({ title: 'SPJ berhasil dibuat', description: `Nomor: ${spj.spjNumber}` });
+      setSelectedId(spj.id);
+      setView('detail');
+    },
+    onError: (err: any) => {
+      toast({ title: 'Gagal membuat SPJ', description: err?.message || 'Terjadi kesalahan', variant: 'destructive' });
+    },
   });
 
   const filtered = spjList.filter(s => {
@@ -88,11 +136,18 @@ export default function SpjPage() {
   return (
     <div className="flex flex-col h-full bg-background">
       <div className="border-b px-6 py-4 shrink-0">
-        <div className="flex items-center gap-3 mb-1">
-          <ClipboardList className="w-5 h-5 text-primary" />
-          <h1 className="text-xl font-semibold" data-testid="page-title-spj">Surat Perintah Jalan</h1>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <ClipboardList className="w-5 h-5 text-primary" />
+              <h1 className="text-xl font-semibold" data-testid="page-title-spj">Surat Perintah Jalan</h1>
+            </div>
+            <p className="text-sm text-muted-foreground">Kelola SPJ untuk setiap trip perjalanan. Biaya perjalanan dicatat dan diselesaikan di sini.</p>
+          </div>
+          <Button onClick={() => setShowCreateDialog(true)} data-testid="btn-create-spj">
+            <Plus className="w-4 h-4 mr-1.5" /> Buat SPJ
+          </Button>
         </div>
-        <p className="text-sm text-muted-foreground">Kelola SPJ untuk setiap trip perjalanan. Biaya perjalanan dicatat dan diselesaikan di sini.</p>
       </div>
 
       <div className="px-6 py-4 border-b bg-muted/20 shrink-0">
@@ -124,7 +179,7 @@ export default function SpjPage() {
           <EmptyState
             icon={ClipboardList}
             title="Belum ada SPJ"
-            description="SPJ akan muncul di sini setelah dibuat dari halaman Trips."
+            description="Klik tombol 'Buat SPJ' di atas untuk membuat SPJ baru."
           />
         ) : (
           <>
@@ -192,6 +247,102 @@ export default function SpjPage() {
           </>
         )}
       </div>
+
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardList className="w-5 h-5 text-primary" />
+              Buat SPJ Baru
+            </DialogTitle>
+            <DialogDescription>Pilih trip yang akan dibuatkan Surat Perintah Jalan.</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center gap-3 py-2">
+            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => setCreateDate(addDays(createDate, -1))} data-testid="btn-prev-date-spj">
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </Button>
+            <Input
+              type="date"
+              value={createDate}
+              onChange={e => setCreateDate(e.target.value)}
+              className="h-8 text-sm w-40 text-center"
+              data-testid="input-date-spj-create"
+            />
+            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => setCreateDate(addDays(createDate, 1))} data-testid="btn-next-date-spj">
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Button>
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Cari rute..."
+                value={tripSearch}
+                onChange={e => setTripSearch(e.target.value)}
+                className="pl-8 h-8 text-sm"
+                data-testid="input-search-trip-for-spj"
+              />
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto border rounded-lg">
+            {filteredTripsForCreate.length === 0 ? (
+              <div className="text-center py-10 text-sm text-muted-foreground">
+                <Calendar className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+                Tidak ada trip pada tanggal ini.
+              </div>
+            ) : (
+              <div className="divide-y">
+                {filteredTripsForCreate.map(trip => {
+                  const hasSpj = existingTripIds.has(trip.id);
+                  const patternName = getPatternName(trip.patternId);
+                  const departTime = (trip as any).originDepartHHMM || null;
+                  return (
+                    <div
+                      key={trip.id}
+                      className={`p-3 flex items-center justify-between gap-3 ${hasSpj ? 'opacity-50 bg-muted/20' : 'hover:bg-muted/30 cursor-pointer'}`}
+                      data-testid={`trip-for-spj-${trip.id}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
+                          <span className="text-sm font-medium truncate">{patternName}</span>
+                        </div>
+                        <div className="flex gap-3 text-xs text-muted-foreground pl-5">
+                          {departTime && (
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{departTime}</span>
+                          )}
+                          {(trip as any).vehiclePlate && (
+                            <span className="flex items-center gap-1"><Bus className="w-3 h-3" />{(trip as any).vehiclePlate}</span>
+                          )}
+                          {(trip as any).driverName && (
+                            <span className="flex items-center gap-1"><User className="w-3 h-3" />{(trip as any).driverName}</span>
+                          )}
+                          {!(trip as any).driverName && (
+                            <span className="text-amber-600">Driver belum ditugaskan</span>
+                          )}
+                        </div>
+                      </div>
+                      {hasSpj ? (
+                        <Badge variant="outline" className="text-xs shrink-0">SPJ ada</Badge>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => createSpjMutation.mutate(trip.id)}
+                          disabled={createSpjMutation.isPending}
+                          data-testid={`btn-create-spj-for-trip-${trip.id}`}
+                        >
+                          <Plus className="w-3.5 h-3.5 mr-1" /> Buat SPJ
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

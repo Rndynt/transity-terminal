@@ -8,16 +8,17 @@ import {
 
 const NAV_SECTIONS = [
   {
-    title: "OPERATIONS",
+    title: "OPERASIONAL",
     items: [
       { name: "Reservasi", path: "/cso", icon: Ticket },
       { name: "Kargo", path: "/cargo", icon: Package },
       { name: "All Bookings", path: "/bookings", icon: List },
       { name: "Manifest", path: "/manifest", icon: FileText },
+      { name: "SPJ", path: "/spj", icon: ClipboardList },
     ]
   },
   {
-    title: "MASTERS",
+    title: "MASTER DATA",
     items: [
       { name: "Stops", path: "/masters?tab=stops", icon: MapPin },
       { name: "Outlets", path: "/masters?tab=outlets", icon: Store },
@@ -31,12 +32,6 @@ const NAV_SECTIONS = [
       { name: "Jenis Kargo", path: "/masters?tab=cargo-types", icon: Tag },
       { name: "Tarif Kargo", path: "/masters?tab=cargo-rates", icon: Package },
       { name: "Biaya Perjalanan", path: "/masters?tab=cost-templates", icon: Wallet },
-    ]
-  },
-  {
-    title: "KEUANGAN",
-    items: [
-      { name: "SPJ", path: "/spj", icon: ClipboardList },
     ]
   }
 ];
