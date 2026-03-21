@@ -19,6 +19,7 @@ interface SearchableSelectProps {
   onChange: (value: string) => void;
   disabled?: boolean;
   className?: string;
+  clearValue?: string;
   'data-testid'?: string;
 }
 
@@ -31,6 +32,7 @@ export function SearchableSelect({
   onChange,
   disabled = false,
   className,
+  clearValue = '',
   ...props
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
@@ -97,7 +99,7 @@ export function SearchableSelect({
 
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onChange('');
+    onChange(clearValue);
   };
 
   return (

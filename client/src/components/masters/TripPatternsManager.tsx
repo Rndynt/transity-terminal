@@ -329,6 +329,7 @@ export default function TripPatternsManager() {
                 placeholder="Semua kota"
                 searchPlaceholder="Cari kota..."
                 onChange={v => setFilterCity(v === 'all' ? '' : v)}
+                clearValue="all"
                 data-testid="filter-city"
               />
             </div>

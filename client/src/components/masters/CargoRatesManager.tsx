@@ -5,7 +5,7 @@ import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { DollarSign, Plus, Pencil, Trash2, ArrowRight, Filter, X } from 'lucide-react';
 import { RowActionsMenu } from './RowActionsMenu';
-import type { CargoType, CargoRate, Stop, TripPattern, Trip } from '@shared/schema';
+import type { CargoType, CargoRate, Stop, TripPattern, TripWithDetails } from '@shared/schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -66,7 +66,7 @@ export default function CargoRatesManager() {
     queryFn: () => fetch('/api/trip-patterns').then(r => r.json())
   });
 
-  const { data: trips = [] } = useQuery<Trip[]>({
+  const { data: trips = [] } = useQuery<TripWithDetails[]>({
     queryKey: ['/api/trips'],
     queryFn: () => fetch('/api/trips').then(r => r.json())
   });
@@ -79,7 +79,19 @@ export default function CargoRatesManager() {
   const cargoTypeOptions = cargoTypes.map(ct => ({ value: ct.id, label: ct.name, badge: ct.code }));
   const stopOptions = allStops.map(s => ({ value: s.id, label: s.name, badge: s.code, subtitle: s.city || undefined }));
   const patternOptions = patterns.map(p => ({ value: p.id, label: p.name, badge: p.code }));
-  const tripOptions = trips.slice(0, 50).map(t => ({ value: t.id, label: `Trip ${t.id.slice(-8)}`, badge: t.serviceDate }));
+  const tripOptions = trips.map((t: TripWithDetails) => {
+    const patternLabel = t.patternCode || t.patternName || '';
+    const dateLabel = t.serviceDate
+      ? new Date(t.serviceDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+      : '';
+    return {
+      value: t.id,
+      label: `${dateLabel}${t.vehiclePlate ? ` · ${t.vehiclePlate}` : ''}`,
+      badge: t.status || 'scheduled',
+      subtitle: patternLabel ? `${patternLabel}${t.patternName && t.patternCode ? ` — ${t.patternName}` : ''}` : undefined,
+      group: patternLabel || 'Tanpa Pola',
+    };
+  });
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<CargoRate>) => cargoRatesApi.create(data),
@@ -162,7 +174,14 @@ export default function CargoRatesManager() {
   const getScopeRefName = (scope: string | null, refId: string | null) => {
     if (!scope || scope === 'global' || !refId) return '';
     if (scope === 'pattern') return patterns.find(p => p.id === refId)?.name || refId;
-    if (scope === 'trip') return trips.find(t => t.id === refId)?.id?.slice(0, 8) || refId;
+    if (scope === 'trip') {
+      const t = trips.find(tr => tr.id === refId);
+      if (!t) return refId.slice(0, 8);
+      const dateStr = t.serviceDate
+        ? new Date(t.serviceDate + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+        : '';
+      return [t.patternCode || t.patternName, dateStr, t.vehiclePlate].filter(Boolean).join(' · ');
+    }
     return '';
   };
 
@@ -231,6 +250,7 @@ export default function CargoRatesManager() {
                 placeholder="Semua jenis"
                 searchPlaceholder="Cari jenis kargo..."
                 onChange={setFilterTypeId}
+                clearValue="all"
                 data-testid="filter-rate-type"
               />
             </div>

@@ -456,6 +456,7 @@ export default function TripsManager() {
                 placeholder="Semua rute"
                 searchPlaceholder="Cari nama atau kode rute..."
                 onChange={setFilterPatternId}
+                clearValue="all"
                 data-testid="filter-pattern-select"
               />
             </div>

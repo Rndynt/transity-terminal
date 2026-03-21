@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -517,6 +516,7 @@ export default function TripBasesManager() {
                   placeholder="Semua rute"
                   searchPlaceholder="Cari nama atau kode rute..."
                   onChange={v => setFilterPattern(v === 'all' ? '' : v)}
+                  clearValue="all"
                   data-testid="filter-pattern"
                 />
               </div>
@@ -532,6 +532,7 @@ export default function TripBasesManager() {
                   placeholder="Semua kota"
                   searchPlaceholder="Cari kota..."
                   onChange={v => setFilterCity(v === 'all' ? '' : v)}
+                  clearValue="all"
                   data-testid="filter-city"
                 />
               </div>
@@ -840,24 +841,17 @@ export default function TripBasesManager() {
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="pattern">Trip Pattern <span className="text-destructive">*</span></Label>
-                  <Select
+                  <SearchableSelect
                     value={formData.patternId}
-                    onValueChange={(value) => {
+                    options={patterns.map((p: TripPattern) => ({ value: p.id, label: p.name, badge: p.code }))}
+                    placeholder="Pilih pola perjalanan..."
+                    searchPlaceholder="Cari pola..."
+                    onChange={(value) => {
                       setFormData(prev => ({ ...prev, patternId: value }));
                       setSelectedPatternId(value);
                     }}
-                  >
-                    <SelectTrigger data-testid="select-pattern">
-                      <SelectValue placeholder="Pilih pola perjalanan..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {patterns.map((pattern: TripPattern) => (
-                        <SelectItem key={pattern.id} value={pattern.id}>
-                          {pattern.code} — {pattern.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    data-testid="select-pattern"
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -970,37 +964,33 @@ export default function TripBasesManager() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <Label>Layout</Label>
-                  <Select
+                  <SearchableSelect
                     value={formData.defaultLayoutId}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, defaultLayoutId: value }))}
-                  >
-                    <SelectTrigger data-testid="select-layout">
-                      <SelectValue placeholder="Pilih layout..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">— Tidak ada —</SelectItem>
-                      {layouts.map((layout: Layout) => (
-                        <SelectItem key={layout.id} value={layout.id}>{layout.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={[
+                      { value: 'none', label: '— Tidak ada —' },
+                      ...layouts.map((l: Layout) => ({ value: l.id, label: l.name }))
+                    ]}
+                    placeholder="Pilih layout..."
+                    searchPlaceholder="Cari layout..."
+                    onChange={(value) => setFormData(prev => ({ ...prev, defaultLayoutId: value }))}
+                    clearValue="none"
+                    data-testid="select-layout"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Kendaraan</Label>
-                  <Select
+                  <SearchableSelect
                     value={formData.defaultVehicleId}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, defaultVehicleId: value }))}
-                  >
-                    <SelectTrigger data-testid="select-vehicle">
-                      <SelectValue placeholder="Pilih kendaraan..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">— Tidak ada —</SelectItem>
-                      {vehicles.map((vehicle: Vehicle) => (
-                        <SelectItem key={vehicle.id} value={vehicle.id}>{vehicle.code} — {vehicle.plate}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={[
+                      { value: 'none', label: '— Tidak ada —' },
+                      ...vehicles.map((v: Vehicle) => ({ value: v.id, label: `${v.code} — ${v.plate}` }))
+                    ]}
+                    placeholder="Pilih kendaraan..."
+                    searchPlaceholder="Cari kendaraan..."
+                    onChange={(value) => setFormData(prev => ({ ...prev, defaultVehicleId: value }))}
+                    clearValue="none"
+                    data-testid="select-vehicle"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="capacity">Override Kapasitas</Label>

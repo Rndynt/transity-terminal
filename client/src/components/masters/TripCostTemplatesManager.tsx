@@ -292,17 +292,20 @@ export default function TripCostTemplatesManager() {
       />
 
       <div className="flex justify-end">
-        <Select value={filterPatternId} onValueChange={setFilterPatternId}>
-          <SelectTrigger className="w-full sm:w-[200px] h-9" data-testid="filter-template-pattern">
-            <SelectValue placeholder="Semua Rute" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Rute</SelectItem>
-            {patterns.map(p => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="w-full sm:w-[260px]">
+          <SearchableSelect
+            value={filterPatternId}
+            options={[
+              { value: 'all', label: 'Semua Rute' },
+              ...patterns.map(p => ({ value: p.id, label: p.name, badge: p.code }))
+            ]}
+            placeholder="Semua Rute"
+            searchPlaceholder="Cari rute..."
+            onChange={setFilterPatternId}
+            clearValue="all"
+            data-testid="filter-template-pattern"
+          />
+        </div>
       </div>
 
       {/* Template Form Dialog */}

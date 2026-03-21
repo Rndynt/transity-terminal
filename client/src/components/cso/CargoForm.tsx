@@ -8,6 +8,7 @@ import {
   Banknote, QrCode, Wallet, Building2, Loader2,
   ArrowRight, Ruler, ShieldCheck
 } from 'lucide-react';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { Stop, Outlet, CsoAvailableTrip, CargoType, CargoShipmentWithStops } from '@/types';
 
 interface CargoFormProps {
@@ -192,31 +193,25 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
         <div className="grid grid-cols-2 gap-2 mb-3 flex-shrink-0">
           <div>
             <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Kota Asal</label>
-            <select
+            <SearchableSelect
               value={selectedOriginId}
-              onChange={(e) => setSelectedOriginId(e.target.value)}
-              className="w-full h-9 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+              options={allStops.map((s: Stop) => ({ value: s.id, label: s.name, badge: s.code, subtitle: s.city || undefined }))}
+              placeholder="Pilih asal..."
+              searchPlaceholder="Cari halte..."
+              onChange={setSelectedOriginId}
               data-testid="select-cargo-origin"
-            >
-              <option value="">Pilih asal...</option>
-              {allStops.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
+            />
           </div>
           <div>
             <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Kota Tujuan</label>
-            <select
+            <SearchableSelect
               value={selectedDestId}
-              onChange={(e) => setSelectedDestId(e.target.value)}
-              className="w-full h-9 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+              options={allStops.map((s: Stop) => ({ value: s.id, label: s.name, badge: s.code, subtitle: s.city || undefined }))}
+              placeholder="Pilih tujuan..."
+              searchPlaceholder="Cari halte..."
+              onChange={setSelectedDestId}
               data-testid="select-cargo-dest"
-            >
-              <option value="">Pilih tujuan...</option>
-              {allStops.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
+            />
           </div>
         </div>
       )}
@@ -301,17 +296,14 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
             {activeCargoTypes.length > 0 && (
               <div>
                 <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Jenis Kargo</label>
-                <select
+                <SearchableSelect
                   value={cargoTypeId}
-                  onChange={(e) => setCargoTypeId(e.target.value)}
-                  className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+                  options={activeCargoTypes.map((ct: CargoType) => ({ value: ct.id, label: ct.name, badge: ct.code }))}
+                  placeholder="Pilih jenis..."
+                  searchPlaceholder="Cari jenis kargo..."
+                  onChange={setCargoTypeId}
                   data-testid="select-cargo-type"
-                >
-                  <option value="">Pilih jenis...</option>
-                  {activeCargoTypes.map((ct: CargoType) => (
-                    <option key={ct.id} value={ct.id}>{ct.name} ({ct.code})</option>
-                  ))}
-                </select>
+                />
               </div>
             )}
             <div>
