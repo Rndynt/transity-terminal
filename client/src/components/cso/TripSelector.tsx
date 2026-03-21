@@ -3,7 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Store, Calendar, Bus, Loader2, Search, ChevronDown,
   ArrowRight, Armchair, Route, X, Check, ChevronLeft, ChevronRight as ChevronRightIcon,
-  MapPin, Hash
+  MapPin, Hash, AlertTriangle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, outletsApi, stopsApi } from '@/lib/api';
@@ -443,6 +443,10 @@ export default function TripSelector({
   };
 
   const handleTripSelect = async (trip: CsoAvailableTrip) => {
+    if (!trip.hasPriceRule) {
+      toast({ title: "Belum Ada Harga", description: "Trip ini belum memiliki aturan harga. Hubungi admin untuk mengatur harga.", variant: "destructive" });
+      return;
+    }
     if (trip.status === 'closed') {
       toast({ title: "Trip Ditutup", description: "Trip ini sudah ditutup", variant: "destructive" });
       return;
@@ -675,7 +679,8 @@ export default function TripSelector({
                         (trip.isVirtual && trip.baseId && selectedTrip?.baseId === trip.baseId);
                       const isPast = getTripIsPast(trip);
                       const isPastVirtual = isPast && trip.isVirtual;
-                      const isDisabled = trip.status === 'closed' || trip.status === 'canceled' || isPastVirtual;
+                      const noPrice = !trip.hasPriceRule;
+                      const isDisabled = trip.status === 'closed' || trip.status === 'canceled' || isPastVirtual || noPrice;
                       const isMaterializing = materializingBaseId === trip.baseId;
                       const seatCount = trip.availableSeats ?? trip.capacity ?? 0;
                       const totalSeats = trip.capacity ?? 40;
@@ -713,17 +718,24 @@ export default function TripSelector({
                                 </>
                               )}
                             </div>
-                            {isPast && trip.isVirtual ? (
-                              <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-md text-[10px] font-semibold">Sudah Lewat</span>
-                            ) : isPast && !trip.isVirtual ? (
-                              <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-md text-[10px] font-semibold">Sudah Lewat</span>
-                            ) : trip.isVirtual ? (
-                              <span className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded-md text-[10px] font-semibold">Jadwal Virtual</span>
-                            ) : trip.status === 'closed' ? (
-                              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-md text-[10px] font-semibold">Ditutup</span>
-                            ) : (
-                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-md text-[10px] font-semibold">Aktif</span>
-                            )}
+                            <div className="flex items-center gap-1 flex-wrap justify-end">
+                              {noPrice && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-red-100 text-red-700 rounded-md text-[10px] font-semibold" title="Belum ada aturan harga. Tambahkan di menu Aturan Harga.">
+                                  <AlertTriangle className="w-3 h-3" />Belum Ada Harga
+                                </span>
+                              )}
+                              {isPast && trip.isVirtual ? (
+                                <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-md text-[10px] font-semibold">Sudah Lewat</span>
+                              ) : isPast && !trip.isVirtual ? (
+                                <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-md text-[10px] font-semibold">Sudah Lewat</span>
+                              ) : trip.isVirtual ? (
+                                <span className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded-md text-[10px] font-semibold">Jadwal Virtual</span>
+                              ) : trip.status === 'closed' ? (
+                                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-md text-[10px] font-semibold">Ditutup</span>
+                              ) : (
+                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-md text-[10px] font-semibold">Aktif</span>
+                              )}
+                            </div>
                           </div>
 
                           <div className="flex items-center justify-between">
