@@ -10,7 +10,7 @@ import type { Trip, SeatmapResponse } from '@/types';
 import PassengerDetailModal from './PassengerDetailModal';
 import { apiRequest } from '@/lib/queryClient';
 
-interface AssignModeState {
+export interface AssignModeState {
   passengerId: string;
   passengerName: string;
   ticketNumber: string | null;
@@ -25,6 +25,8 @@ interface SeatMapProps {
   onSeatSelect: (seatNo: string) => void;
   onSeatDeselect: (seatNo: string) => void;
   isPastTrip?: boolean;
+  externalAssignMode?: AssignModeState | null;
+  onAssignModeChange?: (mode: AssignModeState | null) => void;
 }
 
 export default function SeatMap({
@@ -34,7 +36,9 @@ export default function SeatMap({
   selectedSeats,
   onSeatSelect,
   onSeatDeselect,
-  isPastTrip = false
+  isPastTrip = false,
+  externalAssignMode = null,
+  onAssignModeChange
 }: SeatMapProps) {
   const [localSelectedSeats, setLocalSelectedSeats] = useState<Set<string>>(new Set());
   const [showPassengerModal, setShowPassengerModal] = useState(false);
@@ -42,7 +46,15 @@ export default function SeatMap({
   const [seatLoading, setSeatLoading] = useState<string | null>(null);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [precomputing, setPrecomputing] = useState(false);
-  const [assignMode, setAssignMode] = useState<AssignModeState | null>(null);
+  const [internalAssignMode, setInternalAssignMode] = useState<AssignModeState | null>(null);
+  const assignMode = externalAssignMode || internalAssignMode;
+  const setAssignMode = (mode: AssignModeState | null) => {
+    if (externalAssignMode && onAssignModeChange) {
+      onAssignModeChange(mode);
+    } else {
+      setInternalAssignMode(mode);
+    }
+  };
   const { toast } = useToast();
   const refetchRef = useRef<() => void>(() => {});
 
@@ -339,7 +351,7 @@ export default function SeatMap({
         </div>
       )}
 
-      {assignMode && (
+      {assignMode && !externalAssignMode && (
         <div className="relative rounded-xl border-2 border-emerald-400 bg-emerald-50 p-3 space-y-2 shadow-sm">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-start gap-2.5">

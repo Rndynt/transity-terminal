@@ -110,11 +110,13 @@ function BookingDetailModal({
   isOpen,
   onClose,
   onOpenInCso,
+  onAssignInCso,
 }: {
   bookingId: string | null;
   isOpen: boolean;
   onClose: () => void;
   onOpenInCso?: (tripId: string, outletId: string, serviceDate: string, originStopId: string, destinationStopId: string) => void;
+  onAssignInCso?: (tripId: string, outletId: string, serviceDate: string, originStopId: string, destinationStopId: string, passengerId: string, passengerName: string) => void;
 }) {
   const [passengersOpen, setPassengersOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -122,8 +124,6 @@ function BookingDetailModal({
   const [confirmUnseatAll, setConfirmUnseatAll] = useState(false);
   const [activeReassignId, setActiveReassignId] = useState<string | null>(null);
   const [reassignSeatNo, setReassignSeatNo] = useState('');
-  const [activeAssignId, setActiveAssignId] = useState<string | null>(null);
-  const [assignSeatNo, setAssignSeatNo] = useState('');
   const { toast } = useToast();
 
   const { data: detail, isLoading, isError } = useQuery<BookingDetail>({
@@ -171,19 +171,6 @@ function BookingDetailModal({
       setReassignSeatNo('');
     },
     onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' })
-  });
-
-  const assignMutation = useMutation({
-    mutationFn: ({ passengerId, newSeatNo }: { passengerId: string; newSeatNo: string }) =>
-      passengersApi.assignSeat(passengerId, newSeatNo),
-    onSuccess: () => {
-      toast({ title: 'Berhasil', description: 'Penumpang berhasil di-assign ke kursi baru.' });
-      queryClient.invalidateQueries({ queryKey: ['/api/bookings', bookingId] });
-      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
-      setActiveAssignId(null);
-      setAssignSeatNo('');
-    },
-    onError: (e: Error) => toast({ title: 'Gagal Assign', description: e.message, variant: 'destructive' })
   });
 
   const hasActivePassengers = detail?.passengers?.some(
@@ -352,21 +339,14 @@ function BookingDetailModal({
                                     <Armchair className="w-3 h-3 text-orange-500 flex-shrink-0" />
                                     Belum memiliki kursi — assign ke kursi baru
                                   </div>
-                                  {activeAssignId === p.id ? (
-                                    <div className="flex items-center gap-2">
-                                      <Input placeholder="No. kursi" value={assignSeatNo} onChange={e => setAssignSeatNo(e.target.value.toUpperCase())}
-                                        className="h-6 w-20 text-xs font-mono" data-testid={`input-assign-${p.id}`} />
-                                      <Button size="sm" className="h-6 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700" disabled={!assignSeatNo || assignMutation.isPending}
-                                        onClick={() => assignMutation.mutate({ passengerId: p.id, newSeatNo: assignSeatNo })} data-testid={`btn-confirm-assign-${p.id}`}>
-                                        {assignMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Armchair className="w-3 h-3" />} Assign
-                                      </Button>
-                                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setActiveAssignId(null); setAssignSeatNo(''); }}>Batal</Button>
-                                    </div>
-                                  ) : (
-                                    <Button size="sm" className="h-6 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 w-full"
-                                      onClick={() => setActiveAssignId(p.id)} data-testid={`btn-assign-${p.id}`}>
-                                      <Armchair className="w-3 h-3" /> Assign Kursi Baru
+                                  {detail.tripId && detail.outletId && detail.tripDetails?.serviceDate && detail.originStopId && detail.destinationStopId && onAssignInCso ? (
+                                    <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 w-full"
+                                      onClick={() => onAssignInCso(detail.tripId, detail.outletId!, detail.tripDetails.serviceDate, detail.originStopId, detail.destinationStopId, p.id, p.fullName)}
+                                      data-testid={`btn-assign-${p.id}`}>
+                                      <Armchair className="w-3 h-3" /> Pilih Kursi di Reservasi
                                     </Button>
+                                  ) : (
+                                    <p className="text-[11px] text-gray-400 italic">Data trip tidak lengkap untuk assign kursi</p>
                                   )}
                                 </>
                               ) : isActive ? (
@@ -808,6 +788,10 @@ export default function AllBookingsPage() {
         onOpenInCso={(tripId, outletId, serviceDate, originStopId, destinationStopId) => {
           setSelectedId(null);
           navigate(`/cso?tripId=${tripId}&outletId=${outletId}&date=${serviceDate}&originStopId=${originStopId}&destinationStopId=${destinationStopId}`);
+        }}
+        onAssignInCso={(tripId, outletId, serviceDate, originStopId, destinationStopId, passengerId, passengerName) => {
+          setSelectedId(null);
+          navigate(`/cso?tripId=${tripId}&outletId=${outletId}&date=${serviceDate}&originStopId=${originStopId}&destinationStopId=${destinationStopId}&assignPassengerId=${passengerId}&assignPassengerName=${encodeURIComponent(passengerName)}`);
         }}
       />
     </div>
