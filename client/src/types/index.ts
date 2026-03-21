@@ -70,6 +70,15 @@ export interface BookingFlowState {
     method: 'cash' | 'qr' | 'ewallet' | 'bank';
     amount: number;
   };
+  promoCode?: string;
+  discountAmount?: number;
+  promoValidation?: {
+    valid: boolean;
+    discountAmount: number;
+    promotion?: any;
+    voucher?: any;
+    error?: string;
+  };
   currentStep: number;
 }
 
@@ -83,6 +92,7 @@ export interface CreateBookingRequest {
   totalAmount: number;
   channel: 'CSO' | 'WEB' | 'APP' | 'OTA';
   createdBy?: string;
+  promoCode?: string;
   passengers: Array<{
     fullName: string;
     phone?: string;

@@ -3,7 +3,7 @@ import {
   drivers, stops, outlets, vehicles, layouts, tripPatterns, patternStops, tripBases,
   trips, tripStopTimes, tripLegs, seatInventory, seatHolds, priceRules, 
   bookings, passengers, payments, printJobs, cargoShipments, cargoTypes, cargoRates,
-  tripCostTemplates, tripCostItems,
+  tripCostTemplates, tripCostItems, promotions, vouchers,
   type Driver, type InsertDriver,
   type Stop, type Outlet, type Vehicle, type Layout, type TripPattern, 
   type PatternStop, type TripBase, type Trip, type TripWithDetails, type TripStopTime, type TripLeg, 
@@ -11,6 +11,8 @@ import {
   type Payment, type PrintJob, type CargoShipment, type CargoType, type CargoRate, type CsoAvailableTrip,
   type TripCostTemplate, type InsertTripCostTemplate,
   type TripCostItem, type InsertTripCostItem,
+  type Promotion, type InsertPromotion,
+  type Voucher, type InsertVoucher,
   type InsertStop, type InsertOutlet, type InsertVehicle, type InsertLayout,
   type InsertTripPattern, type InsertPatternStop, type InsertTripBase, type InsertTrip,
   type InsertTripStopTime, type InsertTripLeg, type InsertSeatInventory,
@@ -1270,6 +1272,74 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTripCostItem(id: string): Promise<void> {
     await db.delete(tripCostItems).where(eq(tripCostItems.id, id));
+  }
+
+  // Promotions
+  async getPromotions(): Promise<Promotion[]> {
+    return await db.select().from(promotions).orderBy(desc(promotions.createdAt));
+  }
+
+  async getPromotionById(id: string): Promise<Promotion | undefined> {
+    const [promo] = await db.select().from(promotions).where(eq(promotions.id, id));
+    return promo;
+  }
+
+  async getPromotionByCode(code: string): Promise<Promotion | undefined> {
+    const [promo] = await db.select().from(promotions).where(eq(promotions.code, code.toUpperCase()));
+    return promo;
+  }
+
+  async createPromotion(data: InsertPromotion): Promise<Promotion> {
+    const [promo] = await db.insert(promotions).values({ ...data, code: data.code.toUpperCase() }).returning();
+    return promo;
+  }
+
+  async updatePromotion(id: string, data: Partial<InsertPromotion>): Promise<Promotion> {
+    if (data.code) data.code = data.code.toUpperCase();
+    const [promo] = await db.update(promotions).set(data).where(eq(promotions.id, id)).returning();
+    return promo;
+  }
+
+  async deletePromotion(id: string): Promise<void> {
+    await db.delete(vouchers).where(eq(vouchers.promoId, id));
+    await db.delete(promotions).where(eq(promotions.id, id));
+  }
+
+  async incrementPromoUsage(id: string): Promise<void> {
+    await db.update(promotions).set({ usageCount: sql`${promotions.usageCount} + 1` }).where(eq(promotions.id, id));
+  }
+
+  // Vouchers
+  async getVouchers(promoId?: string): Promise<Voucher[]> {
+    if (promoId) {
+      return await db.select().from(vouchers).where(eq(vouchers.promoId, promoId)).orderBy(desc(vouchers.createdAt));
+    }
+    return await db.select().from(vouchers).orderBy(desc(vouchers.createdAt));
+  }
+
+  async getVoucherById(id: string): Promise<Voucher | undefined> {
+    const [v] = await db.select().from(vouchers).where(eq(vouchers.id, id));
+    return v;
+  }
+
+  async getVoucherByCode(code: string): Promise<Voucher | undefined> {
+    const [v] = await db.select().from(vouchers).where(eq(vouchers.code, code.toUpperCase()));
+    return v;
+  }
+
+  async createVoucher(data: InsertVoucher): Promise<Voucher> {
+    const [v] = await db.insert(vouchers).values({ ...data, code: data.code.toUpperCase() }).returning();
+    return v;
+  }
+
+  async updateVoucher(id: string, data: Partial<InsertVoucher>): Promise<Voucher> {
+    if (data.code) data.code = data.code.toUpperCase();
+    const [v] = await db.update(vouchers).set(data).where(eq(vouchers.id, id)).returning();
+    return v;
+  }
+
+  async deleteVoucher(id: string): Promise<void> {
+    await db.delete(vouchers).where(eq(vouchers.id, id));
   }
 }
 

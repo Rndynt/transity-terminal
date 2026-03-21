@@ -24,6 +24,9 @@ export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'success',
 export const printStatusEnum = pgEnum('print_status', ['queued', 'sent', 'failed']);
 export const priceRuleScopeEnum = pgEnum('price_rule_scope', ['pattern', 'trip', 'leg', 'time']);
 export const ticketStatusEnum = pgEnum('ticket_status', ['active', 'canceled', 'refunded', 'checked_in', 'no_show']);
+export const promoTypeEnum = pgEnum('promo_type', ['percentage', 'fixed']);
+export const promoScopeEnum = pgEnum('promo_scope', ['global', 'pattern', 'trip', 'outlet', 'channel']);
+export const voucherStatusEnum = pgEnum('voucher_status', ['active', 'used', 'expired', 'revoked']);
 
 // 0. Drivers
 export const driverStatusEnum = pgEnum('driver_status', ['active', 'inactive', 'suspended']);
@@ -229,7 +232,7 @@ export const priceRules = pgTable("price_rules", {
 // 12. Bookings
 export const bookings = pgTable("bookings", {
   id:                 uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  bookingCode:        text("booking_code").unique(), // Human-readable PNR e.g. TRV-20240319-XYZ12
+  bookingCode:        text("booking_code").unique(),
   status:             bookingStatusEnum("status").default('pending'),
   tripId:             uuid("trip_id").notNull().references(() => trips.id),
   originStopId:       uuid("origin_stop_id").notNull().references(() => stops.id),
@@ -239,6 +242,9 @@ export const bookings = pgTable("bookings", {
   channel:            channelEnum("channel").default('CSO'),
   outletId:           uuid("outlet_id").references(() => outlets.id),
   totalAmount:        numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
+  discountAmount:     numeric("discount_amount", { precision: 12, scale: 2 }).default('0'),
+  promoId:            uuid("promo_id"),
+  voucherCode:        text("voucher_code"),
   currency:           text("currency").default('IDR'),
   createdBy:          text("created_by"),
   appUserId:          uuid("app_user_id").references(() => appUsers.id),
@@ -649,7 +655,64 @@ export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, c
 export type Review = typeof reviews.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;
 
-// 21. Trip Cost Templates (Master Biaya Perjalanan)
+// 21. Promotions
+export const promotions = pgTable("promotions", {
+  id:                uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code:              text("code").notNull().unique(),
+  name:              text("name").notNull(),
+  description:       text("description"),
+  type:              promoTypeEnum("type").notNull(),
+  discountValue:     numeric("discount_value", { precision: 12, scale: 2 }).notNull(),
+  minPurchase:       numeric("min_purchase", { precision: 12, scale: 2 }).default('0'),
+  maxDiscount:       numeric("max_discount", { precision: 12, scale: 2 }),
+  scope:             promoScopeEnum("scope").default('global'),
+  scopeRefId:        text("scope_ref_id"),
+  applicableChannels: text("applicable_channels").array(),
+  usageLimit:        integer("usage_limit"),
+  usageCount:        integer("usage_count").default(0),
+  perUserLimit:      integer("per_user_limit"),
+  requireVoucher:    boolean("require_voucher").default(false),
+  stackable:         boolean("stackable").default(false),
+  isActive:          boolean("is_active").default(true),
+  validFrom:         timestamp("valid_from", { withTimezone: true }),
+  validTo:           timestamp("valid_to", { withTimezone: true }),
+  createdAt:         timestamp("created_at", { withTimezone: true }).defaultNow()
+});
+
+export const promotionsRelations = relations(promotions, ({ many }) => ({
+  vouchers: many(vouchers)
+}));
+
+export const insertPromotionSchema = createInsertSchema(promotions).omit({ id: true, createdAt: true, usageCount: true }).extend({
+  validFrom: z.preprocess((v) => (typeof v === 'string' ? new Date(v) : v), z.date().nullable().optional()),
+  validTo: z.preprocess((v) => (typeof v === 'string' ? new Date(v) : v), z.date().nullable().optional()),
+});
+export type Promotion = typeof promotions.$inferSelect;
+export type InsertPromotion = z.infer<typeof insertPromotionSchema>;
+
+// 22. Vouchers
+export const vouchers = pgTable("vouchers", {
+  id:              uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code:            text("code").notNull().unique(),
+  promoId:         uuid("promo_id").notNull().references(() => promotions.id),
+  assignedTo:      text("assigned_to"),
+  status:          voucherStatusEnum("status").default('active'),
+  usedAt:          timestamp("used_at", { withTimezone: true }),
+  usedByBookingId: uuid("used_by_booking_id"),
+  validFrom:       timestamp("valid_from", { withTimezone: true }),
+  validTo:         timestamp("valid_to", { withTimezone: true }),
+  createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow()
+});
+
+export const vouchersRelations = relations(vouchers, ({ one }) => ({
+  promotion: one(promotions, { fields: [vouchers.promoId], references: [promotions.id] })
+}));
+
+export const insertVoucherSchema = createInsertSchema(vouchers).omit({ id: true, createdAt: true });
+export type Voucher = typeof vouchers.$inferSelect;
+export type InsertVoucher = z.infer<typeof insertVoucherSchema>;
+
+// 23. Trip Cost Templates (Master Biaya Perjalanan)
 export const costItemCategoryEnum = pgEnum('cost_item_category', ['bbm', 'tol', 'makan', 'parkir', 'lainnya']);
 
 export const tripCostTemplates = pgTable("trip_cost_templates", {

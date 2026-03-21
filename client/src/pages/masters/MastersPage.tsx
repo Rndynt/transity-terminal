@@ -22,6 +22,7 @@ import {
   Tag,
   Package,
   Wallet,
+  Ticket,
 } from 'lucide-react';
 import StopsManager from '@/components/masters/StopsManager';
 import OutletsManager from '@/components/masters/OutletsManager';
@@ -35,6 +36,7 @@ import PriceRulesManager from '@/components/masters/PriceRulesManager';
 import CargoTypesManager from '@/components/masters/CargoTypesManager';
 import CargoRatesManager from '@/components/masters/CargoRatesManager';
 import TripCostTemplatesManager from '@/components/masters/TripCostTemplatesManager';
+import PromosManager from '@/components/masters/PromosManager';
 import type { LucideIcon } from 'lucide-react';
 
 interface TabDef {
@@ -73,6 +75,7 @@ export default function MastersPage() {
     { id: 'cargo-types', label: 'Jenis Kargo', icon: Tag, component: CargoTypesManager },
     { id: 'cargo-rates', label: 'Tarif Kargo', icon: Package, component: CargoRatesManager },
     { id: 'cost-templates', label: 'Biaya Perjalanan', icon: Wallet, component: TripCostTemplatesManager },
+    { id: 'promos', label: 'Promo & Voucher', icon: Ticket, component: PromosManager },
   ];
 
   const activeTabDef = tabs.find((t) => t.id === activeTab) || tabs[0];

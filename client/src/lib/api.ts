@@ -292,6 +292,29 @@ export const manifestApi = {
   recordPrint: (tripId: string) => apiRequest('POST', `/api/trips/${tripId}/manifest/print`).then(res => res.json()),
 };
 
+// Promotions API
+export const promotionsApi = {
+  getAll: () => fetch('/api/promotions').then(res => res.json()),
+  getById: (id: string) => fetch(`/api/promotions/${id}`).then(res => res.json()),
+  create: (data: any) => apiRequest('POST', '/api/promotions', data).then(res => res.json()),
+  update: (id: string, data: any) => apiRequest('PATCH', `/api/promotions/${id}`, data).then(res => res.json()),
+  delete: (id: string) => apiRequest('DELETE', `/api/promotions/${id}`),
+  validate: (data: { code: string; subtotal: number; channel?: string; tripId?: string; patternId?: string }) =>
+    apiRequest('POST', '/api/promos/validate', data).then(res => res.json()),
+};
+
+// Vouchers API
+export const vouchersApi = {
+  getAll: (promoId?: string) => {
+    const qs = promoId ? `?promoId=${promoId}` : '';
+    return fetch(`/api/vouchers${qs}`).then(res => res.json());
+  },
+  generate: (data: { promoId: string; count: number; prefix?: string; assignedTo?: string }) =>
+    apiRequest('POST', '/api/vouchers/generate', data).then(res => res.json()),
+  revoke: (id: string) => apiRequest('PATCH', `/api/vouchers/${id}/revoke`).then(res => res.json()),
+  delete: (id: string) => apiRequest('DELETE', `/api/vouchers/${id}`),
+};
+
 // Seed API
 export const seedApi = {
   run: () => apiRequest('POST', '/api/seed').then(res => res.json())

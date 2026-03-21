@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { bookingsApi, pricingApi } from '@/lib/api';
+import { bookingsApi, pricingApi, promotionsApi } from '@/lib/api';
 import type { BookingFlowState, BookingStep, CreateBookingRequest } from '@/types';
 
 const BOOKING_STEPS: BookingStep[] = [
@@ -227,6 +227,54 @@ export function useBookingFlow() {
     }
   }, [toast, calculateTotalAmount, validateBookingData]);
 
+  const applyPromoCode = useCallback(async (code: string): Promise<void> => {
+    if (!code.trim()) {
+      setState(current => ({
+        ...current,
+        promoCode: undefined,
+        discountAmount: undefined,
+        promoValidation: undefined,
+      }));
+      return;
+    }
+
+    const s = stateRef.current;
+    if (!s.trip?.id || s.originSeq === undefined || s.destinationSeq === undefined) {
+      throw new Error('Pilih trip dan rute terlebih dahulu');
+    }
+
+    const subtotal = await calculateTotalAmount();
+    const trip = s.trip as any;
+
+    const result = await promotionsApi.validate({
+      code: code.trim(),
+      subtotal,
+      channel: 'CSO',
+      tripId: s.trip.id,
+      patternId: trip.patternId || undefined,
+    });
+
+    setState(current => ({
+      ...current,
+      promoCode: result.valid ? code.trim().toUpperCase() : undefined,
+      discountAmount: result.valid ? result.discountAmount : undefined,
+      promoValidation: result,
+    }));
+
+    if (!result.valid) {
+      throw new Error(result.error || 'Kode promo tidak valid');
+    }
+  }, [calculateTotalAmount]);
+
+  const clearPromoCode = useCallback(() => {
+    setState(current => ({
+      ...current,
+      promoCode: undefined,
+      discountAmount: undefined,
+      promoValidation: undefined,
+    }));
+  }, []);
+
   const createBooking = useCallback(async (overrides?: { passengers?: any[]; payment?: any }): Promise<{ booking: any; printPayload: any }> => {
     const s = { ...stateRef.current, ...overrides };
     const validationErrors = validateBookingData(overrides);
@@ -248,7 +296,9 @@ export function useBookingFlow() {
 
     setLoading(true);
     try {
-      const totalAmount = await calculateTotalAmount();
+      const subtotal = await calculateTotalAmount();
+      const discount = s.discountAmount || 0;
+      const totalAmount = subtotal - discount;
       
       if (s.payment && s.payment.amount < totalAmount) {
         throw new Error(`Payment amount (${s.payment.amount}) is less than total amount (${totalAmount})`);
@@ -264,6 +314,7 @@ export function useBookingFlow() {
         totalAmount: totalAmount,
         channel: 'CSO',
         createdBy: 'CSO User',
+        promoCode: s.promoCode || undefined,
         passengers: s.passengers.map((passenger: any, index: number) => ({
           fullName: passenger.fullName,
           phone: passenger.phone || undefined,
@@ -320,6 +371,8 @@ export function useBookingFlow() {
     createBooking,
     createPendingBooking,
     resetFlow,
-    calculateTotalAmount
+    calculateTotalAmount,
+    applyPromoCode,
+    clearPromoCode,
   };
 }

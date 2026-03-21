@@ -164,6 +164,11 @@ function BookingDetailModal({
                 <div>
                   <p className="text-muted-foreground">Total</p>
                   <p className="font-semibold text-emerald-700 mt-0.5">{fmt(detail.totalAmount ?? 0)}</p>
+                  {detail.discountAmount && parseFloat(String(detail.discountAmount)) > 0 && (
+                    <p className="text-xs text-orange-600 mt-0.5" data-testid="text-discount-detail">
+                      Diskon: -{fmt(detail.discountAmount)} {detail.voucherCode ? `(${detail.voucherCode})` : ''}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-muted-foreground">Dibuat</p>

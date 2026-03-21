@@ -45,6 +45,14 @@ plan/              → Dokumentasi teknis fitur
 
 ## Recent Changes
 
+**2026-03-21 — Promo & Voucher System**
+- **Database**: `promotions` table (code, type, discountValue, scope, validity, usage limits) + `vouchers` table (individual codes linked to promos)
+- **Backend**: `PromosService` (validate, apply, generate vouchers), `PromosController` (REST endpoints), integrated into `BookingsService.createBooking` with `promoCode` support
+- **Master Data UI**: `PromosManager.tsx` — CRUD promos with inline voucher generation/revocation, added "Promo & Voucher" tab in MastersPage
+- **CSO Booking Flow**: Promo input in PassengerForm payment section, discount breakdown display, promo state cleared on context changes (outlet/trip/route change)
+- **Booking Detail**: Discount amount + voucher code shown in AllBookingsPage detail modal
+- **Schema**: `insertPromotionSchema` coerces date strings to Date objects; `discountAmount`/`promoId`/`voucherCode` columns on bookings table
+
 **2026-03-21 — Critical Bug Fixes & UI Standardization**
 - **Transaction Safety**: All multi-table writes in BookingsService now wrapped in `db.transaction()` (createBooking, releasePendingBooking, cleanupExpiredPendingBookings)
 - **Holds Service Rewrite**: Removed in-memory Maps, all hold state is now DB-only; errors propagate correctly (no more swallowed catch blocks); WebSocket events only emitted on successful DB operations

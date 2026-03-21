@@ -3,6 +3,7 @@ import { InsertBooking, Booking, InsertPassenger, InsertPayment, InsertPrintJob 
 import { HoldsService } from "../holds/holds.service";
 import { DeterministicBookingService } from "./deterministicBooking.service";
 import { PricingService } from "../pricing/pricing.service";
+import { PromosService } from "../promos/promos.service";
 import { PrintService } from "../printing/print.service";
 import { db } from "../../db";
 import { bookings as bookingsTable, seatHolds, seatInventory } from "@shared/schema";
@@ -14,12 +15,14 @@ export class BookingsService {
   private holdsService: HoldsService;
   private deterministicService: DeterministicBookingService;
   private pricingService: PricingService;
+  private promosService: PromosService;
   private printService: PrintService;
 
   constructor(private storage: IStorage) {
     this.holdsService = new HoldsService();
     this.deterministicService = new DeterministicBookingService(storage);
     this.pricingService = new PricingService(storage);
+    this.promosService = new PromosService(storage);
     this.printService = new PrintService();
   }
 
@@ -90,7 +93,8 @@ export class BookingsService {
     bookingData: InsertBooking,
     passengers: { fullName: string; phone?: string; idNumber?: string; seatNo: string }[],
     payment: { method: 'cash' | 'qr' | 'ewallet' | 'bank'; amount: number },
-    idempotencyKey?: string
+    idempotencyKey?: string,
+    promoCode?: string
   ): Promise<{ booking: Booking; printPayload: any }> {
     
     await this.validateBoardingAlightingRules(
@@ -106,9 +110,7 @@ export class BookingsService {
 
     const operatorId = bookingData.createdBy || 'default-operator';
 
-    // Validate holds from DATABASE (not in-memory)
     for (const passenger of passengers) {
-      // Check if seat has valid hold in database
       const [holdRecord] = await db
         .select()
         .from(seatHolds)
@@ -124,7 +126,6 @@ export class BookingsService {
         throw new Error(`Seat ${passenger.seatNo} is not held or hold has expired`);
       }
 
-      // Verify all required legs are covered by this hold
       const holdLegs = holdRecord.legIndexes as number[];
       const allLegsCovered = legIndexes.every(leg => holdLegs.includes(leg));
       if (!allLegsCovered) {
@@ -132,7 +133,6 @@ export class BookingsService {
       }
     }
 
-    // Calculate pricing
     let fareQuote: Awaited<ReturnType<typeof this.pricingService.quoteFare>>;
     try {
       fareQuote = await this.pricingService.quoteFare(
@@ -147,19 +147,47 @@ export class BookingsService {
       throw err;
     }
 
-    const expectedTotal = Number(fareQuote.total) * passengers.length;
+    const subtotal = Number(fareQuote.total) * passengers.length;
+
+    let discountAmount = 0;
+    let promoId: string | undefined;
+    let voucherCode: string | undefined;
+    let promoValidation: any;
+
+    if (promoCode) {
+      const trip = await this.storage.getTripById(bookingData.tripId);
+      promoValidation = await this.promosService.validateAndCalculateDiscount(
+        promoCode,
+        subtotal,
+        bookingData.channel || undefined,
+        bookingData.tripId,
+        trip?.patternId || undefined
+      );
+      if (!promoValidation.valid) {
+        throw new Error(promoValidation.error || 'Kode promo tidak valid');
+      }
+      discountAmount = promoValidation.discountAmount;
+      promoId = promoValidation.promotion?.id;
+      if (promoValidation.voucher) {
+        voucherCode = promoValidation.voucher.code;
+      }
+    }
+
+    const expectedTotal = subtotal - discountAmount;
     const paymentAmount = Number(payment.amount);
     if (Math.abs(paymentAmount - expectedTotal) > 0.01) {
       throw new Error(`Payment amount ${paymentAmount} does not match expected total ${expectedTotal}`);
     }
 
-    // Wrap entire booking creation in a single transaction for atomicity
     const booking = await db.transaction(async (tx) => {
       const newBooking = await this.storage.createBooking({
         ...bookingData,
         bookingCode: generateBookingCode(),
         status: 'paid',
-        totalAmount: expectedTotal.toString()
+        totalAmount: expectedTotal.toString(),
+        discountAmount: discountAmount.toString(),
+        promoId: promoId || null,
+        voucherCode: voucherCode || null,
       });
 
       for (const passengerData of passengers) {
@@ -202,6 +230,10 @@ export class BookingsService {
 
       return newBooking;
     });
+
+    if (promoId && promoValidation) {
+      await this.promosService.markUsed(promoId, promoValidation.voucher?.id, booking.id);
+    }
 
     const bookingWithRelations = await this.getBookingById(booking.id);
     const printPayload = await this.printService.generatePrintPayload(booking.id);

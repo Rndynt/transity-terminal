@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, CreditCard, Clock, Loader2, Banknote, QrCode, Wallet, Building2 } from 'lucide-react';
+import { Check, CreditCard, Clock, Loader2, Banknote, QrCode, Wallet, Building2, Tag, X, AlertCircle } from 'lucide-react';
 
 interface PassengerData { fullName: string; phone?: string; idNumber?: string; seatNo: string }
 
@@ -32,6 +32,10 @@ interface PassengerFormProps {
   payment?: { method: string; amount: number } | null;
   onBack: () => void;
   loading?: boolean;
+  promoCode?: string;
+  discountAmount?: number;
+  onApplyPromo?: (code: string) => Promise<void>;
+  onClearPromo?: () => void;
 }
 
 const PAYMENT_METHODS = [
@@ -54,12 +58,21 @@ export default function PassengerForm({
   onPaymentUpdate,
   payment,
   onBack,
-  loading = false
+  loading = false,
+  promoCode,
+  discountAmount = 0,
+  onApplyPromo,
+  onClearPromo,
 }: PassengerFormProps) {
   const [formData, setFormData] = useState<Array<{ fullName: string; phone: string; idNumber: string; seatNo: string }>>([]);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [selectedMethod, setSelectedMethod] = useState<string>(payment?.method || '');
   const [cashReceived, setCashReceived] = useState<string>('');
+  const [promoInput, setPromoInput] = useState('');
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoError, setPromoError] = useState('');
+
+  const finalAmount = totalAmount - discountAmount;
 
   useEffect(() => {
     setFormData(prev => {
@@ -100,7 +113,7 @@ export default function PassengerForm({
 
   const handleMethodSelect = (method: string) => {
     setSelectedMethod(method);
-    onPaymentUpdate({ method, amount: totalAmount });
+    onPaymentUpdate({ method, amount: finalAmount });
   };
 
   const filledCount = formData.filter(p => p.fullName.trim().length >= 3).length;
@@ -108,12 +121,12 @@ export default function PassengerForm({
 
   const isPaymentValid = () => {
     if (!selectedMethod) return false;
-    if (selectedMethod === 'cash') return parseFloat(cashReceived) >= totalAmount;
+    if (selectedMethod === 'cash') return parseFloat(cashReceived) >= finalAmount;
     return true;
   };
 
   const cashChange = selectedMethod === 'cash' && cashReceived
-    ? Math.max(0, parseFloat(cashReceived) - totalAmount)
+    ? Math.max(0, parseFloat(cashReceived) - finalAmount)
     : 0;
 
   const handleBookOnly = () => {
@@ -125,7 +138,27 @@ export default function PassengerForm({
   const handlePayAndPrint = () => {
     if (!isPassengerValid || !isPaymentValid()) return;
     onPassengersUpdate(formData);
-    onPay(formData, { method: selectedMethod, amount: totalAmount });
+    onPay(formData, { method: selectedMethod, amount: finalAmount });
+  };
+
+  const handleApplyPromo = async () => {
+    if (!promoInput.trim() || !onApplyPromo) return;
+    setPromoLoading(true);
+    setPromoError('');
+    try {
+      await onApplyPromo(promoInput.trim());
+      setPromoInput('');
+    } catch (err: any) {
+      setPromoError(err.message || 'Kode promo tidak valid');
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
+  const handleClearPromo = () => {
+    onClearPromo?.();
+    setPromoInput('');
+    setPromoError('');
   };
 
   const pricePerSeat = selectedSeats.length > 0 ? Math.round(totalAmount / selectedSeats.length) : 0;
@@ -240,6 +273,50 @@ export default function PassengerForm({
           <span className="text-[10px] text-gray-400">{selectedSeats.length} penumpang</span>
         </div>
 
+        {onApplyPromo && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold flex items-center gap-1">
+              <Tag className="w-3 h-3" /> Kode Promo / Voucher
+            </p>
+            {promoCode ? (
+              <div className="flex items-center justify-between px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <div className="flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="font-mono font-bold text-xs text-emerald-700" data-testid="text-applied-promo-cso">{promoCode}</span>
+                  <span className="text-[10px] text-emerald-600 font-semibold">-{fmt(discountAmount)}</span>
+                </div>
+                <button onClick={handleClearPromo} className="p-0.5 hover:bg-emerald-100 rounded" data-testid="btn-clear-promo-cso">
+                  <X className="w-3.5 h-3.5 text-emerald-600" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-1.5">
+                <input
+                  value={promoInput}
+                  onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError(''); }}
+                  placeholder="Masukkan kode"
+                  className="flex-1 h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-xs font-mono text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+                  onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
+                  data-testid="input-promo-code-cso"
+                />
+                <button
+                  onClick={handleApplyPromo}
+                  disabled={!promoInput.trim() || promoLoading}
+                  className="h-8 px-3 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                  data-testid="btn-apply-promo-cso"
+                >
+                  {promoLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Pakai'}
+                </button>
+              </div>
+            )}
+            {promoError && (
+              <div className="flex items-center gap-1 text-[10px] text-red-500" data-testid="text-promo-error-cso">
+                <AlertCircle className="w-3 h-3" /> {promoError}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="px-3 py-2 flex items-center justify-between border-b border-gray-100">
             <span className="text-xs text-gray-500">Harga per kursi</span>
@@ -249,9 +326,21 @@ export default function PassengerForm({
             <span className="text-xs text-gray-500">Jumlah kursi</span>
             <span className="text-xs font-semibold text-gray-700">{selectedSeats.length} kursi</span>
           </div>
+          {discountAmount > 0 && (
+            <>
+              <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-100">
+                <span className="text-xs text-gray-500">Subtotal</span>
+                <span className="text-xs font-semibold text-gray-400 font-mono">{fmt(totalAmount)}</span>
+              </div>
+              <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-100 bg-emerald-50/50">
+                <span className="text-xs text-emerald-600">Diskon</span>
+                <span className="text-xs font-semibold text-emerald-600 font-mono">-{fmt(discountAmount)}</span>
+              </div>
+            </>
+          )}
           <div className="px-3 py-2.5 flex items-center justify-between bg-blue-50">
             <span className="text-sm font-bold text-gray-700">Total</span>
-            <span className="text-lg font-black text-blue-700 font-mono">{fmt(totalAmount)}</span>
+            <span className="text-lg font-black text-blue-700 font-mono" data-testid="text-final-total">{fmt(finalAmount)}</span>
           </div>
         </div>
 
@@ -295,7 +384,7 @@ export default function PassengerForm({
                   data-testid="input-cash"
                 />
               </div>
-              {parseFloat(cashReceived) >= totalAmount && (
+              {parseFloat(cashReceived) >= finalAmount && (
                 <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-center">
                   <span className="text-[10px] text-gray-500 block">Kembalian</span>
                   <span className="text-lg font-black text-emerald-600 font-mono">{fmt(cashChange)}</span>
@@ -303,7 +392,7 @@ export default function PassengerForm({
               )}
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {generateCashPresets(totalAmount).map((preset) => (
+              {generateCashPresets(finalAmount).map((preset) => (
                 <button
                   key={preset}
                   type="button"
@@ -320,9 +409,9 @@ export default function PassengerForm({
               ))}
               <button
                 type="button"
-                onClick={() => setCashReceived(String(totalAmount))}
+                onClick={() => setCashReceived(String(finalAmount))}
                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                  cashReceived === String(totalAmount)
+                  cashReceived === String(finalAmount)
                     ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
                     : 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100 hover:border-emerald-300'
                 }`}

@@ -15,6 +15,7 @@ const createBookingSchema = z.object({
   channel: z.enum(['CSO', 'WEB', 'APP', 'OTA']).default('CSO'),
   currency: z.string().default('IDR'),
   createdBy: z.string().optional(),
+  promoCode: z.string().optional(),
   passengers: z.array(z.object({
     fullName: z.string(),
     phone: z.string().optional(),
@@ -79,7 +80,7 @@ export class BookingsController {
       
       // Validate request data with enhanced validation
       const validatedData = createBookingSchema.parse(req.body);
-      const { passengers, payment, ...bookingData } = validatedData;
+      const { passengers, payment, promoCode, ...bookingData } = validatedData;
       
       // Enhanced validation
       if (validatedData.totalAmount <= 0) {
@@ -126,7 +127,8 @@ export class BookingsController {
         bookingDataWithStringAmount,
         passengers,
         payment,
-        idempotencyKey
+        idempotencyKey,
+        promoCode
       );
       
       res.status(201).json(result);
@@ -153,6 +155,14 @@ export class BookingsController {
         return res.status(409).json({
           error: 'Seat already booked',
           code: 'SEAT_CONFLICT',
+          details: error.message
+        });
+      }
+
+      if (error.message.includes('promo') || error.message.includes('Promo') || error.message.includes('voucher') || error.message.includes('Voucher') || error.message.includes('Kode promo') || error.message.includes('Kuota') || error.message.includes('Minimum')) {
+        return res.status(400).json({
+          error: 'Promo validation failed',
+          code: 'PROMO_INVALID',
           details: error.message
         });
       }

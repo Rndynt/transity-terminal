@@ -79,6 +79,8 @@ export default function CsoPage() {
     createPendingBooking,
     resetFlow,
     calculateTotalAmount,
+    applyPromoCode,
+    clearPromoCode,
     loading: bookingLoading
   } = useBookingFlow();
 
@@ -109,6 +111,7 @@ export default function CsoPage() {
       passengers: [],
       payment: undefined
     });
+    clearPromoCode();
     setSelectedCsoTrip(undefined);
     setPhase('select');
     setMobilePanel('left');
@@ -122,6 +125,7 @@ export default function CsoPage() {
 
   const handleTripSelect = async (csoTrip: CsoAvailableTrip) => {
     setSelectedCsoTrip(csoTrip);
+    clearPromoCode();
     updateState({
       trip: {
         id: csoTrip.tripId || '',
@@ -182,6 +186,7 @@ export default function CsoPage() {
   const handleBackToSelect = () => {
     setPhase('select');
     setMobilePanel('left');
+    clearPromoCode();
     updateState({ selectedSeats: [], passengers: [], payment: undefined });
     releaseAllHolds();
   };
@@ -203,12 +208,11 @@ export default function CsoPage() {
   const handlePaymentUpdate = (payment: any) => updateState({ payment });
 
   const handlePayWithData = async (passengers: any[], payment: { method: string; amount: number }) => {
-    const paymentWithTotal = { ...payment, amount: totalAmount };
     updatePassengers(passengers);
-    updateState({ payment: paymentWithTotal });
+    updateState({ payment });
     setIsProcessing(true);
     try {
-      const result = await createBooking({ passengers, payment: paymentWithTotal });
+      const result = await createBooking({ passengers, payment });
       setBookingResult(result);
       setShowPrint(true);
     } catch (error) {
@@ -562,6 +566,10 @@ export default function CsoPage() {
                       payment={state.payment}
                       onBack={handleBackToSelect}
                       loading={isProcessing}
+                      promoCode={state.promoCode}
+                      discountAmount={state.discountAmount || 0}
+                      onApplyPromo={applyPromoCode}
+                      onClearPromo={clearPromoCode}
                     />
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-gray-300 py-12 md:py-0">

@@ -8,6 +8,7 @@ import {
   insertTripStopTimeSchema, insertPriceRuleSchema, insertBookingSchema,
   insertPassengerSchema, insertPaymentSchema, insertCargoShipmentSchema,
   insertTripCostTemplateSchema, insertTripCostItemSchema,
+  insertPromotionSchema, insertVoucherSchema,
   type Stop, type Outlet, type Vehicle, type Layout, type TripPattern, 
   type PatternStop, type TripBase, type Trip, type TripWithDetails, type TripStopTime, type TripLeg, 
   type SeatInventory, type PriceRule, type Booking, type Passenger, 
@@ -20,7 +21,9 @@ import {
   type InsertCargoType, type InsertCargoRate,
   type TripCostTemplate, type InsertTripCostTemplate,
   type TripCostItem, type InsertTripCostItem,
-  type CsoAvailableTrip
+  type CsoAvailableTrip,
+  type Promotion, type InsertPromotion,
+  type Voucher, type InsertVoucher
 } from "@shared/schema";
 
 export interface ManifestEntry {
@@ -230,6 +233,23 @@ export interface IStorage {
   updateTripCostItem(id: string, data: Partial<InsertTripCostItem>): Promise<TripCostItem>;
   deleteTripCostItem(id: string): Promise<void>;
 
+  // Promotions
+  getPromotions(): Promise<Promotion[]>;
+  getPromotionById(id: string): Promise<Promotion | undefined>;
+  getPromotionByCode(code: string): Promise<Promotion | undefined>;
+  createPromotion(data: InsertPromotion): Promise<Promotion>;
+  updatePromotion(id: string, data: Partial<InsertPromotion>): Promise<Promotion>;
+  deletePromotion(id: string): Promise<void>;
+  incrementPromoUsage(id: string): Promise<void>;
+
+  // Vouchers
+  getVouchers(promoId?: string): Promise<Voucher[]>;
+  getVoucherById(id: string): Promise<Voucher | undefined>;
+  getVoucherByCode(code: string): Promise<Voucher | undefined>;
+  createVoucher(data: InsertVoucher): Promise<Voucher>;
+  updateVoucher(id: string, data: Partial<InsertVoucher>): Promise<Voucher>;
+  deleteVoucher(id: string): Promise<void>;
+
   // Utility
   tripHasBookings(tripId: string): Promise<boolean>;
   getTripByBaseAndDate(baseId: string, serviceDate: string): Promise<Trip | undefined>;
@@ -253,6 +273,7 @@ import { BookingsController } from "./modules/bookings/bookings.controller";
 import { PaymentsController } from "./modules/payments/payments.controller";
 import { CargoController } from "./modules/cargo/cargo.controller";
 import { AppController } from "./modules/app/app.controller";
+import { PromosController } from "./modules/promos/promos.controller";
 import { appAuthMiddleware, optionalAuthMiddleware } from "./modules/app/app.auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -499,6 +520,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await storage.deleteTripCostItem(req.params.id);
     res.status(204).end();
   }));
+
+  // Promotions & Vouchers
+  const promosController = new PromosController(storage);
+  app.get('/api/promotions', asyncHandler(promosController.getPromotions.bind(promosController)));
+  app.get('/api/promotions/:id', asyncHandler(promosController.getPromotionById.bind(promosController)));
+  app.post('/api/promotions', asyncHandler(promosController.createPromotion.bind(promosController)));
+  app.patch('/api/promotions/:id', asyncHandler(promosController.updatePromotion.bind(promosController)));
+  app.delete('/api/promotions/:id', asyncHandler(promosController.deletePromotion.bind(promosController)));
+  app.get('/api/vouchers', asyncHandler(promosController.getVouchers.bind(promosController)));
+  app.post('/api/vouchers/generate', asyncHandler(promosController.generateVouchers.bind(promosController)));
+  app.patch('/api/vouchers/:id/revoke', asyncHandler(promosController.revokeVoucher.bind(promosController)));
+  app.delete('/api/vouchers/:id', asyncHandler(promosController.deleteVoucher.bind(promosController)));
+  app.post('/api/promos/validate', asyncHandler(promosController.validatePromoCode.bind(promosController)));
 
   // Seed data
   app.post('/api/seed', asyncHandler(async (req: any, res: any) => {
