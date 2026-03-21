@@ -17,11 +17,11 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import {
   List, Search, X, Loader2, RefreshCw,
-  ArrowRight, User, CreditCard, Phone, Hash,
-  Calendar, Ticket, MapPin, Armchair, ChevronDown, ChevronUp,
+  ArrowRight, User,
+  Calendar, Ticket, MapPin, ChevronDown, ChevronUp,
   Bus, Package, ExternalLink, UserMinus, History
 } from 'lucide-react';
-import PassengerActions from '@/components/cso/PassengerActions';
+import PassengerCard from '@/components/cso/PassengerCard';
 
 type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'canceled' | 'refunded' | 'unseated';
 type BookingChannel = 'CSO' | 'WEB' | 'APP' | 'OTA';
@@ -204,11 +204,18 @@ function BookingDetailModal({
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <p className="text-muted-foreground">Channel</p>
-                  <p className="font-medium mt-0.5">{detail.channel ?? '—'}</p>
+                  <p className="font-medium mt-0.5">
+                    {detail.channel ? <ChannelBadge channel={detail.channel} /> : '—'}
+                  </p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Total</p>
                   <p className="font-semibold text-emerald-700 mt-0.5">{fmt(detail.totalAmount ?? 0)}</p>
+                  {detail.discountAmount && parseFloat(String(detail.discountAmount)) > 0 && (
+                    <p className="text-[11px] text-orange-600 mt-0.5">
+                      Diskon: -{fmt(detail.discountAmount)} {detail.voucherCode ? `(${detail.voucherCode})` : ''}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-muted-foreground">Dibuat</p>
@@ -273,67 +280,32 @@ function BookingDetailModal({
                   {passengersOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                 </button>
                 {passengersOpen && (
-                  <div className="divide-y">
-                    {detail.passengers.map((p: any, idx: number) => {
-                      const isActive = p.ticketStatus !== 'unseated' && p.ticketStatus !== 'canceled';
-                      return (
-                        <div key={p.id ?? idx} className="px-4 py-3 space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className={`text-sm font-medium ${!isActive ? 'line-through text-muted-foreground' : ''}`}>{p.fullName}</span>
-                            <div className="flex items-center gap-2">
-                              {p.ticketStatus && p.ticketStatus !== 'active' && (
-                                <StatusBadge status={p.ticketStatus} />
-                              )}
-                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Armchair className="w-3 h-3" />
-                                {p.seatNo}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                            {p.phone && (
-                              <span className="flex items-center gap-1">
-                                <Phone className="w-3 h-3" /> {p.phone}
-                              </span>
-                            )}
-                            {p.idNumber && (
-                              <span className="flex items-center gap-1">
-                                <CreditCard className="w-3 h-3" /> {p.idNumber}
-                              </span>
-                            )}
-                            {p.ticketNumber && (
-                              <span className="flex items-center gap-1">
-                                <Hash className="w-3 h-3" /> {p.ticketNumber}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs font-medium text-emerald-700">{fmt(p.fareAmount ?? 0)}</p>
-
-                          <div className="pt-1">
-                            <PassengerActions
-                              passenger={{
-                                id: p.id,
-                                fullName: p.fullName,
-                                seatNo: p.seatNo,
-                                ticketNumber: p.ticketNumber,
-                                ticketStatus: p.ticketStatus ?? 'active',
-                                bookingCode: detail.bookingCode ?? detail.id.slice(0, 8).toUpperCase(),
-                                bookingId: detail.id,
-                                originStopName: detail.originStop?.name,
-                                destinationStopName: detail.destinationStop?.name,
-                              }}
-                              onClose={onClose}
-                              onAssignInCso={
-                                detail.tripId && detail.outletId && detail.tripDetails?.serviceDate && detail.originStopId && detail.destinationStopId && onAssignInCso
-                                  ? (passengerId, passengerName, bookingCode, ticketNumber) =>
-                                    onAssignInCso(detail.tripId, detail.outletId!, detail.tripDetails.serviceDate, detail.originStopId, detail.destinationStopId, passengerId, passengerName, bookingCode, ticketNumber)
-                                  : undefined
-                              }
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="p-3 space-y-3">
+                    {detail.passengers.map((p: any, idx: number) => (
+                      <PassengerCard
+                        key={p.id ?? idx}
+                        passenger={p}
+                        showHeader={false}
+                        actionTarget={{
+                          id: p.id,
+                          fullName: p.fullName,
+                          seatNo: p.seatNo,
+                          ticketNumber: p.ticketNumber,
+                          ticketStatus: p.ticketStatus ?? 'active',
+                          bookingCode: detail.bookingCode ?? detail.id.slice(0, 8).toUpperCase(),
+                          bookingId: detail.id,
+                          originStopName: detail.originStop?.name,
+                          destinationStopName: detail.destinationStop?.name,
+                        }}
+                        onClose={onClose}
+                        onAssignInCso={
+                          detail.tripId && detail.outletId && detail.tripDetails?.serviceDate && detail.originStopId && detail.destinationStopId && onAssignInCso
+                            ? (passengerId, passengerName, bookingCode, ticketNumber) =>
+                              onAssignInCso(detail.tripId, detail.outletId!, detail.tripDetails.serviceDate, detail.originStopId, detail.destinationStopId, passengerId, passengerName, bookingCode, ticketNumber)
+                            : undefined
+                        }
+                      />
+                    ))}
                   </div>
                 )}
 
