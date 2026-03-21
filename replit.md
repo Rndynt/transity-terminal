@@ -57,6 +57,14 @@ plan/              → Dokumentasi teknis fitur
 - **Endpoints**: `/api/auth/sign-in/email`, `/api/auth/sign-up/email`, `/api/auth/sign-out`, `/api/auth/session`, `/api/auth/me`
 - **Protected Routes**: Semua route CSO dashboard wrapped dalam `ProtectedRoute` — redirect ke `/login` jika belum auth
 
+## Reports Module
+- **Shared Components**: `client/src/components/reports/` — ReportFilters (date range + presets + outlet/channel/route selectors), SummaryCards (metric cards grid), ReportPageLayout (page wrapper with loading state)
+- **Backend**: `server/modules/reports/reports.service.ts` (SQL aggregation queries) + `reports.controller.ts` (REST handlers)
+- **API Endpoints**: `/api/reports/filter-options`, `/api/reports/revenue`, `/api/reports/sales`, `/api/reports/trip-profitability`, `/api/reports/load-factor`
+- **Pages**: Revenue (`/reports/revenue`), Sales (`/reports/sales`), Trip Profitability (`/reports/trip-profitability`), Load Factor (`/reports/load-factor`)
+- **Sidebar**: "LAPORAN" section with 4 menu items between OPERASIONAL and MASTER DATA
+- **Plan Doc**: `plan/reports-plan.md` — full checklist for all 12 planned reports (P1 done, P2/P3 pending)
+
 ## Recent Changes
 
 **2026-03-21 — Realmio Auth Integration**

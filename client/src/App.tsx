@@ -13,6 +13,10 @@ import ManifestPage from "@/pages/manifest/ManifestPage";
 import AllBookingsPage from "@/pages/bookings/AllBookingsPage";
 import SpjPage from "@/pages/spj/SpjPage";
 import SchedulePage from "@/pages/schedule/SchedulePage";
+import RevenueReportPage from "@/pages/reports/RevenueReportPage";
+import SalesReportPage from "@/pages/reports/SalesReportPage";
+import TripProfitabilityPage from "@/pages/reports/TripProfitabilityPage";
+import LoadFactorPage from "@/pages/reports/LoadFactorPage";
 import LoginPage from "@/pages/auth/LoginPage";
 import { Loader2 } from "lucide-react";
 import { useLocation, Redirect } from "wouter";
@@ -54,6 +58,10 @@ function Router() {
               <Route path="/schedule" component={SchedulePage} />
               <Route path="/bookings" component={AllBookingsPage} />
               <Route path="/spj" component={SpjPage} />
+              <Route path="/reports/revenue" component={RevenueReportPage} />
+              <Route path="/reports/sales" component={SalesReportPage} />
+              <Route path="/reports/trip-profitability" component={TripProfitabilityPage} />
+              <Route path="/reports/load-factor" component={LoadFactorPage} />
               <Route path="/masters" component={MastersPage} />
               <Route component={NotFound} />
             </Switch>

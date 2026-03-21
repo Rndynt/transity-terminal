@@ -638,6 +638,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/spj/cost-lines/:id', asyncHandler(spjController.deleteCostLine.bind(spjController)));
   app.get('/api/spj/trip/:tripId/profit', asyncHandler(spjController.getTripProfit.bind(spjController)));
 
+  // Reports routes
+  const { ReportsController } = await import('./modules/reports/reports.controller');
+  const reportsController = new ReportsController();
+  app.get('/api/reports/filter-options', asyncHandler(reportsController.getFilterOptions.bind(reportsController)));
+  app.get('/api/reports/revenue', asyncHandler(reportsController.getRevenue.bind(reportsController)));
+  app.get('/api/reports/sales', asyncHandler(reportsController.getSales.bind(reportsController)));
+  app.get('/api/reports/trip-profitability', asyncHandler(reportsController.getTripProfitability.bind(reportsController)));
+  app.get('/api/reports/load-factor', asyncHandler(reportsController.getLoadFactor.bind(reportsController)));
+
   // Seed data
   app.post('/api/seed', asyncHandler(async (req: any, res: any) => {
     const { seedData } = await import('./seed');

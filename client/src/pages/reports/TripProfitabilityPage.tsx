@@ -1,0 +1,129 @@
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DollarSign, TrendingUp, TrendingDown, Bus } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import ReportFilters, { type ReportFilterValues } from '@/components/reports/ReportFilters';
+import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
+import ReportPageLayout from '@/components/reports/ReportPageLayout';
+import { fmtCurrency } from '@/lib/constants';
+import { Badge } from '@/components/ui/badge';
+
+function buildQuery(f: ReportFilterValues) {
+  const params = new URLSearchParams({ dateFrom: f.dateFrom, dateTo: f.dateTo });
+  if (f.patternId) params.set('patternId', f.patternId);
+  return params.toString();
+}
+
+export default function TripProfitabilityPage() {
+  const today = new Date().toISOString().split('T')[0];
+  const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
+  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['/api/reports/trip-profitability', filters],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/trip-profitability?${buildQuery(filters)}`);
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json();
+    },
+  });
+
+  const summary = data?.summary;
+  const trips = data?.trips || [];
+
+  const totalRevenue = Number(summary?.total_revenue || 0);
+  const totalCost = Number(summary?.total_cost || 0);
+  const totalProfit = Number(summary?.total_profit || 0);
+  const marginPct = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0';
+
+  const top10 = [...trips]
+    .sort((a: any, b: any) => Number(b.profit) - Number(a.profit))
+    .slice(0, 10)
+    .map((t: any) => ({
+      name: `${(t.route_code || '').slice(0, 8)} ${t.service_date?.slice(5)}`,
+      profit: Number(t.profit),
+      revenue: Number(t.total_revenue),
+      cost: Number(t.actual_cost),
+    }));
+
+  return (
+    <ReportPageLayout title="Laba Rugi per Trip" description="Analisis profitabilitas setiap trip berdasarkan revenue vs biaya operasional" isLoading={isLoading}>
+      <ReportFilters value={filters} onChange={setFilters} showOutlet={false} showChannel={false} />
+
+      <SummaryCardsGrid items={[
+        { label: 'Total Revenue', value: fmtCurrency(totalRevenue), icon: DollarSign, iconBg: 'bg-green-100', iconColor: 'text-green-600' },
+        { label: 'Total Biaya', value: fmtCurrency(totalCost), icon: TrendingDown, iconBg: 'bg-red-100', iconColor: 'text-red-600' },
+        { label: 'Total Laba', value: fmtCurrency(totalProfit), icon: TrendingUp, iconBg: totalProfit >= 0 ? 'bg-emerald-100' : 'bg-red-100', iconColor: totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600', subtitle: `Margin: ${marginPct}%` },
+        { label: 'Total Trip', value: Number(summary?.total_trips || 0).toLocaleString(), icon: Bus, iconBg: 'bg-blue-100', iconColor: 'text-blue-600' },
+      ]} />
+
+      {top10.length > 1 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Top 10 Trip (Laba Tertinggi)</CardTitle></CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={top10} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" fontSize={12} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <YAxis type="category" dataKey="name" fontSize={11} width={120} />
+                  <Tooltip formatter={(v: number) => fmtCurrency(v)} />
+                  <Bar dataKey="profit" name="Laba" fill="#16a34a" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Detail per Trip</CardTitle></CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead>Rute</TableHead>
+                  <TableHead>Supir</TableHead>
+                  <TableHead>Kendaraan</TableHead>
+                  <TableHead className="text-right">Pax</TableHead>
+                  <TableHead className="text-right">Revenue Tiket</TableHead>
+                  <TableHead className="text-right">Revenue Kargo</TableHead>
+                  <TableHead className="text-right">Biaya</TableHead>
+                  <TableHead className="text-right">Laba</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {trips.length > 0 ? trips.map((t: any) => {
+                  const profit = Number(t.profit);
+                  return (
+                    <TableRow key={t.trip_id}>
+                      <TableCell className="text-sm">{t.service_date}</TableCell>
+                      <TableCell className="font-medium text-sm">{t.route_name || '-'}</TableCell>
+                      <TableCell className="text-sm">{t.driver_name || '-'}</TableCell>
+                      <TableCell className="text-sm">{t.vehicle_plate || '-'}</TableCell>
+                      <TableCell className="text-right">{t.passenger_count}</TableCell>
+                      <TableCell className="text-right">{fmtCurrency(Number(t.ticket_revenue))}</TableCell>
+                      <TableCell className="text-right">{fmtCurrency(Number(t.cargo_revenue))}</TableCell>
+                      <TableCell className="text-right text-red-600">{fmtCurrency(Number(t.actual_cost))}</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={profit >= 0 ? 'default' : 'destructive'} className="font-mono">
+                          {fmtCurrency(profit)}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                }) : (
+                  <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground">Tidak ada data trip pada periode ini</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </ReportPageLayout>
+  );
+}
