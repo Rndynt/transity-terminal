@@ -376,7 +376,7 @@ export default function PromosManager() {
               </div>
 
               {expandedPromo === p.id && (
-                <VoucherSection promoId={p.id} promoCode={p.code} />
+                <VoucherSection promoId={p.id} promoCode={p.code} requireVoucher={p.requireVoucher ?? false} />
               )}
             </div>
           ))}
@@ -634,7 +634,7 @@ export default function PromosManager() {
   );
 }
 
-function VoucherSection({ promoId, promoCode }: { promoId: string; promoCode: string }) {
+function VoucherSection({ promoId, promoCode, requireVoucher }: { promoId: string; promoCode: string; requireVoucher: boolean }) {
   const { toast } = useToast();
   const [showGen, setShowGen] = useState(false);
   const [genForm, setGenForm] = useState({ count: '', prefix: '' });
@@ -718,14 +718,20 @@ function VoucherSection({ promoId, promoCode }: { promoId: string; promoCode: st
           <Ticket className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-medium">Voucher ({vouchers.length})</span>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setShowGen(!showGen)}
-          data-testid={`btn-gen-vouchers-${promoId}`}
-        >
-          <Plus className="w-3.5 h-3.5 mr-1" /> Generate
-        </Button>
+        {requireVoucher ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowGen(!showGen)}
+            data-testid={`btn-gen-vouchers-${promoId}`}
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" /> Generate
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground italic" data-testid={`voucher-disabled-hint-${promoId}`}>
+            Aktifkan "Perlu Voucher" untuk generate
+          </span>
+        )}
       </div>
 
       {showGen && (
