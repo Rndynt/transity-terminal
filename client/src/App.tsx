@@ -11,6 +11,7 @@ import CargoListPage from "@/pages/cargo/CargoListPage";
 import ManifestPage from "@/pages/manifest/ManifestPage";
 import AllBookingsPage from "@/pages/bookings/AllBookingsPage";
 import SpjPage from "@/pages/spj/SpjPage";
+import SchedulePage from "@/pages/schedule/SchedulePage";
 
 function Router() {
   return (
@@ -20,6 +21,7 @@ function Router() {
         <Route path="/cso" component={CsoPage} />
         <Route path="/cargo" component={CargoListPage} />
         <Route path="/manifest" component={ManifestPage} />
+        <Route path="/schedule" component={SchedulePage} />
         <Route path="/bookings" component={AllBookingsPage} />
         <Route path="/spj" component={SpjPage} />
         <Route path="/masters" component={MastersPage} />

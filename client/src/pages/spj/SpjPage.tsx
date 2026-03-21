@@ -14,7 +14,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import {
   ClipboardList, Search, Eye, CheckCircle, Trash2, ArrowLeft, Printer,
   User, Bus, MapPin, Calendar, FileText, Wallet, Plus, Pencil, X,
-  ArrowRight, CircleDollarSign, TrendingUp, ArrowUpDown, Banknote, Clock
+  ChevronLeft, ChevronRight, CircleDollarSign, TrendingUp, ArrowUpDown, Banknote, Clock
 } from 'lucide-react';
 import type { SpjWithDetails, SpjCostLine, TripWithDetails, TripPattern } from '@/types';
 
@@ -258,24 +258,34 @@ export default function SpjPage() {
             <DialogDescription>Pilih trip yang akan dibuatkan Surat Perintah Jalan.</DialogDescription>
           </DialogHeader>
 
-          <div className="flex items-center gap-3 py-2">
-            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => setCreateDate(addDays(createDate, -1))} data-testid="btn-prev-date-spj">
-              <ArrowLeft className="w-3.5 h-3.5" />
-            </Button>
-            <Input
-              type="date"
-              value={createDate}
-              onChange={e => setCreateDate(e.target.value)}
-              className="h-8 text-sm w-40 text-center"
-              data-testid="input-date-spj-create"
-            />
-            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => setCreateDate(addDays(createDate, 1))} data-testid="btn-next-date-spj">
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Button>
-            <div className="relative flex-1">
+          <div className="flex flex-col gap-3 py-2">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => setCreateDate(d => addDays(d, -1))} data-testid="btn-prev-date-spj">
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <div className="flex flex-col items-center min-w-[180px]">
+                <span className="text-sm font-semibold">
+                  {(() => { try { return new Date(createDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); } catch { return createDate; } })()}
+                </span>
+              </div>
+              <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => setCreateDate(d => addDays(d, 1))} data-testid="btn-next-date-spj">
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <Button variant="outline" size="sm" className="ml-2 h-8 text-xs" onClick={() => setCreateDate(todayStr())}>
+                Hari Ini
+              </Button>
+              <Input
+                type="date"
+                value={createDate}
+                onChange={e => setCreateDate(e.target.value)}
+                className="h-8 w-36 text-xs"
+                data-testid="input-date-spj-create"
+              />
+            </div>
+            <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
-                placeholder="Cari rute..."
+                placeholder="Cari rute, kendaraan..."
                 value={tripSearch}
                 onChange={e => setTripSearch(e.target.value)}
                 className="pl-8 h-8 text-sm"

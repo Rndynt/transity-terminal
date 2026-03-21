@@ -45,6 +45,16 @@ plan/              → Dokumentasi teknis fitur
 
 ## Recent Changes
 
+**2026-03-21 — Jadwal Harian (Unified Daily Schedule)**
+- **New page**: `client/src/pages/schedule/SchedulePage.tsx` — unified operational hub at `/schedule`
+  - Shows all trips for a selected date with consistent date navigation (chevron arrows, "Hari Ini", date picker)
+  - **Driver assignment** inline: click driver badge to open assignment dialog (SearchableSelect), can assign/change/remove driver
+  - **Manifest** access: "Manifest" button on each trip card opens ManifestDialog
+  - **SPJ creation**: "Buat SPJ" button on each trip card, shows status if SPJ already exists
+  - Summary badges: total trips, trips without driver, trips without SPJ
+- **Sidebar reorganized**: "Manifest" replaced by "Jadwal Harian" in OPERASIONAL section; SPJ page still available separately for SPJ management/detail views
+- **SPJ page**: Create dialog date navigation updated to match consistent chevron style
+
 **2026-03-21 — SPJ (Surat Perintah Jalan) & Driver Assignment**
 - **Database**: `spj` table (spj_number, trip_id, driver_id, vehicle_id, status enum draft/issued/on_trip/settled) + `spj_cost_lines` table (category from cost_item_category enum, estimated/actual amounts, is_advance flag)
 - **Backend**: `SpjService` (create SPJ from trip with auto-populated cost lines from templates, issue, settle, CRUD cost lines, trip profit calculation) + `SpjController` — routes at `/api/spj/*`
