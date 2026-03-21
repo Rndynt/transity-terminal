@@ -19,7 +19,12 @@ client/src/
     masters/       → Komponen master data (StopsManager, TripPatternsManager, dll)
     manifest/      → ManifestDialog + ThermalManifest (cetak manifest)
   hooks/           → Custom hooks (useBookingFlow, useWebSocket, use-toast)
-  lib/             → API client, queryClient
+  lib/
+    constants.ts   → Centralized constants (status maps, channel maps, formatters)
+    api.ts         → API client
+    queryClient.ts → React Query config
+  components/
+    shared/        → Reusable badge components (StatusBadges.tsx)
 
 server/
   routes.ts        → IStorage interface + Express route definitions

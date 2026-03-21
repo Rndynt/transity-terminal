@@ -9,6 +9,7 @@ import ManifestDialog from '@/components/manifest/ManifestDialog';
 import { FileText, ChevronLeft, ChevronRight, Bus, Clock, Search, Users } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import type { TripWithDetails, TripPattern } from '@/types';
+import { TripStatusBadge } from '@/components/shared/StatusBadges';
 
 function formatDisplayDate(dateStr: string) {
   try {
@@ -34,16 +35,6 @@ function addDays(dateStr: string, days: number) {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    scheduled: { label: 'Terjadwal', className: 'bg-blue-100 text-blue-700' },
-    canceled:  { label: 'Batal',     className: 'bg-red-100 text-red-700' },
-    closed:    { label: 'Ditutup',   className: 'bg-gray-100 text-gray-600' },
-  };
-  const s = map[status] ?? { label: status, className: 'bg-gray-100 text-gray-600' };
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.className}`}>{s.label}</span>;
 }
 
 export default function ManifestPage() {
@@ -166,7 +157,7 @@ export default function ManifestPage() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm truncate">{getPatternName(trip.patternId)}</span>
-                        <StatusBadge status={trip.status ?? 'scheduled'} />
+                        <TripStatusBadge status={trip.status ?? 'scheduled'} />
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
                         {(trip as any).originDepartHHMM && (

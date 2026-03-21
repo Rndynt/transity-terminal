@@ -1,22 +1,7 @@
 import { Phone, CreditCard, Hash, Armchair, User } from 'lucide-react';
 import PassengerActions from './PassengerActions';
 import type { PassengerActionTarget } from './PassengerActions';
-
-type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'canceled' | 'refunded' | 'unseated';
-
-const STATUS_MAP: Record<BookingStatus, { label: string; color: string; bg: string }> = {
-  pending:    { label: 'Pending',    color: 'text-amber-700',  bg: 'bg-amber-50 border border-amber-200' },
-  confirmed:  { label: 'Terkonfirmasi', color: 'text-blue-700',   bg: 'bg-blue-50 border border-blue-200' },
-  checked_in: { label: 'Check-In',   color: 'text-indigo-700', bg: 'bg-indigo-50 border border-indigo-200' },
-  paid:       { label: 'Lunas',      color: 'text-emerald-700',bg: 'bg-emerald-50 border border-emerald-200' },
-  canceled:   { label: 'Dibatalkan', color: 'text-red-700',    bg: 'bg-red-50 border border-red-200' },
-  refunded:   { label: 'Refund',     color: 'text-purple-700', bg: 'bg-purple-50 border border-purple-200' },
-  unseated:   { label: 'Unseated',   color: 'text-orange-700', bg: 'bg-orange-50 border border-orange-200' },
-};
-
-const fmt = (amount: string | number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })
-    .format(typeof amount === 'string' ? parseFloat(amount) : amount);
+import { BOOKING_STATUS_MAP, fmtCurrency, type BookingStatus } from '@/lib/constants';
 
 interface PassengerData {
   id: string;
@@ -99,12 +84,12 @@ export default function PassengerCard({
             </span>
           )}
         </div>
-        <p className="text-xs font-medium text-emerald-700" data-testid="fare-amount">{fmt(p.fareAmount ?? 0)}</p>
+        <p className="text-xs font-medium text-emerald-700" data-testid="fare-amount">{fmtCurrency(p.fareAmount ?? 0)}</p>
         {p.ticketStatus && p.ticketStatus !== 'active' && (
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium mt-1 ${
-            STATUS_MAP[p.ticketStatus as BookingStatus]?.bg || 'bg-gray-50 border border-gray-200'
-          } ${STATUS_MAP[p.ticketStatus as BookingStatus]?.color || 'text-gray-700'}`}>
-            Tiket: {STATUS_MAP[p.ticketStatus as BookingStatus]?.label || p.ticketStatus}
+            BOOKING_STATUS_MAP[p.ticketStatus as BookingStatus]?.bg || 'bg-gray-50 border border-gray-200'
+          } ${BOOKING_STATUS_MAP[p.ticketStatus as BookingStatus]?.color || 'text-gray-700'}`}>
+            Tiket: {BOOKING_STATUS_MAP[p.ticketStatus as BookingStatus]?.label || p.ticketStatus}
           </span>
         )}
       </div>

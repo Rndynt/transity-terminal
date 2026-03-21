@@ -7,26 +7,9 @@ import {
   Loader2
 } from 'lucide-react';
 import PassengerCard from './PassengerCard';
+import { BookingStatusBadge, ChannelBadge } from '@/components/shared/StatusBadges';
+import { fmtCurrency, fmtDate, getPaymentLabel } from '@/lib/constants';
 import type { Passenger, Booking, Payment, Stop } from '@/types';
-
-type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'canceled' | 'refunded' | 'unseated';
-
-const STATUS_MAP: Record<BookingStatus, { label: string; color: string; bg: string }> = {
-  pending:    { label: 'Pending',    color: 'text-amber-700',  bg: 'bg-amber-50 border border-amber-200' },
-  confirmed:  { label: 'Terkonfirmasi', color: 'text-blue-700',   bg: 'bg-blue-50 border border-blue-200' },
-  checked_in: { label: 'Check-In',   color: 'text-indigo-700', bg: 'bg-indigo-50 border border-indigo-200' },
-  paid:       { label: 'Lunas',      color: 'text-emerald-700',bg: 'bg-emerald-50 border border-emerald-200' },
-  canceled:   { label: 'Dibatalkan', color: 'text-red-700',    bg: 'bg-red-50 border border-red-200' },
-  refunded:   { label: 'Refund',     color: 'text-purple-700', bg: 'bg-purple-50 border border-purple-200' },
-  unseated:   { label: 'Unseated',   color: 'text-orange-700', bg: 'bg-orange-50 border border-orange-200' },
-};
-
-const CHANNEL_MAP: Record<string, { label: string; color: string }> = {
-  CSO: { label: 'CSO',  color: 'text-blue-600' },
-  WEB: { label: 'Web',  color: 'text-green-600' },
-  APP: { label: 'App',  color: 'text-purple-600' },
-  OTA: { label: 'OTA',  color: 'text-orange-600' },
-};
 
 interface PassengerDetailsData {
   seatNo: string;
@@ -58,36 +41,6 @@ interface PassengerDetailModalProps {
   onStartRescheduleMode?: (passenger: { id: string; name: string; ticketNumber: string | null; bookingCode: string; seatNo: string; originStopName: string; destinationStopName: string; reason: string }) => void;
 }
 
-const fmt = (amount: string | number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })
-    .format(typeof amount === 'string' ? parseFloat(amount) : amount);
-
-const fmtDate = (d: string | Date | null | undefined) => {
-  if (!d) return '—';
-  return new Date(d).toLocaleString('id-ID', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-    timeZone: 'Asia/Jakarta'
-  });
-};
-
-const getPaymentLabel = (method: string) => ({
-  cash: 'Tunai', qr: 'QRIS', ewallet: 'E-Wallet', bank: 'Transfer Bank'
-}[method] ?? method);
-
-function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_MAP[status as BookingStatus] ?? { label: status, color: 'text-gray-700', bg: 'bg-gray-50 border border-gray-200' };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${s.bg} ${s.color}`} data-testid={`booking-status-${status}`}>
-      {s.label}
-    </span>
-  );
-}
-
-function ChannelBadge({ channel }: { channel: string }) {
-  const c = CHANNEL_MAP[channel] ?? { label: channel, color: 'text-gray-500' };
-  return <span className={`text-[11px] font-semibold ${c.color}`}>{c.label}</span>;
-}
 
 export default function PassengerDetailModal({
   isOpen,
@@ -167,7 +120,7 @@ export default function PassengerDetailModal({
                         <span className="flex items-center gap-2">
                           <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-primary/10 text-primary text-xs font-bold font-mono">{p.seatNo}</span>
                           <span>{p.fullName}</span>
-                          <StatusBadge status={b.status || 'unknown'} />
+                          <BookingStatusBadge status={b.status || 'unknown'} />
                         </span>
                         {isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                       </button>
@@ -184,7 +137,7 @@ export default function PassengerDetailModal({
                                 {b.bookingCode ?? b.id?.slice(0, 8).toUpperCase()}
                               </p>
                             </div>
-                            <StatusBadge status={b.status || 'unknown'} />
+                            <BookingStatusBadge status={b.status || 'unknown'} />
                           </div>
 
                           <div className="flex items-center gap-2 text-sm font-medium" data-testid="origin-destination">
@@ -203,10 +156,10 @@ export default function PassengerDetailModal({
                             </div>
                             <div>
                               <p className="text-muted-foreground">Total</p>
-                              <p className="font-semibold text-emerald-700 mt-0.5">{fmt(b.totalAmount ?? 0)}</p>
+                              <p className="font-semibold text-emerald-700 mt-0.5">{fmtCurrency(b.totalAmount ?? 0)}</p>
                               {b.discountAmount && parseFloat(String(b.discountAmount)) > 0 && (
                                 <p className="text-[11px] text-orange-600 mt-0.5">
-                                  Diskon: -{fmt(b.discountAmount)} {b.voucherCode ? `(${b.voucherCode})` : ''}
+                                  Diskon: -{fmtCurrency(b.discountAmount)} {b.voucherCode ? `(${b.voucherCode})` : ''}
                                 </p>
                               )}
                             </div>
@@ -278,16 +231,16 @@ export default function PassengerDetailModal({
                               <div className="px-4 py-3 space-y-1.5 text-sm">
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Subtotal</span>
-                                  <span className="font-mono">{fmt(subtotal)}</span>
+                                  <span className="font-mono">{fmtCurrency(subtotal)}</span>
                                 </div>
                                 <div className="flex justify-between text-orange-600">
                                   <span>Diskon {b.voucherCode ? <span className="font-mono text-[10px]">({b.voucherCode})</span> : ''}</span>
-                                  <span className="font-mono">-{fmt(discount)}</span>
+                                  <span className="font-mono">-{fmtCurrency(discount)}</span>
                                 </div>
                                 <Separator />
                                 <div className="flex justify-between font-semibold">
                                   <span>Total Bayar</span>
-                                  <span className="text-emerald-700 font-mono">{fmt(total)}</span>
+                                  <span className="text-emerald-700 font-mono">{fmtCurrency(total)}</span>
                                 </div>
                               </div>
                             </div>
@@ -308,7 +261,7 @@ export default function PassengerDetailModal({
                                     <p className="font-medium">{getPaymentLabel(pay.method)}</p>
                                     {pay.paidAt && <p className="text-xs text-muted-foreground mt-0.5">{fmtDate(pay.paidAt)}</p>}
                                   </div>
-                                  <p className="font-semibold text-emerald-700">{fmt(pay.amount ?? 0)}</p>
+                                  <p className="font-semibold text-emerald-700">{fmtCurrency(pay.amount ?? 0)}</p>
                                 </div>
                               ))}
                             </div>

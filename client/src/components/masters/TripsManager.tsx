@@ -21,6 +21,7 @@ import { useLocation } from 'wouter';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterFormDialog from './MasterFormDialog';
 import type { Trip, TripPattern, Vehicle, Layout, Driver } from '@/types';
+import { TripStatusBadge } from '@/components/shared/StatusBadges';
 import TripScheduleEditor from './TripScheduleEditor';
 import ManifestDialog from '@/components/manifest/ManifestDialog';
 
@@ -41,34 +42,6 @@ function SectionDivider({ label }: { label: string }) {
       <div className="flex-1 h-px bg-border" />
     </div>
   );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  switch (status) {
-    case 'scheduled':
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800">
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />
-          Terjadwal
-        </span>
-      );
-    case 'canceled':
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-          Dibatalkan
-        </span>
-      );
-    case 'closed':
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">
-          <span className="w-1.5 h-1.5 rounded-full bg-gray-400 inline-block" />
-          Ditutup
-        </span>
-      );
-    default:
-      return <Badge variant="outline">{status}</Badge>;
-  }
 }
 
 function ActiveFilterPill({ label, onRemove }: { label: string; onRemove: () => void }) {
@@ -729,7 +702,7 @@ export default function TripsManager() {
                         {/* Status */}
                         <div>
                           <p className="text-xs text-muted-foreground mb-0.5">Status</p>
-                          <StatusBadge status={trip.status || 'scheduled'} />
+                          <TripStatusBadge status={trip.status || 'scheduled'} />
                         </div>
                       </div>
                     </div>
@@ -858,7 +831,7 @@ export default function TripsManager() {
 
                         {/* Status */}
                         <TableCell className="py-3">
-                          <StatusBadge status={trip.status || 'scheduled'} />
+                          <TripStatusBadge status={trip.status || 'scheduled'} />
                         </TableCell>
 
                         {/* Actions */}
@@ -1039,7 +1012,7 @@ export default function TripsManager() {
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground font-medium block mb-0.5">Status</span>
-                    <StatusBadge status={schedulingTrip.status || 'scheduled'} />
+                    <TripStatusBadge status={schedulingTrip.status || 'scheduled'} />
                   </div>
                 </div>
               </div>

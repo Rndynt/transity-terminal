@@ -17,6 +17,7 @@ import {
   ChevronLeft, ChevronRight, CircleDollarSign, TrendingUp, ArrowUpDown, Banknote, Clock
 } from 'lucide-react';
 import type { SpjWithDetails, SpjCostLine, TripWithDetails, TripPattern } from '@/types';
+import { SpjStatusBadge } from '@/components/shared/StatusBadges';
 
 function formatDate(d: string | Date | null | undefined) {
   if (!d) return '—';
@@ -30,23 +31,6 @@ function formatCurrency(amount: string | number | null | undefined) {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (isNaN(num)) return '—';
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
-}
-
-const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = {
-  draft:   { label: 'Draft',      color: 'bg-gray-100 text-gray-700 border-gray-200', icon: FileText },
-  issued:  { label: 'Diterbitkan', color: 'bg-blue-100 text-blue-700 border-blue-200', icon: CheckCircle },
-  on_trip: { label: 'Dalam Perjalanan', color: 'bg-amber-100 text-amber-700 border-amber-200', icon: Bus },
-  settled: { label: 'Selesai',    color: 'bg-green-100 text-green-700 border-green-200', icon: CheckCircle },
-};
-
-function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_MAP[status] || STATUS_MAP.draft;
-  return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border ${s.color}`} data-testid={`spj-status-${status}`}>
-      <s.icon className="w-3 h-3" />
-      {s.label}
-    </span>
-  );
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -199,7 +183,7 @@ export default function SpjPage() {
                         <p className="font-semibold text-sm font-mono">{s.spjNumber}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">{s.tripPatternName || '—'}</p>
                       </div>
-                      <StatusBadge status={s.status || 'draft'} />
+                      <SpjStatusBadge status={s.status || 'draft'} />
                     </div>
                     <div className="flex gap-4 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1"><User className="w-3 h-3" />{s.driverName || '—'}</span>
@@ -240,7 +224,7 @@ export default function SpjPage() {
                       </div>
                     </TableCell>
                     <TableCell className="py-3 text-sm font-mono">{s.vehiclePlate || '—'}</TableCell>
-                    <TableCell className="py-3"><StatusBadge status={s.status || 'draft'} /></TableCell>
+                    <TableCell className="py-3"><SpjStatusBadge status={s.status || 'draft'} /></TableCell>
                     <TableCell className="py-3 text-sm text-muted-foreground">{formatDate(s.createdAt)}</TableCell>
                     <TableCell className="py-3">
                       <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100" data-testid={`btn-view-spj-${s.id}`}>
@@ -481,7 +465,7 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-semibold font-mono" data-testid="spj-detail-number">{spjData.spjNumber}</h2>
-                <StatusBadge status={spjData.status || 'draft'} />
+                <SpjStatusBadge status={spjData.status || 'draft'} />
               </div>
             </div>
           </div>

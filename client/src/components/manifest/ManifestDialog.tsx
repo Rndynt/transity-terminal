@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { manifestApi } from '@/lib/api';
 import { Printer, X, Bus, User, Clock, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
+import { TicketStatusBadge } from '@/components/shared/StatusBadges';
 
 interface ManifestDialogProps {
   tripId: string | null;
@@ -48,18 +49,6 @@ function formatDateShort(dateStr: string) {
   } catch {
     return dateStr;
   }
-}
-
-function TicketStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; color: string }> = {
-    active:     { label: 'Aktif',    color: 'bg-green-100 text-green-800' },
-    checked_in: { label: 'Check-In', color: 'bg-blue-100 text-blue-800' },
-    no_show:    { label: 'No-Show',  color: 'bg-red-100 text-red-800' },
-    canceled:   { label: 'Batal',    color: 'bg-gray-100 text-gray-600' },
-    refunded:   { label: 'Refund',   color: 'bg-orange-100 text-orange-800' },
-  };
-  const s = map[status] ?? { label: status, color: 'bg-gray-100 text-gray-600' };
-  return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${s.color}`}>{s.label}</span>;
 }
 
 // ── Thermal layout (visible only when printing) ──────────────────────────────

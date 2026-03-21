@@ -22,65 +22,13 @@ import {
   Bus, Package, ExternalLink, UserMinus, History
 } from 'lucide-react';
 import PassengerCard from '@/components/cso/PassengerCard';
-
-type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'canceled' | 'refunded' | 'unseated';
-type BookingChannel = 'CSO' | 'WEB' | 'APP' | 'OTA';
-
-const STATUS_MAP: Record<BookingStatus, { label: string; color: string; bg: string }> = {
-  pending:    { label: 'Pending',    color: 'text-amber-700',  bg: 'bg-amber-50 border border-amber-200' },
-  confirmed:  { label: 'Terkonfirmasi', color: 'text-blue-700',   bg: 'bg-blue-50 border border-blue-200' },
-  checked_in: { label: 'Check-In',   color: 'text-indigo-700', bg: 'bg-indigo-50 border border-indigo-200' },
-  paid:       { label: 'Lunas',      color: 'text-emerald-700',bg: 'bg-emerald-50 border border-emerald-200' },
-  canceled:   { label: 'Dibatalkan', color: 'text-red-700',    bg: 'bg-red-50 border border-red-200' },
-  refunded:   { label: 'Refund',     color: 'text-purple-700', bg: 'bg-purple-50 border border-purple-200' },
-  unseated:   { label: 'Unseated',   color: 'text-orange-700', bg: 'bg-orange-50 border border-orange-200' },
-};
-
-const CHANNEL_MAP: Record<BookingChannel, { label: string; color: string }> = {
-  CSO: { label: 'CSO',  color: 'text-blue-600' },
-  WEB: { label: 'Web',  color: 'text-green-600' },
-  APP: { label: 'App',  color: 'text-purple-600' },
-  OTA: { label: 'OTA',  color: 'text-orange-600' },
-};
-
-const ALL_STATUSES: BookingStatus[] = ['pending', 'confirmed', 'checked_in', 'paid', 'canceled', 'refunded', 'unseated'];
-const ALL_CHANNELS: BookingChannel[] = ['CSO', 'WEB', 'APP', 'OTA'];
-
-const fmt = (amount: string | number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })
-    .format(typeof amount === 'string' ? parseFloat(amount) : amount);
-
-const fmtDate = (d: string | Date | null | undefined) => {
-  if (!d) return '—';
-  return new Date(d).toLocaleString('id-ID', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-    timeZone: 'Asia/Jakarta'
-  });
-};
-
-const fmtShortDate = (d: string | Date | null | undefined) => {
-  if (!d) return '—';
-  return new Date(d).toLocaleString('id-ID', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-    timeZone: 'Asia/Jakarta'
-  });
-};
-
-function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_MAP[status as BookingStatus] ?? { label: status, color: 'text-gray-700', bg: 'bg-gray-50 border border-gray-200' };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${s.bg} ${s.color}`}>
-      {s.label}
-    </span>
-  );
-}
-
-function ChannelBadge({ channel }: { channel: string }) {
-  const c = CHANNEL_MAP[channel as BookingChannel] ?? { label: channel, color: 'text-gray-500' };
-  return <span className={`text-[11px] font-semibold ${c.color}`}>{c.label}</span>;
-}
+import { BookingStatusBadge, ChannelBadge } from '@/components/shared/StatusBadges';
+import {
+  BOOKING_STATUS_MAP, CHANNEL_MAP, HISTORY_ACTION_MAP,
+  ALL_BOOKING_STATUSES, ALL_CHANNELS,
+  fmtCurrency, fmtDate, fmtShortDate, getPaymentLabel,
+  type BookingStatus, type BookingChannel,
+} from '@/lib/constants';
 
 type EnrichedBooking = Booking & {
   _originStop?: Stop;
@@ -99,13 +47,6 @@ type BookingDetail = Booking & {
   arriveAt?: string | null;
 };
 
-const HISTORY_ACTION_LABELS: Record<string, { label: string; color: string }> = {
-  unseated: { label: 'Unseat', color: 'text-orange-600' },
-  reassigned: { label: 'Pindah Kursi', color: 'text-blue-600' },
-  rescheduled: { label: 'Reschedule', color: 'text-purple-600' },
-  canceled: { label: 'Dibatalkan', color: 'text-red-600' },
-  status_change: { label: 'Status Berubah', color: 'text-gray-600' },
-};
 
 function BookingDetailModal({
   bookingId,
@@ -155,9 +96,6 @@ function BookingDetailModal({
     (p: any) => p.ticketStatus !== 'unseated' && p.ticketStatus !== 'canceled'
   );
 
-  const getPaymentLabel = (method: string) => ({
-    cash: 'Tunai', qr: 'QRIS', ewallet: 'E-Wallet', bank: 'Transfer Bank'
-  }[method] ?? method);
 
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
@@ -190,7 +128,7 @@ function BookingDetailModal({
                     {detail.bookingCode ?? detail.id.slice(0, 8).toUpperCase()}
                   </p>
                 </div>
-                <StatusBadge status={detail.status ?? ''} />
+                <BookingStatusBadge status={detail.status ?? ''} />
               </div>
 
               {/* Route */}
@@ -210,10 +148,10 @@ function BookingDetailModal({
                 </div>
                 <div>
                   <p className="text-muted-foreground">Total</p>
-                  <p className="font-semibold text-emerald-700 mt-0.5">{fmt(detail.totalAmount ?? 0)}</p>
+                  <p className="font-semibold text-emerald-700 mt-0.5">{fmtCurrency(detail.totalAmount ?? 0)}</p>
                   {detail.discountAmount && parseFloat(String(detail.discountAmount)) > 0 && (
                     <p className="text-[11px] text-orange-600 mt-0.5">
-                      Diskon: -{fmt(detail.discountAmount)} {detail.voucherCode ? `(${detail.voucherCode})` : ''}
+                      Diskon: -{fmtCurrency(detail.discountAmount)} {detail.voucherCode ? `(${detail.voucherCode})` : ''}
                     </p>
                   )}
                 </div>
@@ -357,18 +295,18 @@ function BookingDetailModal({
                       <>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Subtotal</span>
-                          <span className="font-mono">{fmt(subtotal)}</span>
+                          <span className="font-mono">{fmtCurrency(subtotal)}</span>
                         </div>
                         <div className="flex justify-between text-orange-600" data-testid="text-discount-detail">
                           <span>Diskon {detail.voucherCode ? <span className="font-mono text-[10px]">({detail.voucherCode})</span> : ''}</span>
-                          <span className="font-mono">-{fmt(discount)}</span>
+                          <span className="font-mono">-{fmtCurrency(discount)}</span>
                         </div>
                         <Separator />
                       </>
                     )}
                     <div className="flex justify-between font-semibold">
                       <span>Total Bayar</span>
-                      <span className="text-emerald-700 font-mono">{fmt(total)}</span>
+                      <span className="text-emerald-700 font-mono">{fmtCurrency(total)}</span>
                     </div>
                     {!!detail.payments?.length && (
                       <div className="pt-2 space-y-1.5 border-t mt-2">
@@ -378,7 +316,7 @@ function BookingDetailModal({
                               <span className="font-medium">{getPaymentLabel(pay.method)}</span>
                               {pay.paidAt && <span className="text-muted-foreground ml-1.5">{fmtShortDate(pay.paidAt)}</span>}
                             </div>
-                            <span className="font-mono text-emerald-700">{fmt(pay.amount ?? 0)}</span>
+                            <span className="font-mono text-emerald-700">{fmtCurrency(pay.amount ?? 0)}</span>
                           </div>
                         ))}
                       </div>
@@ -408,7 +346,7 @@ function BookingDetailModal({
                   ) : (
                     <div className="space-y-3">
                       {(history as any[]).map((h: any, i: number) => {
-                        const actionInfo = HISTORY_ACTION_LABELS[h.action] || { label: h.action, color: 'text-gray-600' };
+                        const actionInfo = HISTORY_ACTION_MAP[h.action as keyof typeof HISTORY_ACTION_MAP] || { label: h.action, color: 'text-gray-600', dotColor: 'bg-gray-400' };
                         const details = h.details as any;
                         return (
                           <div key={h.id || i} className="flex gap-3 text-xs" data-testid={`history-${i}`}>
@@ -493,7 +431,7 @@ export default function AllBookingsPage() {
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: bookings.length };
-    ALL_STATUSES.forEach(s => { c[s] = bookings.filter(b => b.status === s).length; });
+    ALL_BOOKING_STATUSES.forEach(s => { c[s] = bookings.filter(b => b.status === s).length; });
     return c;
   }, [bookings]);
 
@@ -560,8 +498,8 @@ export default function AllBookingsPage() {
           >
             Semua ({counts.all})
           </button>
-          {ALL_STATUSES.map(s => {
-            const sm = STATUS_MAP[s];
+          {ALL_BOOKING_STATUSES.map(s => {
+            const sm = BOOKING_STATUS_MAP[s];
             return (
               <button
                 key={s}
@@ -650,7 +588,7 @@ export default function AllBookingsPage() {
 
                   {/* Status */}
                   <td className="px-4 py-3">
-                    <StatusBadge status={b.status ?? ''} />
+                    <BookingStatusBadge status={b.status ?? ''} />
                   </td>
 
                   {/* Rute */}
@@ -679,7 +617,7 @@ export default function AllBookingsPage() {
                   {/* Total */}
                   <td className="px-4 py-3 text-right">
                     <span className="font-semibold text-emerald-700 text-xs whitespace-nowrap">
-                      {fmt(b.totalAmount ?? 0)}
+                      {fmtCurrency(b.totalAmount ?? 0)}
                     </span>
                   </td>
 

@@ -13,31 +13,12 @@ import {
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 
-const fmt = (amount: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
+import { CARGO_STATUS_MAP, CARGO_STATUS_TRANSITIONS, fmtCurrency, type CargoStatus } from '@/lib/constants';
+import { CargoStatusBadge } from '@/components/shared/StatusBadges';
 
-type StatusKey = 'pending' | 'received' | 'loaded' | 'in_transit' | 'arrived' | 'delivered' | 'returned' | 'canceled';
-
-const STATUS_MAP: Record<StatusKey, { label: string; color: string; bg: string; icon: typeof Clock }> = {
-  pending: { label: 'Menunggu', color: 'text-amber-700', bg: 'bg-amber-100', icon: Clock },
-  received: { label: 'Diterima', color: 'text-orange-700', bg: 'bg-orange-100', icon: Download },
-  loaded: { label: 'Dimuat', color: 'text-indigo-700', bg: 'bg-indigo-100', icon: Upload },
-  in_transit: { label: 'Dalam Perjalanan', color: 'text-blue-700', bg: 'bg-blue-100', icon: Truck },
-  arrived: { label: 'Tiba', color: 'text-emerald-700', bg: 'bg-emerald-100', icon: CheckCircle2 },
-  delivered: { label: 'Terkirim', color: 'text-emerald-700', bg: 'bg-emerald-100', icon: CheckCircle2 },
-  returned: { label: 'Dikembalikan', color: 'text-purple-700', bg: 'bg-purple-100', icon: RotateCcw },
-  canceled: { label: 'Dibatalkan', color: 'text-red-700', bg: 'bg-red-100', icon: XCircle }
-};
-
-const STATUS_TRANSITIONS: Record<StatusKey, StatusKey[]> = {
-  pending: ['received', 'canceled'],
-  received: ['loaded', 'canceled'],
-  loaded: ['in_transit', 'canceled'],
-  in_transit: ['arrived', 'canceled'],
-  arrived: ['delivered', 'returned'],
-  delivered: [],
-  returned: [],
-  canceled: []
+const CARGO_ICON_MAP: Record<CargoStatus, typeof Clock> = {
+  pending: Clock, received: Download, loaded: Upload, in_transit: Truck,
+  arrived: CheckCircle2, delivered: CheckCircle2, returned: RotateCcw, canceled: XCircle,
 };
 
 function TripCombobox({
@@ -146,7 +127,7 @@ export default function CargoListPage() {
   const [dateFilter, setDateFilter] = useState('');
   const [tripFilter, setTripFilter] = useState('');
   const [selectedShipment, setSelectedShipment] = useState<CargoShipmentWithStops | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{ id: string; status: StatusKey; label: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ id: string; status: CargoStatus; label: string } | null>(null);
   const { toast } = useToast();
 
   const { data: trips = [] } = useQuery<TripWithDetails[]>({
@@ -210,8 +191,8 @@ export default function CargoListPage() {
     } catch { return '-'; }
   };
 
-  const handleStatusClick = (id: string, nextStatus: StatusKey) => {
-    const s = STATUS_MAP[nextStatus];
+  const handleStatusClick = (id: string, nextStatus: CargoStatus) => {
+    const s = CARGO_STATUS_MAP[nextStatus];
     setConfirmAction({ id, status: nextStatus, label: s.label });
   };
 
@@ -308,9 +289,9 @@ export default function CargoListPage() {
               <EmptyState icon={Package} title="Tidak ada pengiriman ditemukan" />
             ) : (
               filteredShipments.map(shipment => {
-                const status = (shipment.status || 'pending') as StatusKey;
-                const s = STATUS_MAP[status] || STATUS_MAP.pending;
-                const StatusIcon = s.icon;
+                const status = (shipment.status || 'pending') as CargoStatus;
+                const s = CARGO_STATUS_MAP[status] || CARGO_STATUS_MAP.pending;
+                const StatusIcon = CARGO_ICON_MAP[status] || Clock;
                 const isSelected = selectedShipment?.id === shipment.id;
                 return (
                   <button
@@ -344,7 +325,7 @@ export default function CargoListPage() {
                     )}
                     <div className="flex items-center justify-between text-[10px] text-gray-400">
                       <span>{shipment.itemDescription}</span>
-                      <span className="font-mono font-semibold text-gray-600">{fmt(parseFloat(shipment.totalAmount))}</span>
+                      <span className="font-mono font-semibold text-gray-600">{fmtCurrency(parseFloat(shipment.totalAmount))}</span>
                     </div>
                     <div className="text-[10px] text-gray-300 mt-1">
                       {shipment.createdAt ? formatDate(String(shipment.createdAt)) : '-'} {shipment.createdAt ? formatTime(String(shipment.createdAt)) : ''}
@@ -374,8 +355,8 @@ export default function CargoListPage() {
                     <span className="text-white font-bold">{selectedShipment.waybillNumber}</span>
                   </div>
                   {(() => {
-                    const status = (selectedShipment.status || 'pending') as StatusKey;
-                    const s = STATUS_MAP[status] || STATUS_MAP.pending;
+                    const status = (selectedShipment.status || 'pending') as CargoStatus;
+                    const s = CARGO_STATUS_MAP[status] || CARGO_STATUS_MAP.pending;
                     return (
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/20 text-white/90">
                         {s.label.toUpperCase()}
@@ -433,7 +414,7 @@ export default function CargoListPage() {
                       )}
                     </div>
                     {selectedShipment.declaredValue && (
-                      <p className="text-[11px] text-gray-500 mt-0.5">Nilai barang: {fmt(parseFloat(selectedShipment.declaredValue))}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">Nilai barang: {fmtCurrency(parseFloat(selectedShipment.declaredValue))}</p>
                     )}
                     {selectedShipment.notes && (
                       <p className="text-[10px] text-gray-400 mt-1 italic">{selectedShipment.notes}</p>
@@ -443,19 +424,19 @@ export default function CargoListPage() {
                   <div className="border-t border-dashed border-gray-200 pt-3 flex justify-between items-center">
                     <span className="text-sm text-gray-600">Total</span>
                     <span className="text-lg font-black text-amber-700 font-mono">
-                      {fmt(parseFloat(selectedShipment.totalAmount))}
+                      {fmtCurrency(parseFloat(selectedShipment.totalAmount))}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {(STATUS_TRANSITIONS[(selectedShipment.status || 'pending') as StatusKey] || []).length > 0 && (
+              {(CARGO_STATUS_TRANSITIONS[(selectedShipment.status || 'pending') as CargoStatus] || []).length > 0 && (
                 <div className="space-y-2">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Ubah Status</p>
                   <div className="flex gap-2 flex-wrap">
-                    {(STATUS_TRANSITIONS[(selectedShipment.status || 'pending') as StatusKey] || []).map(nextStatus => {
-                      const s = STATUS_MAP[nextStatus] || STATUS_MAP.pending;
-                      const Icon = s.icon;
+                    {(CARGO_STATUS_TRANSITIONS[(selectedShipment.status || 'pending') as CargoStatus] || []).map(nextStatus => {
+                      const s = CARGO_STATUS_MAP[nextStatus] || CARGO_STATUS_MAP.pending;
+                      const Icon = CARGO_ICON_MAP[nextStatus] || Clock;
                       return (
                         <button
                           key={nextStatus}
