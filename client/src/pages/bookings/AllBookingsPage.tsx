@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import { bookingsApi, stopsApi } from '@/lib/api';
 import type { Booking, Stop } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,7 @@ import {
   List, Search, X, Loader2, RefreshCw,
   ArrowRight, User, CreditCard, Phone, Hash,
   Calendar, Ticket, MapPin, Armchair, ChevronDown, ChevronUp,
-  Bus, Package
+  Bus, Package, ExternalLink
 } from 'lucide-react';
 
 type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'canceled' | 'refunded';
@@ -97,10 +98,12 @@ function BookingDetailModal({
   bookingId,
   isOpen,
   onClose,
+  onOpenInCso,
 }: {
   bookingId: string | null;
   isOpen: boolean;
   onClose: () => void;
+  onOpenInCso?: (tripId: string, outletId: string, serviceDate: string) => void;
 }) {
   const [passengersOpen, setPassengersOpen] = useState(true);
 
@@ -198,6 +201,19 @@ function BookingDetailModal({
                   </div>
                 )}
               </div>
+
+              {detail.tripId && detail.outletId && detail.tripDetails?.serviceDate && onOpenInCso && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2 mt-1"
+                  onClick={() => onOpenInCso(detail.tripId, detail.outletId!, detail.tripDetails.serviceDate)}
+                  data-testid="btn-open-in-cso"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Buka di Reservasi
+                </Button>
+              )}
             </div>
 
             {/* Passengers */}
@@ -305,6 +321,7 @@ function BookingDetailModal({
 }
 
 export default function AllBookingsPage() {
+  const [, navigate] = useLocation();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all');
   const [channelFilter, setChannelFilter] = useState<BookingChannel | 'all'>('all');
@@ -571,6 +588,10 @@ export default function AllBookingsPage() {
         bookingId={selectedId}
         isOpen={!!selectedId}
         onClose={() => setSelectedId(null)}
+        onOpenInCso={(tripId, outletId, serviceDate) => {
+          setSelectedId(null);
+          navigate(`/cso?tripId=${tripId}&outletId=${outletId}&date=${serviceDate}`);
+        }}
       />
     </div>
   );

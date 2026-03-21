@@ -45,6 +45,11 @@ plan/              → Dokumentasi teknis fitur
 
 ## Recent Changes
 
+**2026-03-21 — Deep-Link All Bookings → CSO**
+- **"Buka di Reservasi" button** in AllBookingsPage `BookingDetailModal` — navigates to `/cso?tripId=&outletId=&date=` with auto-selection
+- **CsoPage URL params**: reads `tripId`, `outletId`, `date` from query string; TripSelector has `initialDate/OutletId/TripId` props for auto-selection
+- Flow: AllBookings → click booking row → modal → "Buka di Reservasi" → CSO page with outlet+date+trip pre-selected → user picks Naik/Turun → seat map
+
 **2026-03-21 — Jadwal Harian (Unified Daily Schedule)**
 - **New page**: `client/src/pages/schedule/SchedulePage.tsx` — unified operational hub at `/schedule`
   - Shows all trips for a selected date with consistent date navigation (chevron arrows, "Hari Ini", date picker)

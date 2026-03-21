@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearch, useLocation } from 'wouter';
 import { queryClient } from '@/lib/queryClient';
 import { cargoApi } from '@/lib/api';
 import TripSelector from '@/components/cso/TripSelector';
@@ -43,6 +44,13 @@ const fmt = (n: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
 
 export default function CsoPage() {
+  const searchString = useSearch();
+  const [, navigate] = useLocation();
+  const urlParams = useMemo(() => new URLSearchParams(searchString), [searchString]);
+  const initialTripId = urlParams.get('tripId') || undefined;
+  const initialOutletId = urlParams.get('outletId') || undefined;
+  const initialDate = urlParams.get('date') || undefined;
+
   const [phase, setPhase] = useState<Phase>('select');
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('left');
   const [bookingResult, setBookingResult] = useState<{ booking: any; printPayload: any } | null>(null);
@@ -469,6 +477,10 @@ export default function CsoPage() {
                     selectedTrip={selectedCsoTrip}
                     onOutletSelect={handleOutletSelect}
                     onTripSelect={handleTripSelect}
+                    initialDate={initialDate}
+                    initialOutletId={initialOutletId}
+                    initialTripId={initialTripId}
+                    onInitialConsumed={() => navigate('/cso', { replace: true })}
                   />
                 </div>
 

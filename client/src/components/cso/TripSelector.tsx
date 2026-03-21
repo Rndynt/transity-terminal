@@ -15,6 +15,10 @@ interface TripSelectorProps {
   selectedTrip?: CsoAvailableTrip;
   onOutletSelect: (outlet: Outlet) => void;
   onTripSelect: (trip: CsoAvailableTrip) => void;
+  initialDate?: string;
+  initialOutletId?: string;
+  initialTripId?: string;
+  onInitialConsumed?: () => void;
 }
 
 const fmt = (n: number) =>
@@ -322,12 +326,21 @@ export default function TripSelector({
   selectedOutlet,
   selectedTrip,
   onOutletSelect,
-  onTripSelect
+  onTripSelect,
+  initialDate,
+  initialOutletId,
+  initialTripId,
+  onInitialConsumed
 }: TripSelectorProps) {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    if (initialDate) return initialDate;
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  });
   const [materializingBaseId, setMaterializingBaseId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedRoutes, setCollapsedRoutes] = useState<Set<string>>(new Set());
+  const [initialConsumed, setInitialConsumed] = useState(false);
   const { toast } = useToast();
 
   const { data: outlets = [] } = useQuery({
@@ -407,6 +420,25 @@ export default function TripSelector({
       removeHolds();
     };
   }, [addEventListener, refetchTrips]);
+
+  useEffect(() => {
+    if (initialConsumed || !initialOutletId || !outlets.length) return;
+    if (selectedOutlet?.id === initialOutletId) {
+      if (initialTripId && trips.length > 0 && !selectedTrip) {
+        const match = trips.find(t => t.tripId === initialTripId);
+        if (match) {
+          setInitialConsumed(true);
+          onTripSelect(match);
+          onInitialConsumed?.();
+        }
+      }
+      return;
+    }
+    const outlet = outlets.find((o: Outlet) => o.id === initialOutletId);
+    if (outlet) {
+      onOutletSelect(outlet);
+    }
+  }, [initialOutletId, initialTripId, outlets, trips, selectedOutlet, selectedTrip, initialConsumed, onOutletSelect, onTripSelect, onInitialConsumed]);
 
   const materializeMutation = useMutation({
     mutationFn: async (baseId: string) => {
