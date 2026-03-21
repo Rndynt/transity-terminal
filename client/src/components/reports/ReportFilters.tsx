@@ -1,7 +1,12 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { X, SlidersHorizontal, ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface FilterOptions {
   outlets: { id: string; name: string }[];
@@ -33,6 +38,8 @@ const PRESETS = [
 ];
 
 export default function ReportFilters({ value, onChange, showOutlet = true, showChannel = true, showRoute = true }: ReportFiltersProps) {
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
   const { data: options } = useQuery<FilterOptions>({
     queryKey: ['/api/reports/filter-options'],
     queryFn: async () => {
@@ -43,11 +50,28 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
     staleTime: 5 * 60 * 1000,
   });
 
-  const hasActiveFilters = value.outletId || value.channel || value.patternId;
+  const hasExtraFilters = showRoute || showOutlet || showChannel;
+  const activeFilterCount = [value.outletId, value.channel, value.patternId].filter(Boolean).length;
 
   const clearFilters = () => {
     onChange({ ...value, outletId: undefined, channel: undefined, patternId: undefined });
   };
+
+  const routeOptions = (options?.patterns || []).map(p => ({
+    value: p.id,
+    label: `${p.code} — ${p.name}`,
+    subtitle: p.code,
+  }));
+
+  const outletOptions = (options?.outlets || []).map(o => ({
+    value: o.id,
+    label: o.name,
+  }));
+
+  const channelOptions = (options?.channels || []).map(c => ({
+    value: c,
+    label: c,
+  }));
 
   return (
     <div className="space-y-2.5">
@@ -82,55 +106,83 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
             </Button>
           ))}
         </div>
+
+        {hasExtraFilters && (
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn("h-8 text-xs gap-1.5 ml-auto", filtersOpen && "bg-muted")}
+            onClick={() => setFiltersOpen(!filtersOpen)}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            Filter
+            {activeFilterCount > 0 && (
+              <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-bold rounded-full">
+                {activeFilterCount}
+              </Badge>
+            )}
+            <ChevronDown className={cn("w-3 h-3 transition-transform", filtersOpen && "rotate-180")} />
+          </Button>
+        )}
       </div>
 
-      {(showRoute || showOutlet || showChannel) && (
-        <div className="flex flex-wrap items-center gap-2">
-          {showRoute && options?.patterns && (
-            <select
-              value={value.patternId || ''}
-              onChange={(e) => onChange({ ...value, patternId: e.target.value || undefined })}
-              className="h-9 px-3 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 min-w-[180px]"
-            >
-              <option value="">Semua Rute</option>
-              {options.patterns.map((p) => (
-                <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-              ))}
-            </select>
-          )}
+      {hasExtraFilters && (
+        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <CollapsibleContent>
+            <div className="flex flex-wrap items-end gap-3 pt-2 pb-1 border-t border-border/50">
+              {showRoute && (
+                <div className="min-w-[220px] max-w-[280px]">
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Rute</label>
+                  <SearchableSelect
+                    value={value.patternId || ''}
+                    onChange={(v) => onChange({ ...value, patternId: v || undefined })}
+                    options={routeOptions}
+                    placeholder="Semua Rute"
+                    searchPlaceholder="Cari rute..."
+                    emptyLabel="Rute tidak ditemukan"
+                    className="w-full"
+                  />
+                </div>
+              )}
 
-          {showOutlet && options?.outlets && (
-            <select
-              value={value.outletId || ''}
-              onChange={(e) => onChange({ ...value, outletId: e.target.value || undefined })}
-              className="h-9 px-3 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 min-w-[160px]"
-            >
-              <option value="">Semua Outlet</option>
-              {options.outlets.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </select>
-          )}
+              {showOutlet && (
+                <div className="min-w-[200px] max-w-[260px]">
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Outlet</label>
+                  <SearchableSelect
+                    value={value.outletId || ''}
+                    onChange={(v) => onChange({ ...value, outletId: v || undefined })}
+                    options={outletOptions}
+                    placeholder="Semua Outlet"
+                    searchPlaceholder="Cari outlet..."
+                    emptyLabel="Outlet tidak ditemukan"
+                    className="w-full"
+                  />
+                </div>
+              )}
 
-          {showChannel && (
-            <select
-              value={value.channel || ''}
-              onChange={(e) => onChange({ ...value, channel: e.target.value || undefined })}
-              className="h-9 px-3 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 min-w-[130px]"
-            >
-              <option value="">Semua Channel</option>
-              {options?.channels.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          )}
+              {showChannel && (
+                <div className="min-w-[160px] max-w-[200px]">
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Channel</label>
+                  <SearchableSelect
+                    value={value.channel || ''}
+                    onChange={(v) => onChange({ ...value, channel: v || undefined })}
+                    options={channelOptions}
+                    placeholder="Semua Channel"
+                    searchPlaceholder="Cari channel..."
+                    emptyLabel="Channel tidak ditemukan"
+                    className="w-full"
+                  />
+                </div>
+              )}
 
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground gap-1" onClick={clearFilters}>
-              <X className="w-3.5 h-3.5" /> Reset
-            </Button>
-          )}
-        </div>
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" className="h-10 text-xs text-muted-foreground gap-1" onClick={clearFilters}>
+                  <X className="w-3.5 h-3.5" /> Reset Filter
+                </Button>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
     </div>
   );
