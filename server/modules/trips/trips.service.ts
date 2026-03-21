@@ -347,13 +347,18 @@ export class TripsService {
     // Get all trip stop times to understand the full trip coverage for booking type determination
     const tripStopTimes = await this.storage.getTripStopTimes(tripId);
     const totalStops = tripStopTimes.length;
+
+    const trip = await this.storage.getTripById(tripId);
+    let vehicle: any = null;
+    if (trip?.vehicleId) {
+      vehicle = await this.storage.getVehicleById(trip.vehicleId);
+    }
     
     for (const booking of allBookings) {
       if (booking.status === 'paid' || booking.status === 'pending') {
         const passengers = await this.storage.getPassengers(booking.id);
         const seatPassenger = passengers.find(p => p.seatNo === seatNo);
         
-        // Include both overlapping bookings and those that completely cover the journey
         if (seatPassenger && 
             booking.originSeq < destinationSeq && 
             booking.destinationSeq > originSeq) {
@@ -361,12 +366,10 @@ export class TripsService {
           const originStop = await this.storage.getStopById(booking.originStopId);
           const destinationStop = await this.storage.getStopById(booking.destinationStopId);
           
-          // Determine booking type based on trip coverage
           const bookingStopCoverage = booking.destinationSeq - booking.originSeq;
-          const totalTripCoverage = totalStops - 1; // Total legs
+          const totalTripCoverage = totalStops - 1;
           const bookingType: 'main' | 'transit' = (bookingStopCoverage / totalTripCoverage) > 0.7 ? 'main' : 'transit';
           
-          // Determine overlap type with requested journey
           const overlapType = 
             (booking.originSeq <= originSeq && booking.destinationSeq >= destinationSeq) ? 'covers' :
             (booking.originSeq >= originSeq && booking.destinationSeq <= destinationSeq) ? 'within' :
@@ -374,13 +377,33 @@ export class TripsService {
             (booking.originSeq > originSeq && booking.originSeq < destinationSeq && booking.destinationSeq > destinationSeq) ? 'ends_after' :
             'partial_overlap';
           
+          let outlet: any = null;
+          if (booking.outletId) {
+            outlet = await this.storage.getOutletById(booking.outletId);
+          }
+
+          let departAt = null;
+          let arriveAt = null;
+          if (booking.originSeq) {
+            const originTime = tripStopTimes.find(st => st.stopSequence === booking.originSeq);
+            if (originTime?.departAt) departAt = originTime.departAt;
+          }
+          if (booking.destinationSeq) {
+            const destTime = tripStopTimes.find(st => st.stopSequence === booking.destinationSeq);
+            if (destTime?.arriveAt) arriveAt = destTime.arriveAt;
+          }
+
           seatBookings.push({
             booking: {
               ...booking,
               originStop,
               destinationStop,
               bookingType,
-              overlapType
+              overlapType,
+              outlet,
+              vehicle,
+              departAt,
+              arriveAt
             },
             passenger: seatPassenger,
             payments

@@ -1,14 +1,41 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Phone, CreditCard, MapPin, User, Armchair, Ticket, Hash, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Phone, CreditCard, MapPin, User, Armchair, Ticket, Hash,
+  ChevronDown, ChevronUp, ArrowRight, Calendar, Building2, Bus
+} from 'lucide-react';
 import type { Passenger, Booking, Payment, Stop } from '@/types';
+
+type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'canceled' | 'refunded';
+
+const STATUS_MAP: Record<BookingStatus, { label: string; color: string; bg: string }> = {
+  pending:    { label: 'Pending',    color: 'text-amber-700',  bg: 'bg-amber-50 border border-amber-200' },
+  confirmed:  { label: 'Terkonfirmasi', color: 'text-blue-700',   bg: 'bg-blue-50 border border-blue-200' },
+  checked_in: { label: 'Check-In',   color: 'text-indigo-700', bg: 'bg-indigo-50 border border-indigo-200' },
+  paid:       { label: 'Lunas',      color: 'text-emerald-700',bg: 'bg-emerald-50 border border-emerald-200' },
+  canceled:   { label: 'Dibatalkan', color: 'text-red-700',    bg: 'bg-red-50 border border-red-200' },
+  refunded:   { label: 'Refund',     color: 'text-purple-700', bg: 'bg-purple-50 border border-purple-200' },
+};
+
+const CHANNEL_MAP: Record<string, { label: string; color: string }> = {
+  CSO: { label: 'CSO',  color: 'text-blue-600' },
+  WEB: { label: 'Web',  color: 'text-green-600' },
+  APP: { label: 'App',  color: 'text-purple-600' },
+  OTA: { label: 'OTA',  color: 'text-orange-600' },
+};
 
 interface PassengerDetailsData {
   seatNo: string;
   bookings: Array<{
-    booking: Booking & { originStop?: Stop; destinationStop?: Stop };
+    booking: Booking & {
+      originStop?: Stop;
+      destinationStop?: Stop;
+      outlet?: { id: string; name: string; code?: string };
+      vehicle?: { id: string; plate: string; code: string };
+      departAt?: string | null;
+      arriveAt?: string | null;
+    };
     passenger: Passenger;
     payments: Payment[];
   }>;
@@ -23,6 +50,37 @@ interface PassengerDetailModalProps {
   isLoading?: boolean;
   isError?: boolean;
   selectedSeatNo?: string | null;
+}
+
+const fmt = (amount: string | number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })
+    .format(typeof amount === 'string' ? parseFloat(amount) : amount);
+
+const fmtDate = (d: string | Date | null | undefined) => {
+  if (!d) return '—';
+  return new Date(d).toLocaleString('id-ID', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZone: 'Asia/Jakarta'
+  });
+};
+
+const getPaymentLabel = (method: string) => ({
+  cash: 'Tunai', qr: 'QRIS', ewallet: 'E-Wallet', bank: 'Transfer Bank'
+}[method] ?? method);
+
+function StatusBadge({ status }: { status: string }) {
+  const s = STATUS_MAP[status as BookingStatus] ?? { label: status, color: 'text-gray-700', bg: 'bg-gray-50 border border-gray-200' };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${s.bg} ${s.color}`} data-testid={`booking-status-${status}`}>
+      {s.label}
+    </span>
+  );
+}
+
+function ChannelBadge({ channel }: { channel: string }) {
+  const c = CHANNEL_MAP[channel] ?? { label: channel, color: 'text-gray-500' };
+  return <span className={`text-[11px] font-semibold ${c.color}`}>{c.label}</span>;
 }
 
 export default function PassengerDetailModal({
@@ -45,71 +103,25 @@ export default function PassengerDetailModal({
 
   const isMulti = (passengerDetails?.bookings?.length ?? 0) > 1;
 
-  const formatCurrency = (amount: string | number) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
-  };
-
-  const formatDate = (dateString: string) =>
-    new Date(dateString).toLocaleString('id-ID', {
-      year: 'numeric', month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', hour12: false,
-      timeZone: 'Asia/Jakarta'
-    });
-
-  const getPaymentMethodLabel = (method: string) => {
-    const methods: Record<string, string> = { cash: 'Tunai', qr: 'QR Code', ewallet: 'E-Wallet', bank: 'Transfer Bank' };
-    return methods[method] || method;
-  };
-
-  const bookingStatusVariants: Record<string, { label: string; className: string }> = {
-    paid:     { label: 'Lunas',       className: 'bg-green-100 text-green-800' },
-    pending:  { label: 'Pending',     className: 'bg-yellow-100 text-yellow-800' },
-    canceled: { label: 'Dibatalkan',  className: 'bg-red-100 text-red-800' },
-    refunded: { label: 'Dikembalikan',className: 'bg-gray-100 text-gray-800' }
-  };
-
-  const ticketStatusVariants: Record<string, { label: string; className: string }> = {
-    active:     { label: 'Aktif',      className: 'bg-blue-100 text-blue-800' },
-    canceled:   { label: 'Dibatalkan', className: 'bg-red-100 text-red-800' },
-    refunded:   { label: 'Refund',     className: 'bg-gray-100 text-gray-700' },
-    checked_in: { label: 'Check-in',   className: 'bg-emerald-100 text-emerald-800' },
-    no_show:    { label: 'No-show',    className: 'bg-orange-100 text-orange-800' },
-  };
-
-  const BookingBadge = ({ status }: { status: string }) => {
-    const v = bookingStatusVariants[status] || { label: status, className: 'bg-gray-100 text-gray-800' };
-    return <Badge className={v.className} data-testid={`booking-status-${status}`}>{v.label}</Badge>;
-  };
-
-  const TicketBadge = ({ status }: { status?: string | null }) => {
-    const s = status || 'active';
-    const v = ticketStatusVariants[s] || { label: s, className: 'bg-gray-100 text-gray-800' };
-    return <Badge className={v.className} data-testid={`ticket-status-${s}`}>{v.label}</Badge>;
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose} data-testid="passenger-detail-modal">
-      <DialogContent className="max-w-2xl max-h-[82vh] flex flex-col gap-0 p-0 overflow-hidden">
-        {/* Fixed header */}
-        <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <Armchair className="w-5 h-5 text-primary" />
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Armchair className="w-4 h-4 text-primary" />
             Detail Penumpang — Kursi {passengerDetails?.seatNo || selectedSeatNo || ''}
             {isMulti && (
               <span className="ml-1 text-xs font-normal text-muted-foreground">
-                ({passengerDetails!.bookings.length} penumpang)
+                ({passengerDetails!.bookings.length} booking)
               </span>
             )}
           </DialogTitle>
         </DialogHeader>
 
-        {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-2" data-testid="modal-content">
-
+        <div data-testid="modal-content">
           {isLoading && (
-            <div className="flex items-center justify-center py-10" data-testid="loading-state">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            <div className="flex items-center justify-center py-12" data-testid="loading-state">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
               <span className="ml-2 text-sm text-muted-foreground">Memuat detail penumpang...</span>
             </div>
           )}
@@ -128,159 +140,172 @@ export default function PassengerDetailModal({
           )}
 
           {!isLoading && passengerDetails?.bookings && passengerDetails.bookings.length > 0 && (
-            passengerDetails.bookings.map((bookingData, index) => {
-              const isOpen = openIndices.has(index);
-              const p = bookingData.passenger as any;
-              const b = bookingData.booking as any;
+            <div className="space-y-4">
+              {passengerDetails.bookings.map((bookingData, index) => {
+                const isOpen = openIndices.has(index);
+                const b = bookingData.booking as any;
+                const p = bookingData.passenger as any;
 
-              return (
-                <div
-                  key={bookingData.booking.id}
-                  className="rounded-lg border bg-card overflow-hidden"
-                  data-testid={`booking-${index}`}
-                >
-                  {/* Collapsible header — always visible */}
-                  <button
-                    type="button"
-                    onClick={() => isMulti && toggle(index)}
-                    className={`w-full text-left px-4 py-3 flex items-start gap-3 ${isMulti ? 'cursor-pointer hover:bg-muted/40 transition-colors' : 'cursor-default'}`}
-                    data-testid={`booking-header-${index}`}
-                  >
-                    {/* Seat chip */}
-                    <span className="mt-0.5 shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-md bg-primary/10 text-primary text-xs font-bold font-mono">
-                      {bookingData.passenger.seatNo}
-                    </span>
+                return (
+                  <div key={b.id} className="space-y-4" data-testid={`booking-${index}`}>
+                    {isMulti && (
+                      <button
+                        type="button"
+                        onClick={() => toggle(index)}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-sm font-medium"
+                        data-testid={`booking-header-${index}`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-primary/10 text-primary text-xs font-bold font-mono">{p.seatNo}</span>
+                          <span>{p.fullName}</span>
+                          <StatusBadge status={b.status || 'unknown'} />
+                        </span>
+                        {isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                      </button>
+                    )}
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="font-semibold text-sm truncate">{bookingData.passenger.fullName}</span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <TicketBadge status={p.ticketStatus} />
-                          <BookingBadge status={bookingData.booking.status || 'unknown'} />
-                          {isMulti && (
-                            <span className="text-muted-foreground">
-                              {isOpen
-                                ? <ChevronUp className="w-4 h-4" />
-                                : <ChevronDown className="w-4 h-4" />
-                              }
-                            </span>
-                          )}
+                    {(!isMulti || isOpen) && (
+                      <>
+                        {/* Booking Header */}
+                        <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Kode Booking</p>
+                              <p className="font-mono font-bold text-base text-blue-700" data-testid="booking-code">
+                                {b.bookingCode ?? b.id?.slice(0, 8).toUpperCase()}
+                              </p>
+                            </div>
+                            <StatusBadge status={b.status || 'unknown'} />
+                          </div>
+
+                          <div className="flex items-center gap-2 text-sm font-medium" data-testid="origin-destination">
+                            <MapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                            <span className="truncate">{b.originStop?.name ?? '—'}</span>
+                            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                            <span className="truncate">{b.destinationStop?.name ?? '—'}</span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 text-xs">
+                            <div>
+                              <p className="text-muted-foreground">Channel</p>
+                              <p className="font-medium mt-0.5">
+                                {b.channel ? <ChannelBadge channel={b.channel} /> : '—'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Total</p>
+                              <p className="font-semibold text-emerald-700 mt-0.5">{fmt(b.totalAmount ?? 0)}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Dibuat</p>
+                              <p className="font-medium mt-0.5">{fmtDate(b.createdAt)}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Oleh</p>
+                              <p className="font-medium mt-0.5 truncate">{b.createdBy ?? '—'}</p>
+                            </div>
+                            {b.outlet && (
+                              <div>
+                                <p className="text-muted-foreground">Outlet</p>
+                                <p className="font-medium mt-0.5 truncate">{b.outlet.name}</p>
+                              </div>
+                            )}
+                            {b.vehicle && (
+                              <div>
+                                <p className="text-muted-foreground">Kendaraan</p>
+                                <p className="font-medium mt-0.5">{b.vehicle.plate} ({b.vehicle.code})</p>
+                              </div>
+                            )}
+                            {b.departAt && (
+                              <div>
+                                <p className="text-muted-foreground">Berangkat</p>
+                                <p className="font-medium mt-0.5">{fmtDate(b.departAt)}</p>
+                              </div>
+                            )}
+                            {b.arriveAt && (
+                              <div>
+                                <p className="text-muted-foreground">Tiba</p>
+                                <p className="font-medium mt-0.5">{fmtDate(b.arriveAt)}</p>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Codes — always visible */}
-                      <div className="flex flex-col gap-0.5 mt-1">
-                        {p.ticketNumber && (
-                          <div className="flex items-center gap-1.5 text-xs" data-testid="ticket-number">
-                            <Ticket className="w-3 h-3 text-muted-foreground shrink-0" />
-                            <span className="text-muted-foreground">Tiket:</span>
-                            <span className="font-mono font-semibold tracking-wider text-primary">{p.ticketNumber}</span>
-                          </div>
-                        )}
-                        {b.bookingCode && (
-                          <div className="flex items-center gap-1.5 text-xs" data-testid="booking-code">
-                            <Hash className="w-3 h-3 text-muted-foreground shrink-0" />
-                            <span className="text-muted-foreground">Booking:</span>
-                            <span className="font-mono font-semibold tracking-wider text-primary">{b.bookingCode}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-
-                  {/* Collapsible body */}
-                  {(!isMulti || isOpen) && (
-                    <div className="border-t px-4 py-3 space-y-3 text-sm" data-testid={`booking-body-${index}`}>
-
-                      {/* Passenger details */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2" data-testid="passenger-name">
+                        {/* Passenger */}
+                        <div className="rounded-lg border overflow-hidden">
+                          <div className="px-4 py-3 bg-muted/20 flex items-center gap-2 text-sm font-semibold">
                             <User className="w-3.5 h-3.5 text-muted-foreground" />
-                            <span className="font-medium">Nama:</span>
-                            <span>{bookingData.passenger.fullName}</span>
+                            Penumpang
                           </div>
-                          {bookingData.passenger.phone && (
-                            <div className="flex items-center gap-2" data-testid="passenger-phone">
-                              <Phone className="w-3.5 h-3.5 text-muted-foreground" />
-                              <span className="font-medium">Telepon:</span>
-                              <span>{bookingData.passenger.phone}</span>
+                          <div className="px-4 py-3 space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium" data-testid="passenger-name">{p.fullName}</span>
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="seat-number">
+                                <Armchair className="w-3 h-3" />
+                                {p.seatNo}
+                              </span>
                             </div>
-                          )}
-                          {bookingData.passenger.idNumber && (
-                            <div className="flex items-center gap-2" data-testid="passenger-id">
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                              {p.phone && (
+                                <span className="flex items-center gap-1" data-testid="passenger-phone">
+                                  <Phone className="w-3 h-3" /> {p.phone}
+                                </span>
+                              )}
+                              {p.idNumber && (
+                                <span className="flex items-center gap-1" data-testid="passenger-id">
+                                  <CreditCard className="w-3 h-3" /> {p.idNumber}
+                                </span>
+                              )}
+                              {p.ticketNumber && (
+                                <span className="flex items-center gap-1" data-testid="ticket-number">
+                                  <Hash className="w-3 h-3" /> {p.ticketNumber}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs font-medium text-emerald-700" data-testid="fare-amount">{fmt(p.fareAmount ?? 0)}</p>
+                          </div>
+                        </div>
+
+                        {/* Payments */}
+                        {bookingData.payments.length > 0 && (
+                          <div className="rounded-lg border overflow-hidden">
+                            <div className="px-4 py-3 bg-muted/20 flex items-center gap-2 text-sm font-semibold">
                               <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
-                              <span className="font-medium">No. ID:</span>
-                              <span>{bookingData.passenger.idNumber}</span>
+                              Pembayaran
                             </div>
-                          )}
-                        </div>
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2" data-testid="seat-number">
-                            <Armchair className="w-3.5 h-3.5 text-muted-foreground" />
-                            <span className="font-medium">Kursi:</span>
-                            <span>{bookingData.passenger.seatNo}</span>
-                          </div>
-                          <div className="flex items-center gap-2" data-testid="fare-amount">
-                            <span className="font-medium">Tarif:</span>
-                            <span>{formatCurrency(bookingData.passenger.fareAmount || '0')}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <Separator />
-
-                      {/* Journey */}
-                      <div className="space-y-1.5">
-                        <h4 className="font-medium text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5" /> Detail Perjalanan
-                        </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <div data-testid="origin-destination">
-                            <span className="font-medium">Rute:</span>
-                            <div className="text-muted-foreground text-xs mt-0.5">
-                              {bookingData.booking.originStop?.name} → {bookingData.booking.destinationStop?.name}
+                            <div className="divide-y">
+                              {bookingData.payments.map((pay, pi) => (
+                                <div key={pay.id} className="px-4 py-3 flex items-center justify-between text-sm" data-testid={`payment-${pi}`}>
+                                  <div>
+                                    <p className="font-medium">{getPaymentLabel(pay.method)}</p>
+                                    {pay.paidAt && <p className="text-xs text-muted-foreground mt-0.5">{fmtDate(pay.paidAt)}</p>}
+                                  </div>
+                                  <p className="font-semibold text-emerald-700">{fmt(pay.amount ?? 0)}</p>
+                                </div>
+                              ))}
                             </div>
                           </div>
-                          <div data-testid="booking-date">
-                            <span className="font-medium">Tanggal Booking:</span>
-                            <div className="text-muted-foreground text-xs mt-0.5">
-                              {bookingData.booking.createdAt && formatDate(bookingData.booking.createdAt.toString())}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <Separator />
-
-                      {/* Payment */}
-                      <div className="space-y-1.5">
-                        <h4 className="font-medium text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <CreditCard className="w-3.5 h-3.5" /> Detail Pembayaran
-                        </h4>
-                        {bookingData.payments.length > 0 ? (
-                          bookingData.payments.map((payment, pi) => (
-                            <div key={payment.id} className="grid grid-cols-2 gap-2" data-testid={`payment-${pi}`}>
-                              <div>
-                                <span className="font-medium">Metode:</span>
-                                <span className="ml-1">{getPaymentMethodLabel(payment.method)}</span>
-                              </div>
-                              <div>
-                                <span className="font-medium">Jumlah:</span>
-                                <span className="ml-1">{formatCurrency(payment.amount)}</span>
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-muted-foreground text-xs">Belum ada data pembayaran</p>
                         )}
-                      </div>
 
-                    </div>
-                  )}
-                </div>
-              );
-            })
+                        {bookingData.payments.length === 0 && (
+                          <div className="rounded-lg border overflow-hidden">
+                            <div className="px-4 py-3 bg-muted/20 flex items-center gap-2 text-sm font-semibold">
+                              <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
+                              Pembayaran
+                            </div>
+                            <p className="px-4 py-3 text-muted-foreground text-xs">Belum ada data pembayaran</p>
+                          </div>
+                        )}
+
+                        {isMulti && index < passengerDetails.bookings.length - 1 && (
+                          <Separator />
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </DialogContent>
