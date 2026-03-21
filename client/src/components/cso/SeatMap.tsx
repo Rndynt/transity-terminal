@@ -361,7 +361,7 @@ export default function SeatMap({
         </div>
       )}
 
-      {assignMode && !externalAssignMode && (
+      {assignMode && (
         <div className="relative rounded-xl border-2 border-emerald-400 bg-emerald-50 p-3 space-y-2 shadow-sm">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-start gap-2.5">

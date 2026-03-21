@@ -17,7 +17,7 @@ import { useSeatHold } from '@/hooks/useSeatHold';
 import {
   ChevronRight, ChevronLeft, Loader2, MapPin,
   Armchair, ArrowRight, Ticket, Package, Clock, CheckCircle2, Truck, XCircle,
-  Download, Upload, RotateCcw, FileText, User, X as XIcon
+  Download, Upload, RotateCcw, FileText, User
 } from 'lucide-react';
 import type { Stop, Outlet, CsoAvailableTrip, CargoShipmentWithStops } from '@/types';
 
@@ -533,37 +533,6 @@ export default function CsoPage() {
                 </div>
               </div>
             </>
-          )}
-
-          {assignModeInfo && phase === 'book' && (
-            <div className="flex-shrink-0 bg-emerald-600 text-white" data-testid="assign-mode-banner">
-              <div className="flex items-center justify-between px-4 py-2.5 gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-white/20 flex-shrink-0">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-emerald-100">Mode Assign Kursi</p>
-                    <p className="text-sm font-bold truncate">{assignModeInfo.passengerName}</p>
-                    {assignModeInfo.bookingCode && (
-                      <p className="text-xs text-emerald-200 font-mono">{assignModeInfo.bookingCode}</p>
-                    )}
-                  </div>
-                </div>
-                <p className="text-xs text-emerald-100 hidden md:block flex-shrink-0">Klik kursi yang tersedia (hijau) untuk assign</p>
-                <button
-                  onClick={() => {
-                    setAssignModeInfo(null);
-                    navigate('/cso');
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 transition-colors text-xs font-semibold flex-shrink-0"
-                  data-testid="btn-cancel-assign"
-                >
-                  <XIcon className="w-3.5 h-3.5" />
-                  Batalkan
-                </button>
-              </div>
-            </div>
           )}
 
           {phase === 'book' && csoMode === 'penumpang' && (
