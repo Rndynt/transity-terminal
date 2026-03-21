@@ -108,7 +108,12 @@ export const tripsApi = {
           throw new Error(`Failed to fetch passenger details: ${res.status}`);
         }
         return res.json();
-      })
+      }),
+  getUnseatedPassengers: async (tripId: string) => {
+    const res = await fetch(`/api/trips/${tripId}/unseated-passengers`);
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Failed to fetch unseated passengers'); }
+    return res.json();
+  },
 };
 
 // Trip Stop Times API

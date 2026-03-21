@@ -395,6 +395,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/trips/:id/seatmap', asyncHandler(tripsController.getSeatmap.bind(tripsController)));
   app.get('/api/trips/:tripId/seats/:seatNo/passenger-details', asyncHandler(tripsController.getSeatPassengerDetails.bind(tripsController)));
 
+  app.get('/api/trips/:id/unseated-passengers', asyncHandler(async (req, res) => {
+    const passengers = await storage.getUnseatedPassengers(req.params.id);
+    res.json(passengers);
+  }));
+
   // Manifest — full manifest document per trip (header + passengers + cargo + summary)
   app.get('/api/trips/:id/manifest', asyncHandler(async (req, res) => {
     const manifest = await storage.getManifestFull(req.params.id);

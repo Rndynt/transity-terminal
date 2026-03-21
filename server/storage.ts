@@ -832,6 +832,30 @@ export class DatabaseStorage implements IStorage {
     return passenger;
   }
 
+  async getUnseatedPassengers(tripId: string): Promise<any[]> {
+    const rows = await db.execute(sql`
+      SELECT
+        p.id,
+        p.full_name             AS "fullName",
+        p.phone,
+        p.ticket_number         AS "ticketNumber",
+        p.fare_amount           AS "fareAmount",
+        b.booking_code          AS "bookingCode",
+        b.id                    AS "bookingId",
+        os.name                 AS "originStopName",
+        ds.name                 AS "destinationStopName"
+      FROM ${passengers} p
+      INNER JOIN ${bookings} b ON b.id = p.booking_id
+      LEFT JOIN ${stops} os ON os.id = b.origin_stop_id
+      LEFT JOIN ${stops} ds ON ds.id = b.destination_stop_id
+      WHERE b.trip_id = ${tripId}
+        AND b.status NOT IN ('canceled', 'refunded')
+        AND COALESCE(p.ticket_status, 'active') = 'unseated'
+      ORDER BY p.full_name ASC
+    `);
+    return rows.rows as any[];
+  }
+
   // Manifest — all passengers for a trip with booking and stop context
   async getManifest(tripId: string): Promise<ManifestEntry[]> {
     const rows = await db.execute(sql`

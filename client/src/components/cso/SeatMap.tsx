@@ -3,7 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { tripsApi, holdsApi, passengersApi } from '@/lib/api';
 import { useSeatHold } from '@/hooks/useSeatHold';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { RotateCcw, Loader2, Bus, Timer, CheckCircle2, AlertTriangle, Users, Settings2, Armchair, X, User } from 'lucide-react';
+import { RotateCcw, Loader2, Bus, Timer, CheckCircle2, AlertTriangle, Users, Settings2, Armchair, X, User, ChevronDown, ChevronUp, UserX } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
 import type { Trip, SeatmapResponse } from '@/types';
@@ -49,11 +49,10 @@ export default function SeatMap({
   const [internalAssignMode, setInternalAssignMode] = useState<AssignModeState | null>(null);
   const assignMode = externalAssignMode || internalAssignMode;
   const setAssignMode = (mode: AssignModeState | null) => {
-    if (externalAssignMode && onAssignModeChange) {
+    if (onAssignModeChange) {
       onAssignModeChange(mode);
-    } else {
-      setInternalAssignMode(mode);
     }
+    setInternalAssignMode(mode);
   };
   const { toast } = useToast();
   const refetchRef = useRef<() => void>(() => {});
@@ -67,6 +66,7 @@ export default function SeatMap({
       queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
       setAssignMode(null);
       refetch();
+      refetchUnseated();
     },
     onError: (e: Error) => {
       toast({ title: 'Gagal Assign Kursi', description: e.message, variant: 'destructive' });
@@ -87,11 +87,21 @@ export default function SeatMap({
 
   const { isConnected, subscribeToTrip, unsubscribeFromTrip, addEventListener } = useWebSocket();
 
+  const [unseatedOpen, setUnseatedOpen] = useState(true);
+
   const { data: seatmap, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['/api/trips', trip.id, 'seatmap', originSeq, destinationSeq],
     queryFn: () => tripsApi.getSeatmap(trip.id, originSeq, destinationSeq),
     enabled: !!trip.id && originSeq > 0 && destinationSeq > 0,
     staleTime: 5000
+  });
+
+  const { data: unseatedPassengers = [], refetch: refetchUnseated } = useQuery<any[]>({
+    queryKey: ['/api/trips', trip.id, 'unseated-passengers'],
+    queryFn: () => tripsApi.getUnseatedPassengers(trip.id),
+    enabled: !!trip.id,
+    staleTime: 10000,
+    refetchInterval: 30000
   });
 
   useEffect(() => { refetchRef.current = refetch; }, [refetch]);
@@ -497,6 +507,63 @@ export default function SeatMap({
               <div className="h-1 bg-blue-100 rounded-full overflow-hidden">
                 <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${(minTTL / 300) * 100}%` }} />
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {unseatedPassengers.length > 0 && !assignMode && (
+        <div className="rounded-xl border-2 border-orange-300 bg-orange-50 overflow-hidden">
+          <button
+            onClick={() => setUnseatedOpen(o => !o)}
+            className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-orange-100/60 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
+                <UserX className="w-3.5 h-3.5 text-orange-600" />
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-bold text-orange-800">Penumpang Tanpa Kursi</p>
+                <p className="text-[10px] text-orange-600">{unseatedPassengers.length} penumpang perlu assign kursi</p>
+              </div>
+            </div>
+            {unseatedOpen ? <ChevronUp className="w-4 h-4 text-orange-400" /> : <ChevronDown className="w-4 h-4 text-orange-400" />}
+          </button>
+          {unseatedOpen && (
+            <div className="px-3 pb-3 space-y-1.5 max-h-48 overflow-y-auto">
+              {isPastTrip && (
+                <p className="text-[10px] text-orange-600 italic px-1">Jadwal sudah lewat — assign kursi tidak tersedia.</p>
+              )}
+              {unseatedPassengers.map((p: any) => (
+                <div key={p.id} className="flex items-center justify-between gap-2 px-2.5 py-2 bg-white rounded-lg border border-orange-200">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-gray-800 truncate">{p.fullName}</p>
+                    <p className="text-[10px] text-gray-500">
+                      <span className="font-mono">{p.bookingCode}</span>
+                      {p.originStopName && p.destinationStopName && (
+                        <> · {p.originStopName} → {p.destinationStopName}</>
+                      )}
+                    </p>
+                  </div>
+                  {!isPastTrip && (
+                    <button
+                      onClick={() => {
+                        setAssignMode({
+                          passengerId: p.id,
+                          passengerName: p.fullName,
+                          ticketNumber: p.ticketNumber || null,
+                          bookingCode: p.bookingCode,
+                        });
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold rounded-lg transition-colors flex-shrink-0"
+                      data-testid={`btn-assign-unseated-${p.id}`}
+                    >
+                      <Armchair className="w-3 h-3" />
+                      Assign
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
