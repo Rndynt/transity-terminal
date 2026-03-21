@@ -7,8 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import ReportFilters, { type ReportFilterValues } from '@/components/reports/ReportFilters';
 import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
 import ReportPageLayout from '@/components/reports/ReportPageLayout';
-import { fmtCurrency } from '@/lib/constants';
-import { CHANNEL_MAP } from '@/lib/constants';
+import { fmtCurrency, CHANNEL_MAP } from '@/lib/constants';
 
 function buildQuery(f: ReportFilterValues) {
   const params = new URLSearchParams({ dateFrom: f.dateFrom, dateTo: f.dateTo });
@@ -45,9 +44,13 @@ export default function RevenueReportPage() {
   }));
 
   return (
-    <ReportPageLayout title="Laporan Pendapatan" description="Analisis pendapatan berdasarkan periode, rute, outlet, dan channel" isLoading={isLoading}>
-      <ReportFilters value={filters} onChange={setFilters} />
-
+    <ReportPageLayout
+      title="Laporan Pendapatan"
+      description="Analisis pendapatan berdasarkan periode, rute, outlet, dan channel."
+      icon={DollarSign}
+      isLoading={isLoading}
+      filterBar={<ReportFilters value={filters} onChange={setFilters} />}
+    >
       <SummaryCardsGrid items={[
         { label: 'Total Pendapatan', value: fmtCurrency(Number(summary?.total_revenue || 0)), icon: DollarSign, iconBg: 'bg-green-100', iconColor: 'text-green-600' },
         { label: 'Total Booking', value: Number(summary?.total_bookings || 0).toLocaleString(), icon: Ticket, iconBg: 'bg-blue-100', iconColor: 'text-blue-600' },
@@ -57,16 +60,18 @@ export default function RevenueReportPage() {
 
       {chartData.length > 1 && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Tren Pendapatan Harian</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Tren Pendapatan Harian</CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
+            <div className="h-[260px]">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" fontSize={12} />
-                  <YAxis fontSize={12} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="date" fontSize={11} className="text-muted-foreground" />
+                  <YAxis fontSize={11} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} className="text-muted-foreground" />
                   <Tooltip formatter={(v: number) => fmtCurrency(v)} labelFormatter={(l) => `Tanggal: ${l}`} />
-                  <Line type="monotone" dataKey="revenue" stroke="#16a34a" strokeWidth={2} name="Pendapatan" dot={false} />
+                  <Line type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} name="Pendapatan" dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -76,46 +81,50 @@ export default function RevenueReportPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardHeader><CardTitle className="text-base">Per Channel</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Per Channel</CardTitle>
+          </CardHeader>
           <CardContent>
             {byChannel.length > 0 ? (
-              <div className="h-[250px]">
+              <div className="h-[220px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={byChannel.map((c: any) => ({ ...c, revenue: Number(c.revenue), label: CHANNEL_MAP[c.channel as keyof typeof CHANNEL_MAP]?.label || c.channel }))}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" fontSize={12} />
-                    <YAxis fontSize={12} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="label" fontSize={11} />
+                    <YAxis fontSize={11} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                     <Tooltip formatter={(v: number) => fmtCurrency(v)} />
-                    <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Pendapatan" />
+                    <Bar dataKey="revenue" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Pendapatan" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             ) : (
-              <p className="text-center text-muted-foreground py-8">Tidak ada data</p>
+              <p className="text-center text-sm text-muted-foreground py-8">Tidak ada data</p>
             )}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">Per Rute</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Per Rute</CardTitle>
+          </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Rute</TableHead>
-                  <TableHead className="text-right">Booking</TableHead>
-                  <TableHead className="text-right">Pendapatan</TableHead>
+                  <TableHead className="text-xs">Rute</TableHead>
+                  <TableHead className="text-xs text-right">Booking</TableHead>
+                  <TableHead className="text-xs text-right">Pendapatan</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {byRoute.length > 0 ? byRoute.map((r: any, i: number) => (
                   <TableRow key={i}>
-                    <TableCell className="font-medium">{r.route_name || '-'}</TableCell>
-                    <TableCell className="text-right">{r.bookings}</TableCell>
-                    <TableCell className="text-right font-medium">{fmtCurrency(Number(r.revenue))}</TableCell>
+                    <TableCell className="text-sm">{r.route_name || '-'}</TableCell>
+                    <TableCell className="text-sm text-right">{r.bookings}</TableCell>
+                    <TableCell className="text-sm text-right font-medium">{fmtCurrency(Number(r.revenue))}</TableCell>
                   </TableRow>
                 )) : (
-                  <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Tidak ada data</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={3} className="text-center text-sm text-muted-foreground">Tidak ada data</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -125,22 +134,24 @@ export default function RevenueReportPage() {
 
       {byOutlet.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Per Outlet</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Per Outlet</CardTitle>
+          </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Outlet</TableHead>
-                  <TableHead className="text-right">Booking</TableHead>
-                  <TableHead className="text-right">Pendapatan</TableHead>
+                  <TableHead className="text-xs">Outlet</TableHead>
+                  <TableHead className="text-xs text-right">Booking</TableHead>
+                  <TableHead className="text-xs text-right">Pendapatan</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {byOutlet.map((o: any, i: number) => (
                   <TableRow key={i}>
-                    <TableCell className="font-medium">{o.outlet_name || 'Tanpa Outlet'}</TableCell>
-                    <TableCell className="text-right">{o.bookings}</TableCell>
-                    <TableCell className="text-right font-medium">{fmtCurrency(Number(o.revenue))}</TableCell>
+                    <TableCell className="text-sm">{o.outlet_name || 'Tanpa Outlet'}</TableCell>
+                    <TableCell className="text-sm text-right">{o.bookings}</TableCell>
+                    <TableCell className="text-sm text-right font-medium">{fmtCurrency(Number(o.revenue))}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
