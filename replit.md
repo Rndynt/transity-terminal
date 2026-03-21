@@ -45,9 +45,11 @@ plan/              → Dokumentasi teknis fitur
 
 ## Recent Changes
 
-**2026-03-21 — Unseat & Reschedule**
+**2026-03-21 — Unseat & Reschedule + Bug Fixes**
 - **Schema**: Added `unseated` to `bookingStatusEnum` and `ticketStatusEnum`; new `booking_history` table for audit trail (action enum: unseated/reassigned/rescheduled/canceled/status_change)
-- **Backend**: `UnseatService` (`server/modules/bookings/unseat.service.ts`) — unseatPassenger, unseatAllPassengers, reassignSeat, reschedulePassenger; all operations transactional with seat_inventory updates and WebSocket broadcasts
+- **Backend**: `UnseatService` (`server/modules/bookings/unseat.service.ts`) — unseatPassenger, unseatAllPassengers, reassignSeat, reschedulePassenger, assignSeatToUnseated; all operations transactional with seat_inventory updates and WebSocket broadcasts
+- **Bug Fix — Assign Unseated**: New `assignSeatToUnseated` service method + API endpoint `POST /api/passengers/:passengerId/assign-seat` allows re-assigning seats to unseated passengers. UI buttons added in both `PassengerDetailModal` and `AllBookingsPage` with orange notice banner for awareness
+- **Bug Fix — Seat Hold Expiry**: `useSeatHold` hook now accepts `onHoldExpired` callback; on timer expiry it (1) removes seat from local state, (2) calls backend `holdsApi.release()`, (3) triggers `onSeatDeselect` + seatmap refetch in SeatMap so the seat visually returns to available
 - **API Routes**: `POST /api/passengers/:passengerId/unseat`, `POST /api/passengers/:passengerId/reassign`, `POST /api/passengers/:passengerId/reschedule`, `POST /api/bookings/:bookingId/unseat-all`, `GET /api/bookings/:bookingId/history`
 - **Frontend**: PassengerDetailModal (CSO seat map click) has Unseat and Pindah Kursi buttons per passenger; AllBookingsPage BookingDetailModal has per-passenger Unseat/Reassign + Unseat All + Booking History timeline
 - **Manifest**: Unseated passengers/bookings excluded from manifest queries

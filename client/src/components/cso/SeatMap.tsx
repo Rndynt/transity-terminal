@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { tripsApi, holdsApi } from '@/lib/api';
 import { useSeatHold } from '@/hooks/useSeatHold';
@@ -34,8 +34,20 @@ export default function SeatMap({
   const [seatLoading, setSeatLoading] = useState<string | null>(null);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [precomputing, setPrecomputing] = useState(false);
-  const { createHold, releaseHold, getHoldTTL, isHeld } = useSeatHold();
   const { toast } = useToast();
+  const refetchRef = useRef<() => void>(() => {});
+
+  const handleHoldExpired = useCallback((seatNo: string) => {
+    setLocalSelectedSeats(prev => {
+      const n = new Set(prev);
+      n.delete(seatNo);
+      return n;
+    });
+    onSeatDeselect(seatNo);
+    setTimeout(() => refetchRef.current(), 100);
+  }, [onSeatDeselect]);
+
+  const { createHold, releaseHold, getHoldTTL, isHeld } = useSeatHold(handleHoldExpired);
 
   const { isConnected, subscribeToTrip, unsubscribeFromTrip, addEventListener } = useWebSocket();
 
@@ -45,6 +57,8 @@ export default function SeatMap({
     enabled: !!trip.id && originSeq > 0 && destinationSeq > 0,
     staleTime: 5000
   });
+
+  useEffect(() => { refetchRef.current = refetch; }, [refetch]);
 
   const passengerDetailsMutation = useMutation({
     mutationFn: ({ tripId, seatNo, originSeq, destinationSeq }: {

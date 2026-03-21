@@ -349,6 +349,92 @@ export class UnseatService {
     };
   }
 
+  async assignSeatToUnseated(
+    passengerId: string,
+    newSeatNo: string,
+    performedBy: string
+  ): Promise<{ success: boolean; passenger: any; booking: any }> {
+    const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
+    if (!passenger) throw new Error("Penumpang tidak ditemukan");
+    if (passenger.ticketStatus !== 'unseated') {
+      throw new Error("Hanya penumpang berstatus unseated yang bisa di-assign ulang");
+    }
+
+    const booking = await this.storage.getBookingById(passenger.bookingId);
+    if (!booking) throw new Error("Booking tidak ditemukan");
+
+    const legIndexes = getLegIndexes(booking.originSeq, booking.destinationSeq);
+
+    const newSeatAvailability = await db.select().from(seatInventory)
+      .where(and(
+        eq(seatInventory.tripId, booking.tripId),
+        eq(seatInventory.seatNo, newSeatNo),
+        inArray(seatInventory.legIndex, legIndexes)
+      ));
+
+    if (newSeatAvailability.length === 0) {
+      throw new Error("Inventori kursi belum diinisialisasi untuk kursi ini");
+    }
+
+    if (newSeatAvailability.length !== legIndexes.length) {
+      throw new Error("Inventori kursi tidak lengkap untuk semua leg rute");
+    }
+
+    const isAvailable = newSeatAvailability.every(s => !s.booked && !s.holdRef);
+    if (!isAvailable) {
+      throw new Error(`Kursi ${newSeatNo} tidak tersedia untuk semua leg rute ini`);
+    }
+
+    const updatedPassenger = await db.transaction(async (tx) => {
+      const [updatedP] = await tx.update(passengers)
+        .set({ seatNo: newSeatNo, ticketStatus: 'active' })
+        .where(eq(passengers.id, passengerId))
+        .returning();
+
+      await tx.update(seatInventory)
+        .set({ booked: true, holdRef: null })
+        .where(and(
+          eq(seatInventory.tripId, booking.tripId),
+          eq(seatInventory.seatNo, newSeatNo),
+          inArray(seatInventory.legIndex, legIndexes)
+        ));
+
+      const allPax = await tx.select().from(passengers).where(eq(passengers.bookingId, booking.id));
+      const hasActivePax = allPax.some(p => p.ticketStatus === 'active');
+      if (hasActivePax && booking.status === 'unseated') {
+        const previousStatus = booking.status;
+        const newStatus = 'paid';
+        await tx.update(bookings)
+          .set({ status: newStatus })
+          .where(eq(bookings.id, booking.id));
+      }
+
+      await tx.insert(bookingHistory).values({
+        bookingId: booking.id,
+        passengerId: passengerId,
+        action: 'reassigned',
+        details: {
+          oldSeatNo: passenger.seatNo,
+          newSeatNo,
+          fromUnseated: true
+        },
+        performedBy
+      });
+
+      return updatedP;
+    });
+
+    for (const legIdx of legIndexes) {
+      webSocketService.emitInventoryUpdated(booking.tripId, newSeatNo, [legIdx]);
+    }
+
+    return {
+      success: true,
+      passenger: updatedPassenger,
+      booking: await this.storage.getBookingById(booking.id)
+    };
+  }
+
   async getBookingHistory(bookingId: string) {
     return await db.select().from(bookingHistory)
       .where(eq(bookingHistory.bookingId, bookingId))

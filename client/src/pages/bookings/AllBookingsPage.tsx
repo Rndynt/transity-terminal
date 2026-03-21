@@ -122,6 +122,8 @@ function BookingDetailModal({
   const [confirmUnseatAll, setConfirmUnseatAll] = useState(false);
   const [activeReassignId, setActiveReassignId] = useState<string | null>(null);
   const [reassignSeatNo, setReassignSeatNo] = useState('');
+  const [activeAssignId, setActiveAssignId] = useState<string | null>(null);
+  const [assignSeatNo, setAssignSeatNo] = useState('');
   const { toast } = useToast();
 
   const { data: detail, isLoading, isError } = useQuery<BookingDetail>({
@@ -169,6 +171,19 @@ function BookingDetailModal({
       setReassignSeatNo('');
     },
     onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' })
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: ({ passengerId, newSeatNo }: { passengerId: string; newSeatNo: string }) =>
+      passengersApi.assignSeat(passengerId, newSeatNo),
+    onSuccess: () => {
+      toast({ title: 'Berhasil', description: 'Penumpang berhasil di-assign ke kursi baru.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings', bookingId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+      setActiveAssignId(null);
+      setAssignSeatNo('');
+    },
+    onError: (e: Error) => toast({ title: 'Gagal Assign', description: e.message, variant: 'destructive' })
   });
 
   const hasActivePassengers = detail?.passengers?.some(
@@ -329,39 +344,66 @@ function BookingDetailModal({
                           </div>
                           <p className="text-xs font-medium text-emerald-700">{fmt(p.fareAmount ?? 0)}</p>
 
-                          {isActive && (
+                          {p.ticketStatus !== 'canceled' && (
                             <div className="pt-1 space-y-2">
-                              {confirmUnseatId === p.id ? (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-red-600 font-medium">Yakin unseat?</span>
-                                  <Button size="sm" variant="destructive" className="h-6 text-xs gap-1" disabled={unseatMutation.isPending}
-                                    onClick={() => unseatMutation.mutate(p.id)} data-testid={`btn-confirm-unseat-${p.id}`}>
-                                    {unseatMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />} Ya
-                                  </Button>
-                                  <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setConfirmUnseatId(null)}>Batal</Button>
-                                </div>
-                              ) : activeReassignId === p.id ? (
-                                <div className="flex items-center gap-2">
-                                  <Input placeholder="Kursi baru" value={reassignSeatNo} onChange={e => setReassignSeatNo(e.target.value.toUpperCase())}
-                                    className="h-6 w-20 text-xs font-mono" data-testid={`input-reassign-${p.id}`} />
-                                  <Button size="sm" className="h-6 text-xs gap-1" disabled={!reassignSeatNo || reassignMutation.isPending}
-                                    onClick={() => reassignMutation.mutate({ passengerId: p.id, newSeatNo: reassignSeatNo })} data-testid={`btn-confirm-reassign-${p.id}`}>
-                                    {reassignMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowLeftRight className="w-3 h-3" />} Pindah
-                                  </Button>
-                                  <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setActiveReassignId(null); setReassignSeatNo(''); }}>Batal</Button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-1.5">
-                                  <Button size="sm" variant="outline" className="h-6 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                                    onClick={() => setConfirmUnseatId(p.id)} data-testid={`btn-unseat-${p.id}`}>
-                                    <UserMinus className="w-3 h-3" /> Unseat
-                                  </Button>
-                                  <Button size="sm" variant="outline" className="h-6 text-xs gap-1"
-                                    onClick={() => setActiveReassignId(p.id)} data-testid={`btn-reassign-${p.id}`}>
-                                    <ArrowLeftRight className="w-3 h-3" /> Pindah Kursi
-                                  </Button>
-                                </div>
-                              )}
+                              {p.ticketStatus === 'unseated' ? (
+                                <>
+                                  <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-50 border border-orange-200 rounded text-xs text-orange-700 font-medium">
+                                    <Armchair className="w-3 h-3 text-orange-500 flex-shrink-0" />
+                                    Belum memiliki kursi — assign ke kursi baru
+                                  </div>
+                                  {activeAssignId === p.id ? (
+                                    <div className="flex items-center gap-2">
+                                      <Input placeholder="No. kursi" value={assignSeatNo} onChange={e => setAssignSeatNo(e.target.value.toUpperCase())}
+                                        className="h-6 w-20 text-xs font-mono" data-testid={`input-assign-${p.id}`} />
+                                      <Button size="sm" className="h-6 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700" disabled={!assignSeatNo || assignMutation.isPending}
+                                        onClick={() => assignMutation.mutate({ passengerId: p.id, newSeatNo: assignSeatNo })} data-testid={`btn-confirm-assign-${p.id}`}>
+                                        {assignMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Armchair className="w-3 h-3" />} Assign
+                                      </Button>
+                                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setActiveAssignId(null); setAssignSeatNo(''); }}>Batal</Button>
+                                    </div>
+                                  ) : (
+                                    <Button size="sm" className="h-6 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 w-full"
+                                      onClick={() => setActiveAssignId(p.id)} data-testid={`btn-assign-${p.id}`}>
+                                      <Armchair className="w-3 h-3" /> Assign Kursi Baru
+                                    </Button>
+                                  )}
+                                </>
+                              ) : isActive ? (
+                                <>
+                                  {confirmUnseatId === p.id ? (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-red-600 font-medium">Yakin unseat?</span>
+                                      <Button size="sm" variant="destructive" className="h-6 text-xs gap-1" disabled={unseatMutation.isPending}
+                                        onClick={() => unseatMutation.mutate(p.id)} data-testid={`btn-confirm-unseat-${p.id}`}>
+                                        {unseatMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />} Ya
+                                      </Button>
+                                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setConfirmUnseatId(null)}>Batal</Button>
+                                    </div>
+                                  ) : activeReassignId === p.id ? (
+                                    <div className="flex items-center gap-2">
+                                      <Input placeholder="Kursi baru" value={reassignSeatNo} onChange={e => setReassignSeatNo(e.target.value.toUpperCase())}
+                                        className="h-6 w-20 text-xs font-mono" data-testid={`input-reassign-${p.id}`} />
+                                      <Button size="sm" className="h-6 text-xs gap-1" disabled={!reassignSeatNo || reassignMutation.isPending}
+                                        onClick={() => reassignMutation.mutate({ passengerId: p.id, newSeatNo: reassignSeatNo })} data-testid={`btn-confirm-reassign-${p.id}`}>
+                                        {reassignMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowLeftRight className="w-3 h-3" />} Pindah
+                                      </Button>
+                                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setActiveReassignId(null); setReassignSeatNo(''); }}>Batal</Button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5">
+                                      <Button size="sm" variant="outline" className="h-6 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                                        onClick={() => setConfirmUnseatId(p.id)} data-testid={`btn-unseat-${p.id}`}>
+                                        <UserMinus className="w-3 h-3" /> Unseat
+                                      </Button>
+                                      <Button size="sm" variant="outline" className="h-6 text-xs gap-1"
+                                        onClick={() => setActiveReassignId(p.id)} data-testid={`btn-reassign-${p.id}`}>
+                                        <ArrowLeftRight className="w-3 h-3" /> Pindah Kursi
+                                      </Button>
+                                    </div>
+                                  )}
+                                </>
+                              ) : null}
                             </div>
                           )}
                         </div>

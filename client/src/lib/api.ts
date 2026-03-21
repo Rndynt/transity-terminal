@@ -195,6 +195,15 @@ export const passengersApi = {
     if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Reassign failed'); }
     return res.json();
   },
+  assignSeat: async (passengerId: string, newSeatNo: string) => {
+    const res = await fetch(`/api/passengers/${passengerId}/assign-seat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newSeatNo })
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Assign seat failed'); }
+    return res.json();
+  },
   reschedule: async (passengerId: string, data: {
     newTripId: string;
     newSeatNo: string;

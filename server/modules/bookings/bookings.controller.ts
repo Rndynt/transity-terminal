@@ -420,6 +420,25 @@ export class BookingsController {
     }
   }
 
+  async assignSeatToUnseated(req: Request, res: Response) {
+    try {
+      const { passengerId } = req.params;
+      const { newSeatNo } = reassignSeatSchema.parse(req.body);
+      const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
+      const result = await this.unseatService.assignSeatToUnseated(passengerId, newSeatNo, performedBy);
+      res.json(result);
+    } catch (error: any) {
+      console.error('Assign seat to unseated error:', error);
+      const status = error.message.includes('tidak ditemukan') ? 404
+        : error.message.includes('tidak tersedia') ? 409
+        : error.message.includes('berstatus unseated') ? 400 : 400;
+      res.status(status).json({
+        error: error.message,
+        code: 'ASSIGN_UNSEATED_ERROR'
+      });
+    }
+  }
+
   async getBookingHistory(req: Request, res: Response) {
     try {
       const { bookingId } = req.params;

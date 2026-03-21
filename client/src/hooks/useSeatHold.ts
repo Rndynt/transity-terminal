@@ -11,13 +11,18 @@ interface SeatHold {
   destinationSeq: number;
 }
 
-export function useSeatHold() {
+export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
   const [holds, setHolds] = useState<Map<string, SeatHold>>(new Map());
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
   const { toast } = useToast();
   const intervalRef = useRef<NodeJS.Timeout>();
   const holdsRef = useRef<Map<string, SeatHold>>(new Map());
+  const onHoldExpiredRef = useRef(onHoldExpired);
+
+  useEffect(() => {
+    onHoldExpiredRef.current = onHoldExpired;
+  }, [onHoldExpired]);
 
   useEffect(() => {
     holdsRef.current = holds;
@@ -34,14 +39,17 @@ export function useSeatHold() {
         let hasChanges = false;
 
         const expiredSeats = Array.from(newHolds.entries()).filter(([, hold]) => hold.expiresAt <= now);
-        for (const [seatNo] of expiredSeats) {
+        for (const [seatNo, hold] of expiredSeats) {
           newHolds.delete(seatNo);
+          holdsRef.current.delete(seatNo);
           hasChanges = true;
           toast({
             title: "Hold Expired",
-            description: `Seat ${seatNo} hold has expired`,
+            description: `Kursi ${seatNo} sudah dilepas otomatis`,
             variant: "destructive"
           });
+          onHoldExpiredRef.current?.(seatNo);
+          holdsApi.release(hold.holdRef).catch(() => {});
         }
 
         return hasChanges ? newHolds : currentHolds;
