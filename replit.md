@@ -1,4 +1,4 @@
-# Transity — Multi-Stop Travel Management System
+# TransityTerminal — Multi-Stop Travel Management System
 
 ## Overview
 Sistem manajemen perjalanan multi-stop (bus/travel) dengan terminal reservasi CSO, penjadwalan trip, kargo, aturan harga, dan manajemen kursi real-time via WebSocket.

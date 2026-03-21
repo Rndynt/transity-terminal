@@ -1,12 +1,12 @@
 // ============================================
-// REALMIO AUTH CLIENT UNTUK TRANSITYCORE
+// REALMIO AUTH CLIENT UNTUK TRANSITYTERMINAL
 // ============================================
 // Letakkan file ini di: client/src/lib/realmio-auth.ts
 // Kemudian sesuaikan dengan kebutuhan project
 
 // Konfigurasi - letakkan di .env
 const REALMIO_AUTH_URL = import.meta.env.VITE_REALMIO_AUTH_URL || 'https://realmio-rndynt.zocomputer.io';
-const REALMIO_TENANT_ID = import.meta.env.VITE_REALMIO_TENANT_ID || 'transity-core';
+const REALMIO_TENANT_ID = import.meta.env.VITE_REALMIO_TENANT_ID || 'transity-terminal';
 
 // ============================================
 // Types

@@ -1,4 +1,4 @@
-# Bug Analysis & Fix Report - TransityCore
+# Bug Analysis & Fix Report - TransityTerminal
 
 **Analysis Date:** 2026-02-22
 **Status:** ALL BUGS FIXED

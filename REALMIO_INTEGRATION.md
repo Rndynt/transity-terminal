@@ -1,4 +1,4 @@
-# Realmio Integration Guide untuk TransityCore
+# Realmio Integration Guide untuk TransityTerminal
 
 ## Arsitektur
 
@@ -6,7 +6,7 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                           Browser                                    │
 │  ┌───────────────────────┐    ┌───────────────────────┐             │
-│  │   TransityCore        │    │   Realmio             │             │
+│  │   TransityTerminal        │    │   Realmio             │             │
 │  │   (Frontend)          │    │   (Auth Service)      │             │
 │  │                       │    │                       │             │
 │  │  - Login Form         │───▶│  - /api/auth/sign-in  │             │
@@ -35,7 +35,7 @@
 ### 1. Login Flow
 
 ```
-User ──▶ TransityCore Login Form ──▶ Realmio API ──▶ Session Cookie
+User ──▶ TransityTerminal Login Form ──▶ Realmio API ──▶ Session Cookie
                                       │
                                       ▼
                               tenant_transity_core.users
@@ -44,7 +44,7 @@ User ──▶ TransityCore Login Form ──▶ Realmio API ──▶ Session C
 ### 2. API Request
 
 ```
-TransityCore ──▶ API Request + Cookie ──▶ Realmio Verify ──▶ TransityCore Backend
+TransityTerminal ──▶ API Request + Cookie ──▶ Realmio Verify ──▶ TransityTerminal Backend
                    │
                    └── Cookie: better-auth.session_token=xxx
 ```
@@ -53,12 +53,12 @@ TransityCore ──▶ API Request + Cookie ──▶ Realmio Verify ──▶ T
 
 ### 1. Environment Variables
 
-Tambahkan di `.env` TransityCore:
+Tambahkan di `.env` TransityTerminal:
 
 ```env
 # Realmio Auth Service
 VITE_REALMIO_AUTH_URL=https://realmio-rndynt.zocomputer.io
-VITE_REALMIO_TENANT_ID=transity-core
+VITE_REALMIO_TENANT_ID=transity-terminal
 ```
 
 ### 2. Copy Auth Library
@@ -112,13 +112,13 @@ import { ProtectedRoute } from '@/lib/realmio-auth';
 # Register user baru
 curl -X POST https://realmio-rndynt.zocomputer.io/api/auth/sign-up/email \
   -H "Content-Type: application/json" \
-  -H "X-Tenant-Id: transity-core" \
+  -H "X-Tenant-Id: transity-terminal" \
   -d '{"email":"user@transity.id","password":"Password123!","name":"Test User"}'
 
 # Login
 curl -X POST https://realmio-rndynt.zocomputer.io/api/auth/sign-in/email \
   -H "Content-Type: application/json" \
-  -H "X-Tenant-Id: transity-core" \
+  -H "X-Tenant-Id: transity-terminal" \
   -d '{"email":"user@transity.id","password":"Password123!"}'
 ```
 

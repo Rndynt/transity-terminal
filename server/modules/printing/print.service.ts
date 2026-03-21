@@ -18,7 +18,7 @@ export class PrintService {
       type: "ticket",
       format: "thermal_80mm",
       content: {
-        header: "TransityCore",
+        header: "TransityTerminal",
         bookingRef,
         tickets: ticketList.map(p => ({
           ticketNumber: p.ticketNumber,

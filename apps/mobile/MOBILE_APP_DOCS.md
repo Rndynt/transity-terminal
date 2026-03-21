@@ -1,6 +1,6 @@
 # Transity Mobile App — Dokumentasi Lengkap
 
-Aplikasi mobile **Transity** adalah aplikasi passenger (penumpang) berbasis React Native + Expo yang terhubung ke backend TransityCore yang sama. Penumpang bisa mencari trip, pilih kursi, booking tiket, tracking kargo, dan melihat e-ticket dengan QR code.
+Aplikasi mobile **Transity** adalah aplikasi passenger (penumpang) berbasis React Native + Expo yang terhubung ke backend TransityTerminal yang sama. Penumpang bisa mencari trip, pilih kursi, booking tiket, tracking kargo, dan melihat e-ticket dengan QR code.
 
 ---
 
@@ -82,7 +82,7 @@ apps/mobile/
 
 ### Langkah 1 — Clone & masuk ke folder mobile
 
-Jika Anda sudah clone repo TransityCore, cukup masuk ke folder mobile:
+Jika Anda sudah clone repo TransityTerminal, cukup masuk ke folder mobile:
 
 ```bash
 cd apps/mobile
@@ -123,7 +123,7 @@ EXPO_PUBLIC_API_URL=https://<your-replit-domain>.replit.app
 **Cara mendapatkan URL backend:**
 - Buka project Transity di Replit
 - Klik tombol **"Open in new tab"** di panel preview
-- Salin URL tersebut (contoh: `https://transitycore.replit.app`)
+- Salin URL tersebut (contoh: `https://transityterminal.replit.app`)
 - Gunakan URL itu sebagai nilai `EXPO_PUBLIC_API_URL`
 
 Untuk development lokal (jika backend juga dijalankan lokal):
@@ -274,7 +274,7 @@ Beranda (Home)
 
 ## 8. Koneksi ke Backend
 
-Mobile app berkomunikasi dengan backend TransityCore melalui REST API. Semua API call terpusat di `src/lib/api.ts`.
+Mobile app berkomunikasi dengan backend TransityTerminal melalui REST API. Semua API call terpusat di `src/lib/api.ts`.
 
 ### Endpoint yang Digunakan
 

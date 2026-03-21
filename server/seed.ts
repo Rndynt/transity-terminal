@@ -5,7 +5,7 @@ import { fromZonedHHMMToUtc } from "./utils/timezone";
 import { TripBasesService } from "./modules/tripBases/tripBases.service";
 
 /**
- * SEED DATA - TransityCore
+ * SEED DATA - TransityTerminal
  *
  * Rute:
  * 1. JKT -> CRB -> SMR -> YGY -> SLO -> SBY  (Jakarta - Surabaya)
@@ -63,7 +63,7 @@ function nextNDays(n: number): string[] {
 
 export async function seedData() {
   console.log("========================================");
-  console.log("  TRANSITYCORE SEED DATA");
+  console.log("  TRANSITYTERMINAL SEED DATA");
   console.log("========================================");
 
   await cleanDatabase();

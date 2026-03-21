@@ -372,6 +372,7 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const [showAddLine, setShowAddLine] = useState(false);
   const [addForm, setAddForm] = useState({ category: 'lainnya', label: '', estimatedAmount: '', isAdvance: true, notes: '' });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showSettleConfirm, setShowSettleConfirm] = useState(false);
 
   const { data: spjData, isLoading } = useQuery<SpjWithDetails>({
     queryKey: ['/api/spj', id],
@@ -491,7 +492,7 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
               </Button>
             )}
             {(isIssued || spjData.status === 'on_trip') && (
-              <Button size="sm" variant="default" onClick={() => settleMutation.mutate()} disabled={settleMutation.isPending} data-testid="btn-settle-spj">
+              <Button size="sm" variant="default" onClick={() => setShowSettleConfirm(true)} disabled={settleMutation.isPending} data-testid="btn-settle-spj">
                 <Wallet className="w-4 h-4 mr-1" /> Selesaikan
               </Button>
             )}
@@ -730,6 +731,49 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
               data-testid="btn-save-cost-line"
             >
               Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showSettleConfirm} onOpenChange={setShowSettleConfirm}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Selesaikan SPJ?</DialogTitle>
+            <DialogDescription>
+              Konfirmasi penyelesaian Surat Perintah Jalan ini.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              SPJ <strong>{spjData.spjNumber}</strong> akan ditandai sebagai <strong>Selesai</strong>. Setelah diselesaikan, biaya tidak dapat diubah lagi.
+            </p>
+            <div className="p-3 rounded-lg bg-muted/30 border space-y-1.5">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Uang muka</span>
+                <span className="font-medium tabular-nums">{formatCurrency(totalAdvance)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Total biaya aktual</span>
+                <span className="font-medium tabular-nums">{formatCurrency(totalActual)}</span>
+              </div>
+              <div className="h-px bg-border" />
+              <div className="flex justify-between text-sm font-semibold">
+                <span>{settlement >= 0 ? 'Sisa dikembalikan' : 'Kurang bayar'}</span>
+                <span className={`tabular-nums ${settlement >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatCurrency(Math.abs(settlement))}
+                </span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSettleConfirm(false)}>Batal</Button>
+            <Button
+              onClick={() => { settleMutation.mutate(); setShowSettleConfirm(false); }}
+              disabled={settleMutation.isPending}
+              data-testid="btn-confirm-settle-spj"
+            >
+              <CheckCircle className="w-4 h-4 mr-1" /> Ya, Selesaikan
             </Button>
           </DialogFooter>
         </DialogContent>

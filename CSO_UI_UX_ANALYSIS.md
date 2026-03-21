@@ -1,4 +1,4 @@
-# CSO UI/UX Analysis - TransityCore
+# CSO UI/UX Analysis - TransityTerminal
 
 **Analysis Date:** 2026-02-22\
 **Branch:** feature/cso-ui-redesign\

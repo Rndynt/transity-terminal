@@ -1,8 +1,8 @@
-# TransityCore
+# TransityTerminal
 
 **Core Backend untuk Sistem Transit & Tiket Multi-Operator**
 
-TransityCore adalah backend sistem ticketing bus transit multi-operator yang komprehensif, mendukung pengelolaan rute, perjalanan, kursi, pemesanan, dan harga dinamis. Sistem ini dirancang untuk operasional real-time dengan dukungan WebSocket untuk update inventaris kursi secara live.
+TransityTerminal adalah backend sistem ticketing bus transit multi-operator yang komprehensif, mendukung pengelolaan rute, perjalanan, kursi, pemesanan, dan harga dinamis. Sistem ini dirancang untuk operasional real-time dengan dukungan WebSocket untuk update inventaris kursi secara live.
 
 ---
 
@@ -219,8 +219,8 @@ TransityCore adalah backend sistem ticketing bus transit multi-operator yang kom
 
 ```bash
 # Clone repository
-git clone https://github.com/Rndynt/TransityCore.git
-cd TransityCore
+git clone https://github.com/Rndynt/TransityTerminal.git
+cd TransityTerminal
 
 # Install dependencies
 npm install
@@ -466,7 +466,7 @@ POST   /api/seed                     # Seed demo data
 
 ## 📅 Virtual Scheduling
 
-TransityCore mendukung **Virtual Scheduling** - sistem penjadwalan yang memungkinkan pembuatan trip on-demand dari template (Trip Bases).
+TransityTerminal mendukung **Virtual Scheduling** - sistem penjadwalan yang memungkinkan pembuatan trip on-demand dari template (Trip Bases).
 
 ### Konsep
 
@@ -560,7 +560,7 @@ TransityCore mendukung **Virtual Scheduling** - sistem penjadwalan yang memungki
 
 ## 🌐 Real-time Events
 
-TransityCore menggunakan Socket.IO untuk komunikasi real-time.
+TransityTerminal menggunakan Socket.IO untuk komunikasi real-time.
 
 ### Event Types
 
@@ -622,7 +622,7 @@ socket.emit('unsubscribe-cso', outletId, serviceDate);
 ## 📁 Struktur Project
 
 ```
-TransityCore/
+TransityTerminal/
 ├── attached_assets/          # Asset demo dan prompt
 ├── client/                   # Frontend React
 │   ├── index.html
@@ -835,8 +835,8 @@ MIT License - Lihat file [LICENSE](LICENSE) untuk detail.
 ## 📞 Kontak
 
 - **Author**: Rndynt
-- **Repository**: [https://github.com/Rndynt/TransityCore](https://github.com/Rndynt/TransityCore)
-- **Issues**: [GitHub Issues](https://github.com/Rndynt/TransityCore/issues)
+- **Repository**: [https://github.com/Rndynt/TransityTerminal](https://github.com/Rndynt/TransityTerminal)
+- **Issues**: [GitHub Issues](https://github.com/Rndynt/TransityTerminal/issues)
 
 ---
 
