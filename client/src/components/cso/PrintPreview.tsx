@@ -149,9 +149,36 @@ export default function PrintPreview({ booking, onNewBooking, onPrint }: PrintPr
             </>
           )}
 
-          <div className="flex justify-between items-center mb-4">
-            <span className="text-sm font-semibold text-gray-600">Total Pembayaran</span>
-            <span className={`text-lg font-black font-mono ${isPaid ? 'text-blue-700' : 'text-amber-700'}`}>{fmt(booking.totalAmount)}</span>
+          <div className="space-y-1.5 mb-4" data-testid="payment-summary">
+            {(() => {
+              const discount = parseFloat(String(booking.discountAmount || 0));
+              const total = parseFloat(String(booking.totalAmount || 0));
+              const subtotal = discount > 0 ? total + discount : (booking.passengers?.reduce((sum: number, p: any) => sum + parseFloat(String(p.fareAmount || 0)), 0) ?? total);
+              const hasDiscount = discount > 0;
+              return (
+                <>
+                  {hasDiscount && (
+                    <>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500">Subtotal</span>
+                        <span className="font-mono text-gray-600">{fmt(subtotal)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-orange-600 flex items-center gap-1">
+                          Diskon {booking.voucherCode ? <span className="font-mono text-[10px]">({booking.voucherCode})</span> : ''}
+                        </span>
+                        <span className="font-mono text-orange-600">-{fmt(discount)}</span>
+                      </div>
+                      <div className="border-t border-dashed border-gray-200 my-1" />
+                    </>
+                  )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold text-gray-600">Total Pembayaran</span>
+                    <span className={`text-lg font-black font-mono ${isPaid ? 'text-blue-700' : 'text-amber-700'}`}>{fmt(total)}</span>
+                  </div>
+                </>
+              );
+            })()}
           </div>
 
           {!isPaid && (

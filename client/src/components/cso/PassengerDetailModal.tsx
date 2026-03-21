@@ -195,6 +195,11 @@ export default function PassengerDetailModal({
                             <div>
                               <p className="text-muted-foreground">Total</p>
                               <p className="font-semibold text-emerald-700 mt-0.5">{fmt(b.totalAmount ?? 0)}</p>
+                              {b.discountAmount && parseFloat(String(b.discountAmount)) > 0 && (
+                                <p className="text-[11px] text-orange-600 mt-0.5">
+                                  Diskon: -{fmt(b.discountAmount)} {b.voucherCode ? `(${b.voucherCode})` : ''}
+                                </p>
+                              )}
                             </div>
                             <div>
                               <p className="text-muted-foreground">Dibuat</p>
@@ -265,6 +270,37 @@ export default function PassengerDetailModal({
                             <p className="text-xs font-medium text-emerald-700" data-testid="fare-amount">{fmt(p.fareAmount ?? 0)}</p>
                           </div>
                         </div>
+
+                        {/* Payment Summary */}
+                        {(() => {
+                          const discount = parseFloat(String(b.discountAmount || 0));
+                          const total = parseFloat(String(b.totalAmount || 0));
+                          const subtotal = discount > 0 ? total + discount : total;
+                          const hasDiscount = discount > 0;
+                          return hasDiscount ? (
+                            <div className="rounded-lg border overflow-hidden" data-testid="payment-summary">
+                              <div className="px-4 py-3 bg-muted/20 flex items-center gap-2 text-sm font-semibold">
+                                <Ticket className="w-3.5 h-3.5 text-muted-foreground" />
+                                Rincian Pembayaran
+                              </div>
+                              <div className="px-4 py-3 space-y-1.5 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Subtotal</span>
+                                  <span className="font-mono">{fmt(subtotal)}</span>
+                                </div>
+                                <div className="flex justify-between text-orange-600">
+                                  <span>Diskon {b.voucherCode ? <span className="font-mono text-[10px]">({b.voucherCode})</span> : ''}</span>
+                                  <span className="font-mono">-{fmt(discount)}</span>
+                                </div>
+                                <Separator />
+                                <div className="flex justify-between font-semibold">
+                                  <span>Total Bayar</span>
+                                  <span className="text-emerald-700 font-mono">{fmt(total)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null;
+                        })()}
 
                         {/* Payments */}
                         {bookingData.payments.length > 0 && (

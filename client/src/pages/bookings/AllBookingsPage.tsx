@@ -164,11 +164,6 @@ function BookingDetailModal({
                 <div>
                   <p className="text-muted-foreground">Total</p>
                   <p className="font-semibold text-emerald-700 mt-0.5">{fmt(detail.totalAmount ?? 0)}</p>
-                  {detail.discountAmount && parseFloat(String(detail.discountAmount)) > 0 && (
-                    <p className="text-xs text-orange-600 mt-0.5" data-testid="text-discount-detail">
-                      Diskon: -{fmt(detail.discountAmount)} {detail.voucherCode ? `(${detail.voucherCode})` : ''}
-                    </p>
-                  )}
                 </div>
                 <div>
                   <p className="text-muted-foreground">Dibuat</p>
@@ -255,26 +250,53 @@ function BookingDetailModal({
               </div>
             )}
 
-            {/* Payments */}
-            {!!detail.payments?.length && (
-              <div className="rounded-lg border overflow-hidden">
-                <div className="px-4 py-3 bg-muted/20 flex items-center gap-2 text-sm font-semibold">
-                  <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
-                  Pembayaran
-                </div>
-                <div className="divide-y">
-                  {detail.payments.map((pay: any, idx: number) => (
-                    <div key={pay.id ?? idx} className="px-4 py-3 flex items-center justify-between text-sm">
-                      <div>
-                        <p className="font-medium">{getPaymentLabel(pay.method)}</p>
-                        {pay.paidAt && <p className="text-xs text-muted-foreground mt-0.5">{fmtDate(pay.paidAt)}</p>}
-                      </div>
-                      <p className="font-semibold text-emerald-700">{fmt(pay.amount ?? 0)}</p>
+            {/* Payment Summary */}
+            {(() => {
+              const discount = parseFloat(String(detail.discountAmount || 0));
+              const total = parseFloat(String(detail.totalAmount || 0));
+              const subtotal = discount > 0 ? total + discount : total;
+              const hasDiscount = discount > 0;
+              return (
+                <div className="rounded-lg border overflow-hidden" data-testid="payment-summary">
+                  <div className="px-4 py-3 bg-muted/20 flex items-center gap-2 text-sm font-semibold">
+                    <Ticket className="w-3.5 h-3.5 text-muted-foreground" />
+                    Rincian Pembayaran
+                  </div>
+                  <div className="px-4 py-3 space-y-1.5 text-sm">
+                    {hasDiscount && (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Subtotal</span>
+                          <span className="font-mono">{fmt(subtotal)}</span>
+                        </div>
+                        <div className="flex justify-between text-orange-600" data-testid="text-discount-detail">
+                          <span>Diskon {detail.voucherCode ? <span className="font-mono text-[10px]">({detail.voucherCode})</span> : ''}</span>
+                          <span className="font-mono">-{fmt(discount)}</span>
+                        </div>
+                        <Separator />
+                      </>
+                    )}
+                    <div className="flex justify-between font-semibold">
+                      <span>Total Bayar</span>
+                      <span className="text-emerald-700 font-mono">{fmt(total)}</span>
                     </div>
-                  ))}
+                    {!!detail.payments?.length && (
+                      <div className="pt-2 space-y-1.5 border-t mt-2">
+                        {detail.payments.map((pay: any, idx: number) => (
+                          <div key={pay.id ?? idx} className="flex items-center justify-between text-xs">
+                            <div>
+                              <span className="font-medium">{getPaymentLabel(pay.method)}</span>
+                              {pay.paidAt && <span className="text-muted-foreground ml-1.5">{fmtShortDate(pay.paidAt)}</span>}
+                            </div>
+                            <span className="font-mono text-emerald-700">{fmt(pay.amount ?? 0)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
       </DialogContent>
