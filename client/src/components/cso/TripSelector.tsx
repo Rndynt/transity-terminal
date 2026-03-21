@@ -45,7 +45,8 @@ function OutletSearchSelect({ value, outlets, stops, placeholder, onChange, test
     };
     if (open) {
       document.addEventListener('mousedown', handler);
-      setTimeout(() => inputRef.current?.focus(), 50);
+      const t = setTimeout(() => inputRef.current?.focus(), 50);
+      return () => { document.removeEventListener('mousedown', handler); clearTimeout(t); };
     }
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);

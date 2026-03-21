@@ -225,13 +225,19 @@ export default function TripsManager() {
 
   const deriveLegsMutation = useMutation({
     mutationFn: tripsApi.deriveLegs,
-    onSuccess: () => { toast({ title: 'Berhasil', description: 'Leg trip berhasil diturunkan' }); },
+    onSuccess: () => {
+      toast({ title: 'Berhasil', description: 'Leg trip berhasil diturunkan' });
+      queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+    },
     onError: (error) => { toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menurunkan leg', variant: 'destructive' }); }
   });
 
   const precomputeSeatInventoryMutation = useMutation({
     mutationFn: tripsApi.precomputeSeatInventory,
-    onSuccess: () => { toast({ title: 'Berhasil', description: 'Inventori kursi berhasil dihitung ulang' }); },
+    onSuccess: () => {
+      toast({ title: 'Berhasil', description: 'Inventori kursi berhasil dihitung ulang' });
+      queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+    },
     onError: (error) => { toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menghitung inventori', variant: 'destructive' }); }
   });
 
@@ -249,7 +255,7 @@ export default function TripsManager() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const submitData = { ...formData, capacity: parseInt(formData.capacity, 10), layoutId: formData.layoutId || null, vehicleId: formData.vehicleId || null, channelFlags: { CSO: true, WEB: false, APP: false, OTA: false } };
+    const submitData = { ...formData, capacity: parseInt(formData.capacity, 10) || 0, layoutId: formData.layoutId || null, vehicleId: formData.vehicleId || null, channelFlags: { CSO: true, WEB: false, APP: false, OTA: false } };
     if (editingTrip) {
       updateMutation.mutate({ id: editingTrip.id, data: submitData });
     } else {

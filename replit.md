@@ -45,6 +45,18 @@ plan/              → Dokumentasi teknis fitur
 
 ## Recent Changes
 
+**2026-03-21 — Critical Bug Fixes & UI Standardization**
+- **Transaction Safety**: All multi-table writes in BookingsService now wrapped in `db.transaction()` (createBooking, releasePendingBooking, cleanupExpiredPendingBookings)
+- **Holds Service Rewrite**: Removed in-memory Maps, all hold state is now DB-only; errors propagate correctly (no more swallowed catch blocks); WebSocket events only emitted on successful DB operations
+- **Query Invalidation**: TripsManager.tsx now invalidates `['/api/trips']` after deriveLeg and precomputeSeatInventory mutations
+- **parseInt Safety**: `parseInt(formData.capacity, 10) || 0` prevents NaN from empty string
+- **tripId Guard**: bookings.controller.ts properly validates tripId query parameter type
+- **Waybill Retry**: Increased from 5 to 20 attempts for unique waybill generation
+- **setTimeout Cleanup**: TripSelector OutletSearchSelect properly clears timeout on unmount
+- **CargoForm Loading**: Added loading state while stops/cargo-types queries are in-flight
+- **Shared Components**: Created `LoadingState`, `EmptyState`, `StatusBadge` reusable UI components
+- Applied shared components to AllBookingsPage, CargoListPage, ManifestPage
+
 **2026-03-21 — Pricing Enforcement**
 - Removed hardcoded `basePricePerLeg = 25000` fallback from PricingService
 - Price must now come exclusively from price rules; a rule with value 0 is valid

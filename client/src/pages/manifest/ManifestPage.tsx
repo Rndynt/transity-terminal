@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import ManifestDialog from '@/components/manifest/ManifestDialog';
 import { FileText, ChevronLeft, ChevronRight, Bus, Clock, Search, Users } from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
 import type { TripWithDetails, TripPattern } from '@/types';
 
 function formatDisplayDate(dateStr: string) {
@@ -140,11 +141,7 @@ export default function ManifestPage() {
             <span className="ml-3 text-sm text-muted-foreground">Memuat trip...</span>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
-            <FileText className="w-10 h-10 mb-3 opacity-20" />
-            <p className="text-sm font-medium">Tidak ada trip pada tanggal ini</p>
-            <p className="text-xs mt-1">Coba pilih tanggal lain</p>
-          </div>
+          <EmptyState icon={FileText} title="Tidak ada trip pada tanggal ini" description="Coba pilih tanggal lain" />
         ) : (
           <div className="space-y-2" data-testid="manifest-trip-list">
             {filtered.map(trip => (

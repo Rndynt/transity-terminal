@@ -10,6 +10,8 @@ import {
   Phone, Clock, CheckCircle2, Truck, XCircle, Eye,
   Download, Upload, RotateCcw, Calendar, AlertTriangle, Bus, ChevronDown, Check
 } from 'lucide-react';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const fmt = (amount: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
@@ -301,15 +303,9 @@ export default function CargoListPage() {
 
           <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2">
             {isLoading ? (
-              <div className="text-center py-8">
-                <Loader2 className="w-5 h-5 animate-spin mx-auto text-amber-500" />
-                <p className="text-xs text-gray-400 mt-1.5">Memuat data...</p>
-              </div>
+              <LoadingState message="Memuat data..." />
             ) : filteredShipments.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <Package className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                <p className="text-sm">Tidak ada pengiriman ditemukan</p>
-              </div>
+              <EmptyState icon={Package} title="Tidak ada pengiriman ditemukan" />
             ) : (
               filteredShipments.map(shipment => {
                 const status = (shipment.status || 'pending') as StatusKey;

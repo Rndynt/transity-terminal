@@ -94,7 +94,7 @@ export class CargoService {
       }
     }
 
-    const maxRetries = 5;
+    const maxRetries = 20;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const waybillNumber = this.generateWaybillNumber();
       try {

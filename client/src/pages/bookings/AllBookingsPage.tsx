@@ -5,6 +5,8 @@ import type { Booking, Stop } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
 } from '@/components/ui/dialog';
@@ -431,22 +433,21 @@ export default function AllBookingsPage() {
       {/* Table */}
       <div className="flex-1 overflow-auto">
         {isLoading ? (
-          <div className="flex items-center justify-center h-48">
-            <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-          </div>
+          <LoadingState message="Memuat data booking..." size="lg" />
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 text-center gap-2">
-            <Package className="w-8 h-8 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">Tidak ada booking ditemukan.</p>
-            {(search || statusFilter !== 'all' || channelFilter !== 'all') && (
+          <EmptyState
+            icon={Package}
+            title="Tidak ada booking ditemukan."
+            action={(search || statusFilter !== 'all' || channelFilter !== 'all') ? (
               <button
                 className="text-xs text-blue-600 hover:underline"
                 onClick={() => { setSearch(''); setStatusFilter('all'); setChannelFilter('all'); }}
+                data-testid="button-reset-filters"
               >
                 Reset filter
               </button>
-            )}
-          </div>
+            ) : undefined}
+          />
         ) : (
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-muted/60 backdrop-blur border-b z-10">

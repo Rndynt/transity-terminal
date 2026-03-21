@@ -62,8 +62,8 @@ export class BookingsController {
   }
 
   async getAll(req: Request, res: Response) {
-    const { tripId } = req.query;
-    const bookings = await this.bookingsService.getAllBookings(tripId as string);
+    const tripId = typeof req.query.tripId === 'string' ? req.query.tripId : undefined;
+    const bookings = await this.bookingsService.getAllBookings(tripId);
     res.json(bookings);
   }
 

@@ -50,12 +50,12 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [tariffQuote, setTariffQuote] = useState<{ found: boolean; calculatedAmount: number; pricePerKg?: number; minCharge?: number } | null>(null);
 
-  const { data: allStops = [] } = useQuery({
+  const { data: allStops = [], isLoading: stopsLoading } = useQuery({
     queryKey: ['/api/stops'],
     queryFn: stopsApi.getAll
   });
 
-  const { data: cargoTypes = [] } = useQuery<CargoType[]>({
+  const { data: cargoTypes = [], isLoading: cargoTypesLoading } = useQuery<CargoType[]>({
     queryKey: ['/api/cargo-types'],
     queryFn: cargoTypesApi.getAll
   });
@@ -162,6 +162,15 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
   const originStopName = originStop?.name || allStops.find(s => s.id === selectedOriginId)?.name;
   const destStopName = destinationStop?.name || allStops.find(s => s.id === selectedDestId)?.name;
   const activeCargoTypes = cargoTypes.filter((ct: CargoType) => ct.isActive !== false);
+
+  if (stopsLoading || cargoTypesLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+        <p className="text-xs text-gray-400 mt-1.5">Memuat data kargo...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col gap-0">

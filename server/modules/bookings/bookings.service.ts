@@ -153,27 +153,24 @@ export class BookingsService {
       throw new Error(`Payment amount ${paymentAmount} does not match expected total ${expectedTotal}`);
     }
 
-    // Create booking with 'paid' status since payment is provided
-    const booking = await this.storage.createBooking({
-      ...bookingData,
-      bookingCode: generateBookingCode(),
-      status: 'paid',  // Set status to paid since payment is provided
-      totalAmount: expectedTotal.toString()
-    });
-
-    // Create passengers and mark seats as booked
-    for (const passengerData of passengers) {
-      await this.storage.createPassenger({
-        ...passengerData,
-        ticketNumber: generateTicketNumber(),
-        bookingId: booking.id,
-        fareAmount: fareQuote.perPassenger.toString(),
-        fareBreakdown: fareQuote.breakdown
+    // Wrap entire booking creation in a single transaction for atomicity
+    const booking = await db.transaction(async (tx) => {
+      const newBooking = await this.storage.createBooking({
+        ...bookingData,
+        bookingCode: generateBookingCode(),
+        status: 'paid',
+        totalAmount: expectedTotal.toString()
       });
 
-      // Mark seats as booked and clear holds from database
-      await db.transaction(async (tx) => {
-        // Update seat inventory
+      for (const passengerData of passengers) {
+        await this.storage.createPassenger({
+          ...passengerData,
+          ticketNumber: generateTicketNumber(),
+          bookingId: newBooking.id,
+          fareAmount: fareQuote.perPassenger.toString(),
+          fareBreakdown: fareQuote.breakdown
+        });
+
         await tx
           .update(seatInventory)
           .set({ booked: true, holdRef: null })
@@ -183,7 +180,6 @@ export class BookingsService {
             inArray(seatInventory.legIndex, legIndexes)
           ));
 
-        // Delete hold record
         await tx
           .delete(seatHolds)
           .where(and(
@@ -191,20 +187,20 @@ export class BookingsService {
             eq(seatHolds.seatNo, passengerData.seatNo),
             eq(seatHolds.operatorId, operatorId)
           ));
+      }
+
+      await this.storage.createPayment({
+        method: payment.method,
+        amount: payment.amount.toString(),
+        bookingId: newBooking.id
       });
-    }
 
-    // Create payment
-    await this.storage.createPayment({
-      method: payment.method,
-      amount: payment.amount.toString(),
-      bookingId: booking.id
-    });
+      await this.storage.createPrintJob({
+        bookingId: newBooking.id,
+        status: 'queued'
+      });
 
-    // Create print job
-    await this.storage.createPrintJob({
-      bookingId: booking.id,
-      status: 'queued'
+      return newBooking;
     });
 
     const bookingWithRelations = await this.getBookingById(booking.id);
@@ -430,16 +426,18 @@ export class BookingsService {
       legIndexes.push(i);
     }
 
-    for (const passenger of passengers) {
-      await db
-        .update(seatInventory)
-        .set({ booked: false, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, booking.tripId),
-          eq(seatInventory.seatNo, passenger.seatNo),
-          inArray(seatInventory.legIndex, legIndexes)
-        ));
-    }
+    await db.transaction(async (tx) => {
+      for (const passenger of passengers) {
+        await tx
+          .update(seatInventory)
+          .set({ booked: false, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, booking.tripId),
+            eq(seatInventory.seatNo, passenger.seatNo),
+            inArray(seatInventory.legIndex, legIndexes)
+          ));
+      }
+    });
 
     await this.holdsService.releaseHoldsByOwner(operatorId, bookingId);
 
@@ -469,20 +467,25 @@ export class BookingsService {
           legIndexes.push(i);
         }
 
-        for (const passenger of passengers) {
-          await db
-            .update(seatInventory)
-            .set({ booked: false, holdRef: null })
-            .where(and(
-              eq(seatInventory.tripId, booking.tripId),
-              eq(seatInventory.seatNo, passenger.seatNo),
-              inArray(seatInventory.legIndex, legIndexes)
-            ));
+        await db.transaction(async (tx) => {
+          for (const passenger of passengers) {
+            await tx
+              .update(seatInventory)
+              .set({ booked: false, holdRef: null })
+              .where(and(
+                eq(seatInventory.tripId, booking.tripId),
+                eq(seatInventory.seatNo, passenger.seatNo),
+                inArray(seatInventory.legIndex, legIndexes)
+              ));
+          }
+        });
 
+        await this.storage.updateBooking(booking.id, { status: 'canceled' });
+
+        for (const passenger of passengers) {
           webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
         }
 
-        await this.storage.updateBooking(booking.id, { status: 'canceled' });
         console.log(`[CLEANUP] Expired pending booking ${booking.id} canceled and seats released`);
       } catch (error) {
         console.error(`[CLEANUP] Failed to cleanup expired booking ${booking.id}:`, error);
