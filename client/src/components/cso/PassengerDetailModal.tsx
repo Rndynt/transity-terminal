@@ -59,6 +59,7 @@ interface PassengerDetailModalProps {
   isError?: boolean;
   selectedSeatNo?: string | null;
   tripId?: string;
+  onStartAssignMode?: (passenger: { id: string; name: string; ticketNumber: string | null; bookingCode: string }) => void;
 }
 
 const fmt = (amount: string | number) =>
@@ -99,7 +100,8 @@ export default function PassengerDetailModal({
   isLoading = false,
   isError = false,
   selectedSeatNo = null,
-  tripId
+  tripId,
+  onStartAssignMode
 }: PassengerDetailModalProps) {
   const [openIndices, setOpenIndices] = useState<Set<number>>(new Set([0]));
   const [reassignSeatNo, setReassignSeatNo] = useState<string>('');
@@ -134,25 +136,6 @@ export default function PassengerDetailModal({
     },
     onError: (e: Error) => {
       toast({ title: 'Gagal Pindah Kursi', description: e.message, variant: 'destructive' });
-    }
-  });
-
-  const [assignSeatNo, setAssignSeatNo] = useState('');
-  const [activeAssignId, setActiveAssignId] = useState<string | null>(null);
-
-  const assignMutation = useMutation({
-    mutationFn: ({ passengerId, newSeatNo }: { passengerId: string; newSeatNo: string }) =>
-      passengersApi.assignSeat(passengerId, newSeatNo),
-    onSuccess: () => {
-      toast({ title: 'Berhasil', description: 'Penumpang berhasil di-assign ke kursi baru.' });
-      queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
-      setActiveAssignId(null);
-      setAssignSeatNo('');
-      onClose();
-    },
-    onError: (e: Error) => {
-      toast({ title: 'Gagal Assign Kursi', description: e.message, variant: 'destructive' });
     }
   });
 
@@ -348,40 +331,25 @@ export default function PassengerDetailModal({
                                     <Armchair className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
                                     <span className="text-xs text-orange-700 font-medium">Penumpang ini belum memiliki kursi. Assign ke kursi baru.</span>
                                   </div>
-                                  {activeAssignId === p.id ? (
-                                    <div className="flex items-center gap-2">
-                                      <Input
-                                        placeholder="No. kursi"
-                                        value={assignSeatNo}
-                                        onChange={e => setAssignSeatNo(e.target.value.toUpperCase())}
-                                        className="h-7 w-24 text-xs font-mono"
-                                        data-testid={`input-assign-seat-${p.id}`}
-                                      />
-                                      <Button
-                                        size="sm"
-                                        className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700"
-                                        disabled={!assignSeatNo || assignMutation.isPending}
-                                        onClick={() => assignMutation.mutate({ passengerId: p.id, newSeatNo: assignSeatNo })}
-                                        data-testid={`btn-confirm-assign-${p.id}`}
-                                      >
-                                        {assignMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Armchair className="w-3 h-3" />}
-                                        Assign
-                                      </Button>
-                                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setActiveAssignId(null); setAssignSeatNo(''); }} data-testid="btn-cancel-assign">
-                                        Batal
-                                      </Button>
-                                    </div>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 w-full"
-                                      onClick={() => setActiveAssignId(p.id)}
-                                      data-testid={`btn-assign-${p.id}`}
-                                    >
-                                      <Armchair className="w-3 h-3" />
-                                      Assign Kursi Baru
-                                    </Button>
-                                  )}
+                                  <Button
+                                    size="sm"
+                                    className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 w-full"
+                                    onClick={() => {
+                                      if (onStartAssignMode) {
+                                        onStartAssignMode({
+                                          id: p.id,
+                                          name: p.fullName,
+                                          ticketNumber: p.ticketNumber,
+                                          bookingCode: b.bookingCode ?? b.id?.slice(0, 8).toUpperCase(),
+                                        });
+                                        onClose();
+                                      }
+                                    }}
+                                    data-testid={`btn-assign-${p.id}`}
+                                  >
+                                    <Armchair className="w-3 h-3" />
+                                    Pilih Kursi di Peta Kursi
+                                  </Button>
                                 </>
                               ) : (
                                 <>

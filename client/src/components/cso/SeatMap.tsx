@@ -1,13 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { tripsApi, holdsApi } from '@/lib/api';
+import { tripsApi, holdsApi, passengersApi } from '@/lib/api';
 import { useSeatHold } from '@/hooks/useSeatHold';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { RotateCcw, Loader2, Bus, Timer, CheckCircle2, AlertTriangle, Users, Settings2 } from 'lucide-react';
+import { RotateCcw, Loader2, Bus, Timer, CheckCircle2, AlertTriangle, Users, Settings2, Armchair, X, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { queryClient } from '@/lib/queryClient';
 import type { Trip, SeatmapResponse } from '@/types';
 import PassengerDetailModal from './PassengerDetailModal';
 import { apiRequest } from '@/lib/queryClient';
+
+interface AssignModeState {
+  passengerId: string;
+  passengerName: string;
+  ticketNumber: string | null;
+  bookingCode: string;
+}
 
 interface SeatMapProps {
   trip: Trip;
@@ -34,8 +42,24 @@ export default function SeatMap({
   const [seatLoading, setSeatLoading] = useState<string | null>(null);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [precomputing, setPrecomputing] = useState(false);
+  const [assignMode, setAssignMode] = useState<AssignModeState | null>(null);
   const { toast } = useToast();
   const refetchRef = useRef<() => void>(() => {});
+
+  const assignSeatMutation = useMutation({
+    mutationFn: ({ passengerId, newSeatNo }: { passengerId: string; newSeatNo: string }) =>
+      passengersApi.assignSeat(passengerId, newSeatNo),
+    onSuccess: (_data, variables) => {
+      toast({ title: 'Berhasil', description: `Penumpang berhasil di-assign ke kursi ${variables.newSeatNo}.` });
+      queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+      setAssignMode(null);
+      refetch();
+    },
+    onError: (e: Error) => {
+      toast({ title: 'Gagal Assign Kursi', description: e.message, variant: 'destructive' });
+    }
+  });
 
   const handleHoldExpired = useCallback((seatNo: string) => {
     setLocalSelectedSeats(prev => {
@@ -118,6 +142,20 @@ export default function SeatMap({
     const seatAvailability = seatmap.seatAvailability[seatNo];
     const isHeldByMe = isHeld(seatNo);
 
+    if (assignMode) {
+      if (isPastTrip) {
+        toast({ title: 'Tidak Bisa Assign', description: 'Jadwal sudah lewat. Tidak bisa assign kursi.', variant: 'destructive' });
+        setAssignMode(null);
+        return;
+      }
+      if (!seatAvailability.available) {
+        toast({ title: 'Kursi Tidak Tersedia', description: `Kursi ${seatNo} sudah terisi atau sedang dipegang. Pilih kursi yang tersedia.`, variant: 'destructive' });
+        return;
+      }
+      assignSeatMutation.mutate({ passengerId: assignMode.passengerId, newSeatNo: seatNo });
+      return;
+    }
+
     if (!seatAvailability.available && !seatAvailability.held) {
       setSelectedSeatForDetails(seatNo);
       setShowPassengerModal(true);
@@ -189,10 +227,11 @@ export default function SeatMap({
 
   const getSeatStatus = (seatNo: string) => {
     if (!seatmap) return 'available';
-    if (localSelectedSeats.has(seatNo)) return 'selected';
+    if (localSelectedSeats.has(seatNo)) return assignMode ? 'blocked' : 'selected';
     const sa = seatmap.seatAvailability[seatNo];
-    if (sa.held) return isPastTrip ? 'past-locked' : 'held';
-    if (!sa.available) return 'booked';
+    if (sa.held) return isPastTrip ? 'past-locked' : (assignMode ? 'blocked' : 'held');
+    if (!sa.available) return assignMode ? 'blocked' : 'booked';
+    if (assignMode) return 'assign-available';
     return isPastTrip ? 'past-locked' : 'available';
   };
 
@@ -202,6 +241,8 @@ export default function SeatMap({
     booked: 'bg-red-100 border-red-200 text-red-300 cursor-pointer',
     held: 'bg-amber-100 border-amber-300 text-amber-600 cursor-pointer',
     'past-locked': 'bg-gray-100 border-gray-200 text-gray-300 cursor-not-allowed',
+    'assign-available': 'bg-emerald-50 border-emerald-400 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-500 cursor-pointer ring-1 ring-emerald-300 animate-pulse',
+    'blocked': 'bg-gray-100 border-gray-200 text-gray-300 cursor-not-allowed opacity-50',
   };
 
   const getAvailableCount = () => {
@@ -298,6 +339,45 @@ export default function SeatMap({
         </div>
       )}
 
+      {assignMode && (
+        <div className="relative rounded-xl border-2 border-emerald-400 bg-emerald-50 p-3 space-y-2 shadow-sm">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Armchair className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-emerald-800">Mode Assign Kursi</p>
+                <p className="text-xs text-emerald-700 mt-0.5">Klik kursi <span className="font-semibold text-emerald-900">hijau</span> yang tersedia untuk assign ke penumpang ini</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setAssignMode(null)}
+              className="p-1 rounded-md text-emerald-400 hover:text-emerald-600 hover:bg-emerald-100 transition-colors flex-shrink-0"
+              data-testid="btn-cancel-assign-mode"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-3 px-3 py-2 bg-white/80 rounded-lg border border-emerald-200">
+            <User className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-gray-800 truncate">{assignMode.passengerName}</p>
+              <p className="text-[10px] text-gray-500">
+                Booking: <span className="font-mono font-semibold">{assignMode.bookingCode}</span>
+                {assignMode.ticketNumber && <> &middot; Tiket: <span className="font-mono">{assignMode.ticketNumber}</span></>}
+              </p>
+            </div>
+          </div>
+          {assignSeatMutation.isPending && (
+            <div className="flex items-center gap-2 text-xs text-emerald-700">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>Memproses assign kursi...</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {isPastTrip && (
         <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg">
           <AlertTriangle className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
@@ -306,7 +386,12 @@ export default function SeatMap({
       )}
 
       <div className="flex items-center justify-center gap-3 py-1.5 px-3 bg-gray-50 rounded-lg flex-wrap">
-        {isPastTrip ? (
+        {assignMode ? (
+          <>
+            <LegendDot color="bg-emerald-50 border-emerald-400 ring-1 ring-emerald-300" label="Tersedia (klik assign)" />
+            <LegendDot color="bg-gray-100 border-gray-200 opacity-50" label="Tidak tersedia" />
+          </>
+        ) : isPastTrip ? (
           <>
             <LegendDot color="bg-gray-100 border-gray-200" label="Terkunci" />
             <LegendDot color="bg-red-100 border-red-200" label="Terisi (klik detail)" />
@@ -343,8 +428,8 @@ export default function SeatMap({
                 return (
                   <div key={seat.seat_no} className="relative w-9 h-9">
                     <button
-                      onClick={() => !isLoading && handleSeatClick(seat.seat_no)}
-                      disabled={isLoading}
+                      onClick={() => !isLoading && !assignSeatMutation.isPending && handleSeatClick(seat.seat_no)}
+                      disabled={isLoading || assignSeatMutation.isPending || status === 'blocked'}
                       data-testid={`seat-${seat.seat_no}`}
                       className={`w-9 h-9 rounded-lg border text-[10px] font-bold font-mono transition-all duration-100 flex items-center justify-center ${seatColors[status]} ${isLoading ? 'opacity-50' : ''}`}
                     >
@@ -413,6 +498,17 @@ export default function SeatMap({
         isError={passengerDetailsMutation.isError}
         selectedSeatNo={selectedSeatForDetails}
         tripId={trip.id}
+        onStartAssignMode={(passenger) => {
+          setAssignMode({
+            passengerId: passenger.id,
+            passengerName: passenger.name,
+            ticketNumber: passenger.ticketNumber,
+            bookingCode: passenger.bookingCode,
+          });
+          setShowPassengerModal(false);
+          setSelectedSeatForDetails(null);
+          passengerDetailsMutation.reset();
+        }}
       />
     </div>
   );
