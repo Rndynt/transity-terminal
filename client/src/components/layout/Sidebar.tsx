@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   MapPin, Store, Truck, UserCheck, LayoutGrid, Route, Calendar, DollarSign,
-  Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText
+  Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText, BadgePercent
 } from "lucide-react";
 
 const NAV_SECTIONS = [
@@ -27,6 +27,7 @@ const NAV_SECTIONS = [
       { name: "Trip Patterns", path: "/masters?tab=patterns", icon: Route },
       { name: "Trips", path: "/masters?tab=trips", icon: Calendar },
       { name: "Price Rules", path: "/masters?tab=pricing", icon: DollarSign },
+      { name: "Promo & Voucher", path: "/masters?tab=promos", icon: BadgePercent },
       { name: "Jenis Kargo", path: "/masters?tab=cargo-types", icon: Tag },
       { name: "Tarif Kargo", path: "/masters?tab=cargo-rates", icon: Package },
       { name: "Biaya Perjalanan", path: "/masters?tab=cost-templates", icon: Wallet },
