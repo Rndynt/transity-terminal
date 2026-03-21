@@ -140,10 +140,18 @@ export class PromosService {
     }
 
     if (promo.scope !== 'global' && promo.scopeRefId) {
-      if (promo.scope === 'trip' && tripId && promo.scopeRefId !== tripId) {
+      let refIds: string[] = [];
+      try {
+        const parsed = JSON.parse(promo.scopeRefId);
+        refIds = Array.isArray(parsed) ? parsed : [promo.scopeRefId];
+      } catch {
+        refIds = [promo.scopeRefId];
+      }
+
+      if (promo.scope === 'trip' && tripId && !refIds.includes(tripId)) {
         return { valid: false, discountAmount: 0, error: 'Promo tidak berlaku untuk trip ini' };
       }
-      if (promo.scope === 'pattern' && patternId && promo.scopeRefId !== patternId) {
+      if (promo.scope === 'pattern' && patternId && !refIds.includes(patternId)) {
         return { valid: false, discountAmount: 0, error: 'Promo tidak berlaku untuk rute ini' };
       }
     }
