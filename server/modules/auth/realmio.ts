@@ -18,10 +18,10 @@ const DEV_BYPASS_AUTH =
 
 const DEV_USER: RealmioUser = {
   id: "dev-user-001",
-  email: "root@transity.id",
-  name: "Root Admin",
+  email: "owner@transity.id",
+  name: "Owner Admin",
   image: null,
-  role: "root",
+  role: "owner",
   createdAt: new Date().toISOString(),
 };
 
