@@ -655,7 +655,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/seed', asyncHandler(async (req: any, res: any) => {
     const { seedData } = await import('./seed');
     await seedData();
+    const { seedRbac } = await import('./modules/rbac/rbac.seed');
+    await seedRbac();
     res.json({ message: 'Seed data created successfully' });
+  }));
+
+  // RBAC seed only (idempotent, safe to run anytime)
+  app.post('/api/seed/rbac', asyncHandler(async (req: any, res: any) => {
+    const { seedRbac } = await import('./modules/rbac/rbac.seed');
+    await seedRbac();
+    res.json({ message: 'RBAC seed completed successfully' });
   }));
 
   // ── Mobile App API (/api/app/) ──────────────────────────────────
