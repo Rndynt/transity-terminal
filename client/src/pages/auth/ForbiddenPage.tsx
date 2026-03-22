@@ -3,12 +3,14 @@ import { Link } from 'wouter';
 import { usePermissions } from '@/lib/permissions';
 
 const PAGE_ROUTES: Array<{ flag: string; path: string; label: string }> = [
-  { flag: 'page.dashboard', path: '/', label: 'Dashboard' },
-  { flag: 'page.cso', path: '/cso', label: 'CSO' },
+  { flag: 'page.cso', path: '/cso', label: 'Reservasi' },
   { flag: 'page.cargo', path: '/cargo', label: 'Kargo' },
+  { flag: 'page.bookings', path: '/bookings', label: 'All Bookings' },
+  { flag: 'page.schedule', path: '/schedule', label: 'Jadwal Harian' },
+  { flag: 'page.spj', path: '/spj', label: 'SPJ' },
   { flag: 'page.manifest', path: '/manifest', label: 'Manifest' },
-  { flag: 'page.reports', path: '/reports', label: 'Laporan' },
   { flag: 'page.masters', path: '/masters', label: 'Master Data' },
+  { flag: 'report.revenue', path: '/reports/revenue', label: 'Laporan Pendapatan' },
 ];
 
 export default function ForbiddenPage() {

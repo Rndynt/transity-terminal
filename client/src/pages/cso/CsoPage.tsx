@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useSearch, useLocation } from 'wouter';
+import { CanAccess } from '@/components/rbac/CanAccess';
+import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
 import { cargoApi } from '@/lib/api';
 import { fmtCurrency } from '@/lib/constants';
@@ -18,7 +20,7 @@ import { useSeatHold } from '@/hooks/useSeatHold';
 import {
   ChevronRight, ChevronLeft, Loader2, MapPin,
   Armchair, ArrowRight, Ticket, Package, Clock, CheckCircle2, Truck, XCircle,
-  Download, Upload, RotateCcw, FileText, User
+  Download, Upload, RotateCcw, FileText, User, Lock
 } from 'lucide-react';
 import type { Stop, Outlet, CsoAvailableTrip, CargoShipmentWithStops } from '@/types';
 
@@ -43,6 +45,7 @@ const formatTime = (isoString: string | null | undefined): string => {
 };
 
 export default function CsoPage() {
+  const { toast } = useToast();
   const searchString = useSearch();
   const [, navigate] = useLocation();
   const urlParams = useMemo(() => new URLSearchParams(searchString), [searchString]);
@@ -88,6 +91,17 @@ export default function CsoPage() {
   const isPastCsoTrip = selectedCsoTrip?.departAtAtOutlet
     ? new Date(selectedCsoTrip.departAtAtOutlet) < new Date()
     : false;
+
+  const closeTripMutation = useMutation({
+    mutationFn: (id: string) =>
+      fetch(`/api/trips/${id}/close`, { method: 'POST', credentials: 'include' })
+        .then(async r => { if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `HTTP ${r.status}`); } return r.json(); }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/cso/available-trips'] });
+      toast({ title: 'Trip berhasil ditutup', description: 'Status trip diubah menjadi closed.' });
+    },
+    onError: (e: Error) => toast({ title: 'Gagal menutup trip', description: e.message, variant: 'destructive' }),
+  });
 
   const { data: tripShipments = [], isLoading: tripShipmentsLoading } = useQuery<CargoShipmentWithStops[]>({
     queryKey: ['/api/cargo', tripId],
@@ -452,6 +466,21 @@ export default function CsoPage() {
                   <span className="hidden sm:inline">Cetak Manifest</span>
                   <span className="sm:hidden">Manifest</span>
                 </button>
+                <CanAccess flag="action.trip.close">
+                  <button
+                    onClick={() => selectedCsoTrip?.tripId && closeTripMutation.mutate(selectedCsoTrip.tripId)}
+                    disabled={closeTripMutation.isPending || selectedCsoTrip?.status === 'closed'}
+                    className="px-2 md:px-3 py-1.5 bg-white border border-gray-200 hover:border-red-300 hover:bg-red-50 text-gray-600 hover:text-red-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                    data-testid="btn-close-trip"
+                  >
+                    {closeTripMutation.isPending
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Lock className="w-3.5 h-3.5" />
+                    }
+                    <span className="hidden sm:inline">Tutup Trip</span>
+                    <span className="sm:hidden">Tutup</span>
+                  </button>
+                </CanAccess>
                 <button
                   onClick={handleBackToSelect}
                   className="px-2 md:px-3 py-1.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap"

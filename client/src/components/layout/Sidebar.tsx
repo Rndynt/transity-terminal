@@ -92,7 +92,15 @@ export default function Sidebar({ isOpen = true, onClose, isMobile = false, isCo
 
   const visibleSections = NAV_SECTIONS.map(section => ({
     ...section,
-    items: permLoading ? [] : section.items.filter(item => can(item.flag)),
+    items: permLoading ? [] : section.items.filter(item => {
+      if (!can(item.flag)) return false;
+      if (section.title === 'MASTER DATA' && !can('page.masters')) return false;
+      if (section.title === 'LAPORAN') {
+        const reportPageFlags = ['report.revenue', 'report.sales', 'report.trip_profitability', 'report.load_factor', 'report.cancellations', 'report.cargo', 'report.payments'];
+        if (!reportPageFlags.some(f => can(f))) return false;
+      }
+      return true;
+    }),
   })).filter(section => section.items.length > 0);
 
   return (
