@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { TripPatternsService } from "./tripPatterns.service";
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { insertTripPatternSchema } from "@shared/schema";
 
 export class TripPatternsController {

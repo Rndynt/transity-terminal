@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { VehiclesService } from "./vehicles.service";
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { insertVehicleSchema } from "@shared/schema";
 
 export class VehiclesController {

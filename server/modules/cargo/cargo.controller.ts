@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { CargoService } from "./cargo.service";
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { insertCargoShipmentSchema, insertCargoTypeSchema, insertCargoRateSchema } from "@shared/schema";
 
 export class CargoController {

@@ -1,4 +1,4 @@
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { Trip, SeatInventory } from "@shared/schema";
 import { db } from "../../db";
 import { seatInventory, seatHolds } from "@shared/schema";

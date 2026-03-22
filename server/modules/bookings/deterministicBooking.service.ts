@@ -1,4 +1,4 @@
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { db } from "../../db";
 import { seatInventory, seatHolds, bookings, passengers as passengersTable, payments, printJobs, trips } from "@shared/schema";
 import { eq, and, inArray, sql, gt, lt } from "drizzle-orm";

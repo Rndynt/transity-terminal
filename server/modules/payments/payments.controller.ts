@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { PaymentsService } from "./payments.service";
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { insertPaymentSchema } from "@shared/schema";
 
 export class PaymentsController {

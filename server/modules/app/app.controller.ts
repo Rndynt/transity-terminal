@@ -1,7 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { AppService } from "./app.service";
-import { AuthenticatedRequest } from "./app.auth";
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { z } from "zod";
 
 const registerSchema = z.object({

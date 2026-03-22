@@ -1,4 +1,4 @@
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { InsertTripBase, TripBase, Trip, InsertTrip } from "@shared/schema";
 import { TripLegsService } from "../tripLegs/tripLegs.service";
 import { SeatInventoryService } from "../seatInventory/seatInventory.service";

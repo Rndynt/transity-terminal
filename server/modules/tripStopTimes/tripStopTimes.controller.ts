@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { TripStopTimesService } from "./tripStopTimes.service";
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { insertTripStopTimeSchema, bulkUpsertTripStopTimeSchema } from "@shared/schema";
 import { z } from "zod";
 

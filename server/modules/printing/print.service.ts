@@ -1,4 +1,4 @@
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { db } from "../../db";
 import { bookings, passengers } from "@shared/schema";
 import { eq } from "drizzle-orm";

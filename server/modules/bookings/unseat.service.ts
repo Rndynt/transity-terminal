@@ -2,7 +2,7 @@ import { db } from "../../db";
 import { bookings, passengers, seatInventory, bookingHistory } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { webSocketService } from "../../realtime/ws";
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 
 function getLegIndexes(originSeq: number, destinationSeq: number): number[] {
   const legs: number[] = [];

@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { StopsService } from "./stops.service";
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { insertStopSchema } from "@shared/schema";
 
 export class StopsController {

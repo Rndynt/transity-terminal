@@ -1,4 +1,4 @@
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { Driver, InsertDriver } from "@shared/schema";
 
 export class DriversService {

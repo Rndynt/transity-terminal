@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { DriversService } from "./drivers.service";
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { insertDriverSchema } from "@shared/schema";
 
 export class DriversController {

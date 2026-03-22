@@ -1,4 +1,4 @@
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { InsertPayment, Payment } from "@shared/schema";
 
 export class PaymentsService {

@@ -1,4 +1,4 @@
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 
 export class PricingService {
   constructor(private storage: IStorage) {}

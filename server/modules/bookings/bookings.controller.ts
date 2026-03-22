@@ -1,7 +1,7 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { BookingsService } from "./bookings.service";
 import { UnseatService } from "./unseat.service";
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { insertBookingSchema, insertPassengerSchema, insertPaymentSchema } from "@shared/schema";
 import { z } from "zod";
 

@@ -8,7 +8,7 @@ import {
 import { eq, and, desc, sql, gte, lte, inArray, gt, isNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { signToken, type AppUserPayload } from "./app.auth";
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 
 interface OperatorSummary {
   id: string;

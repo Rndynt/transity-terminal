@@ -41,8 +41,9 @@ client/src/
 
 server/
   index.ts         → Fastify app bootstrap (decorateRequest, contentTypeParser, logging, error handler)
-  routes.ts        → IStorage interface + Fastify route definitions (104+ endpoints, preHandler arrays)
-  storage.ts       → DatabaseStorage implementation
+  routes.ts        → Route orchestrator (delegates to module .routes.ts files)
+  storage.interface.ts → IStorage interface + manifest types
+  storage.ts       → DatabaseStorage implementation (thin facade)
   vite.ts          → Vite HMR integration (@fastify/middie) + static serving (@fastify/static)
   types/
     fastify.d.ts   → FastifyRequest type augmentations (user, rbac, appUser, scopedOutletId, rawBody)
@@ -76,7 +77,20 @@ server/
     printing/      → PrintingController
 
 shared/
-  schema.ts        → Drizzle table definitions + Zod schemas + shared types
+  schema/          → Drizzle table definitions split by domain
+    index.ts       → Re-exports all domain schemas
+    enums.ts       → pgEnum definitions
+    fleet.ts       → drivers, vehicles, layouts
+    network.ts     → stops, outlets
+    scheduling.ts  → tripPatterns, patternStops, tripBases, trips, tripStopTimes, tripLegs
+    inventory.ts   → seatInventory, seatHolds, priceRules
+    booking.ts     → bookings, passengers, payments, printJobs
+    cargo.ts       → cargoShipments, cargoTypes, cargoRates
+    finance.ts     → tripCostTemplates, tripCostItems
+    promo.ts       → promotions, vouchers
+    spj.ts         → SPJ tables
+    rbac.ts        → roles, permissions, userRoles
+    app-users.ts   → appUsers
 
 plan/              → Dokumentasi teknis fitur
 ```

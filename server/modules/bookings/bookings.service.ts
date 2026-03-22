@@ -1,4 +1,4 @@
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { InsertBooking, Booking, InsertPassenger, InsertPayment, InsertPrintJob } from "@shared/schema";
 import { HoldsService } from "../holds/holds.service";
 import { DeterministicBookingService } from "./deterministicBooking.service";

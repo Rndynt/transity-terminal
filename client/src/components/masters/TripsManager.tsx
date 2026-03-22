@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { DataTable } from '@/components/shared/DataTable';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { RowActionsMenu } from './RowActionsMenu';
@@ -15,11 +14,12 @@ import { tripsApi, tripPatternsApi, vehiclesApi, layoutsApi, driversApi, spjApi 
 import { queryClient } from '@/lib/queryClient';
 import {
   Plus, Pencil, Trash2, Clock, Route, Grid3X3, CalendarDays, FileText,
-  Search, X, Filter, Bus, MapPin, LayoutGrid, ChevronDown, User, ClipboardList
+  Bus, MapPin, LayoutGrid, User, ClipboardList
 } from 'lucide-react';
 import { useLocation } from 'wouter';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterFormDialog from './MasterFormDialog';
+import TripsFilterPanel from './TripsFilterPanel';
 import type { Trip, TripPattern, Vehicle, Layout, Driver } from '@/types';
 import { TripStatusBadge } from '@/components/shared/StatusBadges';
 import TripScheduleEditor from './TripScheduleEditor';
@@ -41,17 +41,6 @@ function SectionDivider({ label }: { label: string }) {
       <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
       <div className="flex-1 h-px bg-border" />
     </div>
-  );
-}
-
-function ActiveFilterPill({ label, onRemove }: { label: string; onRemove: () => void }) {
-  return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
-      {label}
-      <button onClick={onRemove} className="hover:text-primary/60 transition-colors ml-0.5">
-        <X className="w-3 h-3" />
-      </button>
-    </span>
   );
 }
 
@@ -78,49 +67,6 @@ export default function TripsManager() {
   const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [datePreset, setDatePreset] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
-
-  const DATE_PRESETS = [
-    { key: 'today',      label: 'Hari Ini' },
-    { key: 'tomorrow',   label: 'Besok' },
-    { key: 'this_week',  label: 'Minggu Ini' },
-    { key: 'this_month', label: 'Bulan Ini' },
-    { key: 'next_month', label: 'Bulan Depan' },
-    { key: 'custom',     label: 'Kustom' },
-  ] as const;
-
-  const applyDatePreset = (preset: string) => {
-    const fmt = (d: Date) => d.toISOString().split('T')[0];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    setDatePreset(preset);
-    if (preset === 'today') {
-      setFilterDateFrom(fmt(today));
-      setFilterDateTo(fmt(today));
-    } else if (preset === 'tomorrow') {
-      const d = new Date(today); d.setDate(d.getDate() + 1);
-      setFilterDateFrom(fmt(d));
-      setFilterDateTo(fmt(d));
-    } else if (preset === 'this_week') {
-      const day = today.getDay(); // 0=Sun
-      const mon = new Date(today); mon.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
-      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-      setFilterDateFrom(fmt(mon));
-      setFilterDateTo(fmt(sun));
-    } else if (preset === 'this_month') {
-      const start = new Date(today.getFullYear(), today.getMonth(), 1);
-      const end   = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      setFilterDateFrom(fmt(start));
-      setFilterDateTo(fmt(end));
-    } else if (preset === 'next_month') {
-      const start = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-      const end   = new Date(today.getFullYear(), today.getMonth() + 2, 0);
-      setFilterDateFrom(fmt(start));
-      setFilterDateTo(fmt(end));
-    } else if (preset === 'custom') {
-      setFilterDateFrom('');
-      setFilterDateTo('');
-    }
-  };
 
   const { toast } = useToast();
 
@@ -394,161 +340,24 @@ export default function TripsManager() {
         })}
       </div>
 
-      {/* Search & Filter Row */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <Input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Cari rute, kode, atau plat kendaraan..."
-            className="pl-9 pr-9"
-            data-testid="trip-search-input"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowFilters(!showFilters)}
-          data-testid="toggle-filters-button"
-          className={showFilters || activeFilterCount > 0 ? 'border-primary text-primary bg-primary/5' : ''}
-        >
-          <Filter className="h-4 w-4 mr-1.5" />
-          Filter
-          {activeFilterCount > 0 && (
-            <span className="ml-1.5 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
-              {activeFilterCount}
-            </span>
-          )}
-        </Button>
-
-        {activeFilterCount > 0 && (
-          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-muted-foreground hover:text-foreground">
-            <X className="h-3.5 w-3.5 mr-1" />
-            Hapus Filter
-          </Button>
-        )}
-      </div>
-
-      {/* Filter Panel */}
-      {showFilters && (
-        <Card className="border-dashed">
-          <CardContent className="p-4 space-y-4">
-            {/* Route filter */}
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Rute / Pola</Label>
-              <SearchableSelect
-                value={filterPatternId}
-                options={[
-                  { value: 'all', label: 'Semua rute' },
-                  ...uniquePatterns.map(p => ({
-                    value: p.id,
-                    label: p.name,
-                    badge: p.code || undefined,
-                    subtitle: p.vehicleClass || undefined,
-                  }))
-                ]}
-                placeholder="Semua rute"
-                searchPlaceholder="Cari nama atau kode rute..."
-                onChange={setFilterPatternId}
-                clearValue="all"
-                data-testid="filter-pattern-select"
-              />
-            </div>
-
-            {/* Date preset buttons */}
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Rentang Tanggal</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {DATE_PRESETS.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => applyDatePreset(key)}
-                    data-testid={`preset-${key}`}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                      datePreset === key
-                        ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                        : 'bg-background text-foreground border-border hover:border-primary/50 hover:bg-muted'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Custom date inputs — shown only when "Kustom" is selected or manually typed */}
-              {(datePreset === 'custom' || (!datePreset && (filterDateFrom || filterDateTo))) && (
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Dari</Label>
-                    <Input
-                      type="date"
-                      value={filterDateFrom}
-                      onChange={e => { setFilterDateFrom(e.target.value); setDatePreset('custom'); }}
-                      data-testid="filter-date-from"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Sampai</Label>
-                    <Input
-                      type="date"
-                      value={filterDateTo}
-                      onChange={e => { setFilterDateTo(e.target.value); setDatePreset('custom'); }}
-                      data-testid="filter-date-to"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Show resolved range for non-custom presets */}
-              {datePreset && datePreset !== 'custom' && (filterDateFrom || filterDateTo) && (
-                <p className="text-xs text-muted-foreground">
-                  {filterDateFrom === filterDateTo
-                    ? filterDateFrom
-                    : `${filterDateFrom} — ${filterDateTo}`}
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Active Filter Pills */}
-      {activeFilterCount > 0 && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground">Filter aktif:</span>
-          {filterPatternId !== 'all' && (
-            <ActiveFilterPill
-              label={`Rute: ${getPattern(filterPatternId)?.name || filterPatternId}`}
-              onRemove={() => setFilterPatternId('all')}
-            />
-          )}
-          {(filterDateFrom || filterDateTo) && (
-            <ActiveFilterPill
-              label={(() => {
-                const preset = DATE_PRESETS.find(p => p.key === datePreset);
-                if (preset && datePreset !== 'custom') return `Tanggal: ${preset.label}`;
-                if (filterDateFrom === filterDateTo && filterDateFrom) return `Tanggal: ${filterDateFrom}`;
-                if (filterDateFrom && filterDateTo) return `${filterDateFrom} — ${filterDateTo}`;
-                if (filterDateFrom) return `Dari: ${filterDateFrom}`;
-                return `Sampai: ${filterDateTo}`;
-              })()}
-              onRemove={() => { setFilterDateFrom(''); setFilterDateTo(''); setDatePreset(''); }}
-            />
-          )}
-        </div>
-      )}
+      <TripsFilterPanel
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        filterPatternId={filterPatternId}
+        onFilterPatternChange={setFilterPatternId}
+        filterDateFrom={filterDateFrom}
+        filterDateTo={filterDateTo}
+        onFilterDateFromChange={setFilterDateFrom}
+        onFilterDateToChange={setFilterDateTo}
+        datePreset={datePreset}
+        onDatePresetChange={setDatePreset}
+        showFilters={showFilters}
+        onShowFiltersChange={setShowFilters}
+        activeFilterCount={activeFilterCount}
+        onClearAll={clearAllFilters}
+        uniquePatterns={uniquePatterns}
+        getPatternName={(id) => getPattern(id)?.name}
+      />
 
       {/* Table */}
       <Card>

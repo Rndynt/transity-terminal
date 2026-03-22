@@ -1,4 +1,4 @@
-import { IStorage } from "../../routes";
+import { IStorage } from "../../storage.interface";
 import { InsertTripPattern, TripPattern } from "@shared/schema";
 
 export class TripPatternsService {

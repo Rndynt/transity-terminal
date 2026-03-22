@@ -1,4 +1,4 @@
-import { IStorage, ManifestEntry, ManifestFull, ManifestCargoEntry } from "./routes";
+import { IStorage, ManifestEntry, ManifestFull, ManifestCargoEntry } from "./storage.interface";
 import { 
   drivers, stops, outlets, vehicles, layouts, tripPatterns, patternStops, tripBases,
   trips, tripStopTimes, tripLegs, seatInventory, seatHolds, priceRules, 
