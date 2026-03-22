@@ -444,37 +444,61 @@ export class DatabaseStorage implements IStorage {
   }
 
   private async getVirtualTripsForCso(serviceDate: string, outletStopId: string): Promise<CsoAvailableTrip[]> {
-    // Get all eligible trip bases for this date
     const eligibleBases = await this.getEligibleTripBases(serviceDate);
+    if (eligibleBases.length === 0) return [];
     
-    // Fetch all price rules once to avoid N+1 queries
     const allPriceRules = await this.getPriceRules();
+    
+    const uniquePatternIds = [...new Set(eligibleBases.map(b => b.patternId))];
+    
+    const [allPatterns, allPatternStopsRows, patternPathRows] = await Promise.all([
+      db.select().from(tripPatterns).where(inArray(tripPatterns.id, uniquePatternIds)),
+      db.query.patternStops.findMany({
+        where: inArray(patternStops.patternId, uniquePatternIds),
+        orderBy: patternStops.stopSequence,
+        with: { stop: true }
+      }),
+      db.execute(sql`
+        SELECT ps.pattern_id, STRING_AGG(s.name, ' → ' ORDER BY ps.stop_sequence) as pattern_path
+        FROM ${patternStops} ps
+        JOIN ${stops} s ON ps.stop_id = s.id
+        WHERE ps.pattern_id IN ${sql`(${sql.join(uniquePatternIds.map(id => sql`${id}`), sql`, `)})`}
+        GROUP BY ps.pattern_id
+      `)
+    ]);
+    
+    const patternsMap = new Map(allPatterns.map(p => [p.id, p]));
+    const patternStopsMap = new Map<string, typeof allPatternStopsRows>();
+    for (const ps of allPatternStopsRows) {
+      const list = patternStopsMap.get(ps.patternId) || [];
+      list.push(ps);
+      patternStopsMap.set(ps.patternId, list);
+    }
+    const patternPathMap = new Map<string, string>();
+    for (const row of patternPathRows.rows as any[]) {
+      patternPathMap.set(row.pattern_id, row.pattern_path || '');
+    }
     
     const virtualTrips: CsoAvailableTrip[] = [];
     
     for (const base of eligibleBases) {
       try {
-        // Check if this base serves the outlet stop
-        const pattern = await this.getTripPatternById(base.patternId);
+        const pattern = patternsMap.get(base.patternId);
         if (!pattern) continue;
         
-        const patternStopsForBase = await this.getPatternStops(base.patternId);
+        const patternStopsForBase = patternStopsMap.get(base.patternId) || [];
         const outletStop = patternStopsForBase.find(ps => ps.stopId === outletStopId);
         
-        // Skip if this pattern doesn't serve the outlet stop or boarding not allowed
         if (!outletStop || !outletStop.boardingAllowed) continue;
         
-        // Skip if outlet stop is the final destination
         const maxSequence = Math.max(...patternStopsForBase.map(ps => ps.stopSequence));
         if (outletStop.stopSequence >= maxSequence) continue;
         
-        // Compute times for this virtual trip
         const { departAtOutlet, finalArrivalAt } = this.computeVirtualTripTimes(
           base, serviceDate, outletStop.stopSequence, maxSequence
         );
         
-        // Get pattern path - use the same logic as real trips
-        const patternPath = await this.getPatternPath(base.patternId);
+        const patternPath = patternPathMap.get(base.patternId) || '';
         
         const hasPriceRule = allPriceRules.some(r =>
           (r.patternId === base.patternId && !r.tripId)
@@ -485,18 +509,17 @@ export class DatabaseStorage implements IStorage {
           isVirtual: true,
           patternCode: pattern.code,
           patternPath,
-          vehicle: null, // Virtual trips don't have vehicles assigned yet
+          vehicle: null,
           capacity: base.capacity,
           status: 'scheduled',
           departAtAtOutlet: departAtOutlet,
           finalArrivalAt,
           stopCount: patternStopsForBase.length,
           outletStopSequence: outletStop.stopSequence,
-          availableSeats: base.capacity ?? undefined, // Virtual trips show full capacity as available (estimated)
+          availableSeats: base.capacity ?? undefined,
           hasPriceRule
         });
       } catch (error) {
-        // Skip this base if there's an error (e.g., invalid default times)
         console.warn(`Skipping virtual trip for base ${base.id}:`, error);
         continue;
       }
@@ -815,6 +838,11 @@ export class DatabaseStorage implements IStorage {
   // Passengers
   async getPassengers(bookingId: string): Promise<Passenger[]> {
     return await db.select().from(passengers).where(eq(passengers.bookingId, bookingId));
+  }
+
+  async getPassengersByBookingIds(bookingIds: string[]): Promise<Passenger[]> {
+    if (bookingIds.length === 0) return [];
+    return await db.select().from(passengers).where(inArray(passengers.bookingId, bookingIds));
   }
 
   async getPassengerByTicketNumber(ticketNumber: string): Promise<Passenger | undefined> {

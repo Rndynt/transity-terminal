@@ -13,14 +13,22 @@ export class CargoController {
   }
 
   async getAll(req: FastifyRequest, reply: FastifyReply) {
-    const { tripId, status } = req.query;
+    const { tripId, status } = req.query as any;
     const scopedOutlet = req.scopedOutletId ?? req.rbac?.outletId ?? null;
-    const outletId = scopedOutlet ?? (req.query.outletId as string | undefined);
+    const outletId = scopedOutlet ?? (req.query as any).outletId;
     const shipments = await this.cargoService.getAllShipments({
       tripId: tripId as string,
       status: status as string,
       outletId: outletId as string
     });
+    const pageParam = (req.query as any).page;
+    if (pageParam) {
+      const page = Math.max(1, parseInt(pageParam) || 1);
+      const pageSize = Math.min(100, Math.max(1, parseInt((req.query as any).pageSize) || 50));
+      const total = shipments.length;
+      const paginated = shipments.slice((page - 1) * pageSize, page * pageSize);
+      return reply.send({ data: paginated, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+    }
     reply.send(shipments);
   }
 

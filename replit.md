@@ -265,3 +265,27 @@ plan/              → Dokumentasi teknis fitur
 - `seat_inventory`: pre-computed per seat per leg
 - `seat_holds`: temporary hold saat CSO pilih kursi (TTL-based)
 - WebSocket broadcast saat inventory berubah
+
+## Performance Optimizations
+### Database Indexes
+- 33+ indexes on foreign keys and frequently queried columns across all major tables
+- Partial index on `bookings(pending_expires_at) WHERE status = 'pending'` for cleanup scheduler
+- Composite index on `seat_inventory(trip_id, seat_no)` for seatmap lookups
+
+### N+1 Query Fixes
+- `getSeatmap`: batch passenger fetch via `getPassengersByBookingIds()` instead of per-booking queries
+- `getVirtualTripsForCso`: batch pattern/patternStops/patternPath with `Promise.all()` and Maps
+- `createBooking`: batch seat hold validation via `inArray()` instead of per-passenger queries
+- `cleanupExpiredPendingBookings`: batch passenger fetch for all expired bookings at once
+
+### API Pagination
+- Bookings and cargo list endpoints support optional `?page=1&pageSize=50` query params
+- When `page` param is present, returns `{ data, total, page, pageSize, totalPages }`
+- Without `page` param, returns flat array for backward compatibility
+
+### Cache Headers
+- Master data GET endpoints (drivers, stops, outlets, vehicles, layouts, trip-patterns) return `Cache-Control: public, max-age=60, stale-while-revalidate=120`
+
+### Frontend Code Splitting
+- All route-level page components loaded via `React.lazy()` + `Suspense`
+- Reduces initial bundle size — only loads CsoPage/LoginPage on first paint

@@ -166,6 +166,7 @@ export interface IStorage {
   updateBooking(id: string, data: Partial<InsertBooking>): Promise<Booking>;
 
   getPassengers(bookingId: string): Promise<Passenger[]>;
+  getPassengersByBookingIds(bookingIds: string[]): Promise<Passenger[]>;
   getPassengerByTicketNumber(ticketNumber: string): Promise<Passenger | undefined>;
   createPassenger(data: InsertPassenger): Promise<Passenger>;
   updatePassenger(id: string, data: Partial<InsertPassenger>): Promise<Passenger>;
@@ -291,38 +292,45 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
     });
   });
 
-  app.get('/api/drivers', async (req, reply) => driversController.getAll(req, reply));
-  app.get('/api/drivers/:id', async (req, reply) => driversController.getById(req, reply));
+  const masterDataCache = {
+    onSend: async (_req: FastifyRequest, reply: FastifyReply, payload: string) => {
+      reply.header('Cache-Control', 'private, max-age=60, stale-while-revalidate=120');
+      return payload;
+    }
+  };
+
+  app.get('/api/drivers', { ...masterDataCache }, async (req, reply) => driversController.getAll(req, reply));
+  app.get('/api/drivers/:id', { ...masterDataCache }, async (req, reply) => driversController.getById(req, reply));
   app.post('/api/drivers', { preHandler: [requireFlag('master.drivers')] }, async (req, reply) => driversController.create(req, reply));
   app.put('/api/drivers/:id', { preHandler: [requireFlag('master.drivers')] }, async (req, reply) => driversController.update(req, reply));
   app.delete('/api/drivers/:id', { preHandler: [requireFlag('master.drivers')] }, async (req, reply) => driversController.delete(req, reply));
 
-  app.get('/api/stops', async (req, reply) => stopsController.getAll(req, reply));
-  app.get('/api/stops/:id', async (req, reply) => stopsController.getById(req, reply));
+  app.get('/api/stops', { ...masterDataCache }, async (req, reply) => stopsController.getAll(req, reply));
+  app.get('/api/stops/:id', { ...masterDataCache }, async (req, reply) => stopsController.getById(req, reply));
   app.post('/api/stops', { preHandler: [requireFlag('master.stops')] }, async (req, reply) => stopsController.create(req, reply));
   app.put('/api/stops/:id', { preHandler: [requireFlag('master.stops')] }, async (req, reply) => stopsController.update(req, reply));
   app.delete('/api/stops/:id', { preHandler: [requireFlag('master.stops')] }, async (req, reply) => stopsController.delete(req, reply));
 
-  app.get('/api/outlets', async (req, reply) => outletsController.getAll(req, reply));
-  app.get('/api/outlets/:id', async (req, reply) => outletsController.getById(req, reply));
+  app.get('/api/outlets', { ...masterDataCache }, async (req, reply) => outletsController.getAll(req, reply));
+  app.get('/api/outlets/:id', { ...masterDataCache }, async (req, reply) => outletsController.getById(req, reply));
   app.post('/api/outlets', { preHandler: [requireFlag('master.outlets')] }, async (req, reply) => outletsController.create(req, reply));
   app.put('/api/outlets/:id', { preHandler: [requireFlag('master.outlets')] }, async (req, reply) => outletsController.update(req, reply));
   app.delete('/api/outlets/:id', { preHandler: [requireFlag('master.outlets')] }, async (req, reply) => outletsController.delete(req, reply));
 
-  app.get('/api/vehicles', async (req, reply) => vehiclesController.getAll(req, reply));
-  app.get('/api/vehicles/:id', async (req, reply) => vehiclesController.getById(req, reply));
+  app.get('/api/vehicles', { ...masterDataCache }, async (req, reply) => vehiclesController.getAll(req, reply));
+  app.get('/api/vehicles/:id', { ...masterDataCache }, async (req, reply) => vehiclesController.getById(req, reply));
   app.post('/api/vehicles', { preHandler: [requireFlag('master.vehicles')] }, async (req, reply) => vehiclesController.create(req, reply));
   app.put('/api/vehicles/:id', { preHandler: [requireFlag('master.vehicles')] }, async (req, reply) => vehiclesController.update(req, reply));
   app.delete('/api/vehicles/:id', { preHandler: [requireFlag('master.vehicles')] }, async (req, reply) => vehiclesController.delete(req, reply));
 
-  app.get('/api/layouts', async (req, reply) => layoutsController.getAll(req, reply));
-  app.get('/api/layouts/:id', async (req, reply) => layoutsController.getById(req, reply));
+  app.get('/api/layouts', { ...masterDataCache }, async (req, reply) => layoutsController.getAll(req, reply));
+  app.get('/api/layouts/:id', { ...masterDataCache }, async (req, reply) => layoutsController.getById(req, reply));
   app.post('/api/layouts', { preHandler: [requireFlag('master.layouts')] }, async (req, reply) => layoutsController.create(req, reply));
   app.put('/api/layouts/:id', { preHandler: [requireFlag('master.layouts')] }, async (req, reply) => layoutsController.update(req, reply));
   app.delete('/api/layouts/:id', { preHandler: [requireFlag('master.layouts')] }, async (req, reply) => layoutsController.delete(req, reply));
 
-  app.get('/api/trip-patterns', async (req, reply) => tripPatternsController.getAll(req, reply));
-  app.get('/api/trip-patterns/:id', async (req, reply) => tripPatternsController.getById(req, reply));
+  app.get('/api/trip-patterns', { ...masterDataCache }, async (req, reply) => tripPatternsController.getAll(req, reply));
+  app.get('/api/trip-patterns/:id', { ...masterDataCache }, async (req, reply) => tripPatternsController.getById(req, reply));
   app.post('/api/trip-patterns', { preHandler: [requireFlag('master.trip_patterns')] }, async (req, reply) => tripPatternsController.create(req, reply));
   app.put('/api/trip-patterns/:id', { preHandler: [requireFlag('master.trip_patterns')] }, async (req, reply) => tripPatternsController.update(req, reply));
   app.delete('/api/trip-patterns/:id', { preHandler: [requireFlag('master.trip_patterns')] }, async (req, reply) => tripPatternsController.delete(req, reply));

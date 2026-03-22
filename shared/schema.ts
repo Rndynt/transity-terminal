@@ -115,7 +115,10 @@ export const patternStops = pgTable("pattern_stops", {
   alightingAllowed: boolean("alighting_allowed").notNull().default(true),
   dwellSeconds:     integer("dwell_seconds").default(0),
   createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxPatternStopsPatternId: sql`CREATE INDEX IF NOT EXISTS idx_pattern_stops_pattern_id ON ${table} (pattern_id)`,
+  idxPatternStopsStopId: sql`CREATE INDEX IF NOT EXISTS idx_pattern_stops_stop_id ON ${table} (stop_id)`
+}));
 
 // 6a. Trip Bases (Virtual scheduling templates)
 export const tripBases = pgTable("trip_bases", {
@@ -165,7 +168,12 @@ export const trips = pgTable("trips", {
   manifestFirstPrintedAt:   timestamp("manifest_first_printed_at", { withTimezone: true }),
   createdAt:                timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
-  uniqTripBasePerDay: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_trip_base_per_day ON ${table} (base_id, service_date) WHERE base_id IS NOT NULL`
+  uniqTripBasePerDay: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_trip_base_per_day ON ${table} (base_id, service_date) WHERE base_id IS NOT NULL`,
+  idxTripsServiceDate: sql`CREATE INDEX IF NOT EXISTS idx_trips_service_date ON ${table} (service_date)`,
+  idxTripsPatternId: sql`CREATE INDEX IF NOT EXISTS idx_trips_pattern_id ON ${table} (pattern_id)`,
+  idxTripsStatus: sql`CREATE INDEX IF NOT EXISTS idx_trips_status ON ${table} (status)`,
+  idxTripsDriverId: sql`CREATE INDEX IF NOT EXISTS idx_trips_driver_id ON ${table} (driver_id)`,
+  idxTripsVehicleId: sql`CREATE INDEX IF NOT EXISTS idx_trips_vehicle_id ON ${table} (vehicle_id)`
 }));
 
 // 8. Trip Stop Times
@@ -176,10 +184,13 @@ export const tripStopTimes = pgTable("trip_stop_times", {
   stopSequence:     integer("stop_sequence").notNull(),
   arriveAt:         timestamp("arrive_at", { withTimezone: true }),
   departAt:         timestamp("depart_at", { withTimezone: true }),
-  boardingAllowed:  boolean("boarding_allowed"), // null = inherit from pattern
-  alightingAllowed: boolean("alighting_allowed"), // null = inherit from pattern
+  boardingAllowed:  boolean("boarding_allowed"),
+  alightingAllowed: boolean("alighting_allowed"),
   dwellSeconds:     integer("dwell_seconds").default(0)
-});
+}, (table) => ({
+  idxTstTripId: sql`CREATE INDEX IF NOT EXISTS idx_tst_trip_id ON ${table} (trip_id)`,
+  idxTstStopId: sql`CREATE INDEX IF NOT EXISTS idx_tst_stop_id ON ${table} (stop_id)`
+}));
 
 // 9. Trip Legs
 export const tripLegs = pgTable("trip_legs", {
@@ -191,7 +202,9 @@ export const tripLegs = pgTable("trip_legs", {
   departAt:    timestamp("depart_at", { withTimezone: true }).notNull(),
   arriveAt:    timestamp("arrive_at", { withTimezone: true }).notNull(),
   durationMin: integer("duration_min").notNull()
-});
+}, (table) => ({
+  idxTripLegsTripId: sql`CREATE INDEX IF NOT EXISTS idx_trip_legs_trip_id ON ${table} (trip_id)`
+}));
 
 // 10. Seat Inventory
 export const seatInventory = pgTable("seat_inventory", {
@@ -201,7 +214,10 @@ export const seatInventory = pgTable("seat_inventory", {
   legIndex: integer("leg_index").notNull(),
   booked:   boolean("booked").default(false),
   holdRef:  text("hold_ref")
-});
+}, (table) => ({
+  idxSeatInvTripSeat: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_trip_seat ON ${table} (trip_id, seat_no)`,
+  idxSeatInvTripId: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_trip_id ON ${table} (trip_id)`
+}));
 
 // 10a. Seat Holds
 export const seatHolds = pgTable("seat_holds", {
@@ -210,12 +226,15 @@ export const seatHolds = pgTable("seat_holds", {
   tripId:      uuid("trip_id").notNull().references(() => trips.id),
   seatNo:      text("seat_no").notNull(),
   legIndexes:  integer("leg_indexes").array().notNull(),
-  ttlClass:    text("ttl_class").notNull(), // 'short' | 'long'
+  ttlClass:    text("ttl_class").notNull(),
   operatorId:  text("operator_id").notNull(),
-  bookingId:   text("booking_id"), // nullable for non-booking holds
+  bookingId:   text("booking_id"),
   expiresAt:   timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxSeatHoldsTripId: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_trip_id ON ${table} (trip_id)`,
+  idxSeatHoldsExpiresAt: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_expires_at ON ${table} (expires_at)`
+}));
 
 // 11. Price Rules
 export const priceRules = pgTable("price_rules", {
@@ -225,10 +244,13 @@ export const priceRules = pgTable("price_rules", {
   tripId:    uuid("trip_id").references(() => trips.id),
   legIndex:  integer("leg_index"),
   priority:  integer("priority").default(0),
-  rule:      jsonb("rule").notNull(), // base per leg, caps, discounts, peak %, promo
+  rule:      jsonb("rule").notNull(),
   validFrom: timestamp("valid_from", { withTimezone: true }),
   validTo:   timestamp("valid_to", { withTimezone: true })
-});
+}, (table) => ({
+  idxPriceRulesPatternId: sql`CREATE INDEX IF NOT EXISTS idx_price_rules_pattern_id ON ${table} (pattern_id)`,
+  idxPriceRulesTripId: sql`CREATE INDEX IF NOT EXISTS idx_price_rules_trip_id ON ${table} (trip_id)`
+}));
 
 // 12. Bookings
 export const bookings = pgTable("bookings", {
@@ -251,13 +273,19 @@ export const bookings = pgTable("bookings", {
   appUserId:          uuid("app_user_id").references(() => appUsers.id),
   pendingExpiresAt:   timestamp("pending_expires_at", { withTimezone: true }),
   createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxBookingsTripId: sql`CREATE INDEX IF NOT EXISTS idx_bookings_trip_id ON ${table} (trip_id)`,
+  idxBookingsStatus: sql`CREATE INDEX IF NOT EXISTS idx_bookings_status ON ${table} (status)`,
+  idxBookingsOutletId: sql`CREATE INDEX IF NOT EXISTS idx_bookings_outlet_id ON ${table} (outlet_id)`,
+  idxBookingsCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_bookings_created_at ON ${table} (created_at)`,
+  idxBookingsPendingExpiry: sql`CREATE INDEX IF NOT EXISTS idx_bookings_pending_expiry ON ${table} (pending_expires_at) WHERE status = 'pending'`
+}));
 
 // 13. Passengers
 export const passengers = pgTable("passengers", {
   id:             uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  ticketNumber:   text("ticket_number").unique(), // Per-passenger ticket ID e.g. TKT-20240319-AB123
-  ticketStatus:   ticketStatusEnum("ticket_status").default('active'), // Individual cancellation per passenger
+  ticketNumber:   text("ticket_number").unique(),
+  ticketStatus:   ticketStatusEnum("ticket_status").default('active'),
   bookingId:      uuid("booking_id").notNull().references(() => bookings.id),
   seatNo:         text("seat_no").notNull(),
   fullName:       text("full_name").notNull(),
@@ -265,7 +293,9 @@ export const passengers = pgTable("passengers", {
   idNumber:       text("id_number"),
   fareAmount:     numeric("fare_amount", { precision: 12, scale: 2 }).notNull(),
   fareBreakdown:  jsonb("fare_breakdown")
-});
+}, (table) => ({
+  idxPassengersBookingId: sql`CREATE INDEX IF NOT EXISTS idx_passengers_booking_id ON ${table} (booking_id)`
+}));
 
 // 14. Payments
 export const payments = pgTable("payments", {
@@ -276,7 +306,9 @@ export const payments = pgTable("payments", {
   amount:      numeric("amount", { precision: 12, scale: 2 }).notNull(),
   providerRef: text("provider_ref"),
   paidAt:      timestamp("paid_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxPaymentsBookingId: sql`CREATE INDEX IF NOT EXISTS idx_payments_booking_id ON ${table} (booking_id)`
+}));
 
 // 15. Print Jobs
 export const printJobs = pgTable("print_jobs", {
@@ -596,7 +628,11 @@ export const cargoShipments = pgTable("cargo_shipments", {
   notes:              text("notes"),
   createdBy:          text("created_by"),
   createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxCargoTripId: sql`CREATE INDEX IF NOT EXISTS idx_cargo_trip_id ON ${table} (trip_id)`,
+  idxCargoStatus: sql`CREATE INDEX IF NOT EXISTS idx_cargo_status ON ${table} (status)`,
+  idxCargoOutletId: sql`CREATE INDEX IF NOT EXISTS idx_cargo_outlet_id ON ${table} (outlet_id)`
+}));
 
 export const cargoShipmentsRelations = relations(cargoShipments, ({ one }) => ({
   trip: one(trips, { fields: [cargoShipments.tripId], references: [trips.id] }),
@@ -703,7 +739,10 @@ export const vouchers = pgTable("vouchers", {
   validFrom:       timestamp("valid_from", { withTimezone: true }),
   validTo:         timestamp("valid_to", { withTimezone: true }),
   createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxVouchersPromoId: sql`CREATE INDEX IF NOT EXISTS idx_vouchers_promo_id ON ${table} (promo_id)`,
+  idxVouchersStatus: sql`CREATE INDEX IF NOT EXISTS idx_vouchers_status ON ${table} (status)`
+}));
 
 export const vouchersRelations = relations(vouchers, ({ one }) => ({
   promotion: one(promotions, { fields: [vouchers.promoId], references: [promotions.id] })
@@ -768,7 +807,11 @@ export const spj = pgTable("spj", {
   notes:        text("notes"),
   createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt:    timestamp("updated_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxSpjTripId: sql`CREATE INDEX IF NOT EXISTS idx_spj_trip_id ON ${table} (trip_id)`,
+  idxSpjStatus: sql`CREATE INDEX IF NOT EXISTS idx_spj_status ON ${table} (status)`,
+  idxSpjDriverId: sql`CREATE INDEX IF NOT EXISTS idx_spj_driver_id ON ${table} (driver_id)`
+}));
 
 export const spjRelations = relations(spj, ({ one, many }) => ({
   trip: one(trips, { fields: [spj.tripId], references: [trips.id] }),
@@ -826,7 +869,9 @@ export const bookingHistory = pgTable("booking_history", {
   details:       jsonb("details"),
   performedBy:   text("performed_by"),
   createdAt:     timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxBookingHistoryBookingId: sql`CREATE INDEX IF NOT EXISTS idx_booking_history_booking_id ON ${table} (booking_id)`
+}));
 
 export const bookingHistoryRelations = relations(bookingHistory, ({ one }) => ({
   booking: one(bookings, { fields: [bookingHistory.bookingId], references: [bookings.id] }),

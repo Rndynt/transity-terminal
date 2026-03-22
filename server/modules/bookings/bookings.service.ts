@@ -110,18 +110,20 @@ export class BookingsService {
 
     const operatorId = bookingData.createdBy || 'default-operator';
 
+    const seatNos = passengers.map(p => p.seatNo);
+    const holdRecords = await db
+      .select()
+      .from(seatHolds)
+      .where(and(
+        eq(seatHolds.tripId, bookingData.tripId),
+        inArray(seatHolds.seatNo, seatNos),
+        gt(seatHolds.expiresAt, new Date()),
+        eq(seatHolds.operatorId, operatorId)
+      ));
+    const holdsBySeat = new Map(holdRecords.map(h => [h.seatNo, h]));
+
     for (const passenger of passengers) {
-      const [holdRecord] = await db
-        .select()
-        .from(seatHolds)
-        .where(and(
-          eq(seatHolds.tripId, bookingData.tripId),
-          eq(seatHolds.seatNo, passenger.seatNo),
-          gt(seatHolds.expiresAt, new Date()),
-          eq(seatHolds.operatorId, operatorId)
-        ))
-        .limit(1);
-      
+      const holdRecord = holdsBySeat.get(passenger.seatNo);
       if (!holdRecord) {
         throw new Error(`Seat ${passenger.seatNo} is not held or hold has expired`);
       }
@@ -491,16 +493,28 @@ export class BookingsService {
         lt(bookingsTable.pendingExpiresAt, now)
       ));
 
+    if (expiredPendingBookings.length === 0) return;
+
+    const allPassengers = await this.storage.getPassengersByBookingIds(
+      expiredPendingBookings.map(b => b.id)
+    );
+    const passengersByBooking = new Map<string, typeof allPassengers>();
+    for (const p of allPassengers) {
+      const list = passengersByBooking.get(p.bookingId) || [];
+      list.push(p);
+      passengersByBooking.set(p.bookingId, list);
+    }
+
     for (const booking of expiredPendingBookings) {
       try {
-        const passengers = await this.storage.getPassengers(booking.id);
+        const bookingPassengers = passengersByBooking.get(booking.id) || [];
         const legIndexes: number[] = [];
         for (let i = booking.originSeq; i < booking.destinationSeq; i++) {
           legIndexes.push(i);
         }
 
         await db.transaction(async (tx) => {
-          for (const passenger of passengers) {
+          for (const passenger of bookingPassengers) {
             await tx
               .update(seatInventory)
               .set({ booked: false, holdRef: null })
@@ -514,7 +528,7 @@ export class BookingsService {
 
         await this.storage.updateBooking(booking.id, { status: 'canceled' });
 
-        for (const passenger of passengers) {
+        for (const passenger of bookingPassengers) {
           webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
         }
 
