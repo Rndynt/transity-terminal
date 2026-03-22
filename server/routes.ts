@@ -651,12 +651,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/reports/cargo', asyncHandler(reportsController.getCargo.bind(reportsController)));
   app.get('/api/reports/payments', asyncHandler(reportsController.getPayments.bind(reportsController)));
 
-  // Seed data
+  // Seed data (includes RBAC seed at the end)
   app.post('/api/seed', asyncHandler(async (req: any, res: any) => {
     const { seedData } = await import('./seed');
     await seedData();
-    const { seedRbac } = await import('./modules/rbac/rbac.seed');
-    await seedRbac();
     res.json({ message: 'Seed data created successfully' });
   }));
 

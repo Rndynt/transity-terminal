@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { fromZonedHHMMToUtc } from "./utils/timezone";
 import { TripBasesService } from "./modules/tripBases/tripBases.service";
+import { seedRbac } from "./modules/rbac/rbac.seed";
 
 /**
  * SEED DATA - TransityTerminal
@@ -542,6 +543,8 @@ export async function seedData() {
   console.log(`  Seat Inv    : ${(invCount.rows[0] as any).c} baris`);
   console.log(`  Kargo Types : 7 | Patterns: 6 | Bases: ${createdBases.length}`);
   console.log("========================================\n");
+
+  await seedRbac();
 }
 
 // Run seeder if executed directly
