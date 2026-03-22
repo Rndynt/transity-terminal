@@ -10,6 +10,19 @@ Sistem manajemen perjalanan multi-stop (bus/travel) dengan terminal reservasi CS
 - **Real-time**: WebSocket (ws) untuk update kursi
 - **Mobile**: Expo React Native (B2C) di `/apps/mobile`
 
+## VPS Deployment
+Cara deploy di VPS (non-Replit):
+1. `npm install` — install semua dependencies
+2. `npm run build` — build frontend + server bundle ke `dist/`
+3. Set environment variables:
+   - `DATABASE_URL` — PostgreSQL connection string
+   - `PORT` — port server (default 5000)
+   - `DEV_BYPASS_AUTH=true` — bypass auth, auto-login sebagai owner (untuk dev/testing)
+   - `JWT_SECRET` — secret untuk JWT (wajib di production jika tidak bypass)
+4. `npm start` — jalankan production build, ATAU `npm run start:dev` — production build + auto bypass auth
+- Vite plugin Replit (`@replit/vite-plugin-*`) otomatis di-skip jika `REPL_ID` tidak ada (bukan di Replit)
+- Auth bypass bisa aktif di mode production jika `DEV_BYPASS_AUTH=true` di-set
+
 ## Project Structure
 ```
 client/src/

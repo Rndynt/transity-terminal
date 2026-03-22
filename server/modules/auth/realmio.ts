@@ -13,8 +13,13 @@ export interface RealmioUser {
 const AUTHCORE_BASE_URL = process.env.AUTHCORE_BASE_URL || "";
 const AUTHCORE_TENANT_ID = process.env.AUTHCORE_TENANT_ID || "transity";
 const DEV_BYPASS_AUTH =
-  process.env.NODE_ENV !== "production" &&
-  (process.env.DEV_BYPASS_AUTH === "true" || !AUTHCORE_BASE_URL);
+  process.env.DEV_BYPASS_AUTH === "true" ||
+  (process.env.NODE_ENV !== "production" && !AUTHCORE_BASE_URL);
+
+if (DEV_BYPASS_AUTH && process.env.NODE_ENV === "production") {
+  console.warn("⚠️  WARNING: DEV_BYPASS_AUTH is active in PRODUCTION mode!");
+  console.warn("⚠️  All requests will auto-authenticate as owner. DO NOT use on public-facing servers.");
+}
 
 const DEV_USER: RealmioUser = {
   id: "dev-user-001",

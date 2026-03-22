@@ -1,12 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { createServer as createViteServer, createLogger } from "vite";
-import { type Server } from "http";
 import type { FastifyInstance } from "fastify";
-import viteConfig from "../vite.config";
-import { nanoid } from "nanoid";
-
-const viteLogger = createLogger();
 
 export function log(message: string, source = "fastify") {
   const formattedTime = new Date().toLocaleTimeString("id-ID", {
@@ -20,7 +14,17 @@ export function log(message: string, source = "fastify") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-export async function setupVite(app: FastifyInstance, server: Server) {
+export async function setupVite(app: FastifyInstance, server: any) {
+  const viteLib = await import("vite");
+  const createViteServer = viteLib.createServer;
+  const createLogger = viteLib.createLogger;
+  const viteConfigModule = await import("../vite.config");
+  const viteConfig = viteConfigModule.default;
+  const nanoidModule = await import("nanoid");
+  const nanoid = nanoidModule.nanoid;
+
+  const viteLogger = createLogger();
+
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
@@ -32,7 +36,7 @@ export async function setupVite(app: FastifyInstance, server: Server) {
     configFile: false,
     customLogger: {
       ...viteLogger,
-      error: (msg, options) => {
+      error: (msg: string, options?: any) => {
         viteLogger.error(msg, options);
         process.exit(1);
       },
