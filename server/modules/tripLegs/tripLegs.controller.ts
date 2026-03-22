@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { TripLegsService } from "./tripLegs.service";
 import { IStorage } from "../../routes";
 
@@ -9,9 +9,9 @@ export class TripLegsController {
     this.tripLegsService = new TripLegsService(storage);
   }
 
-  async getByTrip(req: Request, res: Response) {
+  async getByTrip(req: FastifyRequest, reply: FastifyReply) {
     const { tripId } = req.params;
     const legs = await this.tripLegsService.getTripLegs(tripId);
-    res.json(legs);
+    reply.send(legs);
   }
 }

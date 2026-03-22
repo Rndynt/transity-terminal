@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { StopsService } from "./stops.service";
 import { IStorage } from "../../routes";
 import { insertStopSchema } from "@shared/schema";
@@ -10,33 +10,33 @@ export class StopsController {
     this.stopsService = new StopsService(storage);
   }
 
-  async getAll(req: Request, res: Response) {
+  async getAll(req: FastifyRequest, reply: FastifyReply) {
     const stops = await this.stopsService.getAllStops();
-    res.json(stops);
+    reply.send(stops);
   }
 
-  async getById(req: Request, res: Response) {
+  async getById(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const stop = await this.stopsService.getStopById(id);
-    res.json(stop);
+    reply.send(stop);
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     const validatedData = insertStopSchema.parse(req.body);
     const stop = await this.stopsService.createStop(validatedData);
-    res.status(201).json(stop);
+    reply.code(201).send(stop);
   }
 
-  async update(req: Request, res: Response) {
+  async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const validatedData = insertStopSchema.partial().parse(req.body);
     const stop = await this.stopsService.updateStop(id, validatedData);
-    res.json(stop);
+    reply.send(stop);
   }
 
-  async delete(req: Request, res: Response) {
+  async delete(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     await this.stopsService.deleteStop(id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 }

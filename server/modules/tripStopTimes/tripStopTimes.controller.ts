@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { TripStopTimesService } from "./tripStopTimes.service";
 import { IStorage } from "../../routes";
 import { insertTripStopTimeSchema, bulkUpsertTripStopTimeSchema } from "@shared/schema";
@@ -106,38 +106,38 @@ export class TripStopTimesController {
     return { valid: errors.length === 0, errors };
   }
 
-  async getByTrip(req: Request, res: Response) {
+  async getByTrip(req: FastifyRequest, reply: FastifyReply) {
     const { tripId } = req.params;
     const stopTimes = await this.tripStopTimesService.getTripStopTimes(tripId);
-    res.json(stopTimes);
+    reply.send(stopTimes);
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     const validatedData = insertTripStopTimeSchema.parse(req.body);
     const stopTime = await this.tripStopTimesService.createTripStopTime(validatedData);
-    res.status(201).json(stopTime);
+    reply.code(201).send(stopTime);
   }
 
-  async update(req: Request, res: Response) {
+  async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const validatedData = insertTripStopTimeSchema.partial().parse(req.body);
     const stopTime = await this.tripStopTimesService.updateTripStopTime(id, validatedData);
-    res.json(stopTime);
+    reply.send(stopTime);
   }
 
-  async delete(req: Request, res: Response) {
+  async delete(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     await this.tripStopTimesService.deleteTripStopTime(id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 
-  async getByTripWithEffectiveFlags(req: Request, res: Response) {
+  async getByTripWithEffectiveFlags(req: FastifyRequest, reply: FastifyReply) {
     const { tripId } = req.params;
     const stopTimes = await this.tripStopTimesService.getTripStopTimesWithEffectiveFlags(tripId);
-    res.json(stopTimes);
+    reply.send(stopTimes);
   }
 
-  async bulkUpsert(req: Request, res: Response) {
+  async bulkUpsert(req: FastifyRequest, reply: FastifyReply) {
     const { tripId } = req.params;
     const { precompute } = req.query;
     
@@ -165,7 +165,7 @@ export class TripStopTimesController {
         );
       
       if (!sequencesMatch) {
-        return res.status(400).json({
+        return reply.code(400).send({
           error: 'Cannot reorder stops when trip has bookings. Only time edits are allowed.',
           code: 'trip-has-bookings'
         });
@@ -176,7 +176,7 @@ export class TripStopTimesController {
     const tempValidation = await this.validateStopTimesForPayload(validatedData, tripId);
     
     if (!tempValidation.valid) {
-      return res.status(400).json({
+      return reply.code(400).send({
         error: 'Invalid stop times',
         code: 'invalid-stop-times',
         errors: tempValidation.errors
@@ -190,7 +190,7 @@ export class TripStopTimesController {
     try {
       await this.tripStopTimesService.deriveLegs(tripId);
     } catch (error) {
-      return res.status(400).json({
+      return reply.code(400).send({
         error: 'Failed to derive legs from stop times',
         code: 'derive-legs-failed',
         details: error instanceof Error ? error.message : 'Unknown error'
@@ -202,7 +202,7 @@ export class TripStopTimesController {
       try {
         await this.tripStopTimesService.precomputeSeatInventory(tripId);
       } catch (error) {
-        return res.status(400).json({
+        return reply.code(400).send({
           error: 'Failed to precompute seat inventory',
           code: 'precompute-inventory-failed',
           details: error instanceof Error ? error.message : 'Unknown error'
@@ -210,7 +210,7 @@ export class TripStopTimesController {
       }
     }
     
-    res.json({ 
+    reply.send({ 
       success: true, 
       message: 'Trip stop times updated successfully',
       derivedLegs: true,
@@ -218,26 +218,26 @@ export class TripStopTimesController {
     });
   }
 
-  async syncFromPattern(req: Request, res: Response) {
+  async syncFromPattern(req: FastifyRequest, reply: FastifyReply) {
     const { tripId } = req.params;
     try {
       const result = await this.tripStopTimesService.syncFromPattern(tripId);
-      res.json(result);
+      reply.send(result);
     } catch (error) {
-      res.status(400).json({
+      reply.code(400).send({
         error: error instanceof Error ? error.message : 'Gagal sync halte dari pola rute',
       });
     }
   }
 
-  async deriveLegs(req: Request, res: Response) {
+  async deriveLegs(req: FastifyRequest, reply: FastifyReply) {
     const { tripId } = req.params;
     
     // Validate stop times before deriving legs
     const validation = await this.tripStopTimesService.validateStopTimes(tripId);
     
     if (!validation.valid) {
-      return res.status(400).json({
+      return reply.code(400).send({
         error: 'Cannot derive legs from invalid stop times',
         code: 'invalid-stop-times',
         errors: validation.errors
@@ -246,9 +246,9 @@ export class TripStopTimesController {
     
     try {
       await this.tripStopTimesService.deriveLegs(tripId);
-      res.json({ success: true, message: 'Trip legs derived successfully' });
+      reply.send({ success: true, message: 'Trip legs derived successfully' });
     } catch (error) {
-      res.status(400).json({
+      reply.code(400).send({
         error: 'Failed to derive legs',
         code: 'derive-legs-failed',
         details: error instanceof Error ? error.message : 'Unknown error'
@@ -256,9 +256,9 @@ export class TripStopTimesController {
     }
   }
 
-  async precomputeSeatInventory(req: Request, res: Response) {
+  async precomputeSeatInventory(req: FastifyRequest, reply: FastifyReply) {
     const { tripId } = req.params;
     await this.tripStopTimesService.precomputeSeatInventory(tripId);
-    res.json({ success: true, message: 'Seat inventory precomputed successfully' });
+    reply.send({ success: true, message: 'Seat inventory precomputed successfully' });
   }
 }

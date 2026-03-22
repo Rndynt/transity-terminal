@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { BookingsService } from "./bookings.service";
 import { UnseatService } from "./unseat.service";
 import { IStorage } from "../../routes";
@@ -83,23 +83,23 @@ export class BookingsController {
     this.unseatService = new UnseatService(storage);
   }
 
-  async getAll(req: Request, res: Response) {
+  async getAll(req: FastifyRequest, reply: FastifyReply) {
     const tripId = typeof req.query.tripId === 'string' ? req.query.tripId : undefined;
     const outletId = req.scopedOutletId ?? req.rbac?.outletId ?? null;
     let bookings = await this.bookingsService.getAllBookings(tripId);
     if (outletId) {
       bookings = bookings.filter((b) => b.outletId === outletId);
     }
-    res.json(bookings);
+    reply.send(bookings);
   }
 
-  async getById(req: Request, res: Response) {
+  async getById(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const booking = await this.bookingsService.getBookingById(id);
-    res.json(booking);
+    reply.send(booking);
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     try {
       const idempotencyKey = req.headers['idempotency-key'] as string;
       
@@ -109,7 +109,7 @@ export class BookingsController {
       
       // Enhanced validation
       if (validatedData.totalAmount <= 0) {
-        return res.status(400).json({ 
+        return reply.code(400).send({ 
           error: 'Invalid total amount',
           code: 'INVALID_TOTAL',
           details: 'Total amount must be greater than 0'
@@ -117,7 +117,7 @@ export class BookingsController {
       }
       
       if (!passengers || passengers.length === 0) {
-        return res.status(400).json({
+        return reply.code(400).send({
           error: 'No passengers provided',
           code: 'NO_PASSENGERS',
           details: 'At least one passenger is required'
@@ -125,7 +125,7 @@ export class BookingsController {
       }
       
       if (payment.amount <= 0) {
-        return res.status(400).json({
+        return reply.code(400).send({
           error: 'Invalid payment amount',
           code: 'INVALID_PAYMENT',
           details: 'Payment amount must be greater than 0'
@@ -133,7 +133,7 @@ export class BookingsController {
       }
 
       if (Math.abs(payment.amount - validatedData.totalAmount) > 0.01) {
-        return res.status(400).json({
+        return reply.code(400).send({
           error: 'Payment amount mismatch',
           code: 'PAYMENT_AMOUNT_MISMATCH',
           details: `Payment amount ${payment.amount} does not match booking total ${validatedData.totalAmount}`
@@ -158,12 +158,12 @@ export class BookingsController {
         promoCode
       );
       
-      res.status(201).json(result);
+      reply.code(201).send(result);
     } catch (error: any) {
       console.error('Booking creation error:', error);
       
       if (error.name === 'ZodError') {
-        return res.status(400).json({
+        return reply.code(400).send({
           error: 'Validation failed',
           code: 'VALIDATION_ERROR',
           details: error.errors
@@ -171,7 +171,7 @@ export class BookingsController {
       }
       
       if (error.message.includes('not held') || error.message.includes('expired')) {
-        return res.status(400).json({
+        return reply.code(400).send({
           error: 'Seat hold validation failed',
           code: 'SEAT_NOT_HELD',
           details: error.message
@@ -179,7 +179,7 @@ export class BookingsController {
       }
       
       if (error.message.includes('already booked')) {
-        return res.status(409).json({
+        return reply.code(409).send({
           error: 'Seat already booked',
           code: 'SEAT_CONFLICT',
           details: error.message
@@ -187,7 +187,7 @@ export class BookingsController {
       }
 
       if (error.message.includes('promo') || error.message.includes('Promo') || error.message.includes('voucher') || error.message.includes('Voucher') || error.message.includes('Kode promo') || error.message.includes('Kuota') || error.message.includes('Minimum')) {
-        return res.status(400).json({
+        return reply.code(400).send({
           error: 'Promo validation failed',
           code: 'PROMO_INVALID',
           details: error.message
@@ -195,7 +195,7 @@ export class BookingsController {
       }
       
       // Generic server error
-      res.status(500).json({
+      reply.code(500).send({
         error: 'Internal server error',
         code: 'INTERNAL_ERROR',
         details: 'An unexpected error occurred during booking creation'
@@ -203,7 +203,7 @@ export class BookingsController {
     }
   }
 
-  async createHold(req: Request, res: Response) {
+  async createHold(req: FastifyRequest, reply: FastifyReply) {
     try {
       const validatedData = createHoldSchema.parse(req.body);
       const operatorId = req.headers['x-operator-id'] as string || 'default-operator';
@@ -218,29 +218,29 @@ export class BookingsController {
       );
       
       if (result.ok) {
-        res.status(201).json(result);
+        reply.code(201).send(result);
       } else if (result.reason === 'already-held-by-you') {
         // Idempotent behavior: return success if already held by same operator
-        res.status(200).json({
+        reply.code(200).send({
           ok: true,
           holdRef: null, // No new hold created, but request is successful
           message: 'Seat already held by you',
           ownedByYou: true
         });
       } else if (result.reason === 'INCOMPLETE_INVENTORY') {
-        res.status(422).json({
+        reply.code(422).send({
           error: 'Inventori kursi belum diinisialisasi',
           code: 'INCOMPLETE_INVENTORY',
           details: 'Jalankan Precompute Seat Inventory di halaman Trip terlebih dahulu'
         });
       } else if (result.reason === 'TRANSACTION_ERROR') {
-        res.status(500).json({
+        reply.code(500).send({
           error: 'Terjadi kesalahan sistem saat memegang kursi',
           code: 'TRANSACTION_ERROR',
           details: result.reason
         });
       } else {
-        res.status(409).json({
+        reply.code(409).send({
           error: 'Kursi sedang dipegang oleh agen lain',
           code: 'HELD_BY_OTHER',
           details: result.reason
@@ -248,7 +248,7 @@ export class BookingsController {
       }
     } catch (error: any) {
       console.error('Hold creation error:', error);
-      res.status(500).json({
+      reply.code(500).send({
         error: 'Internal server error',
         code: 'INTERNAL_ERROR',
         details: error.message
@@ -256,13 +256,13 @@ export class BookingsController {
     }
   }
 
-  async releaseHold(req: Request, res: Response) {
+  async releaseHold(req: FastifyRequest, reply: FastifyReply) {
     const { holdRef } = req.params;
     await this.bookingsService.releaseHold(holdRef);
-    res.status(204).send();
+    reply.code(204).send();
   }
 
-  async createPendingBooking(req: Request, res: Response) {
+  async createPendingBooking(req: FastifyRequest, reply: FastifyReply) {
     try {
       const validatedData = createPendingBookingSchema.parse(req.body);
       const { passengers, ...bookingData } = validatedData;
@@ -270,7 +270,7 @@ export class BookingsController {
       
       // Enhanced validation
       if (validatedData.totalAmount <= 0) {
-        return res.status(400).json({ 
+        return reply.code(400).send({ 
           error: 'Invalid total amount',
           code: 'INVALID_TOTAL',
           details: 'Total amount must be greater than 0'
@@ -278,7 +278,7 @@ export class BookingsController {
       }
       
       if (!passengers || passengers.length === 0) {
-        return res.status(400).json({
+        return reply.code(400).send({
           error: 'No passengers provided',
           code: 'NO_PASSENGERS',
           details: 'At least one passenger is required'
@@ -299,12 +299,12 @@ export class BookingsController {
         operatorId
       );
       
-      res.status(201).json(result);
+      reply.code(201).send(result);
     } catch (error: any) {
       console.error('Pending booking creation error:', error);
       
       if (error.name === 'ZodError') {
-        return res.status(400).json({
+        return reply.code(400).send({
           error: 'Validation failed',
           code: 'VALIDATION_ERROR',
           details: error.errors
@@ -312,14 +312,14 @@ export class BookingsController {
       }
       
       if (error.message.includes('not held') || error.message.includes('expired')) {
-        return res.status(400).json({
+        return reply.code(400).send({
           error: 'Seat hold validation failed',
           code: 'SEAT_NOT_HELD',
           details: error.message
         });
       }
       
-      res.status(500).json({
+      reply.code(500).send({
         error: 'Internal server error',
         code: 'INTERNAL_ERROR',
         details: 'An unexpected error occurred during pending booking creation'
@@ -327,24 +327,24 @@ export class BookingsController {
     }
   }
 
-  async getPendingBookings(req: Request, res: Response) {
+  async getPendingBookings(req: FastifyRequest, reply: FastifyReply) {
     const { outletId } = req.query;
     const operatorId = req.headers['x-operator-id'] as string || 'default-operator';
     
     const pendingBookings = await this.bookingsService.getPendingBookings(outletId as string, operatorId);
-    res.json(pendingBookings);
+    reply.send(pendingBookings);
   }
 
-  async releasePendingBooking(req: Request, res: Response) {
+  async releasePendingBooking(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { id } = req.params;
       const operatorId = req.headers['x-operator-id'] as string || 'default-operator';
       
       await this.bookingsService.releasePendingBooking(id, operatorId);
-      res.status(204).send();
+      reply.code(204).send();
     } catch (error: any) {
       console.error('Release pending booking error:', error);
-      res.status(500).json({
+      reply.code(500).send({
         error: 'Internal server error',
         code: 'INTERNAL_ERROR',
         details: error.message
@@ -352,32 +352,32 @@ export class BookingsController {
     }
   }
 
-  async unseatPassenger(req: Request, res: Response) {
+  async unseatPassenger(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { passengerId } = req.params;
       const { reason } = unseatPassengerSchema.parse(req.body || {});
       const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
       const result = await this.unseatService.unseatPassenger(passengerId, performedBy, reason);
-      res.json(result);
+      reply.send(result);
     } catch (error: any) {
       console.error('Unseat passenger error:', error);
-      res.status(error.message.includes('tidak ditemukan') ? 404 : 400).json({
+      reply.code(error.message.includes('tidak ditemukan') ? 404 : 400).send({
         error: error.message,
         code: 'UNSEAT_ERROR'
       });
     }
   }
 
-  async unseatAllPassengers(req: Request, res: Response) {
+  async unseatAllPassengers(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { bookingId } = req.params;
       const { reason } = unseatPassengerSchema.parse(req.body || {});
       const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
       const result = await this.unseatService.unseatAllPassengers(bookingId, performedBy, reason);
-      res.json(result);
+      reply.send(result);
     } catch (error: any) {
       console.error('Unseat all passengers error:', error);
-      res.status(error.message.includes('tidak ditemukan') ? 404 : 400).json({
+      reply.code(error.message.includes('tidak ditemukan') ? 404 : 400).send({
         error: error.message,
         code: 'UNSEAT_ERROR'
       });
@@ -385,7 +385,7 @@ export class BookingsController {
   }
 
 
-  async reschedulePassenger(req: Request, res: Response) {
+  async reschedulePassenger(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { passengerId } = req.params;
       const data = reschedulePassengerSchema.parse(req.body);
@@ -401,45 +401,45 @@ export class BookingsController {
         performedBy,
         data.reason
       );
-      res.json(result);
+      reply.send(result);
     } catch (error: any) {
       console.error('Reschedule passenger error:', error);
       const status = error.message.includes('tidak ditemukan') ? 404
         : error.message.includes('tidak tersedia') ? 409 : 400;
-      res.status(status).json({
+      reply.code(status).send({
         error: error.message,
         code: 'RESCHEDULE_ERROR'
       });
     }
   }
 
-  async assignSeatToUnseated(req: Request, res: Response) {
+  async assignSeatToUnseated(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { passengerId } = req.params;
       const { newSeatNo } = z.object({ newSeatNo: z.string() }).parse(req.body);
       const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
       const result = await this.unseatService.assignSeatToUnseated(passengerId, newSeatNo, performedBy);
-      res.json(result);
+      reply.send(result);
     } catch (error: any) {
       console.error('Assign seat to unseated error:', error);
       const status = error.message.includes('tidak ditemukan') ? 404
         : error.message.includes('tidak tersedia') ? 409
         : error.message.includes('berstatus unseated') ? 400 : 400;
-      res.status(status).json({
+      reply.code(status).send({
         error: error.message,
         code: 'ASSIGN_UNSEATED_ERROR'
       });
     }
   }
 
-  async getBookingHistory(req: Request, res: Response) {
+  async getBookingHistory(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { bookingId } = req.params;
       const history = await this.unseatService.getBookingHistory(bookingId);
-      res.json(history);
+      reply.send(history);
     } catch (error: any) {
       console.error('Get booking history error:', error);
-      res.status(500).json({
+      reply.code(500).send({
         error: error.message,
         code: 'HISTORY_ERROR'
       });

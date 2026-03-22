@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { FastifyInstance } from "fastify";
 import {
   AUTHCORE_BASE_URL,
   AUTHCORE_TENANT_ID,
@@ -6,10 +6,10 @@ import {
   DEV_USER,
 } from "./realmio";
 
-export function registerAuthRoutes(app: Express) {
-  app.post("/api/auth/sign-in/email", async (req: Request, res: Response) => {
+export function registerAuthRoutes(app: FastifyInstance) {
+  app.post("/api/auth/sign-in/email", async (req, reply) => {
     if (DEV_BYPASS_AUTH) {
-      return res.json({
+      return reply.send({
         user: DEV_USER,
         session: {
           id: "dev-session-001",
@@ -33,20 +33,20 @@ export function registerAuthRoutes(app: Express) {
 
       const setCookies = upstream.headers.getSetCookie?.() ?? [];
       for (const c of setCookies) {
-        res.append("Set-Cookie", c);
+        reply.header("Set-Cookie", c);
       }
 
       const data = await upstream.json();
-      return res.status(upstream.status).json(data);
+      return reply.code(upstream.status).send(data);
     } catch (err) {
-      return res.status(502).json({ message: "Auth service unavailable" });
+      return reply.code(502).send({ message: "Auth service unavailable" });
     }
   });
 
-  app.post("/api/auth/sign-up/email", async (req: Request, res: Response) => {
+  app.post("/api/auth/sign-up/email", async (req, reply) => {
     if (DEV_BYPASS_AUTH) {
-      return res.json({
-        user: { ...DEV_USER, email: req.body.email, name: req.body.name },
+      return reply.send({
+        user: { ...DEV_USER, email: (req.body as any).email, name: (req.body as any).name },
         session: {
           id: "dev-session-001",
           token: "dev-token",
@@ -68,19 +68,19 @@ export function registerAuthRoutes(app: Express) {
 
       const setCookies = upstream.headers.getSetCookie?.() ?? [];
       for (const c of setCookies) {
-        res.append("Set-Cookie", c);
+        reply.header("Set-Cookie", c);
       }
 
       const data = await upstream.json();
-      return res.status(upstream.status).json(data);
+      return reply.code(upstream.status).send(data);
     } catch (err) {
-      return res.status(502).json({ message: "Auth service unavailable" });
+      return reply.code(502).send({ message: "Auth service unavailable" });
     }
   });
 
-  app.post("/api/auth/sign-out", async (req: Request, res: Response) => {
+  app.post("/api/auth/sign-out", async (req, reply) => {
     if (DEV_BYPASS_AUTH) {
-      return res.json({ success: true });
+      return reply.send({ success: true });
     }
 
     try {
@@ -94,19 +94,19 @@ export function registerAuthRoutes(app: Express) {
 
       const setCookies = upstream.headers.getSetCookie?.() ?? [];
       for (const c of setCookies) {
-        res.append("Set-Cookie", c);
+        reply.header("Set-Cookie", c);
       }
 
       const data = await upstream.json();
-      return res.status(upstream.status).json(data);
+      return reply.code(upstream.status).send(data);
     } catch (err) {
-      return res.status(502).json({ message: "Auth service unavailable" });
+      return reply.code(502).send({ message: "Auth service unavailable" });
     }
   });
 
-  app.get("/api/auth/session", async (req: Request, res: Response) => {
+  app.get("/api/auth/session", async (req, reply) => {
     if (DEV_BYPASS_AUTH) {
-      return res.json({
+      return reply.send({
         user: DEV_USER,
         session: {
           id: "dev-session-001",
@@ -129,19 +129,19 @@ export function registerAuthRoutes(app: Express) {
       });
 
       if (!upstream.ok) {
-        return res.status(401).json({ user: null, session: null });
+        return reply.code(401).send({ user: null, session: null });
       }
 
       const data = await upstream.json();
-      return res.json(data);
+      return reply.send(data);
     } catch (err) {
-      return res.status(401).json({ user: null, session: null });
+      return reply.code(401).send({ user: null, session: null });
     }
   });
 
-  app.get("/api/auth/me", async (req: Request, res: Response) => {
+  app.get("/api/auth/me", async (req, reply) => {
     if (DEV_BYPASS_AUTH) {
-      return res.json({
+      return reply.send({
         user: DEV_USER,
         tenant: { id: AUTHCORE_TENANT_ID, slug: AUTHCORE_TENANT_ID },
       });
@@ -159,13 +159,13 @@ export function registerAuthRoutes(app: Express) {
       });
 
       if (!upstream.ok) {
-        return res.status(401).json({ user: null });
+        return reply.code(401).send({ user: null });
       }
 
       const data = await upstream.json();
-      return res.json(data);
+      return reply.send(data);
     } catch (err) {
-      return res.status(401).json({ user: null });
+      return reply.code(401).send({ user: null });
     }
   });
 }

@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { PromosService } from "./promos.service";
 import { IStorage } from "../../routes";
 import { insertPromotionSchema } from "@shared/schema";
@@ -11,40 +11,40 @@ export class PromosController {
     this.service = new PromosService(storage);
   }
 
-  async getPromotions(req: Request, res: Response) {
+  async getPromotions(req: FastifyRequest, reply: FastifyReply) {
     const promos = await this.service.getAllPromotions();
-    res.json(promos);
+    reply.send(promos);
   }
 
-  async getPromotionById(req: Request, res: Response) {
+  async getPromotionById(req: FastifyRequest, reply: FastifyReply) {
     const promo = await this.service.getPromotionById(req.params.id);
-    res.json(promo);
+    reply.send(promo);
   }
 
-  async createPromotion(req: Request, res: Response) {
+  async createPromotion(req: FastifyRequest, reply: FastifyReply) {
     const data = insertPromotionSchema.parse(req.body);
     const promo = await this.service.createPromotion(data);
-    res.status(201).json(promo);
+    reply.code(201).send(promo);
   }
 
-  async updatePromotion(req: Request, res: Response) {
+  async updatePromotion(req: FastifyRequest, reply: FastifyReply) {
     const data = insertPromotionSchema.partial().parse(req.body);
     const promo = await this.service.updatePromotion(req.params.id, data);
-    res.json(promo);
+    reply.send(promo);
   }
 
-  async deletePromotion(req: Request, res: Response) {
+  async deletePromotion(req: FastifyRequest, reply: FastifyReply) {
     await this.service.deletePromotion(req.params.id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 
-  async getVouchers(req: Request, res: Response) {
+  async getVouchers(req: FastifyRequest, reply: FastifyReply) {
     const promoId = req.query.promoId as string | undefined;
     const vouchers = await this.service.getVouchers(promoId);
-    res.json(vouchers);
+    reply.send(vouchers);
   }
 
-  async generateVouchers(req: Request, res: Response) {
+  async generateVouchers(req: FastifyRequest, reply: FastifyReply) {
     const schema = z.object({
       promoId: z.string().uuid(),
       count: z.number().min(1).max(100),
@@ -53,20 +53,20 @@ export class PromosController {
     });
     const data = schema.parse(req.body);
     const vouchers = await this.service.generateVouchers(data.promoId, data.count, data.prefix, data.assignedTo);
-    res.status(201).json(vouchers);
+    reply.code(201).send(vouchers);
   }
 
-  async revokeVoucher(req: Request, res: Response) {
+  async revokeVoucher(req: FastifyRequest, reply: FastifyReply) {
     const voucher = await this.service.revokeVoucher(req.params.id);
-    res.json(voucher);
+    reply.send(voucher);
   }
 
-  async deleteVoucher(req: Request, res: Response) {
+  async deleteVoucher(req: FastifyRequest, reply: FastifyReply) {
     await this.service.deleteVoucher(req.params.id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 
-  async validatePromoCode(req: Request, res: Response) {
+  async validatePromoCode(req: FastifyRequest, reply: FastifyReply) {
     const schema = z.object({
       code: z.string().min(1),
       subtotal: z.number().min(0),
@@ -78,6 +78,6 @@ export class PromosController {
     const result = await this.service.validateAndCalculateDiscount(
       data.code, data.subtotal, data.channel, data.tripId, data.patternId
     );
-    res.json(result);
+    reply.send(result);
   }
 }

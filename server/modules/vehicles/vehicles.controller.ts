@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { VehiclesService } from "./vehicles.service";
 import { IStorage } from "../../routes";
 import { insertVehicleSchema } from "@shared/schema";
@@ -10,33 +10,33 @@ export class VehiclesController {
     this.vehiclesService = new VehiclesService(storage);
   }
 
-  async getAll(req: Request, res: Response) {
+  async getAll(req: FastifyRequest, reply: FastifyReply) {
     const vehicles = await this.vehiclesService.getAllVehicles();
-    res.json(vehicles);
+    reply.send(vehicles);
   }
 
-  async getById(req: Request, res: Response) {
+  async getById(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const vehicle = await this.vehiclesService.getVehicleById(id);
-    res.json(vehicle);
+    reply.send(vehicle);
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     const validatedData = insertVehicleSchema.parse(req.body);
     const vehicle = await this.vehiclesService.createVehicle(validatedData);
-    res.status(201).json(vehicle);
+    reply.code(201).send(vehicle);
   }
 
-  async update(req: Request, res: Response) {
+  async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const validatedData = insertVehicleSchema.partial().parse(req.body);
     const vehicle = await this.vehiclesService.updateVehicle(id, validatedData);
-    res.json(vehicle);
+    reply.send(vehicle);
   }
 
-  async delete(req: Request, res: Response) {
+  async delete(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     await this.vehiclesService.deleteVehicle(id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 }

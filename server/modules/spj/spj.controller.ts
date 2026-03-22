@@ -1,117 +1,117 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { SpjService } from "./spj.service";
 
 const spjService = new SpjService();
 
 export class SpjController {
-  async getAll(req: Request, res: Response) {
+  async getAll(req: FastifyRequest, reply: FastifyReply) {
     try {
       const list = await spjService.getAll();
-      res.json(list);
+      reply.send(list);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      reply.code(500).send({ error: e.message });
     }
   }
 
-  async getById(req: Request, res: Response) {
+  async getById(req: FastifyRequest, reply: FastifyReply) {
     try {
       const spj = await spjService.getById(req.params.id);
-      if (!spj) return res.status(404).json({ error: "SPJ tidak ditemukan" });
-      res.json(spj);
+      if (!spj) return reply.code(404).send({ error: "SPJ tidak ditemukan" });
+      reply.send(spj);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      reply.code(500).send({ error: e.message });
     }
   }
 
-  async getByTripId(req: Request, res: Response) {
+  async getByTripId(req: FastifyRequest, reply: FastifyReply) {
     try {
       const spj = await spjService.getByTripId(req.params.tripId);
-      res.json(spj);
+      reply.send(spj);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      reply.code(500).send({ error: e.message });
     }
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { tripId, driverId, vehicleId, notes } = req.body;
-      if (!tripId) return res.status(400).json({ error: "tripId wajib diisi" });
+      if (!tripId) return reply.code(400).send({ error: "tripId wajib diisi" });
       const spj = await spjService.create(tripId, { driverId, vehicleId, notes });
-      res.status(201).json(spj);
+      reply.code(201).send(spj);
     } catch (e: any) {
-      res.status(400).json({ error: e.message });
+      reply.code(400).send({ error: e.message });
     }
   }
 
-  async issue(req: Request, res: Response) {
+  async issue(req: FastifyRequest, reply: FastifyReply) {
     try {
       const spj = await spjService.updateStatus(req.params.id, 'issued');
-      res.json(spj);
+      reply.send(spj);
     } catch (e: any) {
-      res.status(400).json({ error: e.message });
+      reply.code(400).send({ error: e.message });
     }
   }
 
-  async settle(req: Request, res: Response) {
+  async settle(req: FastifyRequest, reply: FastifyReply) {
     try {
       const spj = await spjService.updateStatus(req.params.id, 'settled');
-      res.json(spj);
+      reply.send(spj);
     } catch (e: any) {
-      res.status(400).json({ error: e.message });
+      reply.code(400).send({ error: e.message });
     }
   }
 
-  async updateNotes(req: Request, res: Response) {
+  async updateNotes(req: FastifyRequest, reply: FastifyReply) {
     try {
       const spj = await spjService.updateNotes(req.params.id, req.body.notes || '');
-      res.json(spj);
+      reply.send(spj);
     } catch (e: any) {
-      res.status(400).json({ error: e.message });
+      reply.code(400).send({ error: e.message });
     }
   }
 
-  async delete(req: Request, res: Response) {
+  async delete(req: FastifyRequest, reply: FastifyReply) {
     try {
       await spjService.delete(req.params.id);
-      res.json({ success: true });
+      reply.send({ success: true });
     } catch (e: any) {
-      res.status(400).json({ error: e.message });
+      reply.code(400).send({ error: e.message });
     }
   }
 
-  async updateCostLine(req: Request, res: Response) {
+  async updateCostLine(req: FastifyRequest, reply: FastifyReply) {
     try {
       const line = await spjService.updateCostLine(req.params.id, req.body);
-      res.json(line);
+      reply.send(line);
     } catch (e: any) {
-      res.status(400).json({ error: e.message });
+      reply.code(400).send({ error: e.message });
     }
   }
 
-  async addCostLine(req: Request, res: Response) {
+  async addCostLine(req: FastifyRequest, reply: FastifyReply) {
     try {
       const line = await spjService.addCostLine(req.params.spjId, req.body);
-      res.status(201).json(line);
+      reply.code(201).send(line);
     } catch (e: any) {
-      res.status(400).json({ error: e.message });
+      reply.code(400).send({ error: e.message });
     }
   }
 
-  async deleteCostLine(req: Request, res: Response) {
+  async deleteCostLine(req: FastifyRequest, reply: FastifyReply) {
     try {
       await spjService.deleteCostLine(req.params.id);
-      res.json({ success: true });
+      reply.send({ success: true });
     } catch (e: any) {
-      res.status(400).json({ error: e.message });
+      reply.code(400).send({ error: e.message });
     }
   }
 
-  async getTripProfit(req: Request, res: Response) {
+  async getTripProfit(req: FastifyRequest, reply: FastifyReply) {
     try {
       const profit = await spjService.getTripProfit(req.params.tripId);
-      res.json(profit);
+      reply.send(profit);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      reply.code(500).send({ error: e.message });
     }
   }
 }

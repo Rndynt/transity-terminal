@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import jwt from "jsonwebtoken";
 
 function getJwtSecret(): string {
@@ -20,10 +20,6 @@ export interface AppUserPayload {
   email: string;
 }
 
-export interface AuthenticatedRequest extends Request {
-  appUser?: AppUserPayload;
-}
-
 export function signToken(payload: AppUserPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: "30d" });
 }
@@ -32,32 +28,28 @@ export function verifyToken(token: string): AppUserPayload {
   return jwt.verify(token, JWT_SECRET) as AppUserPayload;
 }
 
-export function appAuthMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+export async function appAuthMiddleware(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Missing or invalid authorization header" });
-    return;
+    return reply.code(401).send({ error: "Missing or invalid authorization header" });
   }
 
   const token = authHeader.slice(7);
   try {
     const payload = verifyToken(token);
     req.appUser = payload;
-    next();
   } catch {
-    res.status(401).json({ error: "Invalid or expired token" });
+    return reply.code(401).send({ error: "Invalid or expired token" });
   }
 }
 
-export function optionalAuthMiddleware(req: AuthenticatedRequest, _res: Response, next: NextFunction): void {
+export async function optionalAuthMiddleware(req: FastifyRequest, _reply: FastifyReply): Promise<void> {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Bearer ")) {
     try {
       const token = authHeader.slice(7);
       req.appUser = verifyToken(token);
     } catch {
-      // ignore invalid token for optional auth
     }
   }
-  next();
 }

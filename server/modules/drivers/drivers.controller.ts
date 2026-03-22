@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { DriversService } from "./drivers.service";
 import { IStorage } from "../../routes";
 import { insertDriverSchema } from "@shared/schema";
@@ -10,30 +10,30 @@ export class DriversController {
     this.service = new DriversService(storage);
   }
 
-  async getAll(req: Request, res: Response) {
+  async getAll(req: FastifyRequest, reply: FastifyReply) {
     const drivers = await this.service.getAllDrivers();
-    res.json(drivers);
+    reply.send(drivers);
   }
 
-  async getById(req: Request, res: Response) {
+  async getById(req: FastifyRequest, reply: FastifyReply) {
     const driver = await this.service.getDriverById(req.params.id);
-    res.json(driver);
+    reply.send(driver);
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     const data = insertDriverSchema.parse(req.body);
     const driver = await this.service.createDriver(data);
-    res.status(201).json(driver);
+    reply.code(201).send(driver);
   }
 
-  async update(req: Request, res: Response) {
+  async update(req: FastifyRequest, reply: FastifyReply) {
     const data = insertDriverSchema.partial().parse(req.body);
     const driver = await this.service.updateDriver(req.params.id, data);
-    res.json(driver);
+    reply.send(driver);
   }
 
-  async delete(req: Request, res: Response) {
+  async delete(req: FastifyRequest, reply: FastifyReply) {
     await this.service.deleteDriver(req.params.id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 }

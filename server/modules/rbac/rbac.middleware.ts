@@ -1,30 +1,25 @@
-import type { Request, Response, NextFunction } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 
 export function requireFlag(flagId: string) {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (!req.rbac || !req.rbac.flags.has(flagId)) {
-      res.status(403).json({ error: "Forbidden", requiredFlag: flagId });
-      return;
+      return reply.code(403).send({ error: "Forbidden", requiredFlag: flagId });
     }
-    next();
   };
 }
 
 export function requireAnyFlag(...flagIds: string[]) {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (!req.rbac || !flagIds.some(f => req.rbac!.flags.has(f))) {
-      res.status(403).json({ error: "Forbidden", requiredFlags: flagIds });
-      return;
+      return reply.code(403).send({ error: "Forbidden", requiredFlags: flagIds });
     }
-    next();
   };
 }
 
 export function requireOutletScope() {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  return async (req: FastifyRequest, _reply: FastifyReply): Promise<void> => {
     const outletId = req.rbac?.outletId ?? null;
     req.scopedOutletId = outletId;
     req.outletId = outletId;
-    next();
   };
 }

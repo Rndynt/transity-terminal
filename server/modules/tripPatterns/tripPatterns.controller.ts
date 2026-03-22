@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { TripPatternsService } from "./tripPatterns.service";
 import { IStorage } from "../../routes";
 import { insertTripPatternSchema } from "@shared/schema";
@@ -10,33 +10,33 @@ export class TripPatternsController {
     this.tripPatternsService = new TripPatternsService(storage);
   }
 
-  async getAll(req: Request, res: Response) {
+  async getAll(req: FastifyRequest, reply: FastifyReply) {
     const patterns = await this.tripPatternsService.getAllTripPatterns();
-    res.json(patterns);
+    reply.send(patterns);
   }
 
-  async getById(req: Request, res: Response) {
+  async getById(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const pattern = await this.tripPatternsService.getTripPatternById(id);
-    res.json(pattern);
+    reply.send(pattern);
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     const validatedData = insertTripPatternSchema.parse(req.body);
     const pattern = await this.tripPatternsService.createTripPattern(validatedData);
-    res.status(201).json(pattern);
+    reply.code(201).send(pattern);
   }
 
-  async update(req: Request, res: Response) {
+  async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const validatedData = insertTripPatternSchema.partial().parse(req.body);
     const pattern = await this.tripPatternsService.updateTripPattern(id, validatedData);
-    res.json(pattern);
+    reply.send(pattern);
   }
 
-  async delete(req: Request, res: Response) {
+  async delete(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     await this.tripPatternsService.deleteTripPattern(id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 }

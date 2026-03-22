@@ -1,14 +1,14 @@
-import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
+import type { FastifyInstance } from "fastify";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
 
 const viteLogger = createLogger();
 
-export function log(message: string, source = "express") {
+export function log(message: string, source = "fastify") {
   const formattedTime = new Date().toLocaleTimeString("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
@@ -20,7 +20,7 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-export async function setupVite(app: Express, server: Server) {
+export async function setupVite(app: FastifyInstance, server: Server) {
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
@@ -42,8 +42,13 @@ export async function setupVite(app: Express, server: Server) {
   });
 
   app.use(vite.middlewares);
-  app.use("*", async (req, res, next) => {
-    const url = req.originalUrl;
+
+  app.get("*", async (req, reply) => {
+    const url = req.url;
+
+    if (url.startsWith("/api")) {
+      return;
+    }
 
     try {
       const clientTemplate = path.resolve(
@@ -53,22 +58,21 @@ export async function setupVite(app: Express, server: Server) {
         "index.html",
       );
 
-      // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
       const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+      reply.type("text/html").send(page);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
-      next(e);
+      throw e;
     }
   });
 }
 
-export function serveStatic(app: Express) {
+export async function serveStatic(app: FastifyInstance) {
   const distPath = path.resolve(import.meta.dirname, "public");
 
   if (!fs.existsSync(distPath)) {
@@ -77,10 +81,15 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  await app.register(import("@fastify/static"), {
+    root: distPath,
+    wildcard: false,
+  });
 
-  // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+  app.get("*", async (req, reply) => {
+    if (req.url.startsWith("/api")) {
+      return;
+    }
+    return reply.sendFile("index.html");
   });
 }

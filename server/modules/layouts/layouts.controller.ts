@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { LayoutsService } from "./layouts.service";
 import { IStorage } from "../../routes";
 import { insertLayoutSchema } from "@shared/schema";
@@ -10,33 +10,33 @@ export class LayoutsController {
     this.layoutsService = new LayoutsService(storage);
   }
 
-  async getAll(req: Request, res: Response) {
+  async getAll(req: FastifyRequest, reply: FastifyReply) {
     const layouts = await this.layoutsService.getAllLayouts();
-    res.json(layouts);
+    reply.send(layouts);
   }
 
-  async getById(req: Request, res: Response) {
+  async getById(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const layout = await this.layoutsService.getLayoutById(id);
-    res.json(layout);
+    reply.send(layout);
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     const validatedData = insertLayoutSchema.parse(req.body);
     const layout = await this.layoutsService.createLayout(validatedData);
-    res.status(201).json(layout);
+    reply.code(201).send(layout);
   }
 
-  async update(req: Request, res: Response) {
+  async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const validatedData = insertLayoutSchema.partial().parse(req.body);
     const layout = await this.layoutsService.updateLayout(id, validatedData);
-    res.json(layout);
+    reply.send(layout);
   }
 
-  async delete(req: Request, res: Response) {
+  async delete(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     await this.layoutsService.deleteLayout(id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 }

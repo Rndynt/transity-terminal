@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { getEffectivePermissions, type EffectivePermissions } from "../rbac/rbac.service";
 
 export interface RealmioUser {
@@ -8,17 +8,6 @@ export interface RealmioUser {
   image: string | null;
   role: string | null;
   createdAt: string;
-}
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: RealmioUser;
-      rbac?: EffectivePermissions;
-      scopedOutletId?: string | null;
-      outletId?: string | null;
-    }
-  }
 }
 
 const AUTHCORE_BASE_URL = process.env.AUTHCORE_BASE_URL || "";
@@ -59,7 +48,7 @@ async function verifyWithRealmio(
   }
 }
 
-async function attachRbac(req: Request): Promise<void> {
+async function attachRbac(req: FastifyRequest): Promise<void> {
   if (!req.user) return;
   try {
     req.rbac = await getEffectivePermissions(req.user.id, req.user.role);
@@ -68,45 +57,40 @@ async function attachRbac(req: Request): Promise<void> {
   }
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
   if (DEV_BYPASS_AUTH) {
     req.user = DEV_USER;
-    attachRbac(req).then(() => next()).catch(() => next());
+    await attachRbac(req);
     return;
   }
 
-  verifyWithRealmio(req.headers.cookie, req.headers.authorization)
-    .then(async (user) => {
-      if (!user) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-      req.user = user;
-      await attachRbac(req);
-      next();
-    })
-    .catch(() => {
-      res.status(401).json({ message: "Unauthorized" });
-    });
+  try {
+    const user = await verifyWithRealmio(req.headers.cookie, req.headers.authorization);
+    if (!user) {
+      return reply.code(401).send({ message: "Unauthorized" });
+    }
+    req.user = user;
+    await attachRbac(req);
+  } catch {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
 }
 
-export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+export async function optionalAuth(req: FastifyRequest, _reply: FastifyReply) {
   if (DEV_BYPASS_AUTH) {
     req.user = DEV_USER;
-    attachRbac(req).then(() => next()).catch(() => next());
+    await attachRbac(req);
     return;
   }
 
-  verifyWithRealmio(req.headers.cookie, req.headers.authorization)
-    .then(async (user) => {
-      if (user) {
-        req.user = user;
-        await attachRbac(req);
-      }
-      next();
-    })
-    .catch(() => {
-      next();
-    });
+  try {
+    const user = await verifyWithRealmio(req.headers.cookie, req.headers.authorization);
+    if (user) {
+      req.user = user;
+      await attachRbac(req);
+    }
+  } catch {
+  }
 }
 
 export { AUTHCORE_BASE_URL, AUTHCORE_TENANT_ID, DEV_BYPASS_AUTH, DEV_USER };

@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { CargoService } from "./cargo.service";
 import { IStorage } from "../../routes";
 import { insertCargoShipmentSchema, insertCargoTypeSchema, insertCargoRateSchema } from "@shared/schema";
@@ -12,7 +12,7 @@ export class CargoController {
     this.storage = storage;
   }
 
-  async getAll(req: Request, res: Response) {
+  async getAll(req: FastifyRequest, reply: FastifyReply) {
     const { tripId, status } = req.query;
     const scopedOutlet = req.scopedOutletId ?? req.rbac?.outletId ?? null;
     const outletId = scopedOutlet ?? (req.query.outletId as string | undefined);
@@ -21,60 +21,60 @@ export class CargoController {
       status: status as string,
       outletId: outletId as string
     });
-    res.json(shipments);
+    reply.send(shipments);
   }
 
-  async getById(req: Request, res: Response) {
+  async getById(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const shipment = await this.cargoService.getShipmentById(id);
-    res.json(shipment);
+    reply.send(shipment);
   }
 
-  async getByWaybill(req: Request, res: Response) {
+  async getByWaybill(req: FastifyRequest, reply: FastifyReply) {
     const { waybillNumber } = req.params;
     const shipment = await this.cargoService.getShipmentByWaybill(waybillNumber);
-    res.json(shipment);
+    reply.send(shipment);
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     const validated = insertCargoShipmentSchema.omit({ waybillNumber: true }).parse(req.body);
     const scopedOutlet = req.scopedOutletId ?? req.rbac?.outletId ?? null;
     if (scopedOutlet) {
       validated.outletId = scopedOutlet;
     }
     const shipment = await this.cargoService.createShipment(validated);
-    res.status(201).json(shipment);
+    reply.code(201).send(shipment);
   }
 
-  async update(req: Request, res: Response) {
+  async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const validated = insertCargoShipmentSchema.partial().parse(req.body);
     const shipment = await this.cargoService.updateShipment(id, validated);
-    res.json(shipment);
+    reply.send(shipment);
   }
 
-  async updateStatus(req: Request, res: Response) {
+  async updateStatus(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const { status } = req.body;
     if (!status) {
-      return res.status(400).json({ error: 'Status is required' });
+      return reply.code(400).send({ error: 'Status is required' });
     }
     try {
       const shipment = await this.cargoService.updateShipmentStatus(id, status);
-      res.json(shipment);
+      reply.send(shipment);
     } catch (error: unknown) {
       const err = error as Error;
       if (err.message?.includes('Invalid status') || err.message?.includes('Cannot transition')) {
-        return res.status(400).json({ error: err.message });
+        return reply.code(400).send({ error: err.message });
       }
       throw error;
     }
   }
 
-  async quoteTariff(req: Request, res: Response) {
+  async quoteTariff(req: FastifyRequest, reply: FastifyReply) {
     const { cargoTypeId, originStopId, destinationStopId, weightKg, tripId } = req.query;
     if (!cargoTypeId || !originStopId || !destinationStopId || !weightKg) {
-      return res.status(400).json({ error: 'cargoTypeId, originStopId, destinationStopId, weightKg are required' });
+      return reply.code(400).send({ error: 'cargoTypeId, originStopId, destinationStopId, weightKg are required' });
     }
     const result = await this.cargoService.calculateTariff(
       cargoTypeId as string,
@@ -84,81 +84,81 @@ export class CargoController {
       tripId as string | undefined
     );
     if (!result) {
-      return res.json({ found: false, calculatedAmount: 0 });
+      return reply.send({ found: false, calculatedAmount: 0 });
     }
-    res.json({ found: true, ...result });
+    reply.send({ found: true, ...result });
   }
 
-  async getCargoTypes(_req: Request, res: Response) {
+  async getCargoTypes(_req: FastifyRequest, reply: FastifyReply) {
     const types = await this.storage.getCargoTypes();
-    res.json(types);
+    reply.send(types);
   }
 
-  async getCargoTypeById(req: Request, res: Response) {
+  async getCargoTypeById(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const ct = await this.storage.getCargoTypeById(id);
-    if (!ct) return res.status(404).json({ error: 'Cargo type not found' });
-    res.json(ct);
+    if (!ct) return reply.code(404).send({ error: 'Cargo type not found' });
+    reply.send(ct);
   }
 
-  async createCargoType(req: Request, res: Response) {
+  async createCargoType(req: FastifyRequest, reply: FastifyReply) {
     const validated = insertCargoTypeSchema.parse(req.body);
     const ct = await this.storage.createCargoType(validated);
-    res.status(201).json(ct);
+    reply.code(201).send(ct);
   }
 
-  async updateCargoType(req: Request, res: Response) {
+  async updateCargoType(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const validated = insertCargoTypeSchema.partial().parse(req.body);
     const ct = await this.storage.updateCargoType(id, validated);
-    res.json(ct);
+    reply.send(ct);
   }
 
-  async deleteCargoType(req: Request, res: Response) {
+  async deleteCargoType(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     await this.storage.deleteCargoType(id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 
-  async getCargoRates(req: Request, res: Response) {
+  async getCargoRates(req: FastifyRequest, reply: FastifyReply) {
     const { cargoTypeId } = req.query;
     const rates = await this.storage.getCargoRates(cargoTypeId as string);
-    res.json(rates);
+    reply.send(rates);
   }
 
-  async getCargoRateById(req: Request, res: Response) {
+  async getCargoRateById(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const cr = await this.storage.getCargoRateById(id);
-    if (!cr) return res.status(404).json({ error: 'Cargo rate not found' });
-    res.json(cr);
+    if (!cr) return reply.code(404).send({ error: 'Cargo rate not found' });
+    reply.send(cr);
   }
 
-  async createCargoRate(req: Request, res: Response) {
+  async createCargoRate(req: FastifyRequest, reply: FastifyReply) {
     const validated = insertCargoRateSchema.parse(req.body);
     if (validated.scope && validated.scope !== 'global' && !validated.scopeRefId) {
-      return res.status(400).json({ message: 'scopeRefId is required when scope is pattern or trip' });
+      return reply.code(400).send({ message: 'scopeRefId is required when scope is pattern or trip' });
     }
     const cr = await this.storage.createCargoRate(validated);
-    res.status(201).json(cr);
+    reply.code(201).send(cr);
   }
 
-  async updateCargoRate(req: Request, res: Response) {
+  async updateCargoRate(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const validated = insertCargoRateSchema.partial().parse(req.body);
     const existing = await this.storage.getCargoRateById(id);
-    if (!existing) return res.status(404).json({ error: 'Cargo rate not found' });
+    if (!existing) return reply.code(404).send({ error: 'Cargo rate not found' });
     const effectiveScope = validated.scope ?? existing.scope ?? 'global';
     const effectiveRefId = validated.scopeRefId !== undefined ? validated.scopeRefId : existing.scopeRefId;
     if (effectiveScope !== 'global' && !effectiveRefId) {
-      return res.status(400).json({ message: 'scopeRefId is required when scope is pattern or trip' });
+      return reply.code(400).send({ message: 'scopeRefId is required when scope is pattern or trip' });
     }
     const cr = await this.storage.updateCargoRate(id, validated);
-    res.json(cr);
+    reply.send(cr);
   }
 
-  async deleteCargoRate(req: Request, res: Response) {
+  async deleteCargoRate(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     await this.storage.deleteCargoRate(id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 }

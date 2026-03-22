@@ -5,7 +5,7 @@ Sistem manajemen perjalanan multi-stop (bus/travel) dengan terminal reservasi CS
 
 ## Tech Stack
 - **Frontend**: React + TypeScript + Vite + Tailwind CSS + shadcn/ui
-- **Backend**: Express.js + TypeScript (tsx)
+- **Backend**: Fastify 5 + TypeScript (tsx)
 - **Database**: PostgreSQL (Neon) + Drizzle ORM
 - **Real-time**: WebSocket (ws) untuk update kursi
 - **Mobile**: Expo React Native (B2C) di `/apps/mobile`
@@ -27,7 +27,7 @@ client/src/
     shared/        → Reusable badge components (StatusBadges.tsx)
 
 server/
-  routes.ts        → IStorage interface + Express route definitions
+  routes.ts        → IStorage interface + Fastify route definitions
   storage.ts       → DatabaseStorage implementation
   modules/
     pricing/       → PricingService + PricingController
@@ -67,6 +67,18 @@ plan/              → Dokumentasi teknis fitur
 - **Plan Doc**: `plan/reports-plan.md` — P1+P2 done, P3 pending
 
 ## Recent Changes
+
+**2026-03-22 — Express → Fastify 5 Migration**
+- **Backend framework**: Migrated from Express 4 to Fastify 5 for better performance and first-class TypeScript support
+- **server/index.ts**: Fastify app creation, `decorateRequest` for custom props (user, rbac, appUser, scopedOutletId, rawBody), `addContentTypeParser` for rawBody webhook support, `onSend` logging hook, `setErrorHandler` with Zod + PG duplicate key handling
+- **server/routes.ts**: All 104+ endpoints migrated — `preHandler` arrays replace Express middleware args, async handlers native (no asyncHandler wrapper needed)
+- **server/vite.ts**: `@fastify/middie` for Vite HMR middleware compat, `@fastify/static` for production static serving
+- **Middleware**: All auth/RBAC middleware (`realmio.ts`, `rbac.middleware.ts`, `app.auth.ts`, `auth.routes.ts`) converted to Fastify `preHandler` async functions with `FastifyRequest`/`FastifyReply` types
+- **Controllers**: All 20 controllers use `FastifyRequest`/`FastifyReply`, `reply.send()` / `reply.code()`
+- **WebSocket**: Socket.io initialized with `app.server` (Fastify's built-in http.Server)
+- **Type augmentations**: `server/types/fastify.d.ts` extends FastifyRequest interface
+- **Packages removed**: `express`, `@types/express`
+- **Packages added**: `fastify`, `@fastify/static`, `@fastify/formbody`, `@fastify/cookie`, `@fastify/cors`, `@fastify/middie`, `fastify-raw-body`, `fastify-plugin`
 
 **2026-03-21 — Realmio Auth Integration**
 - Login page at `/login` with email/password form

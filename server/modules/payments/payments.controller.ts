@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { PaymentsService } from "./payments.service";
 import { IStorage } from "../../routes";
 import { insertPaymentSchema } from "@shared/schema";
@@ -10,15 +10,15 @@ export class PaymentsController {
     this.paymentsService = new PaymentsService(storage);
   }
 
-  async getByBooking(req: Request, res: Response) {
+  async getByBooking(req: FastifyRequest, reply: FastifyReply) {
     const { bookingId } = req.params;
     const payments = await this.paymentsService.getPaymentsByBooking(bookingId);
-    res.json(payments);
+    reply.send(payments);
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     const validatedData = insertPaymentSchema.parse(req.body);
     const payment = await this.paymentsService.createPayment(validatedData);
-    res.status(201).json(payment);
+    reply.code(201).send(payment);
   }
 }

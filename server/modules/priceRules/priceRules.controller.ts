@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { PriceRulesService } from "./priceRules.service";
 import { IStorage } from "../../routes";
 import { insertPriceRuleSchema } from "@shared/schema";
@@ -10,27 +10,27 @@ export class PriceRulesController {
     this.priceRulesService = new PriceRulesService(storage);
   }
 
-  async getAll(req: Request, res: Response) {
+  async getAll(req: FastifyRequest, reply: FastifyReply) {
     const rules = await this.priceRulesService.getAllPriceRules();
-    res.json(rules);
+    reply.send(rules);
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     const validatedData = insertPriceRuleSchema.parse(req.body);
     const rule = await this.priceRulesService.createPriceRule(validatedData);
-    res.status(201).json(rule);
+    reply.code(201).send(rule);
   }
 
-  async update(req: Request, res: Response) {
+  async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const validatedData = insertPriceRuleSchema.partial().parse(req.body);
     const rule = await this.priceRulesService.updatePriceRule(id, validatedData);
-    res.json(rule);
+    reply.send(rule);
   }
 
-  async delete(req: Request, res: Response) {
+  async delete(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     await this.priceRulesService.deletePriceRule(id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 }

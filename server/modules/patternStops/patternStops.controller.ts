@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { PatternStopsService } from "./patternStops.service";
 import { IStorage } from "../../routes";
 import { insertPatternStopSchema } from "@shared/schema";
@@ -11,35 +11,35 @@ export class PatternStopsController {
     this.patternStopsService = new PatternStopsService(storage);
   }
 
-  async getByPattern(req: Request, res: Response) {
+  async getByPattern(req: FastifyRequest, reply: FastifyReply) {
     const { patternId } = req.params;
     const patternStops = await this.patternStopsService.getPatternStops(patternId);
-    res.json(patternStops);
+    reply.send(patternStops);
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     const validatedData = insertPatternStopSchema.parse(req.body);
     const patternStop = await this.patternStopsService.createPatternStop(validatedData);
-    res.status(201).json(patternStop);
+    reply.code(201).send(patternStop);
   }
 
-  async update(req: Request, res: Response) {
+  async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const validatedData = insertPatternStopSchema.partial().parse(req.body);
     const patternStop = await this.patternStopsService.updatePatternStop(id, validatedData);
-    res.json(patternStop);
+    reply.send(patternStop);
   }
 
-  async delete(req: Request, res: Response) {
+  async delete(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     await this.patternStopsService.deletePatternStop(id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 
-  async bulkReplace(req: Request, res: Response) {
+  async bulkReplace(req: FastifyRequest, reply: FastifyReply) {
     const { patternId } = req.params;
     const validatedData = z.array(insertPatternStopSchema).parse(req.body);
     const patternStops = await this.patternStopsService.bulkReplacePatternStops(patternId, validatedData);
-    res.json(patternStops);
+    reply.send(patternStops);
   }
 }

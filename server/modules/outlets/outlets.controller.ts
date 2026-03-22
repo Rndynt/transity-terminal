@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { OutletsService } from "./outlets.service";
 import { IStorage } from "../../routes";
 import { insertOutletSchema } from "@shared/schema";
@@ -10,33 +10,33 @@ export class OutletsController {
     this.outletsService = new OutletsService(storage);
   }
 
-  async getAll(req: Request, res: Response) {
+  async getAll(req: FastifyRequest, reply: FastifyReply) {
     const outlets = await this.outletsService.getAllOutlets();
-    res.json(outlets);
+    reply.send(outlets);
   }
 
-  async getById(req: Request, res: Response) {
+  async getById(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const outlet = await this.outletsService.getOutletById(id);
-    res.json(outlet);
+    reply.send(outlet);
   }
 
-  async create(req: Request, res: Response) {
+  async create(req: FastifyRequest, reply: FastifyReply) {
     const validatedData = insertOutletSchema.parse(req.body);
     const outlet = await this.outletsService.createOutlet(validatedData);
-    res.status(201).json(outlet);
+    reply.code(201).send(outlet);
   }
 
-  async update(req: Request, res: Response) {
+  async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     const validatedData = insertOutletSchema.partial().parse(req.body);
     const outlet = await this.outletsService.updateOutlet(id, validatedData);
-    res.json(outlet);
+    reply.send(outlet);
   }
 
-  async delete(req: Request, res: Response) {
+  async delete(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params;
     await this.outletsService.deleteOutlet(id);
-    res.status(204).send();
+    reply.code(204).send();
   }
 }

@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import type { FastifyRequest, FastifyReply } from "fastify";
 import { AppService } from "./app.service";
 import { AuthenticatedRequest } from "./app.auth";
 import { IStorage } from "../../routes";
@@ -77,151 +77,151 @@ export class AppController {
     this.service = new AppService(storage);
   }
 
-  async register(req: AuthenticatedRequest, res: Response) {
+  async register(req: FastifyRequest, reply: FastifyReply) {
     const parsed = registerSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
+    if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
     try {
       const result = await this.service.register(parsed.data.email, parsed.data.password, parsed.data.name, parsed.data.phone);
-      res.status(201).json(result);
+      reply.code(201).send(result);
     } catch (e: unknown) {
-      res.status(409).json({ error: errMsg(e) });
+      reply.code(409).send({ error: errMsg(e) });
     }
   }
 
-  async login(req: AuthenticatedRequest, res: Response) {
+  async login(req: FastifyRequest, reply: FastifyReply) {
     const parsed = loginSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
+    if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
     try {
       const result = await this.service.login(parsed.data.email, parsed.data.password);
-      res.json(result);
+      reply.send(result);
     } catch (e: unknown) {
-      res.status(401).json({ error: errMsg(e) });
+      reply.code(401).send({ error: errMsg(e) });
     }
   }
 
-  async getProfile(req: AuthenticatedRequest, res: Response) {
+  async getProfile(req: FastifyRequest, reply: FastifyReply) {
     try {
       const user = await this.service.getProfile(req.appUser!.userId);
-      res.json(user);
+      reply.send(user);
     } catch (e: unknown) {
-      res.status(404).json({ error: errMsg(e) });
+      reply.code(404).send({ error: errMsg(e) });
     }
   }
 
-  async updateProfile(req: AuthenticatedRequest, res: Response) {
+  async updateProfile(req: FastifyRequest, reply: FastifyReply) {
     const parsed = updateProfileSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
+    if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
     try {
       const user = await this.service.updateProfile(req.appUser!.userId, parsed.data);
-      res.json(user);
+      reply.send(user);
     } catch (e: unknown) {
-      res.status(400).json({ error: errMsg(e) });
+      reply.code(400).send({ error: errMsg(e) });
     }
   }
 
-  async getMe(req: AuthenticatedRequest, res: Response) {
+  async getMe(req: FastifyRequest, reply: FastifyReply) {
     try {
       const user = await this.service.getProfile(req.appUser!.userId);
-      res.json(user);
+      reply.send(user);
     } catch (e: unknown) {
-      res.status(404).json({ error: errMsg(e) });
+      reply.code(404).send({ error: errMsg(e) });
     }
   }
 
-  async getCities(_req: AuthenticatedRequest, res: Response) {
+  async getCities(_req: FastifyRequest, reply: FastifyReply) {
     const cities = await this.service.getCities();
-    res.json(cities);
+    reply.send(cities);
   }
 
-  async getOperators(_req: AuthenticatedRequest, res: Response) {
+  async getOperators(_req: FastifyRequest, reply: FastifyReply) {
     const operators = await this.service.getOperators();
-    res.json(operators);
+    reply.send(operators);
   }
 
-  async searchTrips(req: AuthenticatedRequest, res: Response) {
+  async searchTrips(req: FastifyRequest, reply: FastifyReply) {
     const parsed = searchSchema.safeParse(req.query);
-    if (!parsed.success) return res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
+    if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
     const results = await this.service.searchTrips(parsed.data);
-    res.json(results);
+    reply.send(results);
   }
 
-  async getTripDetail(req: AuthenticatedRequest, res: Response) {
+  async getTripDetail(req: FastifyRequest, reply: FastifyReply) {
     try {
       const detail = await this.service.getTripDetail(req.params.id);
-      res.json(detail);
+      reply.send(detail);
     } catch (e: unknown) {
-      res.status(404).json({ error: errMsg(e) });
+      reply.code(404).send({ error: errMsg(e) });
     }
   }
 
-  async getSeatmap(req: AuthenticatedRequest, res: Response) {
+  async getSeatmap(req: FastifyRequest, reply: FastifyReply) {
     const { originSeq, destinationSeq } = req.query;
-    if (!originSeq || !destinationSeq) return res.status(400).json({ error: "originSeq and destinationSeq required" });
+    if (!originSeq || !destinationSeq) return reply.code(400).send({ error: "originSeq and destinationSeq required" });
     try {
       const seatmap = await this.service.getSeatmap(req.params.id, Number(originSeq), Number(destinationSeq));
-      res.json(seatmap);
+      reply.send(seatmap);
     } catch (e: unknown) {
-      res.status(404).json({ error: errMsg(e) });
+      reply.code(404).send({ error: errMsg(e) });
     }
   }
 
-  async createBooking(req: AuthenticatedRequest, res: Response) {
+  async createBooking(req: FastifyRequest, reply: FastifyReply) {
     const parsed = createBookingSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
+    if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
     try {
       const result = await this.service.createAppBooking({
         userId: req.appUser!.userId,
         ...parsed.data
       });
-      res.status(201).json(result);
+      reply.code(201).send(result);
     } catch (e: unknown) {
-      res.status(400).json({ error: errMsg(e) });
+      reply.code(400).send({ error: errMsg(e) });
     }
   }
 
-  async getMyBookings(req: AuthenticatedRequest, res: Response) {
+  async getMyBookings(req: FastifyRequest, reply: FastifyReply) {
     const bookings = await this.service.getUserBookings(req.appUser!.userId);
-    res.json(bookings);
+    reply.send(bookings);
   }
 
-  async getBookingDetail(req: AuthenticatedRequest, res: Response) {
+  async getBookingDetail(req: FastifyRequest, reply: FastifyReply) {
     try {
       const detail = await this.service.getBookingDetail(req.params.id, req.appUser!.userId);
-      res.json(detail);
+      reply.send(detail);
     } catch (e: unknown) {
       if (errMsg(e) === "Unauthorized") {
-        res.status(403).json({ error: errMsg(e) });
+        reply.code(403).send({ error: errMsg(e) });
       } else {
-        res.status(404).json({ error: errMsg(e) });
+        reply.code(404).send({ error: errMsg(e) });
       }
     }
   }
 
-  async getPaymentStatus(req: AuthenticatedRequest, res: Response) {
+  async getPaymentStatus(req: FastifyRequest, reply: FastifyReply) {
     try {
       const result = await this.service.getPaymentStatus(req.params.id, req.appUser!.userId);
-      res.json(result);
+      reply.send(result);
     } catch (e: unknown) {
       if (errMsg(e) === "Unauthorized") {
-        res.status(403).json({ error: errMsg(e) });
+        reply.code(403).send({ error: errMsg(e) });
       } else {
-        res.status(400).json({ error: errMsg(e) });
+        reply.code(400).send({ error: errMsg(e) });
       }
     }
   }
 
-  async paymentWebhook(req: Request & { rawBody?: Buffer }, res: Response) {
+  async paymentWebhook(req: FastifyRequest & { rawBody?: Buffer }, reply: FastifyReply) {
     try {
       const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET;
       if (!webhookSecret) {
         console.error("[paymentWebhook] PAYMENT_WEBHOOK_SECRET not configured");
-        res.status(503).json({ error: "Payment webhook not configured" });
+        reply.code(503).send({ error: "Payment webhook not configured" });
         return;
       }
 
       const signature = req.headers['x-webhook-signature'] as string | undefined;
       if (!signature) {
-        res.status(401).json({ error: "Missing webhook signature" });
+        reply.code(401).send({ error: "Missing webhook signature" });
         return;
       }
 
@@ -233,70 +233,70 @@ export class AppController {
 
       if (signature.length !== expectedSig.length ||
           !crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expectedSig, 'hex'))) {
-        res.status(401).json({ error: "Invalid webhook signature" });
+        reply.code(401).send({ error: "Invalid webhook signature" });
         return;
       }
 
       const { providerRef, status: gatewayStatus } = req.body;
       if (!providerRef || !['success', 'failed'].includes(gatewayStatus)) {
-        res.status(400).json({ error: "Invalid webhook payload: providerRef and status (success|failed) required" });
+        reply.code(400).send({ error: "Invalid webhook payload: providerRef and status (success|failed) required" });
         return;
       }
       const result = await this.service.processPaymentWebhook(providerRef, gatewayStatus);
-      res.json(result);
+      reply.send(result);
     } catch (e: unknown) {
-      res.status(400).json({ error: errMsg(e) });
+      reply.code(400).send({ error: errMsg(e) });
     }
   }
 
-  async cancelBooking(req: AuthenticatedRequest, res: Response) {
+  async cancelBooking(req: FastifyRequest, reply: FastifyReply) {
     try {
       await this.service.cancelBooking(req.params.id, req.appUser!.userId);
-      res.json({ success: true });
+      reply.send({ success: true });
     } catch (e: unknown) {
-      res.status(400).json({ error: errMsg(e) });
+      reply.code(400).send({ error: errMsg(e) });
     }
   }
 
-  async createReview(req: AuthenticatedRequest, res: Response) {
+  async createReview(req: FastifyRequest, reply: FastifyReply) {
     const parsed = createReviewSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
+    if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
     try {
       const review = await this.service.createReview({
         userId: req.appUser!.userId,
         ...parsed.data
       });
-      res.status(201).json(review);
+      reply.code(201).send(review);
     } catch (e: unknown) {
-      res.status(400).json({ error: errMsg(e) });
+      reply.code(400).send({ error: errMsg(e) });
     }
   }
 
-  async getTripReviews(req: AuthenticatedRequest, res: Response) {
+  async getTripReviews(req: FastifyRequest, reply: FastifyReply) {
     const reviews = await this.service.getTripReviews(req.params.tripId);
-    res.json(reviews);
+    reply.send(reviews);
   }
 
-  async trackCargo(req: AuthenticatedRequest, res: Response) {
+  async trackCargo(req: FastifyRequest, reply: FastifyReply) {
     try {
       const result = await this.service.trackCargo(req.params.waybillNumber);
-      res.json(result);
+      reply.send(result);
     } catch (e: unknown) {
-      res.status(404).json({ error: errMsg(e) });
+      reply.code(404).send({ error: errMsg(e) });
     }
   }
 
-  async createCargo(req: AuthenticatedRequest, res: Response) {
+  async createCargo(req: FastifyRequest, reply: FastifyReply) {
     const parsed = createCargoSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
+    if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
     try {
       const result = await this.service.createAppCargo({
         userId: req.appUser!.userId,
         ...parsed.data
       });
-      res.status(201).json(result);
+      reply.code(201).send(result);
     } catch (e: unknown) {
-      res.status(400).json({ error: errMsg(e) });
+      reply.code(400).send({ error: errMsg(e) });
     }
   }
 }

@@ -1,20 +1,33 @@
-import express, { type Request, Response, NextFunction } from "express";
+import Fastify from "fastify";
 import { ZodError } from "zod";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { scheduler } from "./scheduler";
 import { existsSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 
-const app = express();
-app.use(express.json({
-  verify: (req: Request & { rawBody?: Buffer }, _res, buf) => {
-    if (req.url === '/api/app/payments/webhook') {
-      req.rawBody = buf;
-    }
+const app = Fastify({
+  logger: false,
+});
+
+app.decorateRequest('user', undefined);
+app.decorateRequest('rbac', undefined);
+app.decorateRequest('scopedOutletId', undefined);
+app.decorateRequest('outletId', undefined);
+app.decorateRequest('appUser', undefined);
+app.decorateRequest('rawBody', undefined);
+
+app.register(import("@fastify/middie"));
+
+app.addContentTypeParser('application/json', { parseAs: 'buffer' }, function (req, body, done) {
+  try {
+    const json = body.length > 0 ? JSON.parse(body.toString()) : undefined;
+    (req as any).rawBody = body;
+    done(null, json);
+  } catch (err: any) {
+    done(err, undefined);
   }
-}));
-app.use(express.urlencoded({ extended: false }));
+});
 
 const SENSITIVE_PATHS = ['/api/app/auth/login', '/api/app/auth/register', '/api/app/payments/webhook'];
 const SENSITIVE_KEYS = new Set(['token', 'password', 'passwordHash', 'providerRef', 'authorization']);
@@ -33,113 +46,101 @@ function redactSensitive(obj: Record<string, unknown>): Record<string, unknown> 
   return result;
 }
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, unknown> | undefined = undefined;
+app.addHook('onSend', async (request, reply, payload) => {
+  const path = request.url;
+  if (path.startsWith("/api")) {
+    const duration = Math.round(reply.elapsedTime);
+    let logLine = `${request.method} ${path} ${reply.statusCode} in ${duration}ms`;
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse && !SENSITIVE_PATHS.includes(path)) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      } else if (capturedJsonResponse && SENSITIVE_PATHS.includes(path)) {
-        logLine += ` :: ${JSON.stringify(redactSensitive(capturedJsonResponse))}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
+    if (payload && typeof payload === 'string') {
+      try {
+        const parsed = JSON.parse(payload);
+        if (!SENSITIVE_PATHS.includes(path)) {
+          logLine += ` :: ${JSON.stringify(parsed)}`;
+        } else {
+          logLine += ` :: ${JSON.stringify(redactSensitive(parsed))}`;
+        }
+      } catch {}
     }
-  });
 
-  next();
+    if (logLine.length > 80) {
+      logLine = logLine.slice(0, 79) + "…";
+    }
+
+    log(logLine);
+  }
+  return payload;
+});
+
+app.setErrorHandler((err: Error & { status?: number; statusCode?: number; code?: string }, request, reply) => {
+  if (err.code === '23505') {
+    const detail: string = (err as any).detail ?? '';
+    const valueMatch = detail.match(/Key \([^)]+\)=\(([^)]+)\)/);
+    const fieldMatch = detail.match(/Key \(([^)]+)\)=/);
+    const value = valueMatch ? valueMatch[1] : null;
+    const field = fieldMatch ? fieldMatch[1] : 'data';
+    const msg = value
+      ? `Kode "${value}" sudah digunakan. Gunakan ${field} yang berbeda.`
+      : `Nilai ${field} sudah digunakan. Gunakan nilai yang berbeda.`;
+    return reply.code(409).send({ message: msg });
+  }
+
+  if (err instanceof ZodError) {
+    const messages = err.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+    return reply.code(400).send({ message: `Data tidak valid: ${messages}` });
+  }
+
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || "Internal Server Error";
+
+  reply.code(status).send({ message });
+  if (status === 500) {
+    console.error(err);
+  }
 });
 
 (async () => {
-  const server = await registerRoutes(app);
+  await registerRoutes(app);
 
-  app.use((err: Error & { status?: number; statusCode?: number; code?: string }, _req: Request, res: Response, _next: NextFunction) => {
-    // PostgreSQL unique constraint violation  (code 23505)
-    // detail example: "Key (code)=(JKT-BDG-A) already exists."
-    if (err.code === '23505') {
-      const detail: string = (err as any).detail ?? '';
-      const valueMatch = detail.match(/Key \([^)]+\)=\(([^)]+)\)/);
-      const fieldMatch = detail.match(/Key \(([^)]+)\)=/);
-      const value = valueMatch ? valueMatch[1] : null;
-      const field = fieldMatch ? fieldMatch[1] : 'data';
-      const msg = value
-        ? `Kode "${value}" sudah digunakan. Gunakan ${field} yang berbeda.`
-        : `Nilai ${field} sudah digunakan. Gunakan nilai yang berbeda.`;
-      res.status(409).json({ message: msg });
-      return;
-    }
-
-    // Zod validation error
-    if (err instanceof ZodError) {
-      const messages = err.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
-      res.status(400).json({ message: `Data tidak valid: ${messages}` });
-      return;
-    }
-
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
-  });
-
-  // Serve mobile web app static build at /mobile
   const mobileDist = join(process.cwd(), "apps/mobile/dist");
   if (existsSync(mobileDist)) {
-    app.use("/mobile", express.static(mobileDist));
-    app.get("/mobile/*", (_req: Request, res: Response) => {
-      res.sendFile(join(mobileDist, "index.html"));
+    await app.register(import("@fastify/static"), {
+      root: mobileDist,
+      prefix: "/mobile/",
+      decorateReply: false,
+    });
+    app.get("/mobile/*", async (_req, reply) => {
+      return reply.sendFile("index.html", mobileDist);
     });
     log("Mobile web app served at /mobile");
   }
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
+  if (process.env.NODE_ENV === "development" || !process.env.NODE_ENV) {
+    await setupVite(app, app.server);
   } else {
-    serveStatic(app);
+    await serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
+  await app.listen({
     port,
     host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-    
-    // Start the scheduler for auto-cleanup
-    scheduler.start();
   });
 
-  // Graceful shutdown
+  const { webSocketService } = await import('./realtime/ws');
+  webSocketService.initialize(app.server);
+
+  log(`serving on port ${port}`);
+
+  scheduler.start();
+
   process.on('SIGTERM', () => {
     scheduler.stop();
+    app.close();
   });
-  
+
   process.on('SIGINT', () => {
     scheduler.stop();
-    process.exit(0);
+    app.close().then(() => process.exit(0));
   });
 })();
