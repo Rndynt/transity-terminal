@@ -11,6 +11,14 @@ const PAGE_ROUTES: Array<{ flag: string; path: string; label: string }> = [
   { flag: 'page.manifest', path: '/manifest', label: 'Manifest' },
   { flag: 'page.masters', path: '/masters', label: 'Master Data' },
   { flag: 'report.revenue', path: '/reports/revenue', label: 'Laporan Pendapatan' },
+  { flag: 'report.sales', path: '/reports/sales', label: 'Laporan Penjualan' },
+  { flag: 'report.trip_profitability', path: '/reports/trip-profitability', label: 'Laporan Laba Rugi' },
+  { flag: 'report.load_factor', path: '/reports/load-factor', label: 'Laporan Load Factor' },
+  { flag: 'report.cancellations', path: '/reports/cancellations', label: 'Laporan Pembatalan' },
+  { flag: 'report.cargo', path: '/reports/cargo', label: 'Laporan Kargo' },
+  { flag: 'report.payments', path: '/reports/payments', label: 'Laporan Pembayaran' },
+  { flag: 'admin.staff.manage', path: '/admin/staff', label: 'Kelola Staff' },
+  { flag: 'admin.flags.manage', path: '/admin/flags', label: 'Feature Flags' },
 ];
 
 export default function ForbiddenPage() {
