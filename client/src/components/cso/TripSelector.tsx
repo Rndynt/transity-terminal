@@ -594,7 +594,7 @@ export default function TripSelector({
         <span className="text-[10px] text-gray-400">{filteredTrips.length} jadwal</span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <div className="space-y-2.5">
         <div className="space-y-1">
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
             <Store className="w-3 h-3" /> Outlet
@@ -619,11 +619,11 @@ export default function TripSelector({
             />
           )}
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
             <Calendar className="w-3 h-3" /> Tanggal
           </label>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => {
@@ -656,13 +656,13 @@ export default function TripSelector({
               <ChevronRightIcon className="w-4 h-4" />
             </button>
           </div>
-          <div className="flex items-center gap-1 mt-1">
+          <div className="flex items-center gap-1">
             {getDatePresets().map(preset => (
               <button
                 key={preset.label}
                 type="button"
                 onClick={() => setSelectedDate(preset.date)}
-                className={`flex-1 px-1.5 py-1 text-[10px] font-medium rounded-lg border transition-all ${
+                className={`flex-1 px-2 py-1.5 text-[11px] font-medium rounded-lg border transition-all whitespace-nowrap ${
                   selectedDate === preset.date
                     ? 'bg-blue-50 border-blue-300 text-blue-700'
                     : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50'
