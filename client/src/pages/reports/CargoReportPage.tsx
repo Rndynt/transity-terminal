@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePermissions } from '@/lib/permissions';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -19,6 +20,7 @@ function buildQuery(f: ReportFilterValues) {
 }
 
 export default function CargoReportPage() {
+  const { outletId: scopedOutletId } = usePermissions();
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
   const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today });
@@ -50,7 +52,7 @@ export default function CargoReportPage() {
       description="Ringkasan pengiriman kargo per periode, status, dan rute."
       icon={Package}
       isLoading={isLoading}
-      filterBar={<ReportFilters value={filters} onChange={setFilters} showChannel={false} />}
+      filterBar={<ReportFilters value={filters} onChange={setFilters} showChannel={false} lockedOutletId={scopedOutletId ?? undefined} />}
     >
       <SummaryCardsGrid items={[
         { label: 'Total Kiriman', value: Number(summary?.total_shipments || 0).toLocaleString(), icon: Package, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },

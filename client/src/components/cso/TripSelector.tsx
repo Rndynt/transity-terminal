@@ -3,7 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Store, Calendar, Bus, Loader2, Search, ChevronDown,
   ArrowRight, Armchair, Route, X, Check, ChevronLeft, ChevronRight as ChevronRightIcon,
-  MapPin, Hash, AlertTriangle
+  MapPin, Hash, AlertTriangle, Lock
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, outletsApi, stopsApi } from '@/lib/api';
@@ -18,6 +18,7 @@ interface TripSelectorProps {
   onTripSelect: (trip: CsoAvailableTrip) => void;
   initialDate?: string;
   initialOutletId?: string;
+  lockedOutletId?: string;
   initialTripId?: string;
   onInitialConsumed?: () => void;
 }
@@ -327,9 +328,11 @@ export default function TripSelector({
   onTripSelect,
   initialDate,
   initialOutletId,
+  lockedOutletId,
   initialTripId,
   onInitialConsumed
 }: TripSelectorProps) {
+  const effectiveInitialOutletId = lockedOutletId || initialOutletId;
   const [selectedDate, setSelectedDate] = useState(() => {
     if (initialDate) return initialDate;
     const d = new Date();
@@ -420,8 +423,15 @@ export default function TripSelector({
   }, [addEventListener, refetchTrips]);
 
   useEffect(() => {
-    if (initialConsumed || !initialOutletId || !outlets.length) return;
-    if (selectedOutlet?.id === initialOutletId) {
+    if (!lockedOutletId || !outlets.length) return;
+    if (selectedOutlet?.id === lockedOutletId) return;
+    const outlet = outlets.find((o: Outlet) => o.id === lockedOutletId);
+    if (outlet) onOutletSelect(outlet);
+  }, [lockedOutletId, outlets, selectedOutlet, onOutletSelect]);
+
+  useEffect(() => {
+    if (initialConsumed || !effectiveInitialOutletId || !outlets.length) return;
+    if (selectedOutlet?.id === effectiveInitialOutletId) {
       if (initialTripId && trips.length > 0 && !selectedTrip) {
         const match = trips.find(t => t.tripId === initialTripId);
         if (match) {
@@ -432,11 +442,11 @@ export default function TripSelector({
       }
       return;
     }
-    const outlet = outlets.find((o: Outlet) => o.id === initialOutletId);
+    const outlet = outlets.find((o: Outlet) => o.id === effectiveInitialOutletId);
     if (outlet) {
       onOutletSelect(outlet);
     }
-  }, [initialOutletId, initialTripId, outlets, trips, selectedOutlet, selectedTrip, initialConsumed, onOutletSelect, onTripSelect, onInitialConsumed]);
+  }, [effectiveInitialOutletId, initialTripId, outlets, trips, selectedOutlet, selectedTrip, initialConsumed, onOutletSelect, onTripSelect, onInitialConsumed]);
 
   const materializeMutation = useMutation({
     mutationFn: async (baseId: string) => {
@@ -573,18 +583,26 @@ export default function TripSelector({
         <div className="space-y-1">
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
             <Store className="w-3 h-3" /> Outlet
+            {lockedOutletId && <Lock className="w-3 h-3 text-orange-400 ml-1" />}
           </label>
-          <OutletSearchSelect
-            value={selectedOutlet?.id || ''}
-            outlets={outlets}
-            stops={stops}
-            placeholder="Pilih outlet..."
-            onChange={(val) => {
-              const outlet = outlets.find(o => o.id === val);
-              if (outlet) onOutletSelect(outlet);
-            }}
-            testId="select-outlet"
-          />
+          {lockedOutletId ? (
+            <div className="h-10 px-3 flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 text-sm text-gray-700">
+              <Lock className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
+              <span className="truncate">{selectedOutlet?.name || '...'}</span>
+            </div>
+          ) : (
+            <OutletSearchSelect
+              value={selectedOutlet?.id || ''}
+              outlets={outlets}
+              stops={stops}
+              placeholder="Pilih outlet..."
+              onChange={(val) => {
+                const outlet = outlets.find(o => o.id === val);
+                if (outlet) onOutletSelect(outlet);
+              }}
+              testId="select-outlet"
+            />
+          )}
         </div>
         <div className="space-y-1">
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">

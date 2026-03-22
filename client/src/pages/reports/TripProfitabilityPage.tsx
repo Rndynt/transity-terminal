@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePermissions } from '@/lib/permissions';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -17,6 +18,7 @@ function buildQuery(f: ReportFilterValues) {
 }
 
 export default function TripProfitabilityPage() {
+  const { outletId: scopedOutletId } = usePermissions();
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
   const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today });
@@ -52,7 +54,7 @@ export default function TripProfitabilityPage() {
       description="Analisis profitabilitas setiap trip berdasarkan revenue vs biaya operasional."
       icon={TrendingUp}
       isLoading={isLoading}
-      filterBar={<ReportFilters value={filters} onChange={setFilters} showOutlet={false} showChannel={false} />}
+      filterBar={<ReportFilters value={filters} onChange={setFilters} showOutlet={false} showChannel={false} lockedOutletId={scopedOutletId ?? undefined} />}
     >
       <SummaryCardsGrid items={[
         { label: 'Total Revenue', value: fmtCurrency(totalRevenue), icon: DollarSign, iconBg: 'bg-green-100', iconColor: 'text-green-600' },

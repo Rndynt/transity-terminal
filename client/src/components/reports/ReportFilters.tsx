@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { X, SlidersHorizontal, ChevronDown } from 'lucide-react';
+import { X, SlidersHorizontal, ChevronDown, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface FilterOptions {
@@ -28,6 +28,7 @@ interface ReportFiltersProps {
   showOutlet?: boolean;
   showChannel?: boolean;
   showRoute?: boolean;
+  lockedOutletId?: string;
 }
 
 const PRESETS = [
@@ -37,8 +38,15 @@ const PRESETS = [
   { label: 'Bulan Ini', getValue: () => { const t = new Date(); const f = new Date(t.getFullYear(), t.getMonth(), 1); return { dateFrom: f.toISOString().split('T')[0], dateTo: t.toISOString().split('T')[0] }; } },
 ];
 
-export default function ReportFilters({ value, onChange, showOutlet = true, showChannel = true, showRoute = true }: ReportFiltersProps) {
+export default function ReportFilters({ value, onChange, showOutlet = true, showChannel = true, showRoute = true, lockedOutletId }: ReportFiltersProps) {
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  useEffect(() => {
+    if (lockedOutletId && value.outletId !== lockedOutletId) {
+      onChange({ ...value, outletId: lockedOutletId });
+    }
+  }, [lockedOutletId]);
+
 
   const { data: options } = useQuery<FilterOptions>({
     queryKey: ['/api/reports/filter-options'],
@@ -147,16 +155,28 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
 
               {showOutlet && (
                 <div className="min-w-[200px] max-w-[260px]">
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Outlet</label>
-                  <SearchableSelect
-                    value={value.outletId || ''}
-                    onChange={(v) => onChange({ ...value, outletId: v || undefined })}
-                    options={outletOptions}
-                    placeholder="Semua Outlet"
-                    searchPlaceholder="Cari outlet..."
-                    emptyLabel="Outlet tidak ditemukan"
-                    className="w-full"
-                  />
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                    Outlet
+                    {lockedOutletId && <Lock className="w-2.5 h-2.5 text-amber-500" />}
+                  </label>
+                  {lockedOutletId ? (
+                    <div className="flex items-center gap-1.5 h-9 px-3 rounded-md border border-amber-200 bg-amber-50 text-xs text-amber-800">
+                      <Lock className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                      <span className="truncate font-medium">
+                        {outletOptions.find(o => o.value === lockedOutletId)?.label || lockedOutletId}
+                      </span>
+                    </div>
+                  ) : (
+                    <SearchableSelect
+                      value={value.outletId || ''}
+                      onChange={(v) => onChange({ ...value, outletId: v || undefined })}
+                      options={outletOptions}
+                      placeholder="Semua Outlet"
+                      searchPlaceholder="Cari outlet..."
+                      emptyLabel="Outlet tidak ditemukan"
+                      className="w-full"
+                    />
+                  )}
                 </div>
               )}
 

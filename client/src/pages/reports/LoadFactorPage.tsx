@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePermissions } from '@/lib/permissions';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -23,6 +24,7 @@ function getLoadFactorColor(pct: number) {
 }
 
 export default function LoadFactorPage() {
+  const { outletId: scopedOutletId } = usePermissions();
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
   const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today });
@@ -59,7 +61,7 @@ export default function LoadFactorPage() {
       description="Analisis tingkat keterisian kursi per trip dan rute."
       icon={Users}
       isLoading={isLoading}
-      filterBar={<ReportFilters value={filters} onChange={setFilters} showOutlet={false} showChannel={false} />}
+      filterBar={<ReportFilters value={filters} onChange={setFilters} showOutlet={false} showChannel={false} lockedOutletId={scopedOutletId ?? undefined} />}
     >
       <SummaryCardsGrid items={[
         { label: 'Rata-rata Load Factor', value: `${avgLF}%`, icon: Percent, iconBg: avgLF >= 60 ? 'bg-green-100' : 'bg-orange-100', iconColor: avgLF >= 60 ? 'text-green-600' : 'text-orange-600' },

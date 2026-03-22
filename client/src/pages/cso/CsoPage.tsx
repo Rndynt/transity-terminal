@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useSearch, useLocation } from 'wouter';
 import { CanAccess } from '@/components/rbac/CanAccess';
+import { usePermissions } from '@/lib/permissions';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
 import { cargoApi } from '@/lib/api';
@@ -45,6 +46,7 @@ const formatTime = (isoString: string | null | undefined): string => {
 };
 
 export default function CsoPage() {
+  const { outletId: scopedOutletId } = usePermissions();
   const { toast } = useToast();
   const searchString = useSearch();
   const [, navigate] = useLocation();
@@ -530,6 +532,7 @@ export default function CsoPage() {
                     onTripSelect={handleTripSelect}
                     initialDate={initialDate}
                     initialOutletId={initialOutletId}
+                    lockedOutletId={scopedOutletId ?? undefined}
                     initialTripId={initialTripId}
                     onInitialConsumed={() => navigate('/cso', { replace: true })}
                   />
