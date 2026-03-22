@@ -78,6 +78,11 @@ export default function CsoPage() {
   const [cargoResult, setCargoResult] = useState<CargoShipmentWithStops | null>(null);
   const [showCargoWaybill, setShowCargoWaybill] = useState(false);
   const [mobileCargoPanel, setMobileCargoPanel] = useState<'left' | 'right'>('left');
+  const [selectedDate, setSelectedDate] = useState(() => {
+    if (initialDate) return initialDate;
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  });
   const [manifestDialogTripId, setManifestDialogTripId] = useState<string | null>(null);
   const [pendingRouteAutoSelect, setPendingRouteAutoSelect] = useState<{
     originStopId: string;
@@ -525,7 +530,8 @@ export default function CsoPage() {
                     selectedTrip={selectedCsoTrip}
                     onOutletSelect={handleOutletSelect}
                     onTripSelect={handleTripSelect}
-                    initialDate={initialDate}
+                    selectedDate={selectedDate}
+                    onDateChange={setSelectedDate}
                     initialOutletId={initialOutletId}
                     lockedOutletId={scopedOutletId ?? undefined}
                     initialTripId={initialTripId}

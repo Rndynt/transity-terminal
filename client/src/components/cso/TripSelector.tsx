@@ -16,7 +16,8 @@ interface TripSelectorProps {
   selectedTrip?: CsoAvailableTrip;
   onOutletSelect: (outlet: Outlet) => void;
   onTripSelect: (trip: CsoAvailableTrip) => void;
-  initialDate?: string;
+  selectedDate: string;
+  onDateChange: (date: string) => void;
   initialOutletId?: string;
   lockedOutletId?: string;
   initialTripId?: string;
@@ -321,23 +322,37 @@ function CustomDatePicker({ value, onChange, testId }: {
   );
 }
 
+function formatDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function getDatePresets(): { label: string; date: string }[] {
+  const today = new Date();
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const dayAfter = new Date(today); dayAfter.setDate(today.getDate() + 2);
+  const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 7);
+  return [
+    { label: 'Hari Ini', date: formatDateStr(today) },
+    { label: 'Besok', date: formatDateStr(tomorrow) },
+    { label: 'Lusa', date: formatDateStr(dayAfter) },
+    { label: '+7 Hari', date: formatDateStr(nextWeek) },
+  ];
+}
+
 export default function TripSelector({
   selectedOutlet,
   selectedTrip,
   onOutletSelect,
   onTripSelect,
-  initialDate,
+  selectedDate,
+  onDateChange,
   initialOutletId,
   lockedOutletId,
   initialTripId,
   onInitialConsumed
 }: TripSelectorProps) {
   const effectiveInitialOutletId = lockedOutletId || initialOutletId;
-  const [selectedDate, setSelectedDate] = useState(() => {
-    if (initialDate) return initialDate;
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  });
+  const setSelectedDate = onDateChange;
   const [materializingBaseId, setMaterializingBaseId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedRoutes, setCollapsedRoutes] = useState<Set<string>>(new Set());
@@ -614,7 +629,7 @@ export default function TripSelector({
               onClick={() => {
                 const d = new Date(selectedDate + 'T00:00:00');
                 d.setDate(d.getDate() - 1);
-                setSelectedDate(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+                setSelectedDate(formatDateStr(d));
               }}
               className="flex-shrink-0 w-8 h-10 flex items-center justify-center border border-gray-200 rounded-xl text-gray-400 hover:text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all"
               data-testid="btn-prev-date"
@@ -633,13 +648,30 @@ export default function TripSelector({
               onClick={() => {
                 const d = new Date(selectedDate + 'T00:00:00');
                 d.setDate(d.getDate() + 1);
-                setSelectedDate(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+                setSelectedDate(formatDateStr(d));
               }}
               className="flex-shrink-0 w-8 h-10 flex items-center justify-center border border-gray-200 rounded-xl text-gray-400 hover:text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all"
               data-testid="btn-next-date"
             >
               <ChevronRightIcon className="w-4 h-4" />
             </button>
+          </div>
+          <div className="flex items-center gap-1 mt-1">
+            {getDatePresets().map(preset => (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() => setSelectedDate(preset.date)}
+                className={`flex-1 px-1.5 py-1 text-[10px] font-medium rounded-lg border transition-all ${
+                  selectedDate === preset.date
+                    ? 'bg-blue-50 border-blue-300 text-blue-700'
+                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+                data-testid={`btn-date-preset-${preset.label.toLowerCase().replace(/\s+/g, '-')}`}
+              >
+                {preset.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
