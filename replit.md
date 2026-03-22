@@ -81,6 +81,14 @@ shared/
 plan/              → Dokumentasi teknis fitur
 ```
 
+## Data Safety (Soft Delete)
+Data master yang direferensi oleh booking/laporan menggunakan **soft delete** — tidak pernah dihapus permanen:
+- **stops, outlets, vehicles, layouts** → kolom `deleted_at` di-set, data tetap ada di DB
+- **trip_patterns, trip_bases** → field `active` di-set false (sudah ada sebelumnya)
+- **trips** → status diubah ke `canceled`, trip legs & stop times tetap ada
+- Query list (getStops, getVehicles, dll) otomatis filter `deleted_at IS NULL`
+- Query by ID (getStopById, dll) tetap mengembalikan data termasuk yang soft-deleted (untuk laporan/referensi)
+
 ## Running
 - Workflow "Start application" → `npm run dev` (port 5000)
 - `npm run db:push` → sync schema ke database

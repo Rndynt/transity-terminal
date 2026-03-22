@@ -57,7 +57,8 @@ export const stops = pgTable("stops", {
   isOutlet:  boolean("is_outlet").default(false),
   lat:       numeric("lat", { precision: 9, scale: 6 }),
   lng:       numeric("lng", { precision: 9, scale: 6 }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true })
 });
 
 // 2. Outlets
@@ -68,7 +69,8 @@ export const outlets = pgTable("outlets", {
   address:          text("address"),
   phone:            text("phone"),
   printerProfileId: text("printer_profile_id"),
-  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow()
+  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow(),
+  deletedAt:        timestamp("deleted_at", { withTimezone: true })
 });
 
 // 3. Layouts
@@ -78,7 +80,8 @@ export const layouts = pgTable("layouts", {
   rows:      integer("rows").notNull(),
   cols:      integer("cols").notNull(),
   seatMap:   jsonb("seat_map").notNull(), // array of {seat_no, row, col, class?, disabled?}
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true })
 });
 
 // 4. Vehicles
@@ -89,7 +92,8 @@ export const vehicles = pgTable("vehicles", {
   layoutId:  uuid("layout_id").notNull().references(() => layouts.id),
   capacity:  integer("capacity").notNull(),
   notes:     text("notes"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true })
 });
 
 // 5. Trip Patterns

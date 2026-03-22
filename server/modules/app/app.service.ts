@@ -5,7 +5,7 @@ import {
   seatInventory, tripLegs, seatHolds,
   type AppUser, type InsertAppUser, type Review, type InsertReview
 } from "@shared/schema";
-import { eq, and, desc, sql, gte, lte, inArray, gt } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lte, inArray, gt, isNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { signToken, type AppUserPayload } from "./app.auth";
 import { IStorage } from "../../routes";
@@ -255,7 +255,7 @@ export class AppService {
     const result = await db.execute(sql`
       SELECT city, COUNT(*)::int as stop_count
       FROM stops
-      WHERE city IS NOT NULL AND city != ''
+      WHERE city IS NOT NULL AND city != '' AND deleted_at IS NULL
       GROUP BY city
       ORDER BY city
     `);
@@ -271,10 +271,10 @@ export class AppService {
     const [originStops, destStops] = await Promise.all([
       db.select({ id: stops.id, name: stops.name, code: stops.code })
         .from(stops)
-        .where(eq(stops.city, params.originCity)),
+        .where(and(eq(stops.city, params.originCity), isNull(stops.deletedAt))),
       db.select({ id: stops.id, name: stops.name, code: stops.code })
         .from(stops)
-        .where(eq(stops.city, params.destinationCity))
+        .where(and(eq(stops.city, params.destinationCity), isNull(stops.deletedAt)))
     ]);
 
     if (originStops.length === 0 || destStops.length === 0) return [];

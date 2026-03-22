@@ -51,7 +51,7 @@ export class DatabaseStorage implements IStorage {
 
   // Stops
   async getStops(): Promise<Stop[]> {
-    return await db.select().from(stops).orderBy(stops.name);
+    return await db.select().from(stops).where(isNull(stops.deletedAt)).orderBy(stops.name);
   }
 
   async getStopById(id: string): Promise<Stop | undefined> {
@@ -70,12 +70,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteStop(id: string): Promise<void> {
-    await db.delete(stops).where(eq(stops.id, id));
+    await db.update(stops).set({ deletedAt: new Date() }).where(eq(stops.id, id));
   }
 
   // Outlets
   async getOutlets(): Promise<Outlet[]> {
-    return await db.select().from(outlets).orderBy(outlets.name);
+    return await db.select().from(outlets).where(isNull(outlets.deletedAt)).orderBy(outlets.name);
   }
 
   async getOutletById(id: string): Promise<Outlet | undefined> {
@@ -94,12 +94,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOutlet(id: string): Promise<void> {
-    await db.delete(outlets).where(eq(outlets.id, id));
+    await db.update(outlets).set({ deletedAt: new Date() }).where(eq(outlets.id, id));
   }
 
   // Vehicles
   async getVehicles(): Promise<Vehicle[]> {
-    return await db.select().from(vehicles).orderBy(vehicles.code);
+    return await db.select().from(vehicles).where(isNull(vehicles.deletedAt)).orderBy(vehicles.code);
   }
 
   async getVehicleById(id: string): Promise<Vehicle | undefined> {
@@ -118,12 +118,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteVehicle(id: string): Promise<void> {
-    await db.delete(vehicles).where(eq(vehicles.id, id));
+    await db.update(vehicles).set({ deletedAt: new Date() }).where(eq(vehicles.id, id));
   }
 
   // Layouts
   async getLayouts(): Promise<Layout[]> {
-    return await db.select().from(layouts).orderBy(layouts.name);
+    return await db.select().from(layouts).where(isNull(layouts.deletedAt)).orderBy(layouts.name);
   }
 
   async getLayoutById(id: string): Promise<Layout | undefined> {
@@ -142,12 +142,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteLayout(id: string): Promise<void> {
-    await db.delete(layouts).where(eq(layouts.id, id));
+    await db.update(layouts).set({ deletedAt: new Date() }).where(eq(layouts.id, id));
   }
 
   // Trip Patterns
   async getTripPatterns(): Promise<TripPattern[]> {
-    return await db.select().from(tripPatterns).orderBy(tripPatterns.code);
+    return await db.select().from(tripPatterns).where(eq(tripPatterns.active, true)).orderBy(tripPatterns.code);
   }
 
   async getTripPatternById(id: string): Promise<TripPattern | undefined> {
@@ -166,7 +166,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTripPattern(id: string): Promise<void> {
-    await db.delete(tripPatterns).where(eq(tripPatterns.id, id));
+    await db.update(tripPatterns).set({ active: false }).where(eq(tripPatterns.id, id));
   }
 
   // Pattern Stops
@@ -212,7 +212,7 @@ export class DatabaseStorage implements IStorage {
 
   // Trip Bases
   async getTripBases(): Promise<TripBase[]> {
-    return await db.select().from(tripBases).orderBy(tripBases.name);
+    return await db.select().from(tripBases).where(eq(tripBases.active, true)).orderBy(tripBases.name);
   }
 
   async getTripBaseById(id: string): Promise<TripBase | undefined> {
@@ -231,7 +231,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTripBase(id: string): Promise<void> {
-    await db.delete(tripBases).where(eq(tripBases.id, id));
+    await db.update(tripBases).set({ active: false }).where(eq(tripBases.id, id));
   }
 
   // Trips
@@ -385,8 +385,7 @@ export class DatabaseStorage implements IStorage {
     .where(
       and(
         eq(trips.serviceDate, serviceDate),
-        // Check that this trip has a stop time for this outlet's stop with either
-        // boarding allowed (pickup outlet) or alighting allowed (drop-only outlet)
+        sql`${trips.status} != 'canceled'`,
         sql`EXISTS (
           SELECT 1 
           FROM ${tripStopTimes} tst
@@ -612,10 +611,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTrip(id: string): Promise<void> {
-    // JANGAN hapus passenger, payment, bookings - hanya hapus data lainnya
-    // Wrap in transaction for atomicity and concurrency safety
     await db.transaction(async (tx) => {
-      // Re-check for active bookings inside transaction to prevent race conditions
       const [result] = await tx.select({ count: sql<number>`count(*)` })
         .from(bookings)
         .where(and(
@@ -626,22 +622,10 @@ export class DatabaseStorage implements IStorage {
       if (result.count > 0) {
         throw new Error('TRIP_HAS_ACTIVE_BOOKINGS');
       }
-      
-      // Delete in proper order to avoid foreign key constraint violations
-      // 1. Delete seat inventory
+
       await tx.delete(seatInventory).where(eq(seatInventory.tripId, id));
-      
-      // 2. Delete trip legs
-      await tx.delete(tripLegs).where(eq(tripLegs.tripId, id));
-      
-      // 3. Delete trip stop times
-      await tx.delete(tripStopTimes).where(eq(tripStopTimes.tripId, id));
-      
-      // 4. Delete trip-specific price rules
-      await tx.delete(priceRules).where(eq(priceRules.tripId, id));
-      
-      // 5. Finally delete the trip itself
-      await tx.delete(trips).where(eq(trips.id, id));
+      await tx.delete(seatHolds).where(eq(seatHolds.tripId, id));
+      await tx.update(trips).set({ status: 'canceled' }).where(eq(trips.id, id));
     });
   }
 
