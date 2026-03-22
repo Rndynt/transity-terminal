@@ -214,7 +214,7 @@ export class BookingsController {
   async createHold(req: FastifyRequest, reply: FastifyReply) {
     try {
       const validatedData = createHoldSchema.parse(req.body);
-      const operatorId = req.headers['x-operator-id'] as string || 'default-operator';
+      const operatorId = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
       
       const result = await this.bookingsService.createHold(
         validatedData.tripId,
@@ -274,7 +274,7 @@ export class BookingsController {
     try {
       const validatedData = createPendingBookingSchema.parse(req.body);
       const { passengers, ...bookingData } = validatedData;
-      const operatorId = req.headers['x-operator-id'] as string || 'default-operator';
+      const operatorId = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
       
       // Enhanced validation
       if (validatedData.totalAmount <= 0) {
@@ -337,7 +337,7 @@ export class BookingsController {
 
   async getPendingBookings(req: FastifyRequest, reply: FastifyReply) {
     const { outletId } = req.query;
-    const operatorId = req.headers['x-operator-id'] as string || 'default-operator';
+    const operatorId = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
     
     const pendingBookings = await this.bookingsService.getPendingBookings(outletId as string, operatorId);
     reply.send(pendingBookings);
@@ -346,7 +346,7 @@ export class BookingsController {
   async releasePendingBooking(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { id } = req.params;
-      const operatorId = req.headers['x-operator-id'] as string || 'default-operator';
+      const operatorId = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
       
       await this.bookingsService.releasePendingBooking(id, operatorId);
       reply.code(204).send();
@@ -364,7 +364,7 @@ export class BookingsController {
     try {
       const { passengerId } = req.params;
       const { reason } = unseatPassengerSchema.parse(req.body || {});
-      const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
+      const performedBy = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
       const result = await this.unseatService.unseatPassenger(passengerId, performedBy, reason);
       reply.send(result);
     } catch (error: any) {
@@ -380,7 +380,7 @@ export class BookingsController {
     try {
       const { bookingId } = req.params;
       const { reason } = unseatPassengerSchema.parse(req.body || {});
-      const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
+      const performedBy = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
       const result = await this.unseatService.unseatAllPassengers(bookingId, performedBy, reason);
       reply.send(result);
     } catch (error: any) {
@@ -397,7 +397,7 @@ export class BookingsController {
     try {
       const { passengerId } = req.params;
       const data = reschedulePassengerSchema.parse(req.body);
-      const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
+      const performedBy = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
       const result = await this.unseatService.reschedulePassenger(
         passengerId,
         data.newTripId,
@@ -425,7 +425,7 @@ export class BookingsController {
     try {
       const { passengerId } = req.params;
       const { newSeatNo } = z.object({ newSeatNo: z.string() }).parse(req.body);
-      const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
+      const performedBy = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
       const result = await this.unseatService.assignSeatToUnseated(passengerId, newSeatNo, performedBy);
       reply.send(result);
     } catch (error: any) {
