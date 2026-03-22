@@ -119,7 +119,8 @@ export const patternStops = pgTable("pattern_stops", {
   boardingAllowed:  boolean("boarding_allowed").notNull().default(true),
   alightingAllowed: boolean("alighting_allowed").notNull().default(true),
   dwellSeconds:     integer("dwell_seconds").default(0),
-  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow()
+  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow(),
+  deletedAt:        timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
   idxPatternStopsPatternId: sql`CREATE INDEX IF NOT EXISTS idx_pattern_stops_pattern_id ON ${table} (pattern_id)`,
   idxPatternStopsStopId: sql`CREATE INDEX IF NOT EXISTS idx_pattern_stops_stop_id ON ${table} (stop_id)`
@@ -193,7 +194,8 @@ export const tripStopTimes = pgTable("trip_stop_times", {
   departAt:         timestamp("depart_at", { withTimezone: true }),
   boardingAllowed:  boolean("boarding_allowed"),
   alightingAllowed: boolean("alighting_allowed"),
-  dwellSeconds:     integer("dwell_seconds").default(0)
+  dwellSeconds:     integer("dwell_seconds").default(0),
+  deletedAt:        timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
   idxTstTripId: sql`CREATE INDEX IF NOT EXISTS idx_tst_trip_id ON ${table} (trip_id)`,
   idxTstStopId: sql`CREATE INDEX IF NOT EXISTS idx_tst_stop_id ON ${table} (stop_id)`
@@ -208,7 +210,8 @@ export const tripLegs = pgTable("trip_legs", {
   toStopId:    uuid("to_stop_id").notNull().references(() => stops.id),
   departAt:    timestamp("depart_at", { withTimezone: true }).notNull(),
   arriveAt:    timestamp("arrive_at", { withTimezone: true }).notNull(),
-  durationMin: integer("duration_min").notNull()
+  durationMin: integer("duration_min").notNull(),
+  deletedAt:   timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
   idxTripLegsTripId: sql`CREATE INDEX IF NOT EXISTS idx_trip_legs_trip_id ON ${table} (trip_id)`
 }));
@@ -252,8 +255,9 @@ export const priceRules = pgTable("price_rules", {
   legIndex:  integer("leg_index"),
   priority:  integer("priority").default(0),
   rule:      jsonb("rule").notNull(),
-  validFrom: timestamp("valid_from", { withTimezone: true }),
-  validTo:   timestamp("valid_to", { withTimezone: true })
+  validFrom:  timestamp("valid_from", { withTimezone: true }),
+  validTo:    timestamp("valid_to", { withTimezone: true }),
+  deletedAt:  timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
   idxPriceRulesPatternId: sql`CREATE INDEX IF NOT EXISTS idx_price_rules_pattern_id ON ${table} (pattern_id)`,
   idxPriceRulesTripId: sql`CREATE INDEX IF NOT EXISTS idx_price_rules_trip_id ON ${table} (trip_id)`
