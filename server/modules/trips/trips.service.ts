@@ -29,35 +29,26 @@ export class TripsService {
   }
 
   async createTrip(data: InsertTrip): Promise<Trip> {
-    // Create the trip first
+    const patternStops = await this.storage.getPatternStops(data.patternId);
+    
     const trip = await this.storage.createTrip(data);
     
-    // Auto-initialize trip_stop_times from the pattern's stops
-    await this.initializeTripStopTimes(trip.id, trip.patternId);
-    
-    return trip;
-  }
-
-  private async initializeTripStopTimes(tripId: string, patternId: string): Promise<void> {
-    // Get pattern stops ordered by sequence
-    const patternStops = await this.storage.getPatternStops(patternId);
-    
-    // Create trip stop times with null times initially
     const tripStopTimesData = patternStops.map(ps => ({
-      tripId,
+      tripId: trip.id,
       stopId: ps.stopId,
       stopSequence: ps.stopSequence,
       arriveAt: null,
       departAt: null,
       dwellSeconds: ps.dwellSeconds || 0,
-      boardingAllowed: null, // inherit from pattern
-      alightingAllowed: null // inherit from pattern
+      boardingAllowed: null,
+      alightingAllowed: null
     }));
     
-    // Use bulk upsert to create the stop times
     if (tripStopTimesData.length > 0) {
-      await this.storage.bulkUpsertTripStopTimes(tripId, tripStopTimesData);
+      await this.storage.bulkUpsertTripStopTimes(trip.id, tripStopTimesData);
     }
+    
+    return trip;
   }
 
   async updateTrip(id: string, data: Partial<InsertTrip>): Promise<Trip> {

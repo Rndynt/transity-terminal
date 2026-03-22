@@ -274,9 +274,24 @@ plan/              → Dokumentasi teknis fitur
 
 ### N+1 Query Fixes
 - `getSeatmap`: batch passenger fetch via `getPassengersByBookingIds()` instead of per-booking queries
+- `getSeatPassengerDetails`: batch passengers, stops, outlets, payments via Promise.all + Maps
 - `getVirtualTripsForCso`: batch pattern/patternStops/patternPath with `Promise.all()` and Maps
 - `createBooking`: batch seat hold validation via `inArray()` instead of per-passenger queries
 - `cleanupExpiredPendingBookings`: batch passenger fetch for all expired bookings at once
+- `precomputeInventory`: batch passenger fetch via `getPassengersByBookingIds()` instead of per-booking loop
+- `cleanupExpiredHolds`: bulk UPDATE+DELETE instead of per-hold `releaseHoldByRef` loop
+- `convertHoldsToLong`: single bulk UPDATE instead of per-hold loop
+- `createSeatHold`: single batch query for hold refs instead of per-row query in loop
+
+### Parallelized Queries (Promise.all)
+- `searchTrips`: origin + destination stops fetched in parallel; availableSeats + fareQuote per trip in parallel
+- `getSeatmap` (app): layout + inventory fetched in parallel
+- `getCsoAvailableTrips`: real + virtual trips fetched in parallel
+- `precomputeInventory`: layout + legs + bookings fetched in parallel
+
+### Transaction Safety
+- `precomputeInventory`: delete + insert inventory wrapped in DB transaction (prevents data loss on crash)
+- `createTrip`: pattern stops pre-fetched before trip creation to minimize partial state
 
 ### API Pagination
 - Bookings and cargo list endpoints support optional `?page=1&pageSize=50` query params
@@ -284,7 +299,7 @@ plan/              → Dokumentasi teknis fitur
 - Without `page` param, returns flat array for backward compatibility
 
 ### Cache Headers
-- Master data GET endpoints (drivers, stops, outlets, vehicles, layouts, trip-patterns) return `Cache-Control: public, max-age=60, stale-while-revalidate=120`
+- Master data GET endpoints (drivers, stops, outlets, vehicles, layouts, trip-patterns) return `Cache-Control: private, max-age=60, stale-while-revalidate=120`
 
 ### Frontend Code Splitting
 - All route-level page components loaded via `React.lazy()` + `Suspense`

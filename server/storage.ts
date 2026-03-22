@@ -281,11 +281,10 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Outlet with id ${outletId} not found`);
     }
 
-    // Get real trips
-    const realTrips = await this.getRealTripsForCso(serviceDate, outlet.stopId);
-    
-    // Get virtual trips (computed from trip bases)
-    const virtualTrips = await this.getVirtualTripsForCso(serviceDate, outlet.stopId);
+    const [realTrips, virtualTrips] = await Promise.all([
+      this.getRealTripsForCso(serviceDate, outlet.stopId),
+      this.getVirtualTripsForCso(serviceDate, outlet.stopId)
+    ]);
     
     // Combine results and deduplicate (real trips override virtual ones)
     const baseIdsWithRealTrips = new Set(

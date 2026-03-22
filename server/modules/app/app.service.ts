@@ -268,13 +268,14 @@ export class AppService {
     date: string;
     passengers?: number;
   }): Promise<TripSearchResult[]> {
-    const originStops = await db.select({ id: stops.id, name: stops.name, code: stops.code })
-      .from(stops)
-      .where(eq(stops.city, params.originCity));
-
-    const destStops = await db.select({ id: stops.id, name: stops.name, code: stops.code })
-      .from(stops)
-      .where(eq(stops.city, params.destinationCity));
+    const [originStops, destStops] = await Promise.all([
+      db.select({ id: stops.id, name: stops.name, code: stops.code })
+        .from(stops)
+        .where(eq(stops.city, params.originCity)),
+      db.select({ id: stops.id, name: stops.name, code: stops.code })
+        .from(stops)
+        .where(eq(stops.city, params.destinationCity))
+    ]);
 
     if (originStops.length === 0 || destStops.length === 0) return [];
 
@@ -329,9 +330,10 @@ export class AppService {
 
       if (!originST || !destST) return null;
 
-      const availableSeats = await this.getAvailableSeatsCount(trip.tripId, originST.stopSequence, destST.stopSequence);
-
-      const fareQuote = await this.getBaseFare(trip.tripId, originST.stopSequence, destST.stopSequence);
+      const [availableSeats, fareQuote] = await Promise.all([
+        this.getAvailableSeatsCount(trip.tripId, originST.stopSequence, destST.stopSequence),
+        this.getBaseFare(trip.tripId, originST.stopSequence, destST.stopSequence)
+      ]);
 
       return {
         tripId: trip.tripId,
@@ -470,13 +472,14 @@ export class AppService {
     const layoutId = trip.layoutId;
     if (!layoutId) throw new Error("Trip has no layout");
 
-    const layout = await this.storage.getLayoutById(layoutId);
-    if (!layout) throw new Error("Layout not found");
-
     const legIndexes: number[] = [];
     for (let i = originSeq; i < destinationSeq; i++) legIndexes.push(i);
 
-    const inventory = await this.storage.getSeatInventory(tripId, legIndexes);
+    const [layout, inventory] = await Promise.all([
+      this.storage.getLayoutById(layoutId),
+      this.storage.getSeatInventory(tripId, legIndexes)
+    ]);
+    if (!layout) throw new Error("Layout not found");
 
     const seatAvailability: Record<string, { available: boolean; held: boolean }> = {};
     const seatMap = layout.seatMap as Array<{ seat_no: string; [key: string]: unknown }>;
