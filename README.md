@@ -1,8 +1,8 @@
-# TransityCore
+# TransityTerminal
 
 **Sistem Ticketing Bus Transit Multi-Operator**
 
-TransityCore adalah sistem ticketing bus transit multi-operator yang komprehensif, mendukung pengelolaan rute, perjalanan, kursi, pemesanan, kargo, SPJ, dan harga dinamis. Sistem ini dirancang untuk operasional real-time dengan dukungan WebSocket untuk update inventaris kursi secara live.
+TransityTerminal adalah sistem ticketing bus transit multi-operator yang komprehensif, mendukung pengelolaan rute, perjalanan, kursi, pemesanan, kargo, SPJ, dan harga dinamis. Sistem ini dirancang untuk operasional real-time dengan dukungan WebSocket untuk update inventaris kursi secara live.
 
 ---
 
