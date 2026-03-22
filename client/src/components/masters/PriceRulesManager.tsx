@@ -15,7 +15,7 @@ import { RowActionsMenu } from './RowActionsMenu';
 import { useToast } from '@/hooks/use-toast';
 import { priceRulesApi, tripPatternsApi, tripsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, DollarSign, Tag, ArrowUpDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, DollarSign, Tag, ArrowUpDown, X } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import type { PriceRule, TripPattern, Trip, TripWithDetails } from '@/types';
@@ -108,7 +108,8 @@ export default function PriceRulesManager() {
   const patternOptions = patterns.map(p => ({
     value: p.id,
     label: p.name,
-    badge: p.code
+    badge: p.code,
+    subtitle: p.note || undefined,
   }));
 
   const tripOptions = trips.map((t: TripWithDetails) => {
@@ -298,6 +299,40 @@ export default function PriceRulesManager() {
           </Button>
         }
       />
+
+      {/* ── Filter Bar ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchableSelect
+          value={filterScope}
+          options={scopeFilterOptions}
+          placeholder="Cakupan"
+          searchPlaceholder="Cari..."
+          onChange={setFilterScope}
+          className="w-32"
+        />
+        <SearchableSelect
+          value={filterMode}
+          options={modeFilterOptions}
+          placeholder="Mode"
+          searchPlaceholder="Cari..."
+          onChange={setFilterMode}
+          className="w-28"
+        />
+        <SearchableSelect
+          value={filterPatternId}
+          options={patternOptions}
+          placeholder="Pola rute"
+          searchPlaceholder="Cari pola..."
+          onChange={setFilterPatternId}
+          className="w-48"
+        />
+        {activeFilterCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-xs text-muted-foreground h-8">
+            <X className="w-3 h-3 mr-1" />
+            Reset ({activeFilterCount})
+          </Button>
+        )}
+      </div>
 
       {/* ── Form Dialog ── */}
       <MasterFormDialog
