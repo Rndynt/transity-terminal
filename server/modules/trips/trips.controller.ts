@@ -18,8 +18,15 @@ export class TripsController {
   }
 
   async getCsoAvailableTrips(req: Request, res: Response) {
-    const { date, outletId } = req.query;
+    const { date } = req.query;
+    let { outletId } = req.query;
     
+    // ABAC: if the authenticated user has an outlet scope, enforce it — ignore client-supplied outletId
+    const scopedOutlet = req.scopedOutletId ?? req.rbac?.outletId ?? null;
+    if (scopedOutlet) {
+      outletId = scopedOutlet;
+    }
+
     // Validate required parameters
     if (!date) {
       return res.status(400).json({ error: 'date parameter is required' });

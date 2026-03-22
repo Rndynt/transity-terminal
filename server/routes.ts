@@ -385,8 +385,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/trips/:id/close', requireFlag('action.trip.close'), asyncHandler(tripBasesController.closeTrip.bind(tripBasesController)));
 
   // Trips routes
-  app.get('/api/trips', asyncHandler(tripsController.getAll.bind(tripsController)));
-  app.get('/api/cso/available-trips', asyncHandler(tripsController.getCsoAvailableTrips.bind(tripsController)));
+  app.get('/api/trips', requireOutletScope(), asyncHandler(tripsController.getAll.bind(tripsController)));
+  app.get('/api/cso/available-trips', requireOutletScope(), asyncHandler(tripsController.getCsoAvailableTrips.bind(tripsController)));
   app.get('/api/trips/:id', asyncHandler(tripsController.getById.bind(tripsController)));
   app.post('/api/trips', requireFlag('master.trips'), asyncHandler(tripsController.create.bind(tripsController)));
   app.put('/api/trips/:id', requireFlag('master.trips'), asyncHandler(tripsController.update.bind(tripsController)));
@@ -558,10 +558,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/cargo/quote-tariff', asyncHandler(cargoController.quoteTariff.bind(cargoController)));
 
   // Cargo shipment routes
-  app.get('/api/cargo', asyncHandler(cargoController.getAll.bind(cargoController)));
+  app.get('/api/cargo', requireOutletScope(), asyncHandler(cargoController.getAll.bind(cargoController)));
   app.get('/api/cargo/waybill/:waybillNumber', asyncHandler(cargoController.getByWaybill.bind(cargoController)));
   app.get('/api/cargo/:id', asyncHandler(cargoController.getById.bind(cargoController)));
-  app.post('/api/cargo', requireFlag('action.cargo.create'), asyncHandler(cargoController.create.bind(cargoController)));
+  app.post('/api/cargo', requireFlag('action.cargo.create'), requireOutletScope(), asyncHandler(cargoController.create.bind(cargoController)));
   app.put('/api/cargo/:id', requireFlag('action.cargo.manage'), asyncHandler(cargoController.update.bind(cargoController)));
   app.patch('/api/cargo/:id/status', requireFlag('action.cargo.manage'), asyncHandler(cargoController.updateStatus.bind(cargoController)));
 

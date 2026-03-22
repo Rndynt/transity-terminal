@@ -13,7 +13,9 @@ export class CargoController {
   }
 
   async getAll(req: Request, res: Response) {
-    const { tripId, status, outletId } = req.query;
+    const { tripId, status } = req.query;
+    const scopedOutlet = req.scopedOutletId ?? req.rbac?.outletId ?? null;
+    const outletId = scopedOutlet ?? (req.query.outletId as string | undefined);
     const shipments = await this.cargoService.getAllShipments({
       tripId: tripId as string,
       status: status as string,
@@ -36,6 +38,10 @@ export class CargoController {
 
   async create(req: Request, res: Response) {
     const validated = insertCargoShipmentSchema.omit({ waybillNumber: true }).parse(req.body);
+    const scopedOutlet = req.scopedOutletId ?? req.rbac?.outletId ?? null;
+    if (scopedOutlet) {
+      validated.outletId = scopedOutlet;
+    }
     const shipment = await this.cargoService.createShipment(validated);
     res.status(201).json(shipment);
   }

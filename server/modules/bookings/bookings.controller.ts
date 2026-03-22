@@ -145,7 +145,7 @@ export class BookingsController {
       const staffOutletId = req.rbac?.outletId ?? null;
       const bookingDataWithStringAmount = {
         ...bookingData,
-        outletId: bookingData.outletId ?? staffOutletId ?? undefined,
+        outletId: staffOutletId ?? bookingData.outletId ?? undefined,
         totalAmount: bookingData.totalAmount.toString(),
         createdBy: req.user?.id || req.headers['x-operator-id'] as string || 'default-operator'
       };
@@ -285,8 +285,10 @@ export class BookingsController {
         });
       }
       
+      const staffOutletIdPending = req.rbac?.outletId ?? null;
       const bookingDataWithStringAmount = {
         ...bookingData,
+        outletId: staffOutletIdPending ?? bookingData.outletId ?? undefined,
         totalAmount: bookingData.totalAmount.toString(),
         createdBy: operatorId
       };
