@@ -397,23 +397,27 @@ export default function SeatMap({
 
   const seatMapLayout = seatmap?.layout?.seatMap as any[] | undefined;
 
-  const { maxCol, maxRow, gridCols, seatGrid } = useMemo(() => {
+  const { gridCols, seatGrid } = useMemo(() => {
     if (!seatMapLayout || seatMapLayout.length === 0) {
-      return { maxCol: 0, maxRow: 0, gridCols: 1, seatGrid: [] as (any | null)[][] };
+      return { gridCols: 1, seatGrid: [] as (any | null)[][] };
     }
+    const minc = Math.min(...seatMapLayout.map((s: any) => s.col));
     const mc = Math.max(...seatMapLayout.map((s: any) => s.col));
+    const minr = Math.min(...seatMapLayout.map((s: any) => s.row));
     const mr = Math.max(...seatMapLayout.map((s: any) => s.row));
+    const cols = mc - minc + 1;
     const grid: (any | null)[][] = [];
-    for (let r = 0; r <= mr; r++) {
-      grid[r] = [];
-      for (let c = 0; c <= mc; c++) {
-        grid[r][c] = null;
+    for (let r = minr; r <= mr; r++) {
+      const row: (any | null)[] = [];
+      for (let c = minc; c <= mc; c++) {
+        row.push(null);
       }
+      grid.push(row);
     }
     seatMapLayout.forEach((seat: any) => {
-      grid[seat.row][seat.col] = seat;
+      grid[seat.row - minr][seat.col - minc] = seat;
     });
-    return { maxCol: mc, maxRow: mr, gridCols: mc + 1, seatGrid: grid };
+    return { gridCols: cols, seatGrid: grid };
   }, [seatMapLayout]);
 
   if (isLoading) {
