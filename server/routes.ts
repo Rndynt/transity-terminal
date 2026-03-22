@@ -385,6 +385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/trips/:tripId/stop-times', asyncHandler(tripStopTimesController.getByTrip.bind(tripStopTimesController)));
   app.get('/api/trips/:tripId/stop-times/effective', asyncHandler(tripStopTimesController.getByTripWithEffectiveFlags.bind(tripStopTimesController)));
   app.post('/api/trips/:tripId/stop-times/bulk-upsert', asyncHandler(tripStopTimesController.bulkUpsert.bind(tripStopTimesController)));
+  app.post('/api/trips/:tripId/stop-times/sync-from-pattern', asyncHandler(tripStopTimesController.syncFromPattern.bind(tripStopTimesController)));
   app.post('/api/trips/:tripId/derive-legs', asyncHandler(tripStopTimesController.deriveLegs.bind(tripStopTimesController)));
   app.post('/api/trips/:tripId/precompute-seat-inventory', asyncHandler(tripStopTimesController.precomputeSeatInventory.bind(tripStopTimesController)));
   app.post('/api/trip-stop-times', asyncHandler(tripStopTimesController.create.bind(tripStopTimesController)));

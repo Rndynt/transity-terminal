@@ -98,6 +98,7 @@ export const tripsApi = {
   getStopTimes: (id: string) => fetch(`/api/trips/${id}/stop-times`).then(res => res.json()) as Promise<TripStopTime[]>,
   getStopTimesWithEffectiveFlags: (id: string) => fetch(`/api/trips/${id}/stop-times/effective`).then(res => res.json()),
   bulkUpsertStopTimes: (id: string, data: any[]) => apiRequest('POST', `/api/trips/${id}/stop-times/bulk-upsert`, data).then(res => res.json()),
+  syncStopTimesFromPattern: (id: string) => apiRequest('POST', `/api/trips/${id}/stop-times/sync-from-pattern`).then(res => res.json()),
   getSeatmap: (id: string, originSeq: number, destinationSeq: number) => 
     fetch(`/api/trips/${id}/seatmap?originSeq=${originSeq}&destinationSeq=${destinationSeq}`)
       .then(res => res.json()) as Promise<SeatmapResponse>,

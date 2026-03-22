@@ -27,7 +27,57 @@ export class TripStopTimesService {
   }
 
   async getTripStopTimesWithEffectiveFlags(tripId: string): Promise<any[]> {
+    const existing = await this.storage.getTripStopTimesWithEffectiveFlags(tripId);
+    if (existing.length > 0) return existing;
+
+    const trip = await this.storage.getTripById(tripId);
+    if (!trip) return [];
+
+    const patternStops = await this.storage.getPatternStops(trip.patternId);
+    if (patternStops.length === 0) return [];
+
+    const stopTimesData = patternStops.map(ps => ({
+      tripId,
+      stopId: ps.stopId,
+      stopSequence: ps.stopSequence,
+      arriveAt: null,
+      departAt: null,
+      dwellSeconds: ps.dwellSeconds || 0,
+      boardingAllowed: null,
+      alightingAllowed: null,
+    }));
+    await this.storage.bulkUpsertTripStopTimes(tripId, stopTimesData);
+
     return await this.storage.getTripStopTimesWithEffectiveFlags(tripId);
+  }
+
+  async syncFromPattern(tripId: string): Promise<{ synced: boolean; stopCount: number }> {
+    const trip = await this.storage.getTripById(tripId);
+    if (!trip) throw new Error(`Trip with id ${tripId} not found`);
+
+    const hasBookings = await this.storage.tripHasBookings(tripId);
+    if (hasBookings) {
+      throw new Error('Tidak bisa sync halte karena trip sudah memiliki booking.');
+    }
+
+    const patternStops = await this.storage.getPatternStops(trip.patternId);
+    if (patternStops.length === 0) {
+      throw new Error('Pola rute belum memiliki halte. Tambahkan halte ke pola rute terlebih dahulu.');
+    }
+
+    const stopTimesData = patternStops.map(ps => ({
+      tripId,
+      stopId: ps.stopId,
+      stopSequence: ps.stopSequence,
+      arriveAt: null,
+      departAt: null,
+      dwellSeconds: ps.dwellSeconds || 0,
+      boardingAllowed: null,
+      alightingAllowed: null,
+    }));
+    await this.storage.bulkUpsertTripStopTimes(tripId, stopTimesData);
+
+    return { synced: true, stopCount: patternStops.length };
   }
 
   async bulkUpsertTripStopTimes(tripId: string, stopTimes: any[]): Promise<void> {

@@ -218,6 +218,18 @@ export class TripStopTimesController {
     });
   }
 
+  async syncFromPattern(req: Request, res: Response) {
+    const { tripId } = req.params;
+    try {
+      const result = await this.tripStopTimesService.syncFromPattern(tripId);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({
+        error: error instanceof Error ? error.message : 'Gagal sync halte dari pola rute',
+      });
+    }
+  }
+
   async deriveLegs(req: Request, res: Response) {
     const { tripId } = req.params;
     

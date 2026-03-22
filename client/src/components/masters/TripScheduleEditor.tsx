@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Save, Zap, AlertTriangle, Clock, ArrowDown, ArrowUp } from 'lucide-react';
+import { Save, Zap, AlertTriangle, Clock, ArrowDown, ArrowUp, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Trip, TripStopTimeWithEffectiveFlags } from '@shared/schema';
 
@@ -161,6 +161,25 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
     },
   });
 
+  const syncMutation = useMutation({
+    mutationFn: () => tripsApi.syncStopTimesFromPattern(trip.id),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trips', trip.id, 'stop-times'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/trips', trip.id, 'stop-times', 'effective'] });
+      toast({
+        title: 'Halte berhasil disinkronkan',
+        description: `${data.stopCount} halte dimuat dari pola rute.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Gagal sync halte',
+        description: error.message || 'Terjadi kesalahan.',
+        variant: 'destructive',
+      });
+    },
+  });
+
   useEffect(() => {
     if (stopTimesData.length > 0) {
       const formData = [...stopTimesData]
@@ -246,12 +265,22 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
     );
   }
 
-  if (stopTimes.length === 0) {
+  if (stopTimes.length === 0 && !isLoading) {
     return (
-      <Alert>
-        <AlertTriangle className="h-4 w-4" />
-        <AlertDescription>Tidak ada halte ditemukan untuk trip ini. Pastikan pola rute memiliki halte.</AlertDescription>
-      </Alert>
+      <div className="space-y-3">
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>Tidak ada halte ditemukan untuk trip ini. Jika Anda sudah menambahkan halte ke pola rute, klik tombol di bawah untuk memuat halte.</AlertDescription>
+        </Alert>
+        <Button
+          size="sm"
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending}
+        >
+          <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', syncMutation.isPending && 'animate-spin')} />
+          {syncMutation.isPending ? 'Memuat halte...' : 'Muat Halte dari Pola Rute'}
+        </Button>
+      </div>
     );
   }
 
@@ -460,9 +489,24 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
 
       {/* Action bar */}
       <div className="flex items-center justify-between gap-2 pt-2 border-t">
-        <Button variant="ghost" size="sm" onClick={onClose} data-testid="close-button">
-          Tutup
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose} data-testid="close-button">
+            Tutup
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (confirm('Ini akan menimpa halte trip dengan halte terbaru dari pola rute. Waktu jadwal yang sudah diisi akan direset. Lanjutkan?')) {
+                syncMutation.mutate();
+              }
+            }}
+            disabled={syncMutation.isPending || bulkUpsertMutation.isPending}
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', syncMutation.isPending && 'animate-spin')} />
+            {syncMutation.isPending ? 'Sync...' : 'Sync dari Rute'}
+          </Button>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             size="sm"
