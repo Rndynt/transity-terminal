@@ -625,9 +625,9 @@ export default function SeatMap({
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
-        <div className="flex flex-col gap-1 w-fit mx-auto">
+        <div className="flex flex-col gap-1 items-center w-full">
           {seatGrid.map((row, ri) => (
-            <div key={ri} className="flex gap-1">
+            <div key={ri} className="flex gap-1 justify-center">
               {row.map((seat, ci) => {
                 if (seat === null) return <div key={`gap-${ri}-${ci}`} className="w-9 h-9" />;
                 const status = getSeatStatus(seat.seat_no);
