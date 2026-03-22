@@ -13,6 +13,9 @@ export class TripsController {
 
   async getAll(req: Request, res: Response) {
     const { date } = req.query;
+    // Trips are system-wide resources (no outlet_id column in schema).
+    // Outlet-scoped staff use GET /api/cso/available-trips (which enforces outlet).
+    // This endpoint is primarily used by admin/manager roles that have no outlet restriction.
     const trips = await this.tripsService.getAllTrips(date as string);
     res.json(trips);
   }

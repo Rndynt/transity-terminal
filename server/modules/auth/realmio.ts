@@ -16,6 +16,7 @@ declare global {
       user?: RealmioUser;
       rbac?: EffectivePermissions;
       scopedOutletId?: string | null;
+      outletId?: string | null;
     }
   }
 }

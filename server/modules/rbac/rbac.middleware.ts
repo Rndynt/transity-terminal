@@ -12,7 +12,9 @@ export function requireFlag(flagId: string) {
 
 export function requireOutletScope() {
   return (req: Request, _res: Response, next: NextFunction): void => {
-    req.scopedOutletId = req.rbac?.outletId ?? null;
+    const outletId = req.rbac?.outletId ?? null;
+    req.scopedOutletId = outletId;
+    req.outletId = outletId;
     next();
   };
 }

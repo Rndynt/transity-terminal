@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { webSocketService } from "./realtime/ws";
 import { z } from "zod";
@@ -315,7 +315,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   // Permissions endpoint — returns effective flags, role, and outletId for the authenticated user
-  app.get('/api/permissions/me', asyncHandler(async (req: any, res: any) => {
+  app.get('/api/permissions/me', asyncHandler(async (req: Request, res: Response) => {
     const rbac = req.rbac;
     res.json({
       flags: rbac ? [...rbac.flags] : [],
