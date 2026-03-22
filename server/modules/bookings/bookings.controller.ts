@@ -85,7 +85,11 @@ export class BookingsController {
 
   async getAll(req: Request, res: Response) {
     const tripId = typeof req.query.tripId === 'string' ? req.query.tripId : undefined;
-    const bookings = await this.bookingsService.getAllBookings(tripId);
+    const outletId = req.scopedOutletId ?? req.rbac?.outletId ?? null;
+    let bookings = await this.bookingsService.getAllBookings(tripId);
+    if (outletId) {
+      bookings = bookings.filter((b) => b.outletId === outletId);
+    }
     res.json(bookings);
   }
 
@@ -138,10 +142,12 @@ export class BookingsController {
       
       // Validate seat ownership - this will be checked in the service
       // Convert totalAmount to string for database storage
+      const staffOutletId = req.rbac?.outletId ?? null;
       const bookingDataWithStringAmount = {
         ...bookingData,
+        outletId: bookingData.outletId ?? staffOutletId ?? undefined,
         totalAmount: bookingData.totalAmount.toString(),
-        createdBy: req.headers['x-operator-id'] as string || 'default-operator'
+        createdBy: req.user?.id || req.headers['x-operator-id'] as string || 'default-operator'
       };
 
       const result = await this.bookingsService.createBooking(

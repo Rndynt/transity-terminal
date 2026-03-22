@@ -278,6 +278,7 @@ import { SpjController } from "./modules/spj/spj.controller";
 import { appAuthMiddleware, optionalAuthMiddleware } from "./modules/app/app.auth";
 import { registerAuthRoutes } from "./modules/auth/auth.routes";
 import { requireAuth } from "./modules/auth/realmio";
+import { requireFlag, requireOutletScope } from "./modules/rbac/rbac.middleware";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   registerAuthRoutes(app);
@@ -313,73 +314,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 
+  // Permissions endpoint — returns effective flags, role, and outletId for the authenticated user
+  app.get('/api/permissions/me', asyncHandler(async (req: any, res: any) => {
+    const rbac = req.rbac;
+    res.json({
+      flags: rbac ? [...rbac.flags] : [],
+      role: rbac?.roleId ?? null,
+      outletId: rbac?.outletId ?? null,
+    });
+  }));
+
   // Drivers routes
   app.get('/api/drivers', asyncHandler(driversController.getAll.bind(driversController)));
   app.get('/api/drivers/:id', asyncHandler(driversController.getById.bind(driversController)));
-  app.post('/api/drivers', asyncHandler(driversController.create.bind(driversController)));
-  app.put('/api/drivers/:id', asyncHandler(driversController.update.bind(driversController)));
-  app.delete('/api/drivers/:id', asyncHandler(driversController.delete.bind(driversController)));
+  app.post('/api/drivers', requireFlag('master.drivers'), asyncHandler(driversController.create.bind(driversController)));
+  app.put('/api/drivers/:id', requireFlag('master.drivers'), asyncHandler(driversController.update.bind(driversController)));
+  app.delete('/api/drivers/:id', requireFlag('master.drivers'), asyncHandler(driversController.delete.bind(driversController)));
 
   // Stops routes
   app.get('/api/stops', asyncHandler(stopsController.getAll.bind(stopsController)));
   app.get('/api/stops/:id', asyncHandler(stopsController.getById.bind(stopsController)));
-  app.post('/api/stops', asyncHandler(stopsController.create.bind(stopsController)));
-  app.put('/api/stops/:id', asyncHandler(stopsController.update.bind(stopsController)));
-  app.delete('/api/stops/:id', asyncHandler(stopsController.delete.bind(stopsController)));
+  app.post('/api/stops', requireFlag('master.stops'), asyncHandler(stopsController.create.bind(stopsController)));
+  app.put('/api/stops/:id', requireFlag('master.stops'), asyncHandler(stopsController.update.bind(stopsController)));
+  app.delete('/api/stops/:id', requireFlag('master.stops'), asyncHandler(stopsController.delete.bind(stopsController)));
 
   // Outlets routes
   app.get('/api/outlets', asyncHandler(outletsController.getAll.bind(outletsController)));
   app.get('/api/outlets/:id', asyncHandler(outletsController.getById.bind(outletsController)));
-  app.post('/api/outlets', asyncHandler(outletsController.create.bind(outletsController)));
-  app.put('/api/outlets/:id', asyncHandler(outletsController.update.bind(outletsController)));
-  app.delete('/api/outlets/:id', asyncHandler(outletsController.delete.bind(outletsController)));
+  app.post('/api/outlets', requireFlag('master.outlets'), asyncHandler(outletsController.create.bind(outletsController)));
+  app.put('/api/outlets/:id', requireFlag('master.outlets'), asyncHandler(outletsController.update.bind(outletsController)));
+  app.delete('/api/outlets/:id', requireFlag('master.outlets'), asyncHandler(outletsController.delete.bind(outletsController)));
 
   // Vehicles routes
   app.get('/api/vehicles', asyncHandler(vehiclesController.getAll.bind(vehiclesController)));
   app.get('/api/vehicles/:id', asyncHandler(vehiclesController.getById.bind(vehiclesController)));
-  app.post('/api/vehicles', asyncHandler(vehiclesController.create.bind(vehiclesController)));
-  app.put('/api/vehicles/:id', asyncHandler(vehiclesController.update.bind(vehiclesController)));
-  app.delete('/api/vehicles/:id', asyncHandler(vehiclesController.delete.bind(vehiclesController)));
+  app.post('/api/vehicles', requireFlag('master.vehicles'), asyncHandler(vehiclesController.create.bind(vehiclesController)));
+  app.put('/api/vehicles/:id', requireFlag('master.vehicles'), asyncHandler(vehiclesController.update.bind(vehiclesController)));
+  app.delete('/api/vehicles/:id', requireFlag('master.vehicles'), asyncHandler(vehiclesController.delete.bind(vehiclesController)));
 
   // Layouts routes
   app.get('/api/layouts', asyncHandler(layoutsController.getAll.bind(layoutsController)));
   app.get('/api/layouts/:id', asyncHandler(layoutsController.getById.bind(layoutsController)));
-  app.post('/api/layouts', asyncHandler(layoutsController.create.bind(layoutsController)));
-  app.put('/api/layouts/:id', asyncHandler(layoutsController.update.bind(layoutsController)));
-  app.delete('/api/layouts/:id', asyncHandler(layoutsController.delete.bind(layoutsController)));
+  app.post('/api/layouts', requireFlag('master.layouts'), asyncHandler(layoutsController.create.bind(layoutsController)));
+  app.put('/api/layouts/:id', requireFlag('master.layouts'), asyncHandler(layoutsController.update.bind(layoutsController)));
+  app.delete('/api/layouts/:id', requireFlag('master.layouts'), asyncHandler(layoutsController.delete.bind(layoutsController)));
 
   // Trip Patterns routes
   app.get('/api/trip-patterns', asyncHandler(tripPatternsController.getAll.bind(tripPatternsController)));
   app.get('/api/trip-patterns/:id', asyncHandler(tripPatternsController.getById.bind(tripPatternsController)));
-  app.post('/api/trip-patterns', asyncHandler(tripPatternsController.create.bind(tripPatternsController)));
-  app.put('/api/trip-patterns/:id', asyncHandler(tripPatternsController.update.bind(tripPatternsController)));
-  app.delete('/api/trip-patterns/:id', asyncHandler(tripPatternsController.delete.bind(tripPatternsController)));
+  app.post('/api/trip-patterns', requireFlag('master.trip_patterns'), asyncHandler(tripPatternsController.create.bind(tripPatternsController)));
+  app.put('/api/trip-patterns/:id', requireFlag('master.trip_patterns'), asyncHandler(tripPatternsController.update.bind(tripPatternsController)));
+  app.delete('/api/trip-patterns/:id', requireFlag('master.trip_patterns'), asyncHandler(tripPatternsController.delete.bind(tripPatternsController)));
 
   // Pattern Stops routes
   app.get('/api/trip-patterns/:patternId/stops', asyncHandler(patternStopsController.getByPattern.bind(patternStopsController)));
-  app.post('/api/pattern-stops', asyncHandler(patternStopsController.create.bind(patternStopsController)));
-  app.put('/api/pattern-stops/:id', asyncHandler(patternStopsController.update.bind(patternStopsController)));
-  app.delete('/api/pattern-stops/:id', asyncHandler(patternStopsController.delete.bind(patternStopsController)));
-  app.post('/api/trip-patterns/:patternId/stops/bulk-replace', asyncHandler(patternStopsController.bulkReplace.bind(patternStopsController)));
+  app.post('/api/pattern-stops', requireFlag('master.trip_patterns'), asyncHandler(patternStopsController.create.bind(patternStopsController)));
+  app.put('/api/pattern-stops/:id', requireFlag('master.trip_patterns'), asyncHandler(patternStopsController.update.bind(patternStopsController)));
+  app.delete('/api/pattern-stops/:id', requireFlag('master.trip_patterns'), asyncHandler(patternStopsController.delete.bind(patternStopsController)));
+  app.post('/api/trip-patterns/:patternId/stops/bulk-replace', requireFlag('master.trip_patterns'), asyncHandler(patternStopsController.bulkReplace.bind(patternStopsController)));
 
   // Trip Bases routes
   app.get('/api/trip-bases', asyncHandler(tripBasesController.getAllTripBases.bind(tripBasesController)));
   app.get('/api/trip-bases/:id', asyncHandler(tripBasesController.getTripBaseById.bind(tripBasesController)));
-  app.post('/api/trip-bases', asyncHandler(tripBasesController.createTripBase.bind(tripBasesController)));
-  app.put('/api/trip-bases/:id', asyncHandler(tripBasesController.updateTripBase.bind(tripBasesController)));
-  app.delete('/api/trip-bases/:id', asyncHandler(tripBasesController.deleteTripBase.bind(tripBasesController)));
+  app.post('/api/trip-bases', requireFlag('master.trips'), asyncHandler(tripBasesController.createTripBase.bind(tripBasesController)));
+  app.put('/api/trip-bases/:id', requireFlag('master.trips'), asyncHandler(tripBasesController.updateTripBase.bind(tripBasesController)));
+  app.delete('/api/trip-bases/:id', requireFlag('master.trips'), asyncHandler(tripBasesController.deleteTripBase.bind(tripBasesController)));
 
   // CSO Virtual Scheduling routes
-  app.post('/api/cso/materialize-trip', asyncHandler(tripBasesController.materializeTrip.bind(tripBasesController)));
-  app.post('/api/trips/:id/close', asyncHandler(tripBasesController.closeTrip.bind(tripBasesController)));
+  app.post('/api/cso/materialize-trip', requireFlag('action.trip.materialize'), asyncHandler(tripBasesController.materializeTrip.bind(tripBasesController)));
+  app.post('/api/trips/:id/close', requireFlag('action.trip.close'), asyncHandler(tripBasesController.closeTrip.bind(tripBasesController)));
 
   // Trips routes
   app.get('/api/trips', asyncHandler(tripsController.getAll.bind(tripsController)));
   app.get('/api/cso/available-trips', asyncHandler(tripsController.getCsoAvailableTrips.bind(tripsController)));
   app.get('/api/trips/:id', asyncHandler(tripsController.getById.bind(tripsController)));
-  app.post('/api/trips', asyncHandler(tripsController.create.bind(tripsController)));
-  app.put('/api/trips/:id', asyncHandler(tripsController.update.bind(tripsController)));
-  app.delete('/api/trips/:id', asyncHandler(tripsController.delete.bind(tripsController)));
+  app.post('/api/trips', requireFlag('master.trips'), asyncHandler(tripsController.create.bind(tripsController)));
+  app.put('/api/trips/:id', requireFlag('master.trips'), asyncHandler(tripsController.update.bind(tripsController)));
+  app.delete('/api/trips/:id', requireFlag('master.trips'), asyncHandler(tripsController.delete.bind(tripsController)));
 
   // Trip Stop Times routes
   app.get('/api/trips/:tripId/stop-times', asyncHandler(tripStopTimesController.getByTrip.bind(tripStopTimesController)));
@@ -419,15 +430,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Price Rules routes
   app.get('/api/price-rules', asyncHandler(priceRulesController.getAll.bind(priceRulesController)));
-  app.post('/api/price-rules', asyncHandler(priceRulesController.create.bind(priceRulesController)));
-  app.put('/api/price-rules/:id', asyncHandler(priceRulesController.update.bind(priceRulesController)));
-  app.delete('/api/price-rules/:id', asyncHandler(priceRulesController.delete.bind(priceRulesController)));
+  app.post('/api/price-rules', requireFlag('master.price_rules'), asyncHandler(priceRulesController.create.bind(priceRulesController)));
+  app.put('/api/price-rules/:id', requireFlag('master.price_rules'), asyncHandler(priceRulesController.update.bind(priceRulesController)));
+  app.delete('/api/price-rules/:id', requireFlag('master.price_rules'), asyncHandler(priceRulesController.delete.bind(priceRulesController)));
 
   // Pricing routes
   app.get('/api/pricing/quote-fare', asyncHandler(pricingController.quoteFare.bind(pricingController)));
 
   // Bookings routes
-  app.get('/api/bookings', asyncHandler(bookingsController.getAll.bind(bookingsController)));
+  app.get('/api/bookings', requireOutletScope(), asyncHandler(bookingsController.getAll.bind(bookingsController)));
   // Lookup by booking code / PNR (must be before /:id)
   app.get('/api/bookings/by-code/:code', asyncHandler(async (req, res) => {
     const booking = await storage.getBookingByCode(req.params.code.toUpperCase());
@@ -435,19 +446,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(booking);
   }));
   app.get('/api/bookings/:id', asyncHandler(bookingsController.getById.bind(bookingsController)));
-  app.post('/api/bookings', asyncHandler(bookingsController.create.bind(bookingsController)));
-  app.post('/api/bookings/pending', asyncHandler(bookingsController.createPendingBooking.bind(bookingsController)));
+  app.post('/api/bookings', requireFlag('action.booking.create'), asyncHandler(bookingsController.create.bind(bookingsController)));
+  app.post('/api/bookings/pending', requireFlag('action.booking.create'), asyncHandler(bookingsController.createPendingBooking.bind(bookingsController)));
   app.get('/api/bookings/pending', asyncHandler(bookingsController.getPendingBookings.bind(bookingsController)));
   app.delete('/api/bookings/pending/:id', asyncHandler(bookingsController.releasePendingBooking.bind(bookingsController)));
 
-  app.post('/api/passengers/:passengerId/unseat', asyncHandler(bookingsController.unseatPassenger.bind(bookingsController)));
-  app.post('/api/passengers/:passengerId/assign-seat', asyncHandler(bookingsController.assignSeatToUnseated.bind(bookingsController)));
-  app.post('/api/passengers/:passengerId/reschedule', asyncHandler(bookingsController.reschedulePassenger.bind(bookingsController)));
-  app.post('/api/bookings/:bookingId/unseat-all', asyncHandler(bookingsController.unseatAllPassengers.bind(bookingsController)));
+  app.post('/api/passengers/:passengerId/unseat', requireFlag('action.passenger.unseat'), asyncHandler(bookingsController.unseatPassenger.bind(bookingsController)));
+  app.post('/api/passengers/:passengerId/assign-seat', requireFlag('action.passenger.assign_seat'), asyncHandler(bookingsController.assignSeatToUnseated.bind(bookingsController)));
+  app.post('/api/passengers/:passengerId/reschedule', requireFlag('action.passenger.reschedule'), asyncHandler(bookingsController.reschedulePassenger.bind(bookingsController)));
+  app.post('/api/bookings/:bookingId/unseat-all', requireFlag('action.passenger.unseat'), asyncHandler(bookingsController.unseatAllPassengers.bind(bookingsController)));
   app.get('/api/bookings/:bookingId/history', asyncHandler(bookingsController.getBookingHistory.bind(bookingsController)));
 
   // Ticket (passenger-level) cancel — cancel satu penumpang tanpa batalkan booking
-  app.patch('/api/passengers/:id/cancel', asyncHandler(async (req, res) => {
+  app.patch('/api/passengers/:id/cancel', requireFlag('action.booking.cancel'), asyncHandler(async (req, res) => {
     const { reason } = req.body || {};
     if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
       return res.status(400).json({ error: 'Alasan pembatalan wajib diisi' });
@@ -527,21 +538,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Payments routes
   app.get('/api/bookings/:bookingId/payments', asyncHandler(paymentsController.getByBooking.bind(paymentsController)));
-  app.post('/api/payments', asyncHandler(paymentsController.create.bind(paymentsController)));
+  app.post('/api/payments', requireFlag('action.payment.create'), asyncHandler(paymentsController.create.bind(paymentsController)));
 
   // Cargo types routes
   app.get('/api/cargo-types', asyncHandler(cargoController.getCargoTypes.bind(cargoController)));
   app.get('/api/cargo-types/:id', asyncHandler(cargoController.getCargoTypeById.bind(cargoController)));
-  app.post('/api/cargo-types', asyncHandler(cargoController.createCargoType.bind(cargoController)));
-  app.put('/api/cargo-types/:id', asyncHandler(cargoController.updateCargoType.bind(cargoController)));
-  app.delete('/api/cargo-types/:id', asyncHandler(cargoController.deleteCargoType.bind(cargoController)));
+  app.post('/api/cargo-types', requireFlag('master.cargo_types'), asyncHandler(cargoController.createCargoType.bind(cargoController)));
+  app.put('/api/cargo-types/:id', requireFlag('master.cargo_types'), asyncHandler(cargoController.updateCargoType.bind(cargoController)));
+  app.delete('/api/cargo-types/:id', requireFlag('master.cargo_types'), asyncHandler(cargoController.deleteCargoType.bind(cargoController)));
 
   // Cargo rates routes
   app.get('/api/cargo-rates', asyncHandler(cargoController.getCargoRates.bind(cargoController)));
   app.get('/api/cargo-rates/:id', asyncHandler(cargoController.getCargoRateById.bind(cargoController)));
-  app.post('/api/cargo-rates', asyncHandler(cargoController.createCargoRate.bind(cargoController)));
-  app.put('/api/cargo-rates/:id', asyncHandler(cargoController.updateCargoRate.bind(cargoController)));
-  app.delete('/api/cargo-rates/:id', asyncHandler(cargoController.deleteCargoRate.bind(cargoController)));
+  app.post('/api/cargo-rates', requireFlag('master.cargo_rates'), asyncHandler(cargoController.createCargoRate.bind(cargoController)));
+  app.put('/api/cargo-rates/:id', requireFlag('master.cargo_rates'), asyncHandler(cargoController.updateCargoRate.bind(cargoController)));
+  app.delete('/api/cargo-rates/:id', requireFlag('master.cargo_rates'), asyncHandler(cargoController.deleteCargoRate.bind(cargoController)));
 
   // Cargo tariff quote
   app.get('/api/cargo/quote-tariff', asyncHandler(cargoController.quoteTariff.bind(cargoController)));
@@ -550,9 +561,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/cargo', asyncHandler(cargoController.getAll.bind(cargoController)));
   app.get('/api/cargo/waybill/:waybillNumber', asyncHandler(cargoController.getByWaybill.bind(cargoController)));
   app.get('/api/cargo/:id', asyncHandler(cargoController.getById.bind(cargoController)));
-  app.post('/api/cargo', asyncHandler(cargoController.create.bind(cargoController)));
-  app.put('/api/cargo/:id', asyncHandler(cargoController.update.bind(cargoController)));
-  app.patch('/api/cargo/:id/status', asyncHandler(cargoController.updateStatus.bind(cargoController)));
+  app.post('/api/cargo', requireFlag('action.cargo.create'), asyncHandler(cargoController.create.bind(cargoController)));
+  app.put('/api/cargo/:id', requireFlag('action.cargo.manage'), asyncHandler(cargoController.update.bind(cargoController)));
+  app.patch('/api/cargo/:id/status', requireFlag('action.cargo.manage'), asyncHandler(cargoController.updateStatus.bind(cargoController)));
 
   // Trip Cost Templates routes
   app.get('/api/cost-templates', asyncHandler(async (req: any, res: any) => {
@@ -572,19 +583,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const items = await storage.getTripCostItems(req.params.id);
     res.json({ ...template, items });
   }));
-  app.post('/api/cost-templates', asyncHandler(async (req: any, res: any) => {
+  app.post('/api/cost-templates', requireFlag('master.cost_templates'), asyncHandler(async (req: any, res: any) => {
     const parsed = insertTripCostTemplateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const template = await storage.createTripCostTemplate(parsed.data);
     res.status(201).json(template);
   }));
-  app.put('/api/cost-templates/:id', asyncHandler(async (req: any, res: any) => {
+  app.put('/api/cost-templates/:id', requireFlag('master.cost_templates'), asyncHandler(async (req: any, res: any) => {
     const parsed = insertTripCostTemplateSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const template = await storage.updateTripCostTemplate(req.params.id, parsed.data);
     res.json(template);
   }));
-  app.delete('/api/cost-templates/:id', asyncHandler(async (req: any, res: any) => {
+  app.delete('/api/cost-templates/:id', requireFlag('master.cost_templates'), asyncHandler(async (req: any, res: any) => {
     await storage.deleteTripCostTemplate(req.params.id);
     res.status(204).end();
   }));
@@ -594,19 +605,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const items = await storage.getTripCostItems(req.params.templateId);
     res.json(items);
   }));
-  app.post('/api/cost-templates/:templateId/items', asyncHandler(async (req: any, res: any) => {
+  app.post('/api/cost-templates/:templateId/items', requireFlag('master.cost_templates'), asyncHandler(async (req: any, res: any) => {
     const parsed = insertTripCostItemSchema.safeParse({ ...req.body, templateId: req.params.templateId });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const item = await storage.createTripCostItem(parsed.data);
     res.status(201).json(item);
   }));
-  app.put('/api/cost-items/:id', asyncHandler(async (req: any, res: any) => {
+  app.put('/api/cost-items/:id', requireFlag('master.cost_templates'), asyncHandler(async (req: any, res: any) => {
     const parsed = insertTripCostItemSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const item = await storage.updateTripCostItem(req.params.id, parsed.data);
     res.json(item);
   }));
-  app.delete('/api/cost-items/:id', asyncHandler(async (req: any, res: any) => {
+  app.delete('/api/cost-items/:id', requireFlag('master.cost_templates'), asyncHandler(async (req: any, res: any) => {
     await storage.deleteTripCostItem(req.params.id);
     res.status(204).end();
   }));
@@ -615,13 +626,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const promosController = new PromosController(storage);
   app.get('/api/promotions', asyncHandler(promosController.getPromotions.bind(promosController)));
   app.get('/api/promotions/:id', asyncHandler(promosController.getPromotionById.bind(promosController)));
-  app.post('/api/promotions', asyncHandler(promosController.createPromotion.bind(promosController)));
-  app.patch('/api/promotions/:id', asyncHandler(promosController.updatePromotion.bind(promosController)));
-  app.delete('/api/promotions/:id', asyncHandler(promosController.deletePromotion.bind(promosController)));
+  app.post('/api/promotions', requireFlag('master.promos'), asyncHandler(promosController.createPromotion.bind(promosController)));
+  app.patch('/api/promotions/:id', requireFlag('master.promos'), asyncHandler(promosController.updatePromotion.bind(promosController)));
+  app.delete('/api/promotions/:id', requireFlag('master.promos'), asyncHandler(promosController.deletePromotion.bind(promosController)));
   app.get('/api/vouchers', asyncHandler(promosController.getVouchers.bind(promosController)));
-  app.post('/api/vouchers/generate', asyncHandler(promosController.generateVouchers.bind(promosController)));
-  app.patch('/api/vouchers/:id/revoke', asyncHandler(promosController.revokeVoucher.bind(promosController)));
-  app.delete('/api/vouchers/:id', asyncHandler(promosController.deleteVoucher.bind(promosController)));
+  app.post('/api/vouchers/generate', requireFlag('master.promos'), asyncHandler(promosController.generateVouchers.bind(promosController)));
+  app.patch('/api/vouchers/:id/revoke', requireFlag('master.promos'), asyncHandler(promosController.revokeVoucher.bind(promosController)));
+  app.delete('/api/vouchers/:id', requireFlag('master.promos'), asyncHandler(promosController.deleteVoucher.bind(promosController)));
   app.post('/api/promos/validate', asyncHandler(promosController.validatePromoCode.bind(promosController)));
 
   // SPJ routes
@@ -629,14 +640,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/spj', asyncHandler(spjController.getAll.bind(spjController)));
   app.get('/api/spj/:id', asyncHandler(spjController.getById.bind(spjController)));
   app.get('/api/spj/trip/:tripId', asyncHandler(spjController.getByTripId.bind(spjController)));
-  app.post('/api/spj', asyncHandler(spjController.create.bind(spjController)));
-  app.patch('/api/spj/:id/issue', asyncHandler(spjController.issue.bind(spjController)));
-  app.patch('/api/spj/:id/settle', asyncHandler(spjController.settle.bind(spjController)));
-  app.patch('/api/spj/:id/notes', asyncHandler(spjController.updateNotes.bind(spjController)));
-  app.delete('/api/spj/:id', asyncHandler(spjController.delete.bind(spjController)));
-  app.post('/api/spj/:spjId/cost-lines', asyncHandler(spjController.addCostLine.bind(spjController)));
-  app.patch('/api/spj/cost-lines/:id', asyncHandler(spjController.updateCostLine.bind(spjController)));
-  app.delete('/api/spj/cost-lines/:id', asyncHandler(spjController.deleteCostLine.bind(spjController)));
+  app.post('/api/spj', requireFlag('action.spj.create'), asyncHandler(spjController.create.bind(spjController)));
+  app.patch('/api/spj/:id/issue', requireFlag('action.spj.issue'), asyncHandler(spjController.issue.bind(spjController)));
+  app.patch('/api/spj/:id/settle', requireFlag('action.spj.settle'), asyncHandler(spjController.settle.bind(spjController)));
+  app.patch('/api/spj/:id/notes', requireFlag('action.spj.create'), asyncHandler(spjController.updateNotes.bind(spjController)));
+  app.delete('/api/spj/:id', requireFlag('action.spj.create'), asyncHandler(spjController.delete.bind(spjController)));
+  app.post('/api/spj/:spjId/cost-lines', requireFlag('action.spj.create'), asyncHandler(spjController.addCostLine.bind(spjController)));
+  app.patch('/api/spj/cost-lines/:id', requireFlag('action.spj.create'), asyncHandler(spjController.updateCostLine.bind(spjController)));
+  app.delete('/api/spj/cost-lines/:id', requireFlag('action.spj.create'), asyncHandler(spjController.deleteCostLine.bind(spjController)));
   app.get('/api/spj/trip/:tripId/profit', asyncHandler(spjController.getTripProfit.bind(spjController)));
 
   // Reports routes

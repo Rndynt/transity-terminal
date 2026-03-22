@@ -15,6 +15,7 @@ declare global {
     interface Request {
       user?: RealmioUser;
       rbac?: EffectivePermissions;
+      scopedOutletId?: string | null;
     }
   }
 }
