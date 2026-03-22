@@ -4,10 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { DataTable } from '@/components/shared/DataTable';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
@@ -620,77 +619,74 @@ export default function TripPatternsManager() {
         isPending={deleteMutation.isPending}
       />
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
-          ) : (
-            <Table data-testid="patterns-table">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Kode</TableHead>
-                  <TableHead>Nama</TableHead>
-                  <TableHead>Kelas Kendaraan</TableHead>
-                  <TableHead>Layout Default</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Tag</TableHead>
-                  <TableHead className="w-32">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPatterns.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                      <MapPin className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada pola perjalanan'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredPatterns.map(pattern => (
-                    <TableRow key={pattern.id} data-testid={`pattern-row-${pattern.code}`}>
-                      <TableCell className="font-mono font-medium">{pattern.code}</TableCell>
-                      <TableCell>
-                        <p className="font-medium">{pattern.name}</p>
-                        {pattern.note && (
-                          <p className="text-xs text-muted-foreground mt-0.5">{pattern.note}</p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{pattern.vehicleClass || '-'}</TableCell>
-                      <TableCell>{getLayoutName(pattern.defaultLayoutId || '')}</TableCell>
-                      <TableCell>
-                        {pattern.active ? (
-                          <Badge variant="secondary">Aktif</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-muted-foreground">Nonaktif</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {pattern.tags?.map(tag => (
-                            <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <RowActionsMenu
-                          actions={[
-                            { label: 'Kelola Halte', icon: <MapPin className="h-3.5 w-3.5" />, onClick: () => handleManageStops(pattern) },
-                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(pattern) },
-                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(pattern.id), variant: 'destructive', disabled: deleteMutation.isPending },
-                          ]}
-                          data-testid={`actions-pattern-${pattern.code}`}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable
+        data-testid="patterns-table"
+        data={filteredPatterns}
+        keyExtractor={(p) => p.id}
+        isLoading={isLoading}
+        emptyIcon={<MapPin className="w-7 h-7" />}
+        emptyMessage="Belum ada pola perjalanan"
+        searchQuery={searchQuery}
+        rowTestId={(p) => `pattern-row-${p.code}`}
+        columns={[
+          {
+            key: 'code', header: 'Kode',
+            className: 'font-mono font-medium text-primary/80 whitespace-nowrap',
+            render: (p) => p.code,
+          },
+          {
+            key: 'name', header: 'Nama Rute',
+            render: (p) => (
+              <div>
+                <span className="font-medium leading-tight">{p.name}</span>
+                {p.note && <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{p.note}</p>}
+              </div>
+            ),
+          },
+          {
+            key: 'class', header: 'Kelas', hideOnMobile: true,
+            className: 'text-muted-foreground',
+            render: (p) => p.vehicleClass || '—',
+          },
+          {
+            key: 'layout', header: 'Layout', hideOnMobile: true,
+            className: 'text-muted-foreground',
+            render: (p) => getLayoutName(p.defaultLayoutId || ''),
+          },
+          {
+            key: 'status', header: 'Status',
+            render: (p) => p.active ? (
+              <Badge variant="secondary" className="text-[11px] py-0">Aktif</Badge>
+            ) : (
+              <Badge variant="outline" className="text-[11px] py-0 text-muted-foreground">Nonaktif</Badge>
+            ),
+          },
+          {
+            key: 'tags', header: 'Tag', hideOnMobile: true,
+            render: (p) => (
+              <div className="flex flex-wrap gap-0.5">
+                {p.tags?.map(tag => (
+                  <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0">{tag}</Badge>
+                ))}
+              </div>
+            ),
+          },
+          {
+            key: 'actions', header: 'Aksi',
+            headerClassName: 'text-right', className: 'text-right w-16',
+            render: (p) => (
+              <RowActionsMenu
+                actions={[
+                  { label: 'Kelola Halte', icon: <MapPin className="h-3.5 w-3.5" />, onClick: () => handleManageStops(p) },
+                  { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(p) },
+                  { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(p.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                ]}
+                data-testid={`actions-pattern-${p.code}`}
+              />
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

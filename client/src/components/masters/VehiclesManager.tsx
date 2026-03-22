@@ -4,8 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card, CardContent } from '@/components/ui/card';
+import { DataTable } from '@/components/shared/DataTable';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { vehiclesApi, layoutsApi } from '@/lib/api';
@@ -253,57 +252,57 @@ export default function VehiclesManager() {
         isPending={deleteMutation.isPending}
       />
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
-          ) : (
-            <Table data-testid="vehicles-table">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Kode</TableHead>
-                  <TableHead>Plat Nomor</TableHead>
-                  <TableHead>Layout</TableHead>
-                  <TableHead>Kapasitas</TableHead>
-                  <TableHead>Catatan</TableHead>
-                  <TableHead className="w-24 text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                      <Bus className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data kendaraan'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredData.map(vehicle => (
-                    <TableRow key={vehicle.id} data-testid={`vehicle-row-${vehicle.code}`}>
-                      <TableCell className="font-mono font-medium">{vehicle.code}</TableCell>
-                      <TableCell className="font-mono">{vehicle.plate}</TableCell>
-                      <TableCell>{getLayoutName(vehicle.layoutId)}</TableCell>
-                      <TableCell>{vehicle.capacity} kursi</TableCell>
-                      <TableCell className="max-w-xs truncate text-muted-foreground text-sm">{vehicle.notes || '-'}</TableCell>
-                      <TableCell className="text-right">
-                        <RowActionsMenu
-                          actions={[
-                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(vehicle) },
-                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(vehicle.id), variant: 'destructive', disabled: deleteMutation.isPending },
-                          ]}
-                          data-testid={`actions-vehicle-${vehicle.code}`}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable
+        data-testid="vehicles-table"
+        data={filteredData}
+        keyExtractor={(v) => v.id}
+        isLoading={isLoading}
+        emptyIcon={<Bus className="w-7 h-7" />}
+        emptyMessage="Belum ada data kendaraan"
+        searchQuery={searchQuery}
+        rowTestId={(v) => `vehicle-row-${v.code}`}
+        columns={[
+          {
+            key: 'code', header: 'Kode',
+            className: 'font-mono font-medium text-primary/80 whitespace-nowrap',
+            render: (v) => v.code,
+          },
+          {
+            key: 'plate', header: 'Plat Nomor',
+            className: 'font-mono whitespace-nowrap',
+            render: (v) => v.plate,
+          },
+          {
+            key: 'layout', header: 'Layout', hideOnMobile: true,
+            render: (v) => <span className="text-muted-foreground">{getLayoutName(v.layoutId)}</span>,
+          },
+          {
+            key: 'capacity', header: 'Kapasitas',
+            className: 'tabular-nums',
+            render: (v) => <><span className="font-medium">{v.capacity}</span> <span className="text-[11px] text-muted-foreground">kursi</span></>,
+          },
+          {
+            key: 'notes', header: 'Catatan', hideOnMobile: true,
+            className: 'text-muted-foreground max-w-[200px]',
+            render: (v) => v.notes ? (
+              <span className="line-clamp-2 text-[12px] leading-relaxed">{v.notes}</span>
+            ) : '—',
+          },
+          {
+            key: 'actions', header: 'Aksi',
+            headerClassName: 'text-right', className: 'text-right w-16',
+            render: (v) => (
+              <RowActionsMenu
+                actions={[
+                  { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(v) },
+                  { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(v.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                ]}
+                data-testid={`actions-vehicle-${v.code}`}
+              />
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

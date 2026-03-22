@@ -3,8 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card, CardContent } from '@/components/ui/card';
+import { DataTable } from '@/components/shared/DataTable';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { outletsApi, stopsApi } from '@/lib/api';
@@ -246,57 +245,58 @@ export default function OutletsManager() {
         isPending={deleteMutation.isPending}
       />
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
-          ) : (
-            <Table data-testid="outlets-table">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nama Outlet</TableHead>
-                  <TableHead>Halte / Terminal</TableHead>
-                  <TableHead>Alamat</TableHead>
-                  <TableHead>Telepon</TableHead>
-                  <TableHead>Profil Printer</TableHead>
-                  <TableHead className="w-24 text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                      <Store className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data outlet'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredData.map(outlet => (
-                    <TableRow key={outlet.id} data-testid={`outlet-row-${outlet.id}`}>
-                      <TableCell className="font-medium">{outlet.name}</TableCell>
-                      <TableCell>{getStopName(outlet.stopId)}</TableCell>
-                      <TableCell className="text-muted-foreground">{outlet.address || '-'}</TableCell>
-                      <TableCell className="text-muted-foreground">{outlet.phone || '-'}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{outlet.printerProfileId || 'default'}</TableCell>
-                      <TableCell className="text-right">
-                        <RowActionsMenu
-                          actions={[
-                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(outlet) },
-                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(outlet.id), variant: 'destructive', disabled: deleteMutation.isPending },
-                          ]}
-                          data-testid={`actions-outlet-${outlet.id}`}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable
+        data-testid="outlets-table"
+        data={filteredData}
+        keyExtractor={(o) => o.id}
+        isLoading={isLoading}
+        emptyIcon={<Store className="w-7 h-7" />}
+        emptyMessage="Belum ada data outlet"
+        searchQuery={searchQuery}
+        rowTestId={(o) => `outlet-row-${o.id}`}
+        columns={[
+          {
+            key: 'name', header: 'Nama Outlet',
+            className: 'font-medium',
+            render: (o) => o.name,
+          },
+          {
+            key: 'stop', header: 'Halte / Terminal',
+            className: 'text-muted-foreground',
+            render: (o) => getStopName(o.stopId),
+          },
+          {
+            key: 'address', header: 'Alamat', hideOnMobile: true,
+            className: 'text-muted-foreground max-w-[200px]',
+            render: (o) => o.address ? (
+              <span className="line-clamp-2 text-[12px] leading-relaxed">{o.address}</span>
+            ) : '—',
+          },
+          {
+            key: 'phone', header: 'Telepon', hideOnMobile: true,
+            className: 'tabular-nums text-muted-foreground',
+            render: (o) => o.phone || '—',
+          },
+          {
+            key: 'printer', header: 'Printer', hideOnMobile: true,
+            className: 'font-mono text-[11px] text-muted-foreground',
+            render: (o) => o.printerProfileId || 'default',
+          },
+          {
+            key: 'actions', header: 'Aksi',
+            headerClassName: 'text-right', className: 'text-right w-16',
+            render: (o) => (
+              <RowActionsMenu
+                actions={[
+                  { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(o) },
+                  { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(o.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                ]}
+                data-testid={`actions-outlet-${o.id}`}
+              />
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

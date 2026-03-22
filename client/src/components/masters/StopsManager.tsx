@@ -4,9 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { DataTable } from '@/components/shared/DataTable';
 import { useToast } from '@/hooks/use-toast';
 import { stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
@@ -255,71 +254,63 @@ export default function StopsManager() {
         isPending={deleteMutation.isPending}
       />
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
-          ) : (
-            <Table data-testid="stops-table">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Kode</TableHead>
-                  <TableHead>Nama</TableHead>
-                  <TableHead>Kota</TableHead>
-                  <TableHead>Koordinat</TableHead>
-                  <TableHead>Outlet</TableHead>
-                  <TableHead className="w-24 text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                      <MapPin className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data halte'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredData.map(stop => (
-                    <TableRow key={stop.id} data-testid={`stop-row-${stop.code}`}>
-                      <TableCell className="font-mono font-medium">{stop.code}</TableCell>
-                      <TableCell className="font-medium">{stop.name}</TableCell>
-                      <TableCell>{stop.city || '-'}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {stop.lat && stop.lng ? `${stop.lat}, ${stop.lng}` : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {stop.isOutlet ? (
-                          <Badge variant="secondary" className="gap-1">
-                            <CheckCircle className="h-3 w-3" />
-                            Ya
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="gap-1 text-muted-foreground">
-                            <XCircle className="h-3 w-3" />
-                            Tidak
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <RowActionsMenu
-                          actions={[
-                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(stop) },
-                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(stop.id), variant: 'destructive', disabled: deleteMutation.isPending },
-                          ]}
-                          data-testid={`actions-stop-${stop.code}`}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable
+        data-testid="stops-table"
+        data={filteredData}
+        keyExtractor={(s) => s.id}
+        isLoading={isLoading}
+        emptyIcon={<MapPin className="w-7 h-7" />}
+        emptyMessage="Belum ada data halte"
+        searchQuery={searchQuery}
+        rowTestId={(s) => `stop-row-${s.code}`}
+        columns={[
+          {
+            key: 'code', header: 'Kode',
+            className: 'font-mono font-medium text-primary/80 whitespace-nowrap',
+            render: (s) => s.code,
+          },
+          {
+            key: 'name', header: 'Nama',
+            className: 'font-medium',
+            render: (s) => s.name,
+          },
+          {
+            key: 'city', header: 'Kota', hideOnMobile: true,
+            className: 'text-muted-foreground',
+            render: (s) => s.city || '—',
+          },
+          {
+            key: 'coords', header: 'Koordinat', hideOnMobile: true,
+            className: 'font-mono text-[11px] text-muted-foreground tabular-nums',
+            render: (s) => s.lat && s.lng ? `${s.lat}, ${s.lng}` : '—',
+          },
+          {
+            key: 'outlet', header: 'Outlet',
+            render: (s) => s.isOutlet ? (
+              <Badge variant="secondary" className="gap-1 text-[11px] py-0">
+                <CheckCircle className="h-2.5 w-2.5" />Ya
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1 text-[11px] py-0 text-muted-foreground">
+                <XCircle className="h-2.5 w-2.5" />Tidak
+              </Badge>
+            ),
+          },
+          {
+            key: 'actions', header: 'Aksi',
+            headerClassName: 'text-right', className: 'text-right w-16',
+            render: (s) => (
+              <RowActionsMenu
+                actions={[
+                  { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(s) },
+                  { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(s.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                ]}
+                data-testid={`actions-stop-${s.code}`}
+              />
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

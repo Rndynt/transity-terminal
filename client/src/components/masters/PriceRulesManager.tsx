@@ -5,10 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import MasterFormDialog from './MasterFormDialog';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { DataTable } from '@/components/shared/DataTable';
 import { DatePicker } from '@/components/ui/date-picker';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { RowActionsMenu } from './RowActionsMenu';
@@ -576,140 +575,108 @@ export default function PriceRulesManager() {
       />
 
       {/* ── Table ── */}
-      <div className="rounded-md border overflow-hidden">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-          </div>
-        ) : (
-          <Table data-testid="price-rules-table">
-            <TableHeader>
-              <TableRow className="bg-muted/10 hover:bg-muted/10">
-                <TableHead className="w-[90px] font-semibold text-xs uppercase tracking-wide">Cakupan</TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-wide">Target</TableHead>
-                <TableHead className="w-[80px] font-semibold text-xs uppercase tracking-wide">Mode</TableHead>
-                <TableHead className="w-[160px] font-semibold text-xs uppercase tracking-wide">Harga</TableHead>
-                <TableHead className="w-[70px] font-semibold text-xs uppercase tracking-wide">Mult.</TableHead>
-                <TableHead className="w-[60px] font-semibold text-xs uppercase tracking-wide">Prior.</TableHead>
-                <TableHead className="w-[180px] font-semibold text-xs uppercase tracking-wide">Periode</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredPriceRules.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                    <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm font-medium">
-                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada aturan harga'}
-                    </p>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredPriceRules.map(rule => {
-                  const basePrice = rule.rule?.basePricePerLeg;
-                  const multiplier = rule.rule?.multiplier ?? 1;
-                  const pricingMode = rule.rule?.pricingMode || 'per_leg';
-                  const effectivePrice = basePrice != null ? basePrice * multiplier : null;
-
-                  return (
-                    <TableRow key={rule.id} data-testid={`price-rule-${rule.id}`}>
-                      {/* Scope */}
-                      <TableCell>
-                        <Badge
-                          variant={SCOPE_VARIANTS[rule.scope] ?? 'outline'}
-                          className="text-[11px] font-mono px-1.5"
-                        >
-                          {SCOPE_LABELS[rule.scope] ?? rule.scope}
-                        </Badge>
-                      </TableCell>
-
-                      {/* Target */}
-                      <TableCell>
-                        <span className="text-sm">
-                          {rule.scope === 'pattern' && rule.patternId
-                            ? getPatternName(rule.patternId)
-                            : rule.scope === 'trip' && rule.tripId
-                              ? getTripLabel(rule.tripId)
-                              : rule.scope === 'leg' && rule.tripId
-                                ? <>{getTripLabel(rule.tripId)} <span className="text-muted-foreground">· Leg {rule.legIndex}</span></>
-                                : rule.scope === 'time'
-                                  ? 'Time-based'
-                                  : <span className="text-muted-foreground">—</span>}
-                        </span>
-                      </TableCell>
-
-                      {/* Pricing Mode */}
-                      <TableCell>
-                        <Badge
-                          variant={pricingMode === 'flat' ? 'default' : 'secondary'}
-                          className="text-[11px] px-1.5"
-                        >
-                          {PRICING_MODE_LABELS[pricingMode] || 'Per Segmen'}
-                        </Badge>
-                      </TableCell>
-
-                      {/* Price */}
-                      <TableCell>
-                        {effectivePrice != null ? (
-                          <div className="flex flex-col gap-0.5">
-                            <span className="font-semibold text-sm tabular-nums">
-                              {formatRupiah(effectivePrice)}
-                            </span>
-                            {multiplier !== 1 && basePrice != null && (
-                              <span className="text-[11px] text-muted-foreground tabular-nums">
-                                base {formatRupiah(basePrice)}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">—</span>
-                        )}
-                      </TableCell>
-
-                      {/* Multiplier */}
-                      <TableCell>
-                        <span className={`font-mono text-sm tabular-nums ${multiplier !== 1 ? 'text-amber-600 font-semibold' : 'text-muted-foreground'}`}>
-                          ×{multiplier}
-                        </span>
-                      </TableCell>
-
-                      {/* Priority */}
-                      <TableCell>
-                        <span className="font-mono text-sm text-muted-foreground tabular-nums">{rule.priority ?? 0}</span>
-                      </TableCell>
-
-                      {/* Period */}
-                      <TableCell>
-                        <span className="text-xs text-muted-foreground tabular-nums">
-                          {rule.validFrom
-                            ? format(new Date(rule.validFrom), 'dd MMM yy')
-                            : <span className="opacity-40">∞</span>}
-                          {' '}–{' '}
-                          {rule.validTo
-                            ? format(new Date(rule.validTo), 'dd MMM yy')
-                            : <span className="opacity-40">∞</span>}
-                        </span>
-                      </TableCell>
-
-                      {/* Actions */}
-                      <TableCell className="pr-3">
-                        <RowActionsMenu
-                          actions={[
-                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(rule) },
-                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(rule.id), variant: 'destructive', disabled: deleteMutation.isPending },
-                          ]}
-                          data-testid={`actions-price-rule-${rule.id}`}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+      <DataTable
+        data-testid="price-rules-table"
+        data={filteredPriceRules}
+        keyExtractor={(r) => r.id}
+        isLoading={isLoading}
+        emptyIcon={<DollarSign className="w-7 h-7" />}
+        emptyMessage="Belum ada aturan harga"
+        searchQuery={searchQuery}
+        rowTestId={(r) => `price-rule-${r.id}`}
+        columns={[
+          {
+            key: 'scope', header: 'Cakupan',
+            render: (r) => (
+              <Badge variant={SCOPE_VARIANTS[r.scope] ?? 'outline'} className="text-[11px] font-mono px-1.5 py-0">
+                {SCOPE_LABELS[r.scope] ?? r.scope}
+              </Badge>
+            ),
+          },
+          {
+            key: 'target', header: 'Target',
+            render: (r) => (
+              <span>
+                {r.scope === 'pattern' && r.patternId
+                  ? getPatternName(r.patternId)
+                  : r.scope === 'trip' && r.tripId
+                    ? getTripLabel(r.tripId)
+                    : r.scope === 'leg' && r.tripId
+                      ? <>{getTripLabel(r.tripId)} <span className="text-muted-foreground text-[11px]">Leg {r.legIndex}</span></>
+                      : r.scope === 'time'
+                        ? 'Time-based'
+                        : <span className="text-muted-foreground">—</span>}
+              </span>
+            ),
+          },
+          {
+            key: 'mode', header: 'Mode', hideOnMobile: true,
+            render: (r) => {
+              const pricingMode = r.rule?.pricingMode || 'per_leg';
+              return (
+                <Badge variant={pricingMode === 'flat' ? 'default' : 'secondary'} className="text-[11px] px-1.5 py-0">
+                  {PRICING_MODE_LABELS[pricingMode] || 'Per Segmen'}
+                </Badge>
+              );
+            },
+          },
+          {
+            key: 'price', header: 'Harga',
+            className: 'tabular-nums',
+            render: (r) => {
+              const basePrice = r.rule?.basePricePerLeg;
+              const multiplier = r.rule?.multiplier ?? 1;
+              const effectivePrice = basePrice != null ? basePrice * multiplier : null;
+              if (effectivePrice == null) return <span className="text-muted-foreground">—</span>;
+              return (
+                <div className="flex flex-col">
+                  <span className="font-semibold">{formatRupiah(effectivePrice)}</span>
+                  {multiplier !== 1 && basePrice != null && (
+                    <span className="text-[11px] text-muted-foreground">base {formatRupiah(basePrice)}</span>
+                  )}
+                </div>
+              );
+            },
+          },
+          {
+            key: 'mult', header: 'Mult.', hideOnMobile: true,
+            className: 'font-mono tabular-nums',
+            render: (r) => {
+              const m = r.rule?.multiplier ?? 1;
+              return <span className={m !== 1 ? 'text-amber-600 font-semibold' : 'text-muted-foreground'}>×{m}</span>;
+            },
+          },
+          {
+            key: 'priority', header: 'Prior.', hideOnMobile: true,
+            className: 'font-mono tabular-nums text-muted-foreground',
+            render: (r) => r.priority ?? 0,
+          },
+          {
+            key: 'period', header: 'Periode', hideOnMobile: true,
+            className: 'tabular-nums text-[12px] text-muted-foreground whitespace-nowrap',
+            render: (r) => (
+              <>
+                {r.validFrom ? format(new Date(r.validFrom), 'dd MMM yy') : <span className="opacity-40">∞</span>}
+                {' – '}
+                {r.validTo ? format(new Date(r.validTo), 'dd MMM yy') : <span className="opacity-40">∞</span>}
+              </>
+            ),
+          },
+          {
+            key: 'actions', header: '',
+            className: 'w-10',
+            render: (r) => (
+              <RowActionsMenu
+                actions={[
+                  { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(r) },
+                  { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(r.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                ]}
+                data-testid={`actions-price-rule-${r.id}`}
+              />
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

@@ -3,10 +3,8 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Card, CardContent } from '@/components/ui/card';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { DataTable } from '@/components/shared/DataTable';
 import { useToast } from '@/hooks/use-toast';
 import { layoutsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
@@ -675,110 +673,79 @@ export default function LayoutsManager() {
         isPending={deleteMutation.isPending}
       />
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            </div>
-          ) : (
-            <Table data-testid="layouts-table">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Dimensions</TableHead>
-                  <TableHead>Total Seats</TableHead>
-                  <TableHead>Preview</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredLayouts.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredLayouts.map(layout => {
-                    const seatMap = layout.seatMap as SeatMapItem[];
-                    return (
-                      <TableRow key={layout.id} data-testid={`layout-row-${layout.id}`}>
-                        <TableCell className="font-medium">{layout.name}</TableCell>
-                        <TableCell className="font-mono">{layout.rows} × {layout.cols}</TableCell>
-                        <TableCell>{seatMap.length} seats</TableCell>
-                        <TableCell>
-                          <div 
-                            className="grid gap-0.5 max-w-32"
-                            style={{ gridTemplateColumns: `repeat(${layout.cols}, 1fr)` }}
-                          >
-                            {seatMap.slice(0, Math.min(12, seatMap.length)).map(seat => (
-                              <div
-                                key={seat.seat_no}
-                                className="w-3 h-3 bg-primary/20 rounded-sm border border-primary/40"
-                                title={seat.seat_no}
-                              />
-                            ))}
-                            {seatMap.length > 12 && (
-                              <div className="text-xs text-muted-foreground col-span-full text-center">
-                                +{seatMap.length - 12} more
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="overflow-visible">
-                          <div className="flex items-center space-x-1">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleEdit(layout)}
-                                    className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10 focus:ring-2 focus:ring-primary"
-                                    aria-label={`Edit layout ${layout.name}`}
-                                    data-testid={`edit-layout-${layout.id}`}
-                                  >
-                                    <Pencil className="h-4 w-4 text-primary" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="md:hidden">
-                                  <p>Edit layout</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleDelete(layout.id)}
-                                    disabled={deleteMutation.isPending}
-                                    className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10 focus:ring-2 focus:ring-destructive disabled:opacity-50"
-                                    aria-label={`Delete layout ${layout.name}`}
-                                    data-testid={`delete-layout-${layout.id}`}
-                                  >
-                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="md:hidden">
-                                  <p>Delete layout</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable
+        data-testid="layouts-table"
+        data={filteredLayouts}
+        keyExtractor={(l) => l.id}
+        isLoading={isLoading}
+        emptyMessage="Belum ada data layout"
+        searchQuery={searchQuery}
+        rowTestId={(l) => `layout-row-${l.id}`}
+        columns={[
+          {
+            key: 'name', header: 'Nama',
+            className: 'font-medium',
+            render: (l) => l.name,
+          },
+          {
+            key: 'dims', header: 'Dimensi',
+            className: 'font-mono text-[12px] tabular-nums',
+            render: (l) => `${l.rows} × ${l.cols}`,
+          },
+          {
+            key: 'seats', header: 'Kursi',
+            className: 'tabular-nums',
+            render: (l) => {
+              const seatMap = l.seatMap as SeatMapItem[];
+              return <><span className="font-medium">{seatMap.length}</span> <span className="text-[11px] text-muted-foreground">kursi</span></>;
+            },
+          },
+          {
+            key: 'preview', header: 'Preview', hideOnMobile: true,
+            render: (l) => {
+              const seatMap = l.seatMap as SeatMapItem[];
+              return (
+                <div
+                  className="grid gap-0.5 max-w-24"
+                  style={{ gridTemplateColumns: `repeat(${l.cols}, 1fr)` }}
+                >
+                  {seatMap.slice(0, Math.min(12, seatMap.length)).map(seat => (
+                    <div key={seat.seat_no} className="w-2.5 h-2.5 bg-primary/20 rounded-sm border border-primary/40" title={seat.seat_no} />
+                  ))}
+                  {seatMap.length > 12 && (
+                    <div className="text-[10px] text-muted-foreground col-span-full text-center">+{seatMap.length - 12}</div>
+                  )}
+                </div>
+              );
+            },
+          },
+          {
+            key: 'actions', header: 'Aksi',
+            headerClassName: 'text-right', className: 'text-right w-16',
+            render: (l) => (
+              <div className="flex items-center justify-end gap-0.5">
+                <Button
+                  size="sm" variant="ghost"
+                  onClick={() => handleEdit(l)}
+                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
+                  data-testid={`edit-layout-${l.id}`}
+                >
+                  <Pencil className="h-3.5 w-3.5 text-primary" />
+                </Button>
+                <Button
+                  size="sm" variant="ghost"
+                  onClick={() => handleDelete(l.id)}
+                  disabled={deleteMutation.isPending}
+                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10"
+                  data-testid={`delete-layout-${l.id}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                </Button>
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

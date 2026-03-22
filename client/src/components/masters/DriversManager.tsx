@@ -5,8 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card, CardContent } from '@/components/ui/card';
+import { DataTable } from '@/components/shared/DataTable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { driversApi } from '@/lib/api';
@@ -284,73 +283,69 @@ export default function DriversManager() {
         isPending={deleteMutation.isPending}
       />
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
-          ) : (
-            <Table data-testid="drivers-table">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Kode</TableHead>
-                  <TableHead>Nama</TableHead>
-                  <TableHead>No. Telepon</TableHead>
-                  <TableHead>SIM</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Catatan</TableHead>
-                  <TableHead className="w-24 text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                      <UserCheck className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada data driver'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredData.map(driver => {
-                    const statusInfo = STATUS_LABELS[driver.status] || { label: driver.status, className: 'bg-gray-100 text-gray-700' };
-                    return (
-                      <TableRow key={driver.id} data-testid={`driver-row-${driver.code}`}>
-                        <TableCell className="font-mono font-medium">{driver.code}</TableCell>
-                        <TableCell className="font-medium">{driver.name}</TableCell>
-                        <TableCell className="text-sm">{driver.phone}</TableCell>
-                        <TableCell>
-                          <span className="text-xs font-mono">
-                            {driver.licenseNo}
-                          </span>
-                          <span className="ml-1.5 text-xs text-muted-foreground">
-                            (SIM {driver.licenseType})
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={statusInfo.className}>{statusInfo.label}</Badge>
-                        </TableCell>
-                        <TableCell className="max-w-xs truncate text-muted-foreground text-sm">
-                          {driver.notes || '-'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <RowActionsMenu
-                            actions={[
-                              { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(driver) },
-                              { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(driver.id), variant: 'destructive', disabled: deleteMutation.isPending }
-                            ]}
-                            data-testid={`actions-driver-${driver.code}`}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable
+        data-testid="drivers-table"
+        data={filteredData}
+        keyExtractor={(d) => d.id}
+        isLoading={isLoading}
+        emptyIcon={<UserCheck className="w-7 h-7" />}
+        emptyMessage="Belum ada data driver"
+        searchQuery={searchQuery}
+        rowTestId={(d) => `driver-row-${d.code}`}
+        columns={[
+          {
+            key: 'code', header: 'Kode',
+            className: 'font-mono font-medium text-primary/80 whitespace-nowrap',
+            render: (d) => d.code,
+          },
+          {
+            key: 'name', header: 'Nama',
+            className: 'font-medium',
+            render: (d) => d.name,
+          },
+          {
+            key: 'phone', header: 'Telepon', hideOnMobile: true,
+            className: 'tabular-nums text-muted-foreground',
+            render: (d) => d.phone || '—',
+          },
+          {
+            key: 'license', header: 'SIM',
+            render: (d) => (
+              <span className="whitespace-nowrap">
+                <span className="font-mono text-[12px]">{d.licenseNo}</span>
+                <span className="ml-1 text-[11px] text-muted-foreground">(SIM {d.licenseType})</span>
+              </span>
+            ),
+          },
+          {
+            key: 'status', header: 'Status',
+            render: (d) => {
+              const info = STATUS_LABELS[d.status] || { label: d.status, className: 'bg-gray-100 text-gray-700' };
+              return <Badge className={`${info.className} text-[11px] py-0`}>{info.label}</Badge>;
+            },
+          },
+          {
+            key: 'notes', header: 'Catatan', hideOnMobile: true,
+            className: 'text-muted-foreground max-w-[200px]',
+            render: (d) => d.notes ? (
+              <span className="line-clamp-2 text-[12px] leading-relaxed">{d.notes}</span>
+            ) : '—',
+          },
+          {
+            key: 'actions', header: 'Aksi',
+            headerClassName: 'text-right', className: 'text-right w-16',
+            render: (d) => (
+              <RowActionsMenu
+                actions={[
+                  { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(d) },
+                  { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(d.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                ]}
+                data-testid={`actions-driver-${d.code}`}
+              />
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }
