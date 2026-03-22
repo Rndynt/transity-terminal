@@ -1,124 +1,145 @@
-# TransityTerminal
+# TransityCore
 
-**Core Backend untuk Sistem Transit & Tiket Multi-Operator**
+**Sistem Ticketing Bus Transit Multi-Operator**
 
-TransityTerminal adalah backend sistem ticketing bus transit multi-operator yang komprehensif, mendukung pengelolaan rute, perjalanan, kursi, pemesanan, dan harga dinamis. Sistem ini dirancang untuk operasional real-time dengan dukungan WebSocket untuk update inventaris kursi secara live.
-
----
-
-## 📋 Daftar Isi
-
-- [Fitur Utama](#-fitur-utama)
-- [Arsitektur Sistem](#-arsitektur-sistem)
-- [Tech Stack](#-tech-stack)
-- [Struktur Database](#-struktur-database)
-- [Instalasi](#-instalasi)
-- [Konfigurasi](#-konfigurasi)
-- [API Endpoints](#-api-endpoints)
-- [Alur Booking](#-alur-booking)
-- [Virtual Scheduling](#-virtual-scheduling)
-- [Real-time Events](#-real-time-events)
-- [Struktur Project](#-struktur-project)
-- [Pengembangan](#-pengembangan)
-- [Status Fitur](#-status-fitur)
+TransityCore adalah sistem ticketing bus transit multi-operator yang komprehensif, mendukung pengelolaan rute, perjalanan, kursi, pemesanan, kargo, SPJ, dan harga dinamis. Sistem ini dirancang untuk operasional real-time dengan dukungan WebSocket untuk update inventaris kursi secara live.
 
 ---
 
-## 🚀 Fitur Utama
+## Daftar Isi
 
-### Master Data Management
-- **Stops** - Pengelolaan titik berhenti/terminal dengan koordinat GPS
-- **Outlets** - Lokasi penjualan tiket dengan konfigurasi printer
-- **Vehicles** - Armada bus dengan kapasitas dan layout kursi
-- **Layouts** - Konfigurasi layout kursi (grid-based seat map)
-- **Trip Patterns** - Definisi pola rute dengan urutan pemberhentian
-- **Price Rules** - Aturan harga dinamis (pattern/trip/leg/time-based)
-
-### Trip Operations
-- **Trip Bases** - Template penjadwalan virtual dengan hari operasional
-- **Trips** - Instance perjalanan aktual dengan materialisasi on-demand
-- **Trip Legs** - Segmen perjalanan antar stop
-- **Seat Inventory** - Inventaris kursi per segmen (segment-aware)
-
-### Booking System
-- **Seat Hold** - Reservasi kursi sementara dengan TTL (Time-To-Live)
-- **Pricing Engine** - Kalkulasi harga dinamis berdasarkan aturan
-- **Multi-passenger Booking** - Pemesanan multi-penumpang dalam satu transaksi
-- **Payment Integration** - Dukungan cash, QR, e-wallet, bank transfer
-- **Print Job Queue** - Antrian cetak tiket thermal
-
-### Real-time Features
-- **WebSocket Server** - Update inventaris real-time
-- **Room Subscriptions** - Subscribe ke trip/base/CSO room
-- **Event Broadcasting** - Status trip, inventory update, hold release
+- [Fitur Utama](#fitur-utama)
+- [Arsitektur Sistem](#arsitektur-sistem)
+- [Tech Stack](#tech-stack)
+- [Struktur Database](#struktur-database)
+- [Instalasi](#instalasi)
+- [Konfigurasi](#konfigurasi)
+- [API Endpoints](#api-endpoints)
+- [Alur Booking](#alur-booking)
+- [Virtual Scheduling](#virtual-scheduling)
+- [Otorisasi (RBAC + ABAC + Feature Flags)](#otorisasi-rbac--abac--feature-flags)
+- [Real-time Events](#real-time-events)
+- [Struktur Project](#struktur-project)
+- [Status Fitur](#status-fitur)
 
 ---
 
-## 🏗️ Arsitektur Sistem
+## Fitur Utama
+
+### Operasional
+- **Terminal Reservasi CSO** — 2-phase booking (select trip → book seat), seat map real-time, passenger form, inline payment
+- **Jadwal Harian** — Unified daily schedule dengan driver assignment, manifest access, SPJ creation
+- **Kargo** — Waybill generation (TRN-YYYYMMDD-XXXXX), tariff calculation, status lifecycle tracking
+- **SPJ (Surat Perintah Jalan)** — Trip work orders dengan cost lines, settlement, profit calculation
+- **Manifest Perjalanan** — Trip manifest dengan dukungan thermal printer 80mm
+
+### Master Data
+- **Halte (Stops)** — Titik berhenti/terminal dengan koordinat GPS
+- **Pola Perjalanan (Trip Patterns)** — Template rute dengan urutan pemberhentian, boarding/alighting flags
+- **Kendaraan (Vehicles)** — Armada bus dengan kapasitas dan layout kursi
+- **Pengemudi (Drivers)** — Data pengemudi dengan lisensi
+- **Outlet** — Lokasi penjualan tiket terhubung ke stop
+- **Layout Kursi** — Konfigurasi visual layout kursi bus (grid-based)
+- **Aturan Harga (Price Rules)** — Harga dinamis scope-based (pattern/trip/leg/time) dengan mode per-leg dan flat
+- **Promo & Voucher** — Kode diskon, voucher generation, usage limits
+
+### Booking & Seat Management
+- **Virtual → Real Trip** — Trip bases auto-materialize saat booking pertama
+- **Seat Inventory** — Pre-computed per seat per leg, real-time hold system dengan TTL
+- **Unseat / Reassign / Reschedule** — Full seat management dengan mandatory reason notes dan audit trail
+- **WebSocket Broadcast** — Update ketersediaan kursi real-time ke semua terminal CSO
+
+### Laporan (Reports)
+- Revenue, Sales, Trip Profitability, Load Factor, Cancellations, Cargo, Payments
+- Filter tanggal dengan presets, selector outlet/channel/route
+
+### Admin
+- **Staff Management** — CRUD dengan role assignment dan outlet scoping
+- **Feature Flags** — Toggle akses fitur per flag key
+- **RBAC Roles** — `cso`, `admin`, `finance`, `dispatcher`
+- **Outlet Scoping** — Batasi akses data ke outlet yang di-assign
+
+### Mobile (B2C)
+- Expo React Native app di `/apps/mobile`
+- Sistem auth terpisah (`/api/app/auth/*`)
+- Pencarian trip, booking, tracking kargo
+
+---
+
+## Arsitektur Sistem
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        CLIENT (React + Vite)                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐        │
-│  │   CSO    │  │ Masters  │  │  Hooks   │  │   UI     │        │
-│  │   Page   │  │   Page   │  │ (State)  │  │Components│        │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘        │
-│       │             │             │              │              │
-│       └─────────────┴─────────────┴──────────────┘              │
-│                           │                                      │
-│                    React Query + Wouter                          │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │ HTTP/WebSocket
-                            ▼
+│                     CLIENT (React + Vite)                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
+│  │   CSO    │  │ Masters  │  │  Admin   │  │ Reports  │      │
+│  │   Page   │  │   Page   │  │   Page   │  │   Pages  │      │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘      │
+│       └──────────────┴──────────────┴──────────────┘            │
+│                          │                                      │
+│                   React Query + Wouter                          │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │ HTTP/WebSocket
+                           ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      SERVER (Express + TypeScript)               │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                    Routes Layer                          │   │
-│  │  /api/stops  /api/trips  /api/bookings  /api/holds ...  │   │
-│  └─────────────────────────┬───────────────────────────────┘   │
-│                            │                                    │
-│  ┌─────────────────────────▼───────────────────────────────┐   │
-│  │                  Controllers Layer                       │   │
-│  │  StopsCtrl  TripsCtrl  BookingsCtrl  PricingCtrl ...    │   │
-│  └─────────────────────────┬───────────────────────────────┘   │
-│                            │                                    │
-│  ┌─────────────────────────▼───────────────────────────────┐   │
-│  │                   Services Layer                         │   │
-│  │  BookingsService  PricingService  TripBasesService ...  │   │
-│  └─────────────────────────┬───────────────────────────────┘   │
-│                            │                                    │
-│  ┌─────────────────────────▼───────────────────────────────┐   │
-│  │                  Storage Layer (IStorage)                │   │
-│  │              DatabaseStorage (Drizzle ORM)               │   │
-│  └─────────────────────────┬───────────────────────────────┘   │
-│                            │                                    │
-│  ┌─────────────────────────▼───────────────────────────────┐   │
-│  │                 WebSocket Service                        │   │
-│  │        Socket.IO (Real-time Event Broadcasting)          │   │
-│  └─────────────────────────────────────────────────────────┘   │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-                            ▼
+│                    SERVER (Fastify 5 + TypeScript)               │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │                    Auth & RBAC Layer                        │ │
+│  │  Realmio Auth │ RBAC Middleware │ Feature Flags │ Outlet   │ │
+│  └───────────────────────┬────────────────────────────────────┘ │
+│                          │                                      │
+│  ┌───────────────────────▼────────────────────────────────────┐ │
+│  │                    Routes Layer (104+ endpoints)            │ │
+│  │  preHandler arrays │ async handlers │ Zod validation       │ │
+│  └───────────────────────┬────────────────────────────────────┘ │
+│                          │                                      │
+│  ┌───────────────────────▼────────────────────────────────────┐ │
+│  │                  Controllers Layer                         │ │
+│  │  Bookings │ Pricing │ Cargo │ SPJ │ Reports │ Admin ...   │ │
+│  └───────────────────────┬────────────────────────────────────┘ │
+│                          │                                      │
+│  ┌───────────────────────▼────────────────────────────────────┐ │
+│  │                   Services Layer                           │ │
+│  │  BookingsService │ PricingService │ RbacService │ ...      │ │
+│  └───────────────────────┬────────────────────────────────────┘ │
+│                          │                                      │
+│  ┌───────────────────────▼────────────────────────────────────┐ │
+│  │                  Storage Layer (IStorage)                   │ │
+│  │              DatabaseStorage (Drizzle ORM)                  │ │
+│  └───────────────────────┬────────────────────────────────────┘ │
+│                          │                                      │
+│  ┌───────────────────────▼────────────────────────────────────┐ │
+│  │                 WebSocket Service                          │ │
+│  │        Socket.IO (Real-time Event Broadcasting)            │ │
+│  └────────────────────────────────────────────────────────────┘ │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    DATABASE (PostgreSQL)                         │
-│  stops | outlets | vehicles | layouts | trip_patterns |         │
-│  pattern_stops | trip_bases | trips | trip_stop_times |        │
-│  trip_legs | seat_inventory | seat_holds | price_rules |       │
-│  bookings | passengers | payments | print_jobs                 │
+│  stops │ outlets │ vehicles │ layouts │ trip_patterns │         │
+│  pattern_stops │ trip_bases │ trips │ trip_stop_times │        │
+│  trip_legs │ seat_inventory │ seat_holds │ price_rules │       │
+│  bookings │ passengers │ payments │ print_jobs │               │
+│  staff │ feature_flags │ booking_history │ drivers │           │
+│  spj │ spj_cost_lines │ promotions │ vouchers │               │
+│  cargo_types │ cargo_rates │ cargo_shipments                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Backend
-- **Runtime**: Node.js + TypeScript
-- **Framework**: Express.js
+- **Runtime**: Node.js 20 + TypeScript
+- **Framework**: Fastify 5 (async-first, preHandler hooks)
 - **ORM**: Drizzle ORM
 - **Database**: PostgreSQL (Neon Serverless compatible)
 - **Real-time**: Socket.IO
 - **Validation**: Zod + drizzle-zod
+- **Auth**: Realmio (whitelabel OpenID Connect)
+- **Authorization**: RBAC + ABAC + Feature Flags
 
 ### Frontend
 - **Framework**: React 18
@@ -129,14 +150,19 @@ TransityTerminal adalah backend sistem ticketing bus transit multi-operator yang
 - **UI Components**: Radix UI + shadcn/ui
 - **Icons**: Lucide React
 
+### Mobile
+- **Framework**: Expo React Native
+- **Location**: `/apps/mobile`
+
 ### Development
 - **Package Manager**: npm
 - **Type Checking**: TypeScript 5.6
+- **Dev Server**: Vite + @fastify/middie (HMR)
 - **Bundler**: esbuild (production), Vite (development)
 
 ---
 
-## 📊 Struktur Database
+## Struktur Database
 
 ### Entity Relationship Diagram
 
@@ -157,31 +183,43 @@ TransityTerminal adalah backend sistem ticketing bus transit multi-operator yang
        └────<│  trip_bases │       │
              └──────┬──────┘       │
                     │              │
-             ┌──────▼──────┐       │
-             │    trips    │<──────┘
-             └──────┬──────┘
-                    │
-        ┌───────────┼───────────┐
-        │           │           │
-┌───────▼───────┐   │   ┌───────▼───────┐
-│trip_stop_times│   │   │   trip_legs   │
-└───────────────┘   │   └───────┬───────┘
-                    │           │
-             ┌──────▼──────┐    │
-             │seat_inventory│<──┘
-             └──────┬──────┘
-                    │
-             ┌──────▼──────┐
-             │  seat_holds │
-             └─────────────┘
+             ┌──────▼──────┐       │     ┌─────────────┐
+             │    trips    │<──────┘     │   drivers   │
+             └──────┬──────┘             └──────┬──────┘
+                    │                           │
+        ┌───────────┼───────────┐               │
+        │           │           │               │
+┌───────▼───────┐   │   ┌───────▼───────┐       │
+│trip_stop_times│   │   │   trip_legs   │       │
+└───────────────┘   │   └───────┬───────┘       │
+                    │           │               │
+             ┌──────▼──────┐    │        ┌──────▼──────┐
+             │seat_inventory│<──┘        │     spj     │
+             └──────┬──────┘             └──────┬──────┘
+                    │                           │
+             ┌──────▼──────┐             ┌──────▼──────┐
+             │  seat_holds │             │spj_cost_lines│
+             └─────────────┘             └─────────────┘
 
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
 │  bookings   │────<│ passengers  │     │  payments   │
 └──────┬──────┘     └─────────────┘     └─────────────┘
        │
-┌──────▼──────┐
-│ print_jobs  │
-└─────────────┘
+       ├──────────<┌─────────────┐
+       │           │booking_history│
+       │           └─────────────┘
+       │
+┌──────▼──────┐     ┌─────────────┐     ┌─────────────┐
+│ print_jobs  │     │ promotions  │────<│  vouchers   │
+└─────────────┘     └─────────────┘     └─────────────┘
+
+┌─────────────┐     ┌───────────────┐
+│    staff    │     │ feature_flags │
+└─────────────┘     └───────────────┘
+
+┌─────────────┐     ┌─────────────┐     ┌───────────────┐
+│ cargo_types │────<│ cargo_rates │     │cargo_shipments│
+└─────────────┘     └─────────────┘     └───────────────┘
 ```
 
 ### Tabel Utama
@@ -192,28 +230,38 @@ TransityTerminal adalah backend sistem ticketing bus transit multi-operator yang
 | `outlets` | Lokasi penjualan tiket |
 | `layouts` | Konfigurasi layout kursi |
 | `vehicles` | Armada bus |
+| `drivers` | Data pengemudi |
 | `trip_patterns` | Pola rute (template) |
 | `pattern_stops` | Urutan stop dalam pola |
 | `trip_bases` | Template penjadwalan virtual |
 | `trips` | Instance perjalanan aktual |
-| `trip_stop_times` | Jadwal kedatangan/keberangkatan |
+| `trip_stop_times` | Jadwal kedatangan/keberangkatan per stop |
 | `trip_legs` | Segmen perjalanan antar stop |
 | `seat_inventory` | Ketersediaan kursi per segmen |
-| `seat_holds` | Reservasi kursi sementara |
+| `seat_holds` | Reservasi kursi sementara (TTL-based) |
 | `price_rules` | Aturan harga dinamis |
 | `bookings` | Data pemesanan |
 | `passengers` | Data penumpang |
 | `payments` | Data pembayaran |
+| `booking_history` | Audit trail (unseat/reassign/reschedule/cancel) |
 | `print_jobs` | Antrian cetak tiket |
+| `staff` | Staff users dengan role & outlet scope |
+| `feature_flags` | Feature flag toggles |
+| `spj` | Surat Perintah Jalan |
+| `spj_cost_lines` | Detail biaya SPJ |
+| `promotions` | Promo/diskon |
+| `vouchers` | Voucher individual |
+| `cargo_types` | Jenis kargo |
+| `cargo_rates` | Tarif kargo |
+| `cargo_shipments` | Data pengiriman kargo |
 
 ---
 
-## 📦 Instalasi
+## Instalasi
 
 ### Prasyarat
-- Node.js 18+
+- Node.js 20+
 - PostgreSQL 14+ (atau Neon Serverless)
-- npm atau yarn
 
 ### Langkah Instalasi
 
@@ -225,96 +273,107 @@ cd TransityTerminal
 # Install dependencies
 npm install
 
-# Setup environment variables
-cp .env.example .env
-# Edit .env dengan konfigurasi database Anda
+# Setup environment variables (lihat bagian Konfigurasi)
 
 # Push schema ke database
 npm run db:push
-
-# (Opsional) Seed data demo
-curl -X POST http://localhost:5000/api/seed
 
 # Jalankan development server
 npm run dev
 ```
 
+Aplikasi berjalan di `http://localhost:5000`.
+
+### Build & Production
+
+```bash
+# Build untuk production
+npm run build
+
+# Jalankan production server
+npm start
+```
+
+---
+
+## Konfigurasi
+
 ### Environment Variables
 
-```env
-DATABASE_URL=postgresql://user:password@host:port/database
-PORT=5000
-HOLD_TTL_SHORT_SECONDS=60
-HOLD_TTL_LONG_SECONDS=1200
-PENDING_BOOKING_AUTO_RELEASE=true
-```
+| Variable | Default | Deskripsi | Required |
+|----------|---------|-----------|----------|
+| `DATABASE_URL` | — | PostgreSQL connection string | Ya |
+| `PORT` | 5000 | Port server | Tidak |
+| `AUTHCORE_BASE_URL` | — | URL Realmio auth server | Tidak (dev bypass tersedia) |
+| `AUTHCORE_TENANT_ID` | — | Realmio tenant ID | Tidak |
+| `DEV_BYPASS_AUTH` | — | Set `true` untuk skip auth di development | Tidak |
+| `HOLD_TTL_SHORT_SECONDS` | 60 | TTL hold singkat (detik) | Tidak |
+| `HOLD_TTL_LONG_SECONDS` | 1200 | TTL hold panjang (20 menit) | Tidak |
+| `PENDING_BOOKING_AUTO_RELEASE` | true | Auto-cleanup booking pending | Tidak |
+
+### Dev Mode
+
+Jika `AUTHCORE_BASE_URL` kosong atau `DEV_BYPASS_AUTH=true`, sistem akan auto-login dengan dev user:
+- **Email**: cso@transity.id
+- **Role**: cso
+- **Flags**: page.cso, page.cargo, page.manifest, action.booking.create, action.booking.cancel, action.passenger.assign_seat, action.payment.create, action.cargo.create
 
 ---
 
-## ⚙️ Konfigurasi
+## API Endpoints
 
-### Konfigurasi Aplikasi (`server/config.ts`)
+### Authentication
 
-| Variable | Default | Deskripsi |
-|----------|---------|-----------|
-| `HOLD_TTL_SHORT_SECONDS` | 60 | TTL hold singkat (detik) |
-| `HOLD_TTL_LONG_SECONDS` | 1200 | TTL hold panjang (20 menit) |
-| `PENDING_BOOKING_AUTO_RELEASE` | true | Auto-cleanup booking pending |
-
-### Drizzle Config (`drizzle.config.ts`)
-
-```typescript
-export default defineConfig({
-  out: "./migrations",
-  schema: "./shared/schema.ts",
-  dialect: "postgresql",
-  dbCredentials: {
-    url: process.env.DATABASE_URL,
-  },
-});
+```http
+POST   /api/auth/sign-in/email    # Sign in dengan email/password
+POST   /api/auth/sign-up/email    # Registrasi akun baru
+POST   /api/auth/sign-out         # Sign out
+GET    /api/auth/session           # Session saat ini
+GET    /api/auth/me                # Data user saat ini
 ```
 
----
+### Permissions & Admin
 
-## 🔌 API Endpoints
+```http
+GET    /api/permissions/me         # Flags & role user saat ini
+
+GET    /api/admin/staff            # List semua staff
+POST   /api/admin/staff            # Buat staff baru
+PUT    /api/admin/staff/:id        # Update staff
+DELETE /api/admin/staff/:id        # Hapus staff
+
+GET    /api/admin/flags            # List feature flags
+POST   /api/admin/flags            # Buat feature flag
+PUT    /api/admin/flags/:id        # Update feature flag
+DELETE /api/admin/flags/:id        # Hapus feature flag
+```
 
 ### Master Data
 
 ```http
 # Stops
-GET    /api/stops           # List semua stops
-GET    /api/stops/:id       # Detail stop
-POST   /api/stops           # Buat stop baru
-PUT    /api/stops/:id       # Update stop
-DELETE /api/stops/:id       # Hapus stop
+GET/POST       /api/stops
+GET/PUT/DELETE /api/stops/:id
 
 # Outlets
-GET    /api/outlets
-GET    /api/outlets/:id
-POST   /api/outlets
-PUT    /api/outlets/:id
-DELETE /api/outlets/:id
+GET/POST       /api/outlets
+GET/PUT/DELETE /api/outlets/:id
 
 # Vehicles
-GET    /api/vehicles
-GET    /api/vehicles/:id
-POST   /api/vehicles
-PUT    /api/vehicles/:id
-DELETE /api/vehicles/:id
+GET/POST       /api/vehicles
+GET/PUT/DELETE /api/vehicles/:id
+
+# Drivers
+GET/POST       /api/drivers
+GET/PUT/DELETE /api/drivers/:id
 
 # Layouts
-GET    /api/layouts
-GET    /api/layouts/:id
-POST   /api/layouts
-PUT    /api/layouts/:id
-DELETE /api/layouts/:id
+GET/POST       /api/layouts
+GET/PUT/DELETE /api/layouts/:id
 
 # Trip Patterns
-GET    /api/trip-patterns
-GET    /api/trip-patterns/:id
-POST   /api/trip-patterns
-PUT    /api/trip-patterns/:id
-DELETE /api/trip-patterns/:id
+GET/POST       /api/trip-patterns
+GET/PUT/DELETE /api/trip-patterns/:id
 
 # Pattern Stops
 GET    /api/trip-patterns/:patternId/stops
@@ -324,24 +383,25 @@ DELETE /api/pattern-stops/:id
 POST   /api/trip-patterns/:patternId/stops/bulk-replace
 
 # Trip Bases
-GET    /api/trip-bases
-GET    /api/trip-bases/:id
-POST   /api/trip-bases
-PUT    /api/trip-bases/:id
-DELETE /api/trip-bases/:id
+GET/POST       /api/trip-bases
+GET/PUT/DELETE /api/trip-bases/:id
 
 # Price Rules
-GET    /api/price-rules
-POST   /api/price-rules
-PUT    /api/price-rules/:id
-DELETE /api/price-rules/:id
+GET/POST       /api/price-rules
+PUT/DELETE     /api/price-rules/:id
+
+# Promos & Vouchers
+GET/POST       /api/promos
+PUT/DELETE     /api/promos/:id
+POST           /api/promos/:id/vouchers          # Generate vouchers
+DELETE         /api/promos/:id/vouchers/:voucherId # Revoke voucher
 ```
 
 ### Trip Operations
 
 ```http
 # Trips
-GET    /api/trips                    # List trips (optional ?date=YYYY-MM-DD)
+GET    /api/trips                             # List trips (?date=YYYY-MM-DD)
 GET    /api/trips/:id
 POST   /api/trips
 PUT    /api/trips/:id
@@ -360,23 +420,37 @@ POST   /api/trips/:tripId/precompute-seat-inventory
 # Seat Map
 GET    /api/trips/:id/seatmap?originSeq=N&destinationSeq=M
 GET    /api/trips/:tripId/seats/:seatNo/passenger-details
+GET    /api/trips/:id/unseated-passengers
 
 # Virtual Scheduling
-POST   /api/cso/materialize-trip     # Materialisasi trip dari base
-POST   /api/trips/:id/close          # Tutup trip operasional
+POST   /api/cso/materialize-trip
+POST   /api/trips/:id/close
+
+# Manifest
+GET    /api/trips/:id/manifest
+POST   /api/trips/:id/manifest/print
 ```
 
 ### Booking & Payment
 
 ```http
 # Holds
-POST   /api/holds                    # Buat hold kursi
-DELETE /api/holds/:holdRef           # Release hold
+POST   /api/holds                              # Buat hold kursi
+DELETE /api/holds/:holdRef                      # Release hold
 
 # Bookings
 GET    /api/bookings
 GET    /api/bookings/:id
-POST   /api/bookings                 # Buat booking (idempotent)
+POST   /api/bookings
+GET    /api/bookings/:bookingId/history         # Audit trail
+
+# Unseat / Reassign / Reschedule
+POST   /api/passengers/:passengerId/unseat
+POST   /api/passengers/:passengerId/reassign
+POST   /api/passengers/:passengerId/reschedule
+POST   /api/passengers/:passengerId/assign-seat
+PATCH  /api/passengers/:id/cancel
+POST   /api/bookings/:bookingId/unseat-all
 
 # Payments
 GET    /api/bookings/:bookingId/payments
@@ -386,17 +460,54 @@ POST   /api/payments
 GET    /api/pricing/quote-fare?tripId=X&originSeq=N&destinationSeq=M
 ```
 
-### Utility
+### SPJ (Surat Perintah Jalan)
 
 ```http
-POST   /api/seed                     # Seed demo data
+GET    /api/spj                                # List SPJ
+GET    /api/spj/:id                            # Detail SPJ
+POST   /api/spj                                # Buat SPJ
+POST   /api/spj/:id/issue                      # Terbitkan SPJ
+POST   /api/spj/:id/settle                     # Selesaikan SPJ
+GET    /api/spj/trip/:tripId                    # SPJ by trip
+GET    /api/spj/trip/:tripId/profit             # Profit calculation
+```
+
+### Kargo
+
+```http
+GET    /api/cargo                              # List shipments
+POST   /api/cargo                              # Buat shipment
+GET    /api/cargo/track/:waybillNumber          # Track by waybill
+GET    /api/cargo-types                         # List cargo types
+GET    /api/cargo-rates                         # List cargo rates
+```
+
+### Laporan
+
+```http
+GET    /api/reports/filter-options              # Filter options
+GET    /api/reports/revenue                     # Laporan pendapatan
+GET    /api/reports/sales                       # Laporan penjualan
+GET    /api/reports/trip-profitability           # Laporan profitabilitas trip
+GET    /api/reports/load-factor                 # Laporan load factor
+GET    /api/reports/cancellations               # Laporan pembatalan
+GET    /api/reports/cargo                       # Laporan kargo
+GET    /api/reports/payments                    # Laporan pembayaran
+```
+
+### Mobile B2C API
+
+```http
+POST   /api/app/auth/register                  # Registrasi user mobile
+POST   /api/app/auth/login                     # Login user mobile
+GET    /api/app/trips                           # Cari trip tersedia
+POST   /api/app/bookings                       # Buat booking mobile
+GET    /api/app/cargo/track/:waybillNumber      # Track kargo
 ```
 
 ---
 
-## 🔄 Alur Booking
-
-### Diagram Alur
+## Alur Booking
 
 ```
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
@@ -420,429 +531,233 @@ POST   /api/seed                     # Seed demo data
 
 ### Detail Alur
 
-1. **Outlet Selection** - Pilih lokasi penjualan
-2. **Trip Selection** - Pilih perjalanan dari daftar (real + virtual)
-3. **Route Selection** - Pilih asal dan tujuan dari timeline
-4. **Seat Selection** - Pilih kursi dari seat map interaktif
-5. **Passenger Details** - Isi data penumpang
-6. **Payment** - Proses pembayaran
-7. **Print** - Cetak tiket
+1. **Outlet Selection** — Pilih lokasi penjualan
+2. **Trip Selection** — Pilih perjalanan dari daftar (real + virtual trips)
+3. **Route Selection** — Pilih asal (Naik) dan tujuan (Turun) dari RouteTimeline
+4. **Seat Selection** — Pilih kursi dari seat map interaktif (hold otomatis dengan TTL)
+5. **Passenger Details** — Isi data penumpang + promo code (opsional)
+6. **Payment** — Proses pembayaran (cash, QR, e-wallet, bank transfer)
+7. **Print** — Cetak tiket thermal
 
 ### Seat Hold Mechanism
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│ User clicks │────>│ Create Hold │────>│ Short TTL   │
-│   seat      │     │  (atomic)   │     │   (60s)     │
-└─────────────┘     └──────┬──────┘     └──────┬──────┘
-                           │                   │
-                           │    ┌──────────────┘
-                           ▼    ▼
-                    ┌─────────────┐
-                    │ User fills  │
-                    │passenger form│
-                    └──────┬──────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │ Convert to  │
-                    │  Long TTL   │
-                    │  (1200s)    │
-                    └──────┬──────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │   Payment   │
-                    └──────┬──────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │  Booking    │
-                    │  Created    │
-                    └─────────────┘
+User klik kursi → Create Hold (Short TTL 60s)
+                         │
+                         ▼
+               User isi form penumpang
+                         │
+                         ▼
+               Convert ke Long TTL (1200s)
+                         │
+                         ▼
+                    Payment
+                         │
+                         ▼
+                 Booking Created → Hold Released
 ```
+
+- Hold expired otomatis di-cleanup oleh scheduler (setiap 1 menit)
+- WebSocket broadcast saat seat di-hold atau di-release
 
 ---
 
-## 📅 Virtual Scheduling
+## Virtual Scheduling
 
-TransityTerminal mendukung **Virtual Scheduling** - sistem penjadwalan yang memungkinkan pembuatan trip on-demand dari template (Trip Bases).
+TransityCore mendukung **Virtual Scheduling** — sistem penjadwalan yang memungkinkan pembuatan trip on-demand dari template (Trip Bases).
 
 ### Konsep
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                       TRIP BASE                              │
-│  (Template dengan jadwal berulang)                          │
-│                                                              │
-│  • Pattern: Jakarta → Purwakarta → Bandung                 │
-│  • Days: Senin - Sabtu                                      │
-│  • Time: 10:00 (departure dari Jakarta)                     │
-│  • Valid: 2025-01-01 to 2025-12-31                         │
-│  • Default Capacity: 40                                     │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       │ Ketika CSO memilih tanggal
-                       │ yang eligible
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    VIRTUAL TRIP                              │
-│  (Computed on-the-fly, belum ada di database)               │
-│                                                              │
-│  • Status: isVirtual = true                                 │
-│  • Trip ID: null (belum materialized)                       │
-│  • Departure: 10:00 (computed dari defaultStopTimes)        │
-│  • Capacity: 40 (dari base)                                 │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       │ Ketika CSO memilih dan
-                       │ memulai booking
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    REAL TRIP                                 │
-│  (Materialized ke database)                                 │
-│                                                              │
-│  • Status: scheduled                                        │
-│  • Trip ID: UUID                                            │
-│  • Stop Times: Dibuat dari defaultStopTimes                 │
-│  • Legs: Derived dari stop times                            │
-│  • Seat Inventory: Precomputed                              │
-└─────────────────────────────────────────────────────────────┘
+TRIP BASE (Template)
+  • Pattern: Jakarta → Purwakarta → Bandung
+  • Hari: Senin - Sabtu
+  • Waktu: 10:00 (departure dari Jakarta)
+  • Periode: 2025-01-01 s/d 2025-12-31
+  • Kapasitas: 40
+         │
+         │ CSO pilih tanggal eligible
+         ▼
+VIRTUAL TRIP (Computed on-the-fly)
+  • isVirtual = true
+  • Belum ada di database
+  • Departure: 10:00 (dari defaultStopTimes)
+         │
+         │ CSO mulai booking
+         ▼
+REAL TRIP (Materialized ke database)
+  • Status: scheduled
+  • Trip ID: UUID
+  • Stop Times: dari defaultStopTimes
+  • Legs: derived dari stop times
+  • Seat Inventory: precomputed
 ```
 
-### Trip Base Schema
+---
+
+## Otorisasi (RBAC + ABAC + Feature Flags)
+
+### Model
+
+Sistem otorisasi 3 lapis:
+
+1. **RBAC (Role-Based Access Control)** — Role menentukan akses dasar
+2. **ABAC (Attribute-Based Access Control)** — Outlet scoping membatasi data per lokasi
+3. **Feature Flags** — Toggle granular per fitur
+
+### Roles
+
+| Role | Deskripsi | Akses |
+|------|-----------|-------|
+| `admin` | Administrator | Semua fitur + admin panel |
+| `cso` | Customer Service Officer | Reservasi, booking, manifest |
+| `finance` | Keuangan | Reports, pembayaran |
+| `dispatcher` | Dispatcher | Jadwal, SPJ, driver assignment |
+
+### Feature Flags
+
+| Flag | Deskripsi |
+|------|-----------|
+| `page.cso` | Akses halaman CSO |
+| `page.cargo` | Akses halaman Kargo |
+| `page.manifest` | Akses halaman Manifest |
+| `action.booking.create` | Buat booking baru |
+| `action.booking.cancel` | Batalkan booking |
+| `action.passenger.assign_seat` | Assign kursi ke penumpang |
+| `action.payment.create` | Buat pembayaran |
+| `action.cargo.create` | Buat shipment kargo |
+| `master.stops` | CRUD master stops |
+| `master.vehicles` | CRUD master vehicles |
+
+### Middleware (Fastify preHandler)
 
 ```typescript
-{
-  id: string;
-  patternId: string;           // Reference ke trip pattern
-  code: string;                // Kode unik (e.g., "JKT-BDG-10AM")
-  name: string;                // Nama template
-  active: boolean;             // Status aktif
-  timezone: string;            // Timezone (default: Asia/Jakarta)
-  
-  // Hari operasional
-  mon: boolean;
-  tue: boolean;
-  wed: boolean;
-  thu: boolean;
-  fri: boolean;
-  sat: boolean;
-  sun: boolean;
-  
-  // Periode berlaku
-  validFrom: date;
-  validTo: date;
-  
-  // Default values
-  defaultLayoutId: string;
-  defaultVehicleId: string;
-  capacity: number;
-  
-  // Channel visibility
-  channelFlags: {
-    CSO: boolean;
-    WEB: boolean;
-    APP: boolean;
-    OTA: boolean;
-  };
-  
-  // Jadwal waktu per stop
-  defaultStopTimes: [
-    { stopSequence: 1, arriveAt: null, departAt: "10:00" },
-    { stopSequence: 2, arriveAt: "11:30", departAt: "11:45" },
-    { stopSequence: 3, arriveAt: "13:00", departAt: null }
-  ];
-}
+// Require specific flag
+app.post('/api/stops', { preHandler: [requireFlag('master.stops')] }, handler);
+
+// Require any of multiple flags
+app.get('/api/trips', { preHandler: [requireAnyFlag('page.cso', 'page.cargo')] }, handler);
+
+// Outlet scoping
+app.get('/api/bookings', { preHandler: [requireOutletScope] }, handler);
 ```
 
 ---
 
-## 🌐 Real-time Events
+## Real-time Events
 
-TransityTerminal menggunakan Socket.IO untuk komunikasi real-time.
+### WebSocket Rooms
 
-### Event Types
+| Room | Pattern | Deskripsi |
+|------|---------|-----------|
+| Trip | `trip:{tripId}` | Update trip spesifik |
+| Base | `base:{baseId}` | Update trip base |
+| CSO | `cso:{outletId}` | Update per outlet |
 
-```typescript
-interface WSEvents {
-  TRIP_STATUS_CHANGED: { tripId: string; status: string };
-  TRIP_CANCELED: { tripId: string };
-  HOLDS_RELEASED: { tripId: string; seatNos?: string[] };
-  TRIP_MATERIALIZED: { baseId: string; serviceDate: string; tripId: string };
-  INVENTORY_UPDATED: { tripId: string; seatNo: string; legIndexes?: number[] };
-}
-```
+### Events
 
-### Room Subscriptions
+| Event | Payload | Deskripsi |
+|-------|---------|-----------|
+| `seatUpdate` | `{ tripId, seatNo, status, legIndex }` | Perubahan status kursi |
+| `bookingUpdate` | `{ tripId, bookingId, action }` | Booking baru/berubah |
+| `tripUpdate` | `{ tripId, status }` | Status trip berubah |
 
-```javascript
-// Client-side subscription
-socket.emit('subscribe-trip', tripId);
-socket.emit('subscribe-base', baseId);
-socket.emit('subscribe-cso', outletId, serviceDate);
+---
 
-// Unsubscribe
-socket.emit('unsubscribe-trip', tripId);
-socket.emit('unsubscribe-base', baseId);
-socket.emit('unsubscribe-cso', outletId, serviceDate);
-```
-
-### Event Flow
+## Struktur Project
 
 ```
-┌─────────────────┐                    ┌─────────────────┐
-│   CSO Client A  │                    │   CSO Client B  │
-└────────┬────────┘                    └────────┬────────┘
-         │                                      │
-         │ subscribe-trip:123                   │ subscribe-trip:123
-         │─────────────────────┐                │
-         │                     │                │
-         │                     ▼                │
-         │            ┌─────────────────┐       │
-         │            │  WebSocket      │       │
-         │            │  Server         │       │
-         │            └────────┬────────┘       │
-         │                     │                │
-         │                     │                │
-         │    ┌────────────────┼────────────────┘
-         │    │                │
-         │    │  INVENTORY_UPDATED
-         │    │  { tripId: "123", seatNo: "A1" }
-         │    │                │
-         ▼    ▼                ▼    ▼
-┌─────────────────┐            ┌─────────────────┐
-│  Seat A1 marked │            │  Seat A1 marked │
-│  as held        │            │  as held        │
-└─────────────────┘            └─────────────────┘
+client/src/
+  pages/              Halaman utama
+    auth/             Login page
+    admin/            Staff & Feature Flag management
+    schedule/         Jadwal Harian
+    spj/              SPJ page
+    reports/          7 report pages
+  components/
+    cso/              Terminal CSO (TripSelector, SeatMap, PassengerForm, RouteTimeline)
+    masters/          Master data managers
+    manifest/         ManifestDialog + ThermalManifest
+    reports/          Report components (ReportFilters, SummaryCards)
+    shared/           Reusable components (StatusBadge, LoadingState, EmptyState)
+  hooks/              Custom hooks (useBookingFlow, useWebSocket, useSeatHold)
+  lib/
+    constants.ts      Centralized constants
+    api.ts            API client
+    auth.tsx          AuthProvider + useAuth
+    queryClient.ts    React Query config
+
+server/
+  index.ts            Fastify app bootstrap
+  routes.ts           104+ API endpoints (preHandler arrays)
+  storage.ts          DatabaseStorage (Drizzle ORM)
+  vite.ts             Vite HMR + static serving
+  scheduler.ts        Expired holds/bookings cleanup
+  types/
+    fastify.d.ts      Request type augmentations (user, rbac, appUser, scopedOutletId, rawBody)
+  realtime/
+    ws.ts             Socket.io WebSocket server
+  modules/
+    auth/             Realmio auth proxy
+    rbac/             RBAC + ABAC + Feature Flags
+    app/              Mobile B2C API
+    bookings/         BookingsService + UnseatService
+    pricing/          PricingService (scope-based pricing)
+    cargo/            CargoService
+    spj/              SPJ (Surat Perintah Jalan)
+    reports/          7 report types
+    promos/           Promo & Voucher system
+    payments/         Payment processing
+    holds/            Seat hold management
+    seatInventory/    Seat inventory service
+    tripBases/        Virtual → Real trip materialization
+    tripLegs/         Trip leg computation
+    drivers/          Driver management
+    vehicles/         Vehicle management
+    stops/            Stop management
+    outlets/          Outlet management
+    layouts/          Bus seat layouts
+    trips/            Trip management
+    tripPatterns/     Trip pattern management
+    patternStops/     Pattern stop management
+    tripStopTimes/    Trip stop time overrides
+    priceRules/       Price rule management
+    printing/         Thermal print service
+
+shared/
+  schema.ts           Drizzle table definitions + Zod schemas + shared types
+
+apps/mobile/          Expo React Native B2C app
+plan/                 Technical documentation
 ```
 
 ---
 
-## 📁 Struktur Project
+## Status Fitur
 
-```
-TransityTerminal/
-├── attached_assets/          # Asset demo dan prompt
-├── client/                   # Frontend React
-│   ├── index.html
-│   └── src/
-│       ├── App.tsx           # Root component
-│       ├── components/
-│       │   ├── cso/          # Komponen CSO booking
-│       │   │   ├── BookingStepper.tsx
-│       │   │   ├── PassengerDetailModal.tsx
-│       │   │   ├── PassengerForm.tsx
-│       │   │   ├── PaymentPanel.tsx
-│       │   │   ├── PrintPreview.tsx
-│       │   │   ├── RouteTimeline.tsx
-│       │   │   ├── SeatMap.tsx
-│       │   │   └── TripSelector.tsx
-│       │   ├── layout/       # Layout components
-│       │   │   ├── AppLayout.tsx
-│       │   │   └── Sidebar.tsx
-│       │   ├── masters/      # Master data management
-│       │   │   ├── LayoutsManager.tsx
-│       │   │   ├── OutletsManager.tsx
-│       │   │   ├── PriceRulesManager.tsx
-│       │   │   ├── StopsManager.tsx
-│       │   │   ├── TripBasesManager.tsx
-│       │   │   ├── TripPatternsManager.tsx
-│       │   │   ├── TripsManager.tsx
-│       │   │   └── VehiclesManager.tsx
-│       │   └── ui/           # shadcn/ui components
-│       ├── hooks/
-│       │   ├── useBookingFlow.ts
-│       │   ├── useSeatHold.ts
-│       │   └── useWebSocket.ts
-│       ├── lib/
-│       │   ├── api.ts
-│       │   ├── queryClient.ts
-│       │   └── utils.ts
-│       ├── pages/
-│       │   ├── cso/CsoPage.tsx
-│       │   └── masters/MastersPage.tsx
-│       └── types/
-│           └── index.ts
-├── server/                   # Backend Express
-│   ├── config.ts             # App configuration
-│   ├── db.ts                 # Database connection
-│   ├── index.ts              # Server entry point
-│   ├── routes.ts             # API routes registration
-│   ├── scheduler.ts          # Background jobs
-│   ├── seed.ts               # Demo data seeder
-│   ├── storage.ts            # DatabaseStorage implementation
-│   ├── modules/              # Feature modules
-│   │   ├── bookings/
-│   │   │   ├── bookings.controller.ts
-│   │   │   ├── bookings.service.ts
-│   │   │   └── deterministicBooking.service.ts
-│   │   ├── holds/
-│   │   │   └── holds.service.ts
-│   │   ├── layouts/
-│   │   │   ├── layouts.controller.ts
-│   │   │   └── layouts.service.ts
-│   │   ├── outlets/
-│   │   │   ├── outlets.controller.ts
-│   │   │   └── outlets.service.ts
-│   │   ├── patternStops/
-│   │   ├── payments/
-│   │   ├── priceRules/
-│   │   ├── pricing/
-│   │   │   ├── pricing.controller.ts
-│   │   │   └── pricing.service.ts
-│   │   ├── printing/
-│   │   │   └── print.service.ts
-│   │   ├── seatInventory/
-│   │   │   └── seatInventory.service.ts
-│   │   ├── stops/
-│   │   ├── tripBases/
-│   │   │   └── tripBases.service.ts
-│   │   ├── tripLegs/
-│   │   ├── tripPatterns/
-│   │   ├── tripStopTimes/
-│   │   ├── trips/
-│   │   └── vehicles/
-│   ├── realtime/
-│   │   └── ws.ts             # WebSocket service
-│   ├── utils/
-│   │   └── timezone.ts       # Timezone utilities
-│   └── vite.ts               # Vite dev server setup
-├── shared/
-│   └── schema.ts             # Drizzle schema (shared)
-├── components.json           # shadcn/ui config
-├── drizzle.config.ts         # Drizzle Kit config
-├── package.json
-├── tailwind.config.ts
-├── tsconfig.json
-└── vite.config.ts
-```
+| Fitur | Status |
+|-------|--------|
+| Master Data (Stops, Outlets, Vehicles, Layouts, Patterns) | Done |
+| Trip Bases & Virtual Scheduling | Done |
+| CSO Booking Terminal (SeatMap, PassengerForm, Payment) | Done |
+| Seat Inventory & Hold System | Done |
+| Pricing Engine (per-leg, flat, scope-based) | Done |
+| Promo & Voucher | Done |
+| Kargo Terminal | Done |
+| Manifest & Thermal Print | Done |
+| SPJ (Surat Perintah Jalan) | Done |
+| Jadwal Harian | Done |
+| Unseat / Reassign / Reschedule | Done |
+| Booking History (Audit Trail) | Done |
+| Reports (7 jenis laporan) | Done |
+| Authentication (Realmio) | Done |
+| RBAC + ABAC + Feature Flags | Done |
+| Admin UI (Staff & Flag Management) | Done |
+| Mobile B2C (Expo React Native) | In Progress |
+| Backend: Fastify 5 Migration | Done |
 
 ---
 
-## 🔧 Pengembangan
+## License
 
-### Scripts
-
-```bash
-# Development
-npm run dev              # Start dev server dengan hot reload
-
-# Production
-npm run build            # Build client + server
-npm run start            # Run production server
-
-# Database
-npm run db:push          # Push schema changes ke database
-
-# Type Checking
-npm run check            # Run TypeScript compiler
-```
-
-### Menambah Module Baru
-
-1. Buat folder di `server/modules/<nama>/`
-2. Buat file:
-   - `<nama>.service.ts` - Business logic
-   - `<nama>.controller.ts` - HTTP handlers
-3. Daftarkan routes di `server/routes.ts`
-4. Tambahkan schema di `shared/schema.ts` jika perlu tabel baru
-
-### Testing API
-
-```bash
-# Seed demo data
-curl -X POST http://localhost:5000/api/seed
-
-# Get stops
-curl http://localhost:5000/api/stops
-
-# Get available trips for CSO
-curl "http://localhost:5000/api/cso/available-trips?serviceDate=2025-02-21&outletId=<UUID>"
-
-# Create hold
-curl -X POST http://localhost:5000/api/holds \
-  -H "Content-Type: application/json" \
-  -d '{"tripId":"<UUID>","seatNo":"A1","originSeq":1,"destinationSeq":3}'
-
-# Create booking
-curl -X POST http://localhost:5000/api/bookings \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: booking-123" \
-  -d '{...}'
-```
-
----
-
-## 📋 Status Fitur
-
-### ✅ Completed (MVP)
-
-- [x] Database Schema (15 tables)
-- [x] Modular Backend Architecture
-- [x] PostgreSQL + Drizzle ORM Integration
-- [x] Master Data CRUD (Stops, Outlets, Vehicles, Layouts, Patterns, Price Rules)
-- [x] Trip Bases CRUD
-- [x] Virtual Scheduling System
-- [x] Trip Materialization (on-demand)
-- [x] Trip Legs Derivation
-- [x] Seat Inventory Precomputation
-- [x] Seat Hold System (TTL-based)
-- [x] Pricing Engine
-- [x] CSO Booking Interface (6-step workflow)
-- [x] WebSocket Server
-- [x] Real-time Event Types
-- [x] Print Job Generation
-- [x] Idempotent Booking Creation
-
-### 🔄 In Progress
-
-- [ ] Real-time Event Integration di Services
-- [ ] Virtual/Closed Badges di CSO UI
-- [ ] Complete Seed Data dengan Pickup-Only Configuration
-
-### 📅 Planned
-
-- [ ] Authentication/Authorization
-- [ ] Real Payment Provider Integration
-- [ ] Thermal Printer Integration
-- [ ] Reporting & Analytics Dashboard
-- [ ] Redis untuk Distributed Holds
-- [ ] Audit Logging
-- [ ] Performance Optimization
-- [ ] Mobile App API Support
-- [ ] OTA Integration
-- [ ] Multi-tenancy Support
-
----
-
-## 🤝 Kontribusi
-
-1. Fork repository
-2. Buat branch fitur (`git checkout -b feature/amazing-feature`)
-3. Commit perubahan (`git commit -m 'Add amazing feature'`)
-4. Push ke branch (`git push origin feature/amazing-feature`)
-5. Buka Pull Request
-
----
-
-## 📄 Lisensi
-
-MIT License - Lihat file [LICENSE](LICENSE) untuk detail.
-
----
-
-## 📞 Kontak
-
-- **Author**: Rndynt
-- **Repository**: [https://github.com/Rndynt/TransityTerminal](https://github.com/Rndynt/TransityTerminal)
-- **Issues**: [GitHub Issues](https://github.com/Rndynt/TransityTerminal/issues)
-
----
-
-## 🙏 Acknowledgments
-
-- [Drizzle ORM](https://orm.drizzle.team/) - TypeScript ORM yang excellent
-- [shadcn/ui](https://ui.shadcn.com/) - Komponen UI yang beautiful
-- [TanStack Query](https://tanstack.com/query) - Data fetching yang powerful
-- [Socket.IO](https://socket.io/) - Real-time communication
+MIT
