@@ -27,15 +27,40 @@ client/src/
     shared/        → Reusable badge components (StatusBadges.tsx)
 
 server/
-  routes.ts        → IStorage interface + Fastify route definitions
+  index.ts         → Fastify app bootstrap (decorateRequest, contentTypeParser, logging, error handler)
+  routes.ts        → IStorage interface + Fastify route definitions (104+ endpoints, preHandler arrays)
   storage.ts       → DatabaseStorage implementation
+  vite.ts          → Vite HMR integration (@fastify/middie) + static serving (@fastify/static)
+  types/
+    fastify.d.ts   → FastifyRequest type augmentations (user, rbac, appUser, scopedOutletId, rawBody)
+  realtime/
+    ws.ts          → Socket.io WebSocket server (seat updates, booking broadcasts)
   modules/
+    auth/          → Realmio auth proxy (realmio.ts middleware, auth.routes.ts proxy endpoints)
+    rbac/          → RBAC + ABAC + Feature Flags (rbac.middleware.ts, rbac.service.ts, rbac.controller.ts)
+    app/           → Mobile B2C API auth + controllers (app.auth.ts, app.controller.ts)
     pricing/       → PricingService + PricingController
     bookings/      → BookingsService + BookingsController + UnseatService
     tripBases/     → TripBasesService (materialisasi virtual → real)
     cargo/         → CargoService + CargoController
     seatInventory/ → SeatInventoryService
     tripLegs/      → TripLegsService
+    spj/           → SpjService + SpjController (Surat Perintah Jalan)
+    reports/       → ReportsService + ReportsController (7 report types)
+    promos/        → PromosService + PromosController (promo & voucher)
+    payments/      → PaymentsController (payment processing)
+    holds/         → HoldsService (seat hold management)
+    drivers/       → DriversController
+    vehicles/      → VehiclesController
+    stops/         → StopsController
+    outlets/       → OutletsController
+    layouts/       → LayoutsController (bus seat layouts)
+    trips/         → TripsController
+    tripPatterns/  → TripPatternsController
+    patternStops/  → PatternStopsController
+    tripStopTimes/ → TripStopTimesController
+    priceRules/    → PriceRulesController
+    printing/      → PrintingController
 
 shared/
   schema.ts        → Drizzle table definitions + Zod schemas + shared types
@@ -57,6 +82,17 @@ plan/              → Dokumentasi teknis fitur
 - **Endpoints**: `/api/auth/sign-in/email`, `/api/auth/sign-up/email`, `/api/auth/sign-out`, `/api/auth/session`, `/api/auth/me`
 - **Protected Routes**: Semua route CSO dashboard wrapped dalam `ProtectedRoute` — redirect ke `/login` jika belum auth
 
+## RBAC + ABAC + Feature Flags
+- **Model**: Role-Based Access Control (RBAC) + Attribute-Based Access Control (ABAC) + Feature Flags
+- **Database tables**: `staff` (userId, role, outletId scope), `feature_flags` (flag key, enabled, description)
+- **Roles**: `cso` (operator), `admin` (full access), `finance` (reports only), `dispatcher` (schedule only)
+- **Backend**: `server/modules/rbac/rbac.service.ts` (RbacService — resolvePermissions, checkFlag), `rbac.middleware.ts` (requireFlag, requireAnyFlag, requireOutletScope preHandler hooks), `rbac.controller.ts` (admin CRUD for staff & flags)
+- **Frontend**: `client/src/pages/admin/` — StaffManagement + FeatureFlagManagement pages
+- **Middleware usage**: Routes protected with `preHandler: [requireFlag('master.stops')]` or `preHandler: [requireAnyFlag('page.cso', 'page.cargo')]`
+- **Outlet scoping**: `requireOutletScope` restricts data access to user's assigned outlet
+- **API Endpoints**: `/api/permissions/me`, `/api/admin/staff`, `/api/admin/staff/:id`, `/api/admin/flags`, `/api/admin/flags/:id`
+- **Dev user**: id="dev-user-001", role="cso" with flags: page.cso, page.cargo, page.manifest, action.booking.create, action.booking.cancel, action.passenger.assign_seat, action.payment.create, action.cargo.create
+
 ## Reports Module
 - **Shared Components**: `client/src/components/reports/` — ReportFilters (date range + presets + outlet/channel/route selectors), SummaryCards (metric cards grid), ReportPageLayout (page wrapper with loading state)
 - **Backend**: `server/modules/reports/reports.service.ts` (SQL aggregation queries) + `reports.controller.ts` (REST handlers)
@@ -67,6 +103,13 @@ plan/              → Dokumentasi teknis fitur
 - **Plan Doc**: `plan/reports-plan.md` — P1+P2 done, P3 pending
 
 ## Recent Changes
+
+**2026-03-22 — RBAC Admin UI: Staff & Flag Management (Task #4)**
+- **Admin pages**: `/admin/staff` (StaffManagement) and `/admin/flags` (FeatureFlagManagement)
+- **Staff CRUD**: Create/edit/delete staff records with role assignment and outlet scoping
+- **Feature Flag CRUD**: Create/toggle/delete feature flags with descriptions
+- **Sidebar**: "ADMIN" section with Staff and Feature Flags menu items (visible to admin role)
+- **API Endpoints**: Full REST CRUD at `/api/admin/staff` and `/api/admin/flags`
 
 **2026-03-22 — Express → Fastify 5 Migration**
 - **Backend framework**: Migrated from Express 4 to Fastify 5 for better performance and first-class TypeScript support
@@ -186,6 +229,23 @@ plan/              → Dokumentasi teknis fitur
 - 2-phase layout: select phase → book phase
 - SeatMap, PassengerForm with inline payment
 - WebSocket real-time seat updates
+
+## Backend Architecture (Fastify 5)
+- **Framework**: Fastify 5 — async-first, no `asyncHandler` wrapper needed
+- **Request augmentation**: `decorateRequest` in `index.ts` + type declarations in `server/types/fastify.d.ts`
+  - `req.user` — authenticated user object (from Realmio)
+  - `req.rbac` — resolved RBAC permissions (flags array, role, outletId)
+  - `req.appUser` — mobile B2C authenticated user
+  - `req.scopedOutletId` — outlet scope from RBAC
+  - `req.rawBody` — raw Buffer for webhook signature verification
+- **Middleware pattern**: Fastify `preHandler` hooks instead of Express middleware
+  - Global auth: `addHook('preHandler', ...)` in `routes.ts` (skips `/api/auth/` and `/api/app/`)
+  - Per-route: `{ preHandler: [requireFlag('master.stops'), requireOutletScope] }`
+- **Error handling**: Centralized `setErrorHandler` — PG duplicate key (409), ZodError (400), generic (500)
+- **Logging**: `onSend` hook logs all `/api` requests with method, path, status, duration, truncated response body
+- **Vite integration**: `@fastify/middie` wraps Vite's Connect-style middleware for HMR in dev
+- **Static serving**: `@fastify/static` for production builds and mobile web app
+- **WebSocket**: Socket.io attached to `app.server` (Fastify's built-in http.Server) after `listen()`
 
 ## Key Concepts
 
