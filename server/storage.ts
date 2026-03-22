@@ -147,7 +147,7 @@ export class DatabaseStorage implements IStorage {
 
   // Trip Patterns
   async getTripPatterns(): Promise<TripPattern[]> {
-    return await db.select().from(tripPatterns).where(eq(tripPatterns.active, true)).orderBy(tripPatterns.code);
+    return await db.select().from(tripPatterns).where(isNull(tripPatterns.deletedAt)).orderBy(tripPatterns.code);
   }
 
   async getTripPatternById(id: string): Promise<TripPattern | undefined> {
@@ -166,7 +166,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTripPattern(id: string): Promise<void> {
-    await db.update(tripPatterns).set({ active: false }).where(eq(tripPatterns.id, id));
+    await db.update(tripPatterns).set({ deletedAt: new Date() }).where(eq(tripPatterns.id, id));
   }
 
   // Pattern Stops
@@ -212,7 +212,7 @@ export class DatabaseStorage implements IStorage {
 
   // Trip Bases
   async getTripBases(): Promise<TripBase[]> {
-    return await db.select().from(tripBases).where(eq(tripBases.active, true)).orderBy(tripBases.name);
+    return await db.select().from(tripBases).where(isNull(tripBases.deletedAt)).orderBy(tripBases.name);
   }
 
   async getTripBaseById(id: string): Promise<TripBase | undefined> {
@@ -231,7 +231,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTripBase(id: string): Promise<void> {
-    await db.update(tripBases).set({ active: false }).where(eq(tripBases.id, id));
+    await db.update(tripBases).set({ deletedAt: new Date() }).where(eq(tripBases.id, id));
   }
 
   // Trips
@@ -269,9 +269,9 @@ export class DatabaseStorage implements IStorage {
     .leftJoin(drivers, eq(trips.driverId, drivers.id));
     
     if (serviceDate) {
-      return await query.where(eq(trips.serviceDate, serviceDate)).orderBy(trips.serviceDate);
+      return await query.where(and(eq(trips.serviceDate, serviceDate), isNull(trips.deletedAt))).orderBy(trips.serviceDate);
     }
-    return await query.orderBy(desc(trips.serviceDate));
+    return await query.where(isNull(trips.deletedAt)).orderBy(desc(trips.serviceDate));
   }
 
   async getCsoAvailableTrips(serviceDate: string, outletId: string): Promise<CsoAvailableTrip[]> {
@@ -385,7 +385,7 @@ export class DatabaseStorage implements IStorage {
     .where(
       and(
         eq(trips.serviceDate, serviceDate),
-        sql`${trips.status} != 'canceled'`,
+        isNull(trips.deletedAt),
         sql`EXISTS (
           SELECT 1 
           FROM ${tripStopTimes} tst
@@ -534,6 +534,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(tripBases.active, true),
+          isNull(tripBases.deletedAt),
           sql`${tripBases[dayColumn as keyof typeof tripBases]} = true`,
           sql`(${tripBases.validFrom} IS NULL OR ${tripBases.validFrom} <= ${serviceDate})`,
           sql`(${tripBases.validTo} IS NULL OR ${serviceDate} <= ${tripBases.validTo})`
@@ -625,7 +626,7 @@ export class DatabaseStorage implements IStorage {
 
       await tx.delete(seatInventory).where(eq(seatInventory.tripId, id));
       await tx.delete(seatHolds).where(eq(seatHolds.tripId, id));
-      await tx.update(trips).set({ status: 'canceled' }).where(eq(trips.id, id));
+      await tx.update(trips).set({ status: 'canceled', deletedAt: new Date() }).where(eq(trips.id, id));
     });
   }
 

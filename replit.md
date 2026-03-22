@@ -82,12 +82,13 @@ plan/              → Dokumentasi teknis fitur
 ```
 
 ## Data Safety (Soft Delete)
-Data master yang direferensi oleh booking/laporan menggunakan **soft delete** — tidak pernah dihapus permanen:
-- **stops, outlets, vehicles, layouts** → kolom `deleted_at` di-set, data tetap ada di DB
-- **trip_patterns, trip_bases** → field `active` di-set false (sudah ada sebelumnya)
-- **trips** → status diubah ke `canceled`, trip legs & stop times tetap ada
-- Query list (getStops, getVehicles, dll) otomatis filter `deleted_at IS NULL`
-- Query by ID (getStopById, dll) tetap mengembalikan data termasuk yang soft-deleted (untuk laporan/referensi)
+Semua data master menggunakan **`deleted_at` TIMESTAMPTZ** untuk soft delete — tidak pernah dihapus permanen:
+- **stops, outlets, vehicles, layouts, trip_patterns, trip_bases, trips** → kolom `deleted_at` di-set
+- **trips** → juga set `status='canceled'` bersamaan dengan `deleted_at`
+- **`active` flag** pada trip_patterns/trip_bases tetap terpisah — untuk enable/disable sementara, bukan delete
+- Query list (getStops, getTripPatterns, dll) otomatis filter `deleted_at IS NULL`
+- Query by ID (getStopById, dll) tetap mengembalikan data termasuk yang soft-deleted (untuk laporan/referensi historis)
+- CSO availability, app search, virtual trip eligibility — semua filter `deleted_at IS NULL`
 
 ## Running
 - Workflow "Start application" → `npm run dev` (port 5000)

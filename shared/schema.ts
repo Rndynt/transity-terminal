@@ -106,7 +106,8 @@ export const tripPatterns = pgTable("trip_patterns", {
   vehicleClass:    text("vehicle_class"),
   defaultLayoutId: uuid("default_layout_id").references(() => layouts.id),
   tags:            text("tags").array().default(sql`'{}'`),
-  createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow()
+  createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow(),
+  deletedAt:       timestamp("deleted_at", { withTimezone: true })
 });
 
 // 6. Pattern Stops
@@ -149,7 +150,8 @@ export const tripBases = pgTable("trip_bases", {
   channelFlags:     jsonb("channel_flags").notNull().default(sql`'{"CSO":true,"WEB":false,"APP":false,"OTA":false}'`),
   defaultStopTimes: jsonb("default_stop_times").notNull(), // Default stop times as local time strings without date
   createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt:        timestamp("updated_at", { withTimezone: true }).defaultNow()
+  updatedAt:        timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  deletedAt:        timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
   idxTripBasesActive:  sql`CREATE INDEX IF NOT EXISTS idx_trip_bases_active ON ${table} (active)`,
   idxTripBasesPattern: sql`CREATE INDEX IF NOT EXISTS idx_trip_bases_pattern ON ${table} (pattern_id)`,
@@ -170,7 +172,8 @@ export const trips = pgTable("trips", {
   originDepartHHMM:         text("origin_depart_hhmm"),
   channelFlags:             jsonb("channel_flags").default(sql`'{"CSO":true,"WEB":false,"APP":false,"OTA":false}'`),
   manifestFirstPrintedAt:   timestamp("manifest_first_printed_at", { withTimezone: true }),
-  createdAt:                timestamp("created_at", { withTimezone: true }).defaultNow()
+  createdAt:                timestamp("created_at", { withTimezone: true }).defaultNow(),
+  deletedAt:                timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
   uniqTripBasePerDay: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_trip_base_per_day ON ${table} (base_id, service_date) WHERE base_id IS NOT NULL`,
   idxTripsServiceDate: sql`CREATE INDEX IF NOT EXISTS idx_trips_service_date ON ${table} (service_date)`,

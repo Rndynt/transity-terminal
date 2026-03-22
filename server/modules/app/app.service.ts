@@ -245,7 +245,7 @@ export class AppService {
       active: tripPatterns.active,
     })
     .from(tripPatterns)
-    .where(eq(tripPatterns.active, true))
+    .where(and(eq(tripPatterns.active, true), isNull(tripPatterns.deletedAt)))
     .orderBy(tripPatterns.name);
 
     return result;
@@ -300,6 +300,7 @@ export class AppService {
       and(
         eq(trips.serviceDate, params.date),
         eq(trips.status, 'scheduled'),
+        isNull(trips.deletedAt),
         sql`EXISTS (
           SELECT 1 FROM ${tripStopTimes} tst1
           INNER JOIN ${tripStopTimes} tst2 ON tst2.trip_id = tst1.trip_id
