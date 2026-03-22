@@ -37,7 +37,7 @@ export default function ReportPageLayout({ title, description, icon: Icon, isLoa
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 pb-8">
             {children}
           </div>
         )}
