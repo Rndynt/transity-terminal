@@ -358,18 +358,23 @@ export class TripsService {
       const stopIds = [...new Set(matchingBookings.flatMap(b => [b.originStopId, b.destinationStopId]))];
       const outletIds = [...new Set(matchingBookings.map(b => b.outletId).filter(Boolean))] as string[];
       
-      const [stopsData, outletsData, ...paymentsData] = await Promise.all([
-        this.storage.getStopsByIds ? this.storage.getStopsByIds(stopIds) : Promise.all(stopIds.map(id => this.storage.getStopById(id))),
-        outletIds.length > 0
-          ? Promise.all(outletIds.map(id => this.storage.getOutletById(id)))
-          : Promise.resolve([]),
-        ...matchingBookings.map(b => this.storage.getPayments(b.id))
+      const matchingBookingIds = matchingBookings.map(b => b.id);
+      const [stopsData, outletsData, allPayments] = await Promise.all([
+        this.storage.getStopsByIds(stopIds),
+        outletIds.length > 0 ? this.storage.getOutletsByIds(outletIds) : Promise.resolve([]),
+        this.storage.getPaymentsByBookingIds(matchingBookingIds)
       ]);
       
       const stopsMap = new Map<string, any>();
-      (Array.isArray(stopsData) ? stopsData : []).forEach((s: any) => { if (s) stopsMap.set(s.id, s); });
+      stopsData.forEach((s: any) => { if (s) stopsMap.set(s.id, s); });
       const outletsMap = new Map<string, any>();
-      (outletsData as any[]).forEach((o: any) => { if (o) outletsMap.set(o.id, o); });
+      outletsData.forEach((o: any) => { if (o) outletsMap.set(o.id, o); });
+      const paymentsByBooking = new Map<string, any[]>();
+      for (const p of allPayments) {
+        const list = paymentsByBooking.get(p.bookingId) || [];
+        list.push(p);
+        paymentsByBooking.set(p.bookingId, list);
+      }
 
       matchingBookings.forEach((booking, idx) => {
         const passengers = passengersByBooking.get(booking.id) || [];
@@ -378,7 +383,7 @@ export class TripsService {
 
         const originStop = stopsMap.get(booking.originStopId);
         const destinationStop = stopsMap.get(booking.destinationStopId);
-        const payments = paymentsData[idx] || [];
+        const payments = paymentsByBooking.get(booking.id) || [];
         
         const bookingStopCoverage = booking.destinationSeq - booking.originSeq;
         const totalTripCoverage = totalStops - 1;

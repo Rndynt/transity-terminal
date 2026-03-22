@@ -59,6 +59,11 @@ export class DatabaseStorage implements IStorage {
     return stop;
   }
 
+  async getStopsByIds(ids: string[]): Promise<Stop[]> {
+    if (ids.length === 0) return [];
+    return await db.select().from(stops).where(inArray(stops.id, ids));
+  }
+
   async createStop(data: InsertStop): Promise<Stop> {
     const [stop] = await db.insert(stops).values(data).returning();
     return stop;
@@ -86,6 +91,11 @@ export class DatabaseStorage implements IStorage {
   async getOutletById(id: string): Promise<Outlet | undefined> {
     const [outlet] = await db.select().from(outlets).where(eq(outlets.id, id));
     return outlet;
+  }
+
+  async getOutletsByIds(ids: string[]): Promise<Outlet[]> {
+    if (ids.length === 0) return [];
+    return await db.select().from(outlets).where(inArray(outlets.id, ids));
   }
 
   async createOutlet(data: InsertOutlet): Promise<Outlet> {
@@ -838,6 +848,25 @@ export class DatabaseStorage implements IStorage {
     return await query.orderBy(desc(bookings.createdAt));
   }
 
+  async getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }> {
+    const { tripId, outletId, page, pageSize } = options;
+    const conditions = [];
+    if (tripId) conditions.push(eq(bookings.tripId, tripId));
+    if (outletId) conditions.push(eq(bookings.outletId, outletId));
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [countResult] = await db.select({ count: sql<number>`count(*)::int` }).from(bookings).where(where);
+    const total = countResult?.count ?? 0;
+
+    const data = await db.select().from(bookings)
+      .where(where)
+      .orderBy(desc(bookings.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+
+    return { data, total };
+  }
+
   async getBookingById(id: string): Promise<Booking | undefined> {
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
     return booking;
@@ -1075,6 +1104,11 @@ export class DatabaseStorage implements IStorage {
   // Payments
   async getPayments(bookingId: string): Promise<Payment[]> {
     return await db.select().from(payments).where(eq(payments.bookingId, bookingId));
+  }
+
+  async getPaymentsByBookingIds(bookingIds: string[]): Promise<Payment[]> {
+    if (bookingIds.length === 0) return [];
+    return await db.select().from(payments).where(inArray(payments.bookingId, bookingIds));
   }
 
   async createPayment(data: InsertPayment): Promise<Payment> {

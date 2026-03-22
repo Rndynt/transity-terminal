@@ -40,8 +40,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
       return;
     }
 
-    console.log('[WebSocket] Connecting to server...');
-    
     const socket = io({
       transports: ['websocket', 'polling'],
       upgrade: true,
@@ -51,7 +49,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
     });
 
     socket.on('connect', () => {
-      console.log('[WebSocket] Connected to server');
       setIsConnected(true);
       setIsReconnecting(false);
       setReconnectionAttempt(0);
@@ -74,7 +71,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
     });
 
     socket.on('disconnect', (reason: string) => {
-      console.log('[WebSocket] Disconnected from server:', reason);
       setIsConnected(false);
       
       // Attempt reconnection for network/transport errors and ping timeouts
@@ -100,7 +96,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
 
     eventNames.forEach(eventName => {
       socket.on(eventName, (data: WSEventData<typeof eventName>) => {
-        console.log(`[WebSocket] Received ${eventName}:`, data);
         const handlers = eventHandlersRef.current.get(eventName);
         if (handlers) {
           handlers.forEach(handler => {
@@ -120,7 +115,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
   // Handle reconnection attempts
   const handleReconnection = useCallback(() => {
     if (reconnectionAttempt >= maxReconnectionAttempts) {
-      console.log('[WebSocket] Max reconnection attempts reached');
       return;
     }
 
@@ -128,7 +122,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
     setReconnectionAttempt(prev => prev + 1);
 
     setTimeout(() => {
-      console.log(`[WebSocket] Reconnection attempt ${reconnectionAttempt + 1}/${maxReconnectionAttempts}`);
       connect();
     }, reconnectionDelay);
   }, [reconnectionAttempt, maxReconnectionAttempts, reconnectionDelay, connect]);
@@ -136,7 +129,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
   // Disconnect from server
   const disconnect = useCallback(() => {
     if (socketRef.current) {
-      console.log('[WebSocket] Disconnecting from server...');
       socketRef.current.disconnect();
       socketRef.current = null;
     }
@@ -152,7 +144,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
     const subscriptionKey = `trip:${tripId}`;
     subscriptionsRef.current.add(subscriptionKey);
     socketRef.current.emit('subscribe-trip', tripId);
-    console.log(`[WebSocket] Subscribed to trip: ${tripId}`);
   }, []);
 
   // Unsubscribe from trip updates
@@ -162,7 +153,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
     const subscriptionKey = `trip:${tripId}`;
     subscriptionsRef.current.delete(subscriptionKey);
     socketRef.current.emit('unsubscribe-trip', tripId);
-    console.log(`[WebSocket] Unsubscribed from trip: ${tripId}`);
   }, []);
 
   // Subscribe to base updates
@@ -172,7 +162,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
     const subscriptionKey = `base:${baseId}`;
     subscriptionsRef.current.add(subscriptionKey);
     socketRef.current.emit('subscribe-base', baseId);
-    console.log(`[WebSocket] Subscribed to base: ${baseId}`);
   }, []);
 
   // Unsubscribe from base updates
@@ -182,7 +171,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
     const subscriptionKey = `base:${baseId}`;
     subscriptionsRef.current.delete(subscriptionKey);
     socketRef.current.emit('unsubscribe-base', baseId);
-    console.log(`[WebSocket] Unsubscribed from base: ${baseId}`);
   }, []);
 
   // Subscribe to CSO outlet/date updates
@@ -192,7 +180,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
     const subscriptionKey = `cso:${outletId}:${serviceDate}`;
     subscriptionsRef.current.add(subscriptionKey);
     socketRef.current.emit('subscribe-cso', outletId, serviceDate);
-    console.log(`[WebSocket] Subscribed to CSO: ${outletId}:${serviceDate}`);
   }, []);
 
   // Unsubscribe from CSO updates
@@ -202,7 +189,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
     const subscriptionKey = `cso:${outletId}:${serviceDate}`;
     subscriptionsRef.current.delete(subscriptionKey);
     socketRef.current.emit('unsubscribe-cso', outletId, serviceDate);
-    console.log(`[WebSocket] Unsubscribed from CSO: ${outletId}:${serviceDate}`);
   }, []);
 
   // Add event handler

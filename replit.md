@@ -307,9 +307,15 @@ Saat induk dihapus, semua anak ikut di-soft-delete secara cascade:
 - Composite index on `bookings(trip_id, status)` for available seat counts
 - Composite index on `seat_inventory(trip_id, leg_index)` for seatmap leg lookups
 
+### Batch Query Methods
+- `getStopsByIds(ids)`: fetch multiple stops in single `WHERE id IN (...)` query
+- `getOutletsByIds(ids)`: fetch multiple outlets in single `WHERE id IN (...)` query
+- `getPaymentsByBookingIds(bookingIds)`: fetch payments for multiple bookings in single query
+- `getBookingsPaginated({ tripId, outletId, page, pageSize })`: database-level pagination with SQL LIMIT/OFFSET
+
 ### N+1 Query Fixes
 - `getSeatmap`: batch passenger fetch via `getPassengersByBookingIds()` instead of per-booking queries
-- `getSeatPassengerDetails`: batch passengers, stops, outlets, payments via Promise.all + Maps
+- `getSeatPassengerDetails`: batch stops via `getStopsByIds()`, outlets via `getOutletsByIds()`, payments via `getPaymentsByBookingIds()` — all in single Promise.all
 - `getVirtualTripsForCso`: batch pattern/patternStops/patternPath with `Promise.all()` and Maps
 - `createBooking`: batch seat hold validation via `inArray()` instead of per-passenger queries
 - `cleanupExpiredPendingBookings`: batch passenger fetch for all expired bookings at once
@@ -330,7 +336,7 @@ Saat induk dihapus, semua anak ikut di-soft-delete secara cascade:
 - `getRealTripsForCso`: replaced 4 correlated subqueries with 2 LATERAL JOINs (outlet_tst + trip_agg)
 
 ### Transaction Safety
-- `precomputeInventory`: delete + insert inventory wrapped in DB transaction (prevents data loss on crash)
+- `precomputeInventory`: delete + insert inventory wrapped in DB transaction; preserves active (non-expired) seat holds by reading `seatHolds` + existing `seatInventory.holdRef` before delete/reinsert
 - `createTrip`: pattern stops pre-fetched before trip creation to minimize partial state
 
 ### Frontend Performance
@@ -340,7 +346,8 @@ Saat induk dihapus, semua anak ikut di-soft-delete secara cascade:
 - CsoPage: price calculation debounced (300ms) to prevent rapid API calls when selecting multiple seats
 
 ### API Pagination
-- Bookings and cargo list endpoints support optional `?page=1&pageSize=50` query params
+- Bookings endpoint supports optional `?page=1&pageSize=50` query params with **database-level** LIMIT/OFFSET (not in-memory slicing)
+- Pagination also supports `outletId` filter at SQL level for RBAC-scoped queries
 - When `page` param is present, returns `{ data, total, page, pageSize, totalPages }`
 - Without `page` param, returns flat array for backward compatibility
 

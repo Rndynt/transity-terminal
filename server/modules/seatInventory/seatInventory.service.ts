@@ -1,8 +1,8 @@
 import { IStorage } from "../../routes";
 import { Trip, SeatInventory } from "@shared/schema";
 import { db } from "../../db";
-import { seatInventory } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { seatInventory, seatHolds } from "@shared/schema";
+import { eq, and, gt } from "drizzle-orm";
 
 export class SeatInventoryService {
   constructor(private storage: IStorage) {}
@@ -53,24 +53,45 @@ export class SeatInventoryService {
       }
     }
 
-    const seatMap = layout.seatMap as any[];
-    const inventoryEntries = [];
-
-    for (const seat of seatMap) {
-      if (seat.disabled) continue;
-      for (const leg of legs) {
-        const isBooked = bookedKeys.has(`${seat.seat_no}:${leg.legIndex}`);
-        inventoryEntries.push({
-          tripId: trip.id,
-          seatNo: seat.seat_no,
-          legIndex: leg.legIndex,
-          booked: isBooked,
-          holdRef: null
-        });
-      }
-    }
-
     await db.transaction(async (tx) => {
+      const activeHolds = await tx
+        .select({
+          holdRef: seatHolds.holdRef,
+          seatNo: seatHolds.seatNo,
+          legIndexes: seatHolds.legIndexes
+        })
+        .from(seatHolds)
+        .where(and(
+          eq(seatHolds.tripId, trip.id),
+          gt(seatHolds.expiresAt, new Date())
+        ));
+
+      const holdRefMap = new Map<string, string>();
+      for (const hold of activeHolds) {
+        for (const legIdx of hold.legIndexes) {
+          holdRefMap.set(`${hold.seatNo}:${legIdx}`, hold.holdRef);
+        }
+      }
+
+      const seatMap = layout.seatMap as any[];
+      const inventoryEntries = [];
+
+      for (const seat of seatMap) {
+        if (seat.disabled) continue;
+        for (const leg of legs) {
+          const key = `${seat.seat_no}:${leg.legIndex}`;
+          const isBooked = bookedKeys.has(key);
+          const preservedHoldRef = holdRefMap.get(key) || null;
+          inventoryEntries.push({
+            tripId: trip.id,
+            seatNo: seat.seat_no,
+            legIndex: leg.legIndex,
+            booked: isBooked,
+            holdRef: isBooked ? null : preservedHoldRef
+          });
+        }
+      }
+
       await tx.delete(seatInventory).where(eq(seatInventory.tripId, trip.id));
       if (inventoryEntries.length > 0) {
         await tx.insert(seatInventory).values(inventoryEntries);

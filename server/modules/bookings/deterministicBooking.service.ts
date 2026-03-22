@@ -80,9 +80,7 @@ export class DeterministicBookingService {
    * Get available seats deterministically (sorted by seat_no ASC)
    */
   async getAvailableSeats(tripId: string, legIndexes: number[], count: number = 1): Promise<string[]> {
-    console.log(`[DETERMINISTIC] Getting available seats for trip ${tripId}, legs [${legIndexes.join(',')}], count ${count}`);
-    
-    // Get all seat inventory for the trip and legs with FOR UPDATE lock
+    // Get all seat inventory for the trip and legs
     const inventoryRows = await db
       .select({ 
         seatNo: seatInventory.seatNo,
@@ -127,8 +125,6 @@ export class DeterministicBookingService {
     // Sort deterministically by seat number
     availableSeats.sort((a, b) => a.localeCompare(b));
     
-    console.log(`[DETERMINISTIC] Found ${availableSeats.length} available seats: [${availableSeats.slice(0, Math.min(count, 10)).join(',')}...]`);
-    
     return availableSeats.slice(0, count);
   }
 
@@ -141,7 +137,6 @@ export class DeterministicBookingService {
     const ttlSeconds = ttlClass === 'short' ? 300 : 1800; // 5min short, 30min long
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
     
-    console.log(`[DETERMINISTIC] Attempting atomic hold for seat ${seatNo} on trip ${tripId}, legs [${legIndexes.join(',')}]`);
     
     try {
       const result = await db.transaction(async (tx) => {
@@ -202,7 +197,6 @@ export class DeterministicBookingService {
           expiresAt
         });
 
-        console.log(`[DETERMINISTIC] Hold created successfully: ${holdRef}`);
         
         return {
           success: true,
@@ -233,13 +227,11 @@ export class DeterministicBookingService {
   async atomicBooking(request: BookingRequest, idempotencyKey?: string): Promise<AtomicBookingResult> {
     const { tripId, originSeq, destinationSeq, passengers, payment } = request;
     
-    console.log(`[DETERMINISTIC] Attempting atomic booking for trip ${tripId}, ${passengers.length} passengers, idempotency: ${idempotencyKey}`);
     
     // Check idempotency - if we have this key, return existing booking
     if (idempotencyKey) {
       const existingBooking = await this.findBookingByIdempotencyKey(idempotencyKey);
       if (existingBooking) {
-        console.log(`[DETERMINISTIC] Found existing booking for idempotency key: ${existingBooking.id}`);
         return {
           success: true,
           booking: existingBooking,
@@ -365,7 +357,6 @@ export class DeterministicBookingService {
           status: 'queued'
         });
 
-        console.log(`[DETERMINISTIC] Booking created successfully: ${booking.id}`);
         
         return {
           success: true,
@@ -402,7 +393,6 @@ export class DeterministicBookingService {
    * Auto-select seats deterministically for multi-seat booking
    */
   async autoSelectSeats(tripId: string, legIndexes: number[], count: number): Promise<string[]> {
-    console.log(`[DETERMINISTIC] Auto-selecting ${count} seats for trip ${tripId}`);
     
     const availableSeats = await this.getAvailableSeats(tripId, legIndexes, count);
     
@@ -418,7 +408,6 @@ export class DeterministicBookingService {
    * Cleanup expired holds
    */
   async cleanupExpiredHolds(): Promise<{ released: number }> {
-    console.log(`[DETERMINISTIC] Cleaning up expired holds`);
     
     try {
       const result = await db.transaction(async (tx) => {
@@ -453,7 +442,6 @@ export class DeterministicBookingService {
           webSocketService.emitHoldsReleased(hold.tripId, [hold.seatNo]);
         }
 
-        console.log(`[DETERMINISTIC] Released ${expiredHolds.length} expired holds`);
         return { released: expiredHolds.length };
       });
 
@@ -468,7 +456,6 @@ export class DeterministicBookingService {
    * Release hold by reference
    */
   async releaseHoldByRef(holdRef: string): Promise<{ success: boolean }> {
-    console.log(`[DETERMINISTIC] Releasing hold: ${holdRef}`);
     
     try {
       const result = await db.transaction(async (tx) => {
@@ -501,7 +488,6 @@ export class DeterministicBookingService {
         );
         webSocketService.emitHoldsReleased(hold.tripId, [hold.seatNo]);
 
-        console.log(`[DETERMINISTIC] Hold released: ${holdRef}`);
         return { success: true };
       });
 

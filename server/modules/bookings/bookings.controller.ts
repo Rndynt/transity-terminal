@@ -87,16 +87,20 @@ export class BookingsController {
     const tripId = typeof req.query.tripId === 'string' ? req.query.tripId : undefined;
     const outletId = req.scopedOutletId ?? req.rbac?.outletId ?? null;
     const pageParam = (req.query as any).page;
-    let bookings = await this.bookingsService.getAllBookings(tripId);
-    if (outletId) {
-      bookings = bookings.filter((b) => b.outletId === outletId);
-    }
     if (pageParam) {
       const page = Math.max(1, parseInt(pageParam) || 1);
       const pageSize = Math.min(100, Math.max(1, parseInt((req.query as any).pageSize) || 50));
-      const total = bookings.length;
-      const paginated = bookings.slice((page - 1) * pageSize, page * pageSize);
-      return reply.send({ data: paginated, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+      const { data, total } = await this.bookingsService.getBookingsPaginated({
+        tripId,
+        outletId: outletId || undefined,
+        page,
+        pageSize
+      });
+      return reply.send({ data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+    }
+    let bookings = await this.bookingsService.getAllBookings(tripId);
+    if (outletId) {
+      bookings = bookings.filter((b) => b.outletId === outletId);
     }
     reply.send(bookings);
   }

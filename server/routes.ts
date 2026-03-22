@@ -90,12 +90,14 @@ export interface IStorage {
 
   getStops(): Promise<Stop[]>;
   getStopById(id: string): Promise<Stop | undefined>;
+  getStopsByIds(ids: string[]): Promise<Stop[]>;
   createStop(data: InsertStop): Promise<Stop>;
   updateStop(id: string, data: Partial<InsertStop>): Promise<Stop>;
   deleteStop(id: string): Promise<void>;
 
   getOutlets(): Promise<Outlet[]>;
   getOutletById(id: string): Promise<Outlet | undefined>;
+  getOutletsByIds(ids: string[]): Promise<Outlet[]>;
   createOutlet(data: InsertOutlet): Promise<Outlet>;
   updateOutlet(id: string, data: Partial<InsertOutlet>): Promise<Outlet>;
   deleteOutlet(id: string): Promise<void>;
@@ -160,6 +162,7 @@ export interface IStorage {
   deletePriceRule(id: string): Promise<void>;
 
   getBookings(tripId?: string): Promise<Booking[]>;
+  getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }>;
   getBookingById(id: string): Promise<Booking | undefined>;
   getBookingByCode(bookingCode: string): Promise<Booking | undefined>;
   createBooking(data: InsertBooking): Promise<Booking>;
@@ -176,6 +179,7 @@ export interface IStorage {
   recordManifestPrint(tripId: string): Promise<string | null>;
 
   getPayments(bookingId: string): Promise<Payment[]>;
+  getPaymentsByBookingIds(bookingIds: string[]): Promise<Payment[]>;
   createPayment(data: InsertPayment): Promise<Payment>;
 
   createPrintJob(data: InsertPrintJob): Promise<PrintJob>;

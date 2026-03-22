@@ -96,8 +96,6 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
         holdsRef.current.set(seatNo, hold);
         setHolds(current => new Map(current.set(seatNo, hold)));
 
-        console.log('[useSeatHold] Hold created:', { seatNo, holdRef: response.holdRef });
-
         const minutes = Math.floor(ttlSeconds / 60);
         const seconds = ttlSeconds % 60;
         const durationLabel = seconds > 0 ? `${minutes} menit ${seconds} detik` : `${minutes} menit`;
@@ -135,9 +133,6 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
     // Use ref for immediate access
     const hold = holdsRef.current.get(seatNo);
     
-    console.log('[useSeatHold] Release hold requested for:', seatNo);
-    console.log('[useSeatHold] Current holds:', Array.from(holdsRef.current.entries()).map(([k, v]) => ({ seatNo: k, holdRef: v.holdRef })));
-    
     if (!hold) {
       console.error('[useSeatHold] No hold found for seat:', seatNo);
       toast({
@@ -147,8 +142,6 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
       });
       return false;
     }
-
-    console.log('[useSeatHold] Releasing hold:', hold.holdRef);
 
     try {
       await holdsApi.release(hold.holdRef);
@@ -180,7 +173,6 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
 
   const releaseAllHolds = useCallback(async () => {
     const holdEntries = Array.from(holdsRef.current.entries());
-    console.log('[useSeatHold] Releasing all holds:', holdEntries.length);
     
     for (const [seatNo, hold] of holdEntries) {
       try {

@@ -189,7 +189,6 @@ export function useBookingFlow() {
       };
 
       const idempotencyKey = `pending-booking-${Date.now()}-${Math.random()}`;
-      console.log('Creating pending booking with idempotency key:', idempotencyKey);
       
       // Call the pending booking API
       const response = await fetch('/api/bookings/pending', {
@@ -325,7 +324,6 @@ export function useBookingFlow() {
       };
 
       const idempotencyKey = `booking-${Date.now()}-${Math.random()}`;
-      console.log('Creating booking with idempotency key:', idempotencyKey);
       const result = await bookingsApi.create(bookingData, idempotencyKey);
 
       toast({

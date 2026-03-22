@@ -30,6 +30,10 @@ export class BookingsService {
     return await this.storage.getBookings(tripId);
   }
 
+  async getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }> {
+    return await this.storage.getBookingsPaginated(options);
+  }
+
   async getBookingById(id: string): Promise<Booking & { passengers?: any[]; payments?: any[]; tripDetails?: any; originStop?: any; destinationStop?: any; outlet?: any; vehicle?: any; departAt?: any; arriveAt?: any }> {
     const booking = await this.storage.getBookingById(id);
     if (!booking) {
