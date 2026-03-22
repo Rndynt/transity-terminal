@@ -38,10 +38,11 @@ export const drivers = pgTable("drivers", {
   name:        text("name").notNull(),
   phone:       text("phone").notNull(),
   licenseNo:   text("license_no").notNull(),
-  licenseType: text("license_type").notNull().default('B2'), // SIM B2 umum untuk kendaraan angkutan
+  licenseType: text("license_type").notNull().default('B2'),
   status:      driverStatusEnum("status").notNull().default('active'),
   notes:       text("notes"),
-  createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow()
+  createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
+  deletedAt:   timestamp("deleted_at", { withTimezone: true })
 });
 
 export const insertDriverSchema = createInsertSchema(drivers).omit({ id: true, createdAt: true });
@@ -575,7 +576,8 @@ export const cargoTypes = pgTable("cargo_types", {
   isActive:     boolean("is_active").default(true),
   description:  text("description"),
   maxWeightKg:  numeric("max_weight_kg", { precision: 8, scale: 2 }),
-  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow()
+  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow(),
+  deletedAt:    timestamp("deleted_at", { withTimezone: true })
 });
 
 export const insertCargoTypeSchema = createInsertSchema(cargoTypes).omit({ id: true, createdAt: true });

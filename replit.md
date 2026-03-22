@@ -81,14 +81,24 @@ shared/
 plan/              → Dokumentasi teknis fitur
 ```
 
-## Data Safety (Soft Delete)
+## Data Safety (Soft Delete + Cascade)
 Semua data master menggunakan **`deleted_at` TIMESTAMPTZ** untuk soft delete — tidak pernah dihapus permanen:
-- **stops, outlets, vehicles, layouts, trip_patterns, trip_bases, trips** → kolom `deleted_at` di-set
+- **drivers, stops, outlets, vehicles, layouts, trip_patterns, pattern_stops, trip_bases, trips, trip_stop_times, trip_legs, price_rules, cargo_types** → kolom `deleted_at` di-set
 - **trips** → juga set `status='canceled'` bersamaan dengan `deleted_at`
 - **`active` flag** pada trip_patterns/trip_bases tetap terpisah — untuk enable/disable sementara, bukan delete
 - Query list (getStops, getTripPatterns, dll) otomatis filter `deleted_at IS NULL`
 - Query by ID (getStopById, dll) tetap mengembalikan data termasuk yang soft-deleted (untuk laporan/referensi historis)
 - CSO availability, app search, virtual trip eligibility — semua filter `deleted_at IS NULL`
+
+### Cascade Soft Delete
+Saat induk dihapus, semua anak ikut di-soft-delete secara cascade:
+- **deleteStop** → pattern_stops, outlets
+- **deleteLayout** → vehicles
+- **deleteTripPattern** → pattern_stops, price_rules (pattern-level), trip_bases
+- **deleteTripBase** → trips (+ trip_stop_times, trip_legs, price_rules, seat_inventory, seat_holds)
+- **deleteTrip** → trip_stop_times, trip_legs, price_rules (trip-level), seat_inventory (hard), seat_holds (hard)
+- **deleteCargoType** → cargo_rates (hard delete karena no deletedAt)
+- **seat_inventory & seat_holds** tetap hard-delete karena bersifat transaksional/ephemeral
 
 ## Running
 - Workflow "Start application" → `npm run dev` (port 5000)
