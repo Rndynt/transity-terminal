@@ -317,31 +317,10 @@ export class DatabaseStorage implements IStorage {
       vehiclePlate: vehicles.plate,
       capacity: trips.capacity,
       status: trips.status,
-      departAtOutlet: sql<string>`(
-        SELECT COALESCE(tst.depart_at, tst.arrive_at)
-        FROM ${tripStopTimes} tst 
-        WHERE tst.trip_id = ${trips.id} 
-        AND tst.stop_id = ${outletStopId}
-      )`.as('depart_at_outlet'),
-      finalArrivalAt: sql<string>`(
-        SELECT tst.arrive_at 
-        FROM ${tripStopTimes} tst 
-        WHERE tst.trip_id = ${trips.id} 
-        ORDER BY tst.stop_sequence DESC 
-        LIMIT 1
-      )`.as('final_arrival_at'),
-      outletStopSequence: sql<number>`(
-        SELECT tst.stop_sequence 
-        FROM ${tripStopTimes} tst 
-        WHERE tst.trip_id = ${trips.id} 
-        AND tst.stop_id = ${outletStopId}
-        LIMIT 1
-      )`.as('outlet_stop_sequence'),
-      stopCount: sql<number>`(
-        SELECT COUNT(*) 
-        FROM ${tripStopTimes} tst 
-        WHERE tst.trip_id = ${trips.id}
-      )`.as('stop_count'),
+      departAtOutlet: sql<string>`outlet_tst.depart_at_outlet`.as('depart_at_outlet'),
+      finalArrivalAt: sql<string>`trip_agg.final_arrival_at`.as('final_arrival_at'),
+      outletStopSequence: sql<number>`outlet_tst.stop_sequence`.as('outlet_stop_sequence'),
+      stopCount: sql<number>`trip_agg.stop_count`.as('stop_count'),
       patternStops: sql<string>`(
         SELECT STRING_AGG(s.name, ' → ' ORDER BY ps.stop_sequence)
         FROM ${patternStops} ps
@@ -384,6 +363,25 @@ export class DatabaseStorage implements IStorage {
     .from(trips)
     .innerJoin(tripPatterns, eq(trips.patternId, tripPatterns.id))
     .leftJoin(vehicles, eq(trips.vehicleId, vehicles.id))
+    .innerJoin(
+      sql`LATERAL (
+        SELECT tst.stop_sequence, COALESCE(tst.depart_at, tst.arrive_at) AS depart_at_outlet
+        FROM ${tripStopTimes} tst
+        WHERE tst.trip_id = ${trips.id} AND tst.stop_id = ${outletStopId}
+        LIMIT 1
+      ) AS outlet_tst`,
+      sql`true`
+    )
+    .innerJoin(
+      sql`LATERAL (
+        SELECT 
+          MAX(tst.arrive_at) FILTER (WHERE tst.stop_sequence = (SELECT MAX(t2.stop_sequence) FROM ${tripStopTimes} t2 WHERE t2.trip_id = ${trips.id})) AS final_arrival_at,
+          COUNT(*)::int AS stop_count
+        FROM ${tripStopTimes} tst
+        WHERE tst.trip_id = ${trips.id}
+      ) AS trip_agg`,
+      sql`true`
+    )
     .where(
       and(
         eq(trips.serviceDate, serviceDate),

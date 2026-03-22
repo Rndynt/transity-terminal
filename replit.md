@@ -271,6 +271,9 @@ plan/              → Dokumentasi teknis fitur
 - 33+ indexes on foreign keys and frequently queried columns across all major tables
 - Partial index on `bookings(pending_expires_at) WHERE status = 'pending'` for cleanup scheduler
 - Composite index on `seat_inventory(trip_id, seat_no)` for seatmap lookups
+- Composite index on `trip_stop_times(trip_id, stop_id)` for CSO trip queries
+- Composite index on `bookings(trip_id, status)` for available seat counts
+- Composite index on `seat_inventory(trip_id, leg_index)` for seatmap leg lookups
 
 ### N+1 Query Fixes
 - `getSeatmap`: batch passenger fetch via `getPassengersByBookingIds()` instead of per-booking queries
@@ -285,13 +288,24 @@ plan/              → Dokumentasi teknis fitur
 
 ### Parallelized Queries (Promise.all)
 - `searchTrips`: origin + destination stops fetched in parallel; availableSeats + fareQuote per trip in parallel
+- `getSeatmap` (trips.service): layout + inventory + bookings + stopTimes all in single Promise.all
 - `getSeatmap` (app): layout + inventory fetched in parallel
+- `getBookingById`: stops + outlet + vehicle fetched in single Promise.all (was sequential)
 - `getCsoAvailableTrips`: real + virtual trips fetched in parallel
 - `precomputeInventory`: layout + legs + bookings fetched in parallel
+
+### Query Optimization
+- `getRealTripsForCso`: replaced 4 correlated subqueries with 2 LATERAL JOINs (outlet_tst + trip_agg)
 
 ### Transaction Safety
 - `precomputeInventory`: delete + insert inventory wrapped in DB transaction (prevents data loss on crash)
 - `createTrip`: pattern stops pre-fetched before trip creation to minimize partial state
+
+### Frontend Performance
+- SeatMap: 30s polling disabled when WebSocket is connected (auto-fallback if WS drops)
+- SeatMap: unseated passengers polling disabled when WS connected
+- SeatMap: seat grid calculation memoized with useMemo (no recalc on timer tick)
+- CsoPage: price calculation debounced (300ms) to prevent rapid API calls when selecting multiple seats
 
 ### API Pagination
 - Bookings and cargo list endpoints support optional `?page=1&pageSize=50` query params

@@ -131,16 +131,19 @@ export default function CsoPage() {
   const { releaseAllHolds } = useSeatHold();
 
   useEffect(() => {
-    const updateTotal = async () => {
+    if (state.selectedSeats.length === 0) {
+      setTotalAmount(0);
+      return;
+    }
+    const timer = setTimeout(async () => {
       try {
         const total = await calculateTotalAmount();
         setTotalAmount(total);
       } catch {
         setTotalAmount(0);
       }
-    };
-    if (state.selectedSeats.length > 0) updateTotal();
-    else setTotalAmount(0);
+    }, 300);
+    return () => clearTimeout(timer);
   }, [state.trip?.id, state.originSeq, state.destinationSeq, state.selectedSeats.length, calculateTotalAmount]);
 
   const handleOutletSelect = (outlet: Outlet) => {

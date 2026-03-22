@@ -194,35 +194,31 @@ export class TripsService {
   async getSeatmap(tripId: string, originSeq: number, destinationSeq: number) {
     const trip = await this.getTripById(tripId);
 
-    // Prefer trip's explicit layoutId; fall back to vehicle's layout
     let resolvedLayoutId = trip.layoutId ?? null;
     if (!resolvedLayoutId && trip.vehicleId) {
       const vehicle = await this.storage.getVehicleById(trip.vehicleId);
       resolvedLayoutId = vehicle?.layoutId ?? null;
     }
-    const layout = resolvedLayoutId ? await this.storage.getLayoutById(resolvedLayoutId) : null;
-    
-    if (!layout) {
-      throw new Error("Layout kursi tidak ditemukan. Pastikan trip atau kendaraan memiliki layout yang valid.");
-    }
 
-    // Get required leg indexes for this O-D pair
     const legIndexes = [];
     for (let i = originSeq; i < destinationSeq; i++) {
       legIndexes.push(i);
     }
 
-    // Get seat inventory for required legs
-    const inventory = await this.storage.getSeatInventory(tripId, legIndexes);
+    const [layout, inventory, allBookings, tripStopTimes] = await Promise.all([
+      resolvedLayoutId ? this.storage.getLayoutById(resolvedLayoutId) : null,
+      this.storage.getSeatInventory(tripId, legIndexes),
+      this.storage.getBookings(tripId),
+      this.storage.getTripStopTimes(tripId)
+    ]);
     
-    // Get all bookings for this trip to determine booking types and status
-    const allBookings = await this.storage.getBookings(tripId);
+    if (!layout) {
+      throw new Error("Layout kursi tidak ditemukan. Pastikan trip atau kendaraan memiliki layout yang valid.");
+    }
+
     const activeBookings = allBookings.filter(booking => 
       booking.status === 'paid' || booking.status === 'pending' || booking.status === 'confirmed'
     );
-    
-    // Get all trip stop times to understand the full trip coverage
-    const tripStopTimes = await this.storage.getTripStopTimes(tripId);
     const totalStops = tripStopTimes.length;
     
     // Initialize all seats as available

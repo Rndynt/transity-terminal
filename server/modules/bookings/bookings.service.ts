@@ -43,24 +43,16 @@ export class BookingsService {
       this.storage.getTripStopTimes(booking.tripId)
     ]);
     
-    let originStop = null;
-    let destinationStop = null;
-    if (booking.originStopId && booking.destinationStopId) {
-      [originStop, destinationStop] = await Promise.all([
-        this.storage.getStopById(booking.originStopId),
-        this.storage.getStopById(booking.destinationStopId)
-      ]);
-    }
-
-    let outlet = null;
-    if (booking.outletId) {
-      outlet = await this.storage.getOutletById(booking.outletId);
-    }
-
-    let vehicle = null;
-    if (trip?.vehicleId) {
-      vehicle = await this.storage.getVehicleById(trip.vehicleId);
-    }
+    const secondaryFetches = await Promise.all([
+      booking.originStopId ? this.storage.getStopById(booking.originStopId) : null,
+      booking.destinationStopId ? this.storage.getStopById(booking.destinationStopId) : null,
+      booking.outletId ? this.storage.getOutletById(booking.outletId) : null,
+      trip?.vehicleId ? this.storage.getVehicleById(trip.vehicleId) : null
+    ]);
+    const originStop = secondaryFetches[0];
+    const destinationStop = secondaryFetches[1];
+    const outlet = secondaryFetches[2];
+    const vehicle = secondaryFetches[3];
 
     let departAt = null;
     let arriveAt = null;

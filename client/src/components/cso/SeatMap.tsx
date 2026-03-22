@@ -195,7 +195,7 @@ export default function SeatMap({
     queryFn: () => tripsApi.getUnseatedPassengers(trip.id),
     enabled: !!trip.id,
     staleTime: 10000,
-    refetchInterval: 30000
+    refetchInterval: isConnected ? false : 30000
   });
 
   useEffect(() => { refetchRef.current = refetch; }, [refetch]);
@@ -209,10 +209,10 @@ export default function SeatMap({
   useEffect(() => { setLocalSelectedSeats(new Set(selectedSeats)); }, [selectedSeats]);
 
   useEffect(() => {
-    if (!autoRefreshEnabled) return;
+    if (!autoRefreshEnabled || isConnected) return;
     const interval = setInterval(() => refetch(), 30000);
     return () => clearInterval(interval);
-  }, [autoRefreshEnabled, refetch]);
+  }, [autoRefreshEnabled, isConnected, refetch]);
 
   useEffect(() => {
     if (!isConnected || !trip.id) return;
@@ -420,20 +420,21 @@ export default function SeatMap({
   const availableCount = getAvailableCount();
   const totalSeats = seatMapLayout.length;
 
-  const maxCol = Math.max(...seatMapLayout.map((s: any) => s.col));
-  const maxRow = Math.max(...seatMapLayout.map((s: any) => s.row));
-  const gridCols = maxCol + 1;
-
-  const seatGrid: (any | null)[][] = [];
-  for (let r = 0; r <= maxRow; r++) {
-    seatGrid[r] = [];
-    for (let c = 0; c <= maxCol; c++) {
-      seatGrid[r][c] = null;
+  const { maxCol, maxRow, gridCols, seatGrid } = useMemo(() => {
+    const mc = Math.max(...seatMapLayout.map((s: any) => s.col));
+    const mr = Math.max(...seatMapLayout.map((s: any) => s.row));
+    const grid: (any | null)[][] = [];
+    for (let r = 0; r <= mr; r++) {
+      grid[r] = [];
+      for (let c = 0; c <= mc; c++) {
+        grid[r][c] = null;
+      }
     }
-  }
-  seatMapLayout.forEach((seat: any) => {
-    seatGrid[seat.row][seat.col] = seat;
-  });
+    seatMapLayout.forEach((seat: any) => {
+      grid[seat.row][seat.col] = seat;
+    });
+    return { maxCol: mc, maxRow: mr, gridCols: mc + 1, seatGrid: grid };
+  }, [seatMapLayout]);
 
   return (
     <div className="space-y-3">
