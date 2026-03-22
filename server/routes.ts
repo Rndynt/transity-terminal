@@ -662,6 +662,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/reports/cargo', asyncHandler(reportsController.getCargo.bind(reportsController)));
   app.get('/api/reports/payments', asyncHandler(reportsController.getPayments.bind(reportsController)));
 
+  // ── Admin API (/api/admin/) ──────────────────────────────────
+
+  // List all roles
+  app.get('/api/admin/roles', requireFlag('admin.flags.manage'), asyncHandler(async (_req: any, res: any) => {
+    const { db } = await import('./db');
+    const { roles } = await import('../shared/schema');
+    const allRoles = await db.select().from(roles);
+    res.json(allRoles);
+  }));
+
+  // List all feature flags
+  app.get('/api/admin/flags', requireFlag('admin.flags.manage'), asyncHandler(async (_req: any, res: any) => {
+    const { db } = await import('./db');
+    const { featureFlags } = await import('../shared/schema');
+    const allFlags = await db.select().from(featureFlags);
+    res.json(allFlags);
+  }));
+
+  // Get full role-flag matrix
+  app.get('/api/admin/role-flags', requireFlag('admin.flags.manage'), asyncHandler(async (_req: any, res: any) => {
+    const { db } = await import('./db');
+    const { roleFlags } = await import('../shared/schema');
+    const matrix = await db.select().from(roleFlags);
+    res.json(matrix);
+  }));
+
+  // Toggle a role-flag entry (upsert)
+  app.put('/api/admin/role-flags/:roleId/:flagId', requireFlag('admin.flags.manage'), asyncHandler(async (req: any, res: any) => {
+    const { db } = await import('./db');
+    const { roleFlags } = await import('../shared/schema');
+    const { eq, and } = await import('drizzle-orm');
+    const { roleId, flagId } = req.params;
+    const { enabled } = req.body;
+    const existing = await db.select().from(roleFlags).where(and(eq(roleFlags.roleId, roleId), eq(roleFlags.flagId, flagId))).limit(1);
+    if (existing.length > 0) {
+      await db.update(roleFlags).set({ enabled: !!enabled }).where(and(eq(roleFlags.roleId, roleId), eq(roleFlags.flagId, flagId)));
+    } else if (enabled) {
+      await db.insert(roleFlags).values({ roleId, flagId, enabled: true });
+    }
+    res.json({ roleId, flagId, enabled: !!enabled });
+  }));
+
+  // List all staff members
+  app.get('/api/admin/staff', requireFlag('admin.staff.manage'), asyncHandler(async (_req: any, res: any) => {
+    const { db } = await import('./db');
+    const { staffMembers } = await import('../shared/schema');
+    const list = await db.select({
+      id: staffMembers.id,
+      userId: staffMembers.userId,
+      roleId: staffMembers.roleId,
+      outletId: staffMembers.outletId,
+      isActive: staffMembers.isActive,
+      createdAt: staffMembers.createdAt,
+    }).from(staffMembers);
+    res.json(list);
+  }));
+
+  // Create staff member
+  app.post('/api/admin/staff', requireFlag('admin.staff.manage'), asyncHandler(async (req: any, res: any) => {
+    const { db } = await import('./db');
+    const { staffMembers } = await import('../shared/schema');
+    const { userId, roleId, outletId, isActive } = req.body;
+    if (!userId || !roleId) return res.status(400).json({ message: 'userId and roleId are required' });
+    const [created] = await db.insert(staffMembers).values({
+      userId,
+      roleId,
+      outletId: outletId || null,
+      isActive: isActive !== false,
+    }).returning();
+    res.status(201).json(created);
+  }));
+
+  // Update staff member
+  app.put('/api/admin/staff/:id', requireFlag('admin.staff.manage'), asyncHandler(async (req: any, res: any) => {
+    const { db } = await import('./db');
+    const { staffMembers } = await import('../shared/schema');
+    const { eq } = await import('drizzle-orm');
+    const { id } = req.params;
+    const { roleId, outletId, isActive } = req.body;
+    const updates: any = { updatedAt: new Date() };
+    if (roleId !== undefined) updates.roleId = roleId;
+    if (outletId !== undefined) updates.outletId = outletId || null;
+    if (isActive !== undefined) updates.isActive = isActive;
+    const [updated] = await db.update(staffMembers).set(updates).where(eq(staffMembers.id, id)).returning();
+    if (!updated) return res.status(404).json({ message: 'Staff member not found' });
+    res.json(updated);
+  }));
+
+  // Deactivate / delete staff member
+  app.delete('/api/admin/staff/:id', requireFlag('admin.staff.manage'), asyncHandler(async (req: any, res: any) => {
+    const { db } = await import('./db');
+    const { staffMembers } = await import('../shared/schema');
+    const { eq } = await import('drizzle-orm');
+    const { id } = req.params;
+    await db.update(staffMembers).set({ isActive: false }).where(eq(staffMembers.id, id));
+    res.json({ success: true });
+  }));
+
   // Seed data (includes RBAC seed at the end)
   app.post('/api/seed', asyncHandler(async (req: any, res: any) => {
     const { seedData } = await import('./seed');

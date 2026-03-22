@@ -6,6 +6,7 @@ import { UserMinus, CalendarClock, Ban, Loader2, Armchair } from 'lucide-react';
 import { passengersApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import CanAccess from '@/components/rbac/CanAccess';
 
 export interface PassengerActionTarget {
   id: string;
@@ -245,38 +246,44 @@ export default function PassengerActions({
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-7 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-        onClick={() => setConfirmUnseat(true)}
-        data-testid={`btn-unseat-${p.id}`}
-      >
-        <UserMinus className="w-3 h-3" />
-        Unseat
-      </Button>
-      {onStartRescheduleMode && (
+      <CanAccess flag="action.passenger.unseat">
         <Button
           size="sm"
           variant="outline"
-          className="h-7 text-xs gap-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50 border-purple-200"
-          onClick={() => setShowRescheduleReason(true)}
-          data-testid={`btn-reschedule-${p.id}`}
+          className="h-7 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+          onClick={() => setConfirmUnseat(true)}
+          data-testid={`btn-unseat-${p.id}`}
         >
-          <CalendarClock className="w-3 h-3" />
-          Reschedule
+          <UserMinus className="w-3 h-3" />
+          Unseat
         </Button>
-      )}
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-7 text-xs gap-1 text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
-        onClick={() => setConfirmCancel(true)}
-        data-testid={`btn-cancel-ticket-${p.id}`}
-      >
-        <Ban className="w-3 h-3" />
-        Batalkan Tiket
-      </Button>
+      </CanAccess>
+      <CanAccess flag="action.passenger.reschedule">
+        {onStartRescheduleMode && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50 border-purple-200"
+            onClick={() => setShowRescheduleReason(true)}
+            data-testid={`btn-reschedule-${p.id}`}
+          >
+            <CalendarClock className="w-3 h-3" />
+            Reschedule
+          </Button>
+        )}
+      </CanAccess>
+      <CanAccess flag="action.booking.cancel">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs gap-1 text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
+          onClick={() => setConfirmCancel(true)}
+          data-testid={`btn-cancel-ticket-${p.id}`}
+        >
+          <Ban className="w-3 h-3" />
+          Batalkan Tiket
+        </Button>
+      </CanAccess>
     </div>
   );
 }

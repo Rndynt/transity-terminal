@@ -4,48 +4,57 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   MapPin, Store, Truck, UserCheck, LayoutGrid, Route, Calendar, DollarSign,
   Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText, BadgePercent, ClipboardList, CalendarDays, LogOut,
-  BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard
+  BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard, ShieldCheck
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { usePermissions } from "@/lib/permissions";
 
 const NAV_SECTIONS = [
   {
     title: "OPERASIONAL",
     items: [
-      { name: "Reservasi", path: "/cso", icon: Ticket },
-      { name: "Kargo", path: "/cargo", icon: Package },
-      { name: "All Bookings", path: "/bookings", icon: List },
-      { name: "Jadwal Harian", path: "/schedule", icon: CalendarDays },
-      { name: "SPJ", path: "/spj", icon: ClipboardList },
+      { name: "Reservasi", path: "/cso", icon: Ticket, flag: "page.cso" },
+      { name: "Kargo", path: "/cargo", icon: Package, flag: "page.cargo" },
+      { name: "All Bookings", path: "/bookings", icon: List, flag: "page.bookings" },
+      { name: "Jadwal Harian", path: "/schedule", icon: CalendarDays, flag: "page.schedule" },
+      { name: "SPJ", path: "/spj", icon: ClipboardList, flag: "page.spj" },
+      { name: "Manifest", path: "/manifest", icon: FileText, flag: "page.manifest" },
     ]
   },
   {
     title: "LAPORAN",
     items: [
-      { name: "Pendapatan", path: "/reports/revenue", icon: DollarSign },
-      { name: "Penjualan", path: "/reports/sales", icon: ShoppingCart },
-      { name: "Laba Rugi Trip", path: "/reports/trip-profitability", icon: TrendingUp },
-      { name: "Load Factor", path: "/reports/load-factor", icon: Users },
-      { name: "Pembatalan", path: "/reports/cancellations", icon: AlertTriangle },
-      { name: "Kargo", path: "/reports/cargo", icon: Package },
-      { name: "Pembayaran", path: "/reports/payments", icon: CreditCard },
+      { name: "Pendapatan", path: "/reports/revenue", icon: DollarSign, flag: "report.revenue" },
+      { name: "Penjualan", path: "/reports/sales", icon: ShoppingCart, flag: "report.sales" },
+      { name: "Laba Rugi Trip", path: "/reports/trip-profitability", icon: TrendingUp, flag: "report.trip_profitability" },
+      { name: "Load Factor", path: "/reports/load-factor", icon: Users, flag: "report.load_factor" },
+      { name: "Pembatalan", path: "/reports/cancellations", icon: AlertTriangle, flag: "report.cancellations" },
+      { name: "Kargo", path: "/reports/cargo", icon: Package, flag: "report.cargo" },
+      { name: "Pembayaran", path: "/reports/payments", icon: CreditCard, flag: "report.payments" },
     ]
   },
   {
     title: "MASTER DATA",
     items: [
-      { name: "Stops", path: "/masters?tab=stops", icon: MapPin },
-      { name: "Outlets", path: "/masters?tab=outlets", icon: Store },
-      { name: "Vehicles", path: "/masters?tab=vehicles", icon: Truck },
-      { name: "Driver", path: "/masters?tab=drivers", icon: UserCheck },
-      { name: "Layouts", path: "/masters?tab=layouts", icon: LayoutGrid },
-      { name: "Trip Patterns", path: "/masters?tab=patterns", icon: Route },
-      { name: "Trips", path: "/masters?tab=trips", icon: Calendar },
-      { name: "Price Rules", path: "/masters?tab=pricing", icon: DollarSign },
-      { name: "Promo & Voucher", path: "/masters?tab=promos", icon: BadgePercent },
-      { name: "Jenis Kargo", path: "/masters?tab=cargo-types", icon: Tag },
-      { name: "Tarif Kargo", path: "/masters?tab=cargo-rates", icon: Package },
-      { name: "Biaya Perjalanan", path: "/masters?tab=cost-templates", icon: Wallet },
+      { name: "Stops", path: "/masters?tab=stops", icon: MapPin, flag: "master.stops" },
+      { name: "Outlets", path: "/masters?tab=outlets", icon: Store, flag: "master.outlets" },
+      { name: "Vehicles", path: "/masters?tab=vehicles", icon: Truck, flag: "master.vehicles" },
+      { name: "Driver", path: "/masters?tab=drivers", icon: UserCheck, flag: "master.drivers" },
+      { name: "Layouts", path: "/masters?tab=layouts", icon: LayoutGrid, flag: "master.layouts" },
+      { name: "Trip Patterns", path: "/masters?tab=patterns", icon: Route, flag: "master.trip_patterns" },
+      { name: "Trips", path: "/masters?tab=trips", icon: Calendar, flag: "master.trips" },
+      { name: "Price Rules", path: "/masters?tab=pricing", icon: DollarSign, flag: "master.price_rules" },
+      { name: "Promo & Voucher", path: "/masters?tab=promos", icon: BadgePercent, flag: "master.promos" },
+      { name: "Jenis Kargo", path: "/masters?tab=cargo-types", icon: Tag, flag: "master.cargo_types" },
+      { name: "Tarif Kargo", path: "/masters?tab=cargo-rates", icon: Package, flag: "master.cargo_rates" },
+      { name: "Biaya Perjalanan", path: "/masters?tab=cost-templates", icon: Wallet, flag: "master.cost_templates" },
+    ]
+  },
+  {
+    title: "ADMIN",
+    items: [
+      { name: "Kelola Staff", path: "/admin/staff", icon: Users, flag: "admin.staff.manage" },
+      { name: "Feature Flags", path: "/admin/flags", icon: ShieldCheck, flag: "admin.flags.manage" },
     ]
   }
 ];
@@ -62,6 +71,7 @@ export default function Sidebar({ isOpen = true, onClose, isMobile = false, isCo
   const [location] = useLocation();
   const search = useSearch();
   const { user, signOut } = useAuth();
+  const { can, isLoading: permLoading } = usePermissions();
 
   const handleLinkClick = () => {
     if (isMobile && onClose) onClose();
@@ -79,6 +89,11 @@ export default function Sidebar({ isOpen = true, onClose, isMobile = false, isCo
     }
     return true;
   };
+
+  const visibleSections = NAV_SECTIONS.map(section => ({
+    ...section,
+    items: permLoading ? [] : section.items.filter(item => can(item.flag)),
+  })).filter(section => section.items.length > 0);
 
   return (
     <div
@@ -146,7 +161,7 @@ export default function Sidebar({ isOpen = true, onClose, isMobile = false, isCo
 
       <nav className={cn("flex-1 py-3 overflow-y-auto", isCollapsed && !isMobile ? "px-2" : "px-3")}>
         <TooltipProvider delayDuration={100}>
-          {NAV_SECTIONS.map(section => (
+          {visibleSections.map(section => (
             <div key={section.title} className="mb-4">
               {(!isCollapsed || isMobile) && (
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1.5">

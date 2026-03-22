@@ -19,6 +19,7 @@ import {
 import type { SpjWithDetails, SpjCostLine, TripWithDetails, TripPattern } from '@/types';
 import { SpjStatusBadge } from '@/components/shared/StatusBadges';
 import { fmtCurrency } from '@/lib/constants';
+import { CanAccess } from '@/components/rbac/CanAccess';
 
 function formatDate(d: string | Date | null | undefined) {
   if (!d) return '—';
@@ -129,9 +130,11 @@ export default function SpjPage() {
             </div>
             <p className="text-sm text-muted-foreground">Kelola SPJ untuk setiap trip perjalanan. Biaya perjalanan dicatat dan diselesaikan di sini.</p>
           </div>
-          <Button onClick={() => setShowCreateDialog(true)} data-testid="btn-create-spj">
-            <Plus className="w-4 h-4 mr-1.5" /> Buat SPJ
-          </Button>
+          <CanAccess flag="action.spj.create">
+            <Button onClick={() => setShowCreateDialog(true)} data-testid="btn-create-spj">
+              <Plus className="w-4 h-4 mr-1.5" /> Buat SPJ
+            </Button>
+          </CanAccess>
         </div>
       </div>
 
@@ -465,14 +468,18 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
           </div>
           <div className="flex items-center gap-2">
             {isDraft && (
-              <Button size="sm" onClick={() => issueMutation.mutate()} disabled={issueMutation.isPending} data-testid="btn-issue-spj">
-                <CheckCircle className="w-4 h-4 mr-1" /> Terbitkan
-              </Button>
+              <CanAccess flag="action.spj.issue">
+                <Button size="sm" onClick={() => issueMutation.mutate()} disabled={issueMutation.isPending} data-testid="btn-issue-spj">
+                  <CheckCircle className="w-4 h-4 mr-1" /> Terbitkan
+                </Button>
+              </CanAccess>
             )}
             {(isIssued || spjData.status === 'on_trip') && (
-              <Button size="sm" variant="default" onClick={() => setShowSettleConfirm(true)} disabled={settleMutation.isPending} data-testid="btn-settle-spj">
-                <Wallet className="w-4 h-4 mr-1" /> Selesaikan
-              </Button>
+              <CanAccess flag="action.spj.settle">
+                <Button size="sm" variant="default" onClick={() => setShowSettleConfirm(true)} disabled={settleMutation.isPending} data-testid="btn-settle-spj">
+                  <Wallet className="w-4 h-4 mr-1" /> Selesaikan
+                </Button>
+              </CanAccess>
             )}
             {isDraft && (
               <Button size="sm" variant="destructive" onClick={() => setShowDeleteConfirm(true)} data-testid="btn-delete-spj">

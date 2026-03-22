@@ -4,6 +4,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { PermissionsProvider } from "@/lib/permissions";
+import { RequireFlag } from "@/components/rbac/RequireFlag";
 import NotFound from "@/pages/not-found";
 import AppLayout from "@/components/layout/AppLayout";
 import MastersPage from "@/pages/masters/MastersPage";
@@ -21,6 +23,8 @@ import CancellationsReportPage from "@/pages/reports/CancellationsReportPage";
 import CargoReportPage from "@/pages/reports/CargoReportPage";
 import PaymentsReportPage from "@/pages/reports/PaymentsReportPage";
 import LoginPage from "@/pages/auth/LoginPage";
+import AdminStaffPage from "@/pages/admin/AdminStaffPage";
+import AdminFlagsPage from "@/pages/admin/AdminFlagsPage";
 import { Loader2 } from "lucide-react";
 import { useLocation, Redirect } from "wouter";
 
@@ -52,26 +56,98 @@ function Router() {
       <Route path="/login" component={LoginPage} />
       <Route>
         <ProtectedRoute>
-          <AppLayout>
-            <Switch>
-              <Route path="/" component={CsoPage} />
-              <Route path="/cso" component={CsoPage} />
-              <Route path="/cargo" component={CargoListPage} />
-              <Route path="/manifest" component={ManifestPage} />
-              <Route path="/schedule" component={SchedulePage} />
-              <Route path="/bookings" component={AllBookingsPage} />
-              <Route path="/spj" component={SpjPage} />
-              <Route path="/reports/revenue" component={RevenueReportPage} />
-              <Route path="/reports/sales" component={SalesReportPage} />
-              <Route path="/reports/trip-profitability" component={TripProfitabilityPage} />
-              <Route path="/reports/load-factor" component={LoadFactorPage} />
-              <Route path="/reports/cancellations" component={CancellationsReportPage} />
-              <Route path="/reports/cargo" component={CargoReportPage} />
-              <Route path="/reports/payments" component={PaymentsReportPage} />
-              <Route path="/masters" component={MastersPage} />
-              <Route component={NotFound} />
-            </Switch>
-          </AppLayout>
+          <PermissionsProvider>
+            <AppLayout>
+              <Switch>
+                <Route path="/">
+                  <RequireFlag flag="page.cso">
+                    <CsoPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/cso">
+                  <RequireFlag flag="page.cso">
+                    <CsoPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/cargo">
+                  <RequireFlag flag="page.cargo">
+                    <CargoListPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/manifest">
+                  <RequireFlag flag="page.manifest">
+                    <ManifestPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/schedule">
+                  <RequireFlag flag="page.schedule">
+                    <SchedulePage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/bookings">
+                  <RequireFlag flag="page.bookings">
+                    <AllBookingsPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/spj">
+                  <RequireFlag flag="page.spj">
+                    <SpjPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/reports/revenue">
+                  <RequireFlag flag="report.revenue">
+                    <RevenueReportPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/reports/sales">
+                  <RequireFlag flag="report.sales">
+                    <SalesReportPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/reports/trip-profitability">
+                  <RequireFlag flag="report.trip_profitability">
+                    <TripProfitabilityPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/reports/load-factor">
+                  <RequireFlag flag="report.load_factor">
+                    <LoadFactorPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/reports/cancellations">
+                  <RequireFlag flag="report.cancellations">
+                    <CancellationsReportPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/reports/cargo">
+                  <RequireFlag flag="report.cargo">
+                    <CargoReportPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/reports/payments">
+                  <RequireFlag flag="report.payments">
+                    <PaymentsReportPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/masters">
+                  <RequireFlag flag="page.masters">
+                    <MastersPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/admin/staff">
+                  <RequireFlag flag="admin.staff.manage">
+                    <AdminStaffPage />
+                  </RequireFlag>
+                </Route>
+                <Route path="/admin/flags">
+                  <RequireFlag flag="admin.flags.manage">
+                    <AdminFlagsPage />
+                  </RequireFlag>
+                </Route>
+                <Route component={NotFound} />
+              </Switch>
+            </AppLayout>
+          </PermissionsProvider>
         </ProtectedRoute>
       </Route>
     </Switch>

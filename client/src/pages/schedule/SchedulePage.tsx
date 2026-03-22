@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import type { TripWithDetails, TripPattern, Driver, SpjWithDetails } from '@/types';
 import { TripStatusBadge } from '@/components/shared/StatusBadges';
+import { CanAccess } from '@/components/rbac/CanAccess';
 
 function todayStr() {
   const d = new Date();
@@ -285,17 +286,19 @@ export default function SchedulePage() {
                                 SPJ: {existingSpj.spjNumber}
                               </span>
                             ) : (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs gap-1"
-                                onClick={() => createSpjMutation.mutate(trip.id)}
-                                disabled={createSpjMutation.isPending || !hasDriver}
-                                data-testid={`btn-create-spj-${trip.id}`}
-                              >
-                                <ClipboardList className="w-3 h-3" />
-                                Buat SPJ
-                              </Button>
+                              <CanAccess flag="action.spj.create">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs gap-1"
+                                  onClick={() => createSpjMutation.mutate(trip.id)}
+                                  disabled={createSpjMutation.isPending || !hasDriver}
+                                  data-testid={`btn-create-spj-${trip.id}`}
+                                >
+                                  <ClipboardList className="w-3 h-3" />
+                                  Buat SPJ
+                                </Button>
+                              </CanAccess>
                             )}
                           </div>
                         </div>

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import PassengerCard from '@/components/cso/PassengerCard';
 import { BookingStatusBadge, ChannelBadge } from '@/components/shared/StatusBadges';
+import { CanAccess } from '@/components/rbac/CanAccess';
 import {
   BOOKING_STATUS_MAP, CHANNEL_MAP, HISTORY_ACTION_MAP,
   ALL_BOOKING_STATUSES, ALL_CHANNELS,
@@ -268,10 +269,12 @@ function BookingDetailModal({
                         </div>
                       </div>
                     ) : (
-                      <Button size="sm" variant="outline" className="h-6 text-xs gap-1 w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                        onClick={() => setConfirmUnseatAll(true)} data-testid="btn-unseat-all">
-                        <UserMinus className="w-3 h-3" /> Unseat Semua Penumpang
-                      </Button>
+                      <CanAccess flag="action.passenger.unseat">
+                        <Button size="sm" variant="outline" className="h-6 text-xs gap-1 w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          onClick={() => setConfirmUnseatAll(true)} data-testid="btn-unseat-all">
+                          <UserMinus className="w-3 h-3" /> Unseat Semua Penumpang
+                        </Button>
+                      </CanAccess>
                     )}
                   </div>
                 )}
