@@ -646,6 +646,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/reports/sales', asyncHandler(reportsController.getSales.bind(reportsController)));
   app.get('/api/reports/trip-profitability', asyncHandler(reportsController.getTripProfitability.bind(reportsController)));
   app.get('/api/reports/load-factor', asyncHandler(reportsController.getLoadFactor.bind(reportsController)));
+  app.get('/api/reports/cancellations', asyncHandler(reportsController.getCancellations.bind(reportsController)));
+  app.get('/api/reports/cargo', asyncHandler(reportsController.getCargo.bind(reportsController)));
+  app.get('/api/reports/payments', asyncHandler(reportsController.getPayments.bind(reportsController)));
 
   // Seed data
   app.post('/api/seed', asyncHandler(async (req: any, res: any) => {

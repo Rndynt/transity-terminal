@@ -53,16 +53,16 @@
   - [x] Backend: kapasitas vs terisi per trip
   - [x] Frontend: summary cards (avg LF%, total pax, total kapasitas) + tren harian line chart + bar chart per rute + tabel detail per trip dengan warna badge
 
-### Prioritas 2 — Belum
-- [ ] **Laporan Pembatalan & Unseat**
-  - [ ] Backend: aggregate booking_history by action type
-  - [ ] Frontend: summary cards + tabel detail dengan alasan
-- [ ] **Laporan Kargo**
-  - [ ] Backend: aggregate cargo_shipments by date, status, rute
-  - [ ] Frontend: summary + tabel + status breakdown
-- [ ] **Laporan Pembayaran**
-  - [ ] Backend: aggregate payments by method, status
-  - [ ] Frontend: breakdown per metode bayar + tabel
+### Prioritas 2 — DONE
+- [x] **Laporan Pembatalan & Unseat**
+  - [x] Backend: aggregate booking_history by action type, daily, by route, recent 100
+  - [x] Frontend: summary cards (total/canceled/unseated/reschedule) + stacked bar chart harian + tabel per aksi + per rute + riwayat terbaru dengan alasan
+- [x] **Laporan Kargo**
+  - [x] Backend: aggregate cargo_shipments by date, status, rute
+  - [x] Frontend: summary cards (kiriman/revenue/berat/terkirim) + chart harian + tabel per status + per rute + kiriman terbaru
+- [x] **Laporan Pembayaran**
+  - [x] Backend: aggregate payments by method, status, outlet, daily
+  - [x] Frontend: summary cards + tren harian chart + pie chart metode bayar + tabel per metode + per status + per outlet + transaksi terbaru
 
 ### Prioritas 3 — Enhancement
 - [ ] **Laporan Promo & Voucher**

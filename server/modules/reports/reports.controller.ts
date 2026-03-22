@@ -64,6 +64,42 @@ export class ReportsController {
     }
   }
 
+  async getCancellations(req: Request, res: Response) {
+    try {
+      const filters = parseFilters(req);
+      const data = await reportsService.getCancellationsReport(filters);
+      res.json(data);
+    } catch (e: any) {
+      if (e.name === 'ZodError') return res.status(400).json({ error: 'Parameter filter tidak valid' });
+      console.error('[reports] cancellations error:', e);
+      res.status(500).json({ error: 'Gagal memuat laporan pembatalan' });
+    }
+  }
+
+  async getCargo(req: Request, res: Response) {
+    try {
+      const filters = parseFilters(req);
+      const data = await reportsService.getCargoReport(filters);
+      res.json(data);
+    } catch (e: any) {
+      if (e.name === 'ZodError') return res.status(400).json({ error: 'Parameter filter tidak valid' });
+      console.error('[reports] cargo error:', e);
+      res.status(500).json({ error: 'Gagal memuat laporan kargo' });
+    }
+  }
+
+  async getPayments(req: Request, res: Response) {
+    try {
+      const filters = parseFilters(req);
+      const data = await reportsService.getPaymentsReport(filters);
+      res.json(data);
+    } catch (e: any) {
+      if (e.name === 'ZodError') return res.status(400).json({ error: 'Parameter filter tidak valid' });
+      console.error('[reports] payments error:', e);
+      res.status(500).json({ error: 'Gagal memuat laporan pembayaran' });
+    }
+  }
+
   async getFilterOptions(_req: Request, res: Response) {
     try {
       const data = await reportsService.getFilterOptions();

@@ -4,7 +4,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   MapPin, Store, Truck, UserCheck, LayoutGrid, Route, Calendar, DollarSign,
   Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText, BadgePercent, ClipboardList, CalendarDays, LogOut,
-  BarChart3, ShoppingCart, TrendingUp, Users
+  BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -26,6 +26,9 @@ const NAV_SECTIONS = [
       { name: "Penjualan", path: "/reports/sales", icon: ShoppingCart },
       { name: "Laba Rugi Trip", path: "/reports/trip-profitability", icon: TrendingUp },
       { name: "Load Factor", path: "/reports/load-factor", icon: Users },
+      { name: "Pembatalan", path: "/reports/cancellations", icon: AlertTriangle },
+      { name: "Kargo", path: "/reports/cargo", icon: Package },
+      { name: "Pembayaran", path: "/reports/payments", icon: CreditCard },
     ]
   },
   {
