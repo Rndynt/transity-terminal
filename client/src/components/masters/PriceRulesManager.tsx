@@ -15,7 +15,7 @@ import { RowActionsMenu } from './RowActionsMenu';
 import { useToast } from '@/hooks/use-toast';
 import { priceRulesApi, tripPatternsApi, tripsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, DollarSign, Tag, ArrowUpDown, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, DollarSign, Tag, ArrowUpDown, X, Filter } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import type { PriceRule, TripPattern, Trip, TripWithDetails } from '@/types';
@@ -88,6 +88,7 @@ export default function PriceRulesManager() {
   const [filterScope, setFilterScope] = useState('');
   const [filterMode, setFilterMode] = useState('');
   const [filterPatternId, setFilterPatternId] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const { toast } = useToast();
 
   const { data: priceRules = [], isLoading } = useQuery({
@@ -298,41 +299,86 @@ export default function PriceRulesManager() {
             Tambah Aturan
           </Button>
         }
+        filterButton={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              data-testid="toggle-price-rule-filters"
+              className={showFilters || activeFilterCount > 0 ? 'border-primary text-primary bg-primary/5' : ''}
+            >
+              <Filter className="h-4 w-4 mr-1.5" />
+              Filter
+              {activeFilterCount > 0 && (
+                <span className="ml-1.5 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-muted-foreground hover:text-foreground">
+                <X className="h-3.5 w-3.5 mr-1" />
+                Hapus Filter
+              </Button>
+            )}
+          </div>
+        }
       />
 
-      {/* ── Filter Bar ── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchableSelect
-          value={filterScope}
-          options={scopeFilterOptions}
-          placeholder="Cakupan"
-          searchPlaceholder="Cari..."
-          onChange={setFilterScope}
-          className="w-32"
-        />
-        <SearchableSelect
-          value={filterMode}
-          options={modeFilterOptions}
-          placeholder="Mode"
-          searchPlaceholder="Cari..."
-          onChange={setFilterMode}
-          className="w-28"
-        />
-        <SearchableSelect
-          value={filterPatternId}
-          options={patternOptions}
-          placeholder="Pola rute"
-          searchPlaceholder="Cari pola..."
-          onChange={setFilterPatternId}
-          className="w-48"
-        />
-        {activeFilterCount > 0 && (
-          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-xs text-muted-foreground h-8">
-            <X className="w-3 h-3 mr-1" />
-            Reset ({activeFilterCount})
-          </Button>
-        )}
-      </div>
+      {showFilters && (
+        <Card className="border-dashed">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Cakupan</Label>
+                <SearchableSelect
+                  value={filterScope || 'all'}
+                  options={[
+                    { value: 'all', label: 'Semua' },
+                    ...scopeFilterOptions,
+                  ]}
+                  placeholder="Semua"
+                  searchPlaceholder="Cari..."
+                  onChange={v => setFilterScope(v === 'all' ? '' : v)}
+                  clearValue="all"
+                  data-testid="filter-scope"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Mode</Label>
+                <SearchableSelect
+                  value={filterMode || 'all'}
+                  options={[
+                    { value: 'all', label: 'Semua' },
+                    ...modeFilterOptions,
+                  ]}
+                  placeholder="Semua"
+                  searchPlaceholder="Cari..."
+                  onChange={v => setFilterMode(v === 'all' ? '' : v)}
+                  clearValue="all"
+                  data-testid="filter-mode"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Pola Rute</Label>
+                <SearchableSelect
+                  value={filterPatternId || 'all'}
+                  options={[
+                    { value: 'all', label: 'Semua pola' },
+                    ...patternOptions,
+                  ]}
+                  placeholder="Semua pola"
+                  searchPlaceholder="Cari pola..."
+                  onChange={v => setFilterPatternId(v === 'all' ? '' : v)}
+                  clearValue="all"
+                  data-testid="filter-pattern"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Form Dialog ── */}
       <MasterFormDialog
