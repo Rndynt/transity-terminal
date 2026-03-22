@@ -6,6 +6,34 @@ TransityCore adalah sistem ticketing bus transit multi-operator yang komprehensi
 
 ---
 
+## Dokumentasi Lengkap
+
+Dokumentasi teknis lengkap dengan penjelasan cara kerja, teknologi, dan logika perhitungan setiap fitur tersedia di:
+
+**[docs/FEATURES.md](docs/FEATURES.md)** — Dokumentasi Fitur Lengkap
+
+| Bab | Topik |
+|-----|-------|
+| [1. Arsitektur & Teknologi](docs/FEATURES.md#1-arsitektur--teknologi) | Stack teknologi, pola arsitektur, file utama |
+| [2. Terminal CSO](docs/FEATURES.md#2-terminal-cso-reservasi) | Alur reservasi, komponen UI, deep-link |
+| [3. Manajemen Kursi & Seat Hold](docs/FEATURES.md#3-manajemen-kursi--seat-hold) | Seat map, hold TTL, precompute inventory, leg index |
+| [4. Penjadwalan & Virtual Trip](docs/FEATURES.md#4-penjadwalan--virtual-trip) | Trip Base, materialisasi, virtual vs real trip |
+| [5. Perhitungan Harga](docs/FEATURES.md#5-perhitungan-harga--pricing-engine) | Price rules, mode per_leg/flat, contoh perhitungan |
+| [6. Promo & Voucher](docs/FEATURES.md#6-promo--voucher) | Jenis promo, validasi, voucher redemption |
+| [7. Alur Booking](docs/FEATURES.md#7-alur-booking-pemesanan) | Flow lengkap, DB transaction, pending auto-cleanup |
+| [8. Kargo](docs/FEATURES.md#8-kargo--pengiriman-barang) | Tarif kargo, waybill, status lifecycle |
+| [9. SPJ](docs/FEATURES.md#9-spj-surat-perintah-jalan) | Surat Perintah Jalan, cost lines, settlement |
+| [10. Manifest](docs/FEATURES.md#10-manifest-perjalanan) | Manifest trip, cetak thermal 80mm |
+| [11. RBAC](docs/FEATURES.md#11-rbac-kontrol-akses-berbasis-peran) | Roles, feature flags, outlet scoping |
+| [12. WebSocket](docs/FEATURES.md#12-real-time-websocket) | Rooms, events, fallback polling |
+| [13. Laporan](docs/FEATURES.md#13-laporan--analitik) | 7 jenis report, cara perhitungan |
+| [14. Unseat & Reschedule](docs/FEATURES.md#14-unseat-reschedule--riwayat-booking) | Unseat, assign, reschedule, cancel, audit trail |
+| [15. Aplikasi Mobile](docs/FEATURES.md#15-aplikasi-mobile-b2c) | Expo React Native B2C |
+| [16. Optimasi Performa](docs/FEATURES.md#16-optimasi-performa) | Index, N+1 fix, paralelisasi, caching |
+| [17. Database & Skema](docs/FEATURES.md#17-database--skema) | Semua tabel dengan keterangan |
+
+---
+
 ## Daftar Isi
 
 - [Fitur Utama](#fitur-utama)
@@ -56,7 +84,7 @@ TransityCore adalah sistem ticketing bus transit multi-operator yang komprehensi
 ### Admin
 - **Staff Management** — CRUD dengan role assignment dan outlet scoping
 - **Feature Flags** — Toggle akses fitur per flag key
-- **RBAC Roles** — `cso`, `admin`, `finance`, `dispatcher`
+- **RBAC Roles** — `owner`, `manager`, `finance`, `spv_operations`, `operations`, `spv_cso`, `cso`
 - **Outlet Scoping** — Batasi akses data ke outlet yang di-assign
 
 ### Mobile (B2C)
@@ -307,8 +335,8 @@ npm start
 | `AUTHCORE_BASE_URL` | — | URL Realmio auth server | Tidak (dev bypass tersedia) |
 | `AUTHCORE_TENANT_ID` | — | Realmio tenant ID | Tidak |
 | `DEV_BYPASS_AUTH` | — | Set `true` untuk skip auth di development | Tidak |
-| `HOLD_TTL_SHORT_SECONDS` | 60 | TTL hold singkat (detik) | Tidak |
-| `HOLD_TTL_LONG_SECONDS` | 1200 | TTL hold panjang (20 menit) | Tidak |
+| `HOLD_TTL_SHORT_SECONDS` | 300 | TTL hold singkat (5 menit) | Tidak |
+| `HOLD_TTL_LONG_SECONDS` | 1800 | TTL hold panjang (30 menit) | Tidak |
 | `PENDING_BOOKING_AUTO_RELEASE` | true | Auto-cleanup booking pending | Tidak |
 
 ### Dev Mode
@@ -542,13 +570,13 @@ GET    /api/app/cargo/track/:waybillNumber      # Track kargo
 ### Seat Hold Mechanism
 
 ```
-User klik kursi → Create Hold (Short TTL 60s)
+User klik kursi → Create Hold (Short TTL 300s)
                          │
                          ▼
                User isi form penumpang
                          │
                          ▼
-               Convert ke Long TTL (1200s)
+               Convert ke Long TTL (1800s)
                          │
                          ▼
                     Payment
@@ -609,10 +637,13 @@ Sistem otorisasi 3 lapis:
 
 | Role | Deskripsi | Akses |
 |------|-----------|-------|
-| `admin` | Administrator | Semua fitur + admin panel |
-| `cso` | Customer Service Officer | Reservasi, booking, manifest |
-| `finance` | Keuangan | Reports, pembayaran |
-| `dispatcher` | Dispatcher | Jadwal, SPJ, driver assignment |
+| `owner` | Pemilik | Akses penuh ke semua fitur |
+| `manager` | Manajer | Operasional penuh + semua laporan |
+| `finance` | Keuangan | Laporan keuangan + lihat booking (read-only) |
+| `spv_operations` | SPV Operasional | Jadwal, SPJ, manifest, kargo |
+| `operations` | Staf Operasional | Operasional harian terbatas |
+| `spv_cso` | SPV CSO | CSO + unseat/reschedule |
+| `cso` | Customer Service Officer | Booking dan transaksi harian |
 
 ### Feature Flags
 
@@ -652,15 +683,17 @@ app.get('/api/bookings', { preHandler: [requireOutletScope] }, handler);
 |------|---------|-----------|
 | Trip | `trip:{tripId}` | Update trip spesifik |
 | Base | `base:{baseId}` | Update trip base |
-| CSO | `cso:{outletId}` | Update per outlet |
+| CSO | `cso:{outletId}:{serviceDate}` | Update per outlet per tanggal |
 
 ### Events
 
 | Event | Payload | Deskripsi |
 |-------|---------|-----------|
-| `seatUpdate` | `{ tripId, seatNo, status, legIndex }` | Perubahan status kursi |
-| `bookingUpdate` | `{ tripId, bookingId, action }` | Booking baru/berubah |
-| `tripUpdate` | `{ tripId, status }` | Status trip berubah |
+| `INVENTORY_UPDATED` | `{ tripId }` | Perubahan ketersediaan kursi |
+| `TRIP_STATUS_CHANGED` | `{ tripId, status }` | Status trip berubah |
+| `HOLDS_RELEASED` | `{ tripId }` | Seat hold expired/released |
+| `TRIP_MATERIALIZED` | `{ tripId, baseId }` | Virtual trip dimaterialize |
+| `TRIP_CANCELED` | `{ tripId }` | Trip dibatalkan |
 
 ---
 
