@@ -8,6 +8,7 @@ const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 export const reportFiltersSchema = z.object({
   dateFrom: z.string().regex(dateRegex, 'Invalid date format'),
   dateTo: z.string().regex(dateRegex, 'Invalid date format'),
+  dateMode: z.enum(['departure', 'paid', 'created']).optional(),
   outletId: z.string().regex(uuidRegex, 'Invalid UUID').optional(),
   channel: z.enum(['CSO', 'WEB', 'APP', 'OTA']).optional(),
   patternId: z.string().regex(uuidRegex, 'Invalid UUID').optional(),
@@ -19,11 +20,27 @@ const PAID_STATUSES_SQL = sql.raw(`('paid','confirmed','checked_in')`);
 const ACTIVE_TICKET_SQL = sql.raw(`('active','checked_in')`);
 const EXCLUDE_CARGO_SQL = sql.raw(`('canceled','returned')`);
 
-function bookingFilters(f: ReportFilters, bAlias: string, tAlias: string): SQL[] {
-  const conds: SQL[] = [
+function bookingDateConditions(f: ReportFilters, bAlias: string, tAlias: string): SQL[] {
+  const mode = f.dateMode || 'departure';
+  if (mode === 'created') {
+    return [
+      sql.raw(`${bAlias}.created_at::date >= `).append(sql`${f.dateFrom}`),
+      sql.raw(`${bAlias}.created_at::date <= `).append(sql`${f.dateTo}`),
+    ];
+  }
+  if (mode === 'paid') {
+    return [
+      sql`EXISTS (SELECT 1 FROM payments _py WHERE _py.booking_id = ${sql.raw(bAlias)}.id AND _py.status = 'success' AND _py.paid_at::date >= ${f.dateFrom}::date AND _py.paid_at::date <= ${f.dateTo}::date)`,
+    ];
+  }
+  return [
     sql.raw(`${tAlias}.service_date >= `).append(sql`${f.dateFrom}`),
     sql.raw(`${tAlias}.service_date <= `).append(sql`${f.dateTo}`),
   ];
+}
+
+function bookingFilters(f: ReportFilters, bAlias: string, tAlias: string): SQL[] {
+  const conds = bookingDateConditions(f, bAlias, tAlias);
   if (f.outletId) conds.push(sql.raw(`${bAlias}.outlet_id = `).append(sql`${f.outletId}`));
   if (f.channel) conds.push(sql.raw(`${bAlias}.channel = `).append(sql`${f.channel}`));
   if (f.patternId) conds.push(sql.raw(`${tAlias}.pattern_id = `).append(sql`${f.patternId}`));
@@ -39,6 +56,64 @@ function tripFilters(f: ReportFilters, tAlias: string): SQL[] {
   return conds;
 }
 
+function paymentFilters(f: ReportFilters, pyAlias: string, bAlias: string, tAlias: string): SQL[] {
+  const mode = f.dateMode || 'departure';
+  const conds: SQL[] = [];
+  if (mode === 'paid') {
+    conds.push(sql.raw(`${pyAlias}.paid_at::date >= `).append(sql`${f.dateFrom}`));
+    conds.push(sql.raw(`${pyAlias}.paid_at::date <= `).append(sql`${f.dateTo}`));
+  } else if (mode === 'created') {
+    conds.push(sql.raw(`${bAlias}.created_at::date >= `).append(sql`${f.dateFrom}`));
+    conds.push(sql.raw(`${bAlias}.created_at::date <= `).append(sql`${f.dateTo}`));
+  } else {
+    conds.push(sql.raw(`${tAlias}.service_date >= `).append(sql`${f.dateFrom}`));
+    conds.push(sql.raw(`${tAlias}.service_date <= `).append(sql`${f.dateTo}`));
+  }
+  if (f.outletId) conds.push(sql.raw(`${bAlias}.outlet_id = `).append(sql`${f.outletId}`));
+  if (f.channel) conds.push(sql.raw(`${bAlias}.channel = `).append(sql`${f.channel}`));
+  if (f.patternId) conds.push(sql.raw(`${tAlias}.pattern_id = `).append(sql`${f.patternId}`));
+  return conds;
+}
+
+function cancellationFilters(f: ReportFilters, bhAlias: string, bAlias: string, tAlias: string): SQL[] {
+  const mode = f.dateMode || 'departure';
+  const conds: SQL[] = [];
+  if (mode === 'paid') {
+    conds.push(sql.raw(`${bhAlias}.created_at::date >= `).append(sql`${f.dateFrom}`));
+    conds.push(sql.raw(`${bhAlias}.created_at::date <= `).append(sql`${f.dateTo}`));
+  } else if (mode === 'created') {
+    conds.push(sql.raw(`${bAlias}.created_at::date >= `).append(sql`${f.dateFrom}`));
+    conds.push(sql.raw(`${bAlias}.created_at::date <= `).append(sql`${f.dateTo}`));
+  } else {
+    conds.push(sql.raw(`${tAlias}.service_date >= `).append(sql`${f.dateFrom}`));
+    conds.push(sql.raw(`${tAlias}.service_date <= `).append(sql`${f.dateTo}`));
+  }
+  if (f.outletId) conds.push(sql.raw(`${bAlias}.outlet_id = `).append(sql`${f.outletId}`));
+  if (f.channel) conds.push(sql.raw(`${bAlias}.channel = `).append(sql`${f.channel}`));
+  if (f.patternId) conds.push(sql.raw(`${tAlias}.pattern_id = `).append(sql`${f.patternId}`));
+  return conds;
+}
+
+function cargoDateConditions(f: ReportFilters, csAlias: string, tAlias: string): SQL[] {
+  const mode = f.dateMode || 'departure';
+  if (mode === 'paid') {
+    return [
+      sql.raw(`${csAlias}.paid_at::date >= `).append(sql`${f.dateFrom}`),
+      sql.raw(`${csAlias}.paid_at::date <= `).append(sql`${f.dateTo}`),
+    ];
+  }
+  if (mode === 'created') {
+    return [
+      sql.raw(`${csAlias}.created_at::date >= `).append(sql`${f.dateFrom}`),
+      sql.raw(`${csAlias}.created_at::date <= `).append(sql`${f.dateTo}`),
+    ];
+  }
+  return [
+    sql.raw(`${tAlias}.service_date >= `).append(sql`${f.dateFrom}`),
+    sql.raw(`${tAlias}.service_date <= `).append(sql`${f.dateTo}`),
+  ];
+}
+
 function joinConditions(conds: SQL[]): SQL {
   let result = conds[0];
   for (let i = 1; i < conds.length; i++) {
@@ -47,9 +122,20 @@ function joinConditions(conds: SQL[]): SQL {
   return result;
 }
 
+function dailyDateSelect(f: ReportFilters, bAlias: string, tAlias: string): { sel: SQL; grp: SQL; ord: SQL } {
+  const mode = f.dateMode || 'departure';
+  if (mode === 'created') {
+    const expr = sql.raw(`${bAlias}.created_at::date`);
+    return { sel: sql`${expr}::text as date`, grp: expr, ord: expr };
+  }
+  const expr = sql.raw(`${tAlias}.service_date`);
+  return { sel: sql`${expr}::text as date`, grp: expr, ord: expr };
+}
+
 export class ReportsService {
 
   async getRevenueSummary(f: ReportFilters) {
+    const mode = f.dateMode || 'departure';
     const where = joinConditions([...bookingFilters(f, 'b', 't'), sql`b.status IN ${PAID_STATUSES_SQL}`]);
 
     const summary = await db.execute(sql`
@@ -63,17 +149,39 @@ export class ReportsService {
       WHERE ${where}
     `);
 
-    const daily = await db.execute(sql`
-      SELECT
-        t.service_date::text as date,
-        COALESCE(SUM(b.total_amount::numeric), 0) as revenue,
-        COUNT(*)::int as bookings
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      WHERE ${where}
-      GROUP BY t.service_date
-      ORDER BY t.service_date
-    `);
+    let daily;
+    if (mode === 'paid') {
+      const payWhere = joinConditions([
+        ...paymentFilters(f, 'py', 'b', 't'),
+        sql`py.status = 'success'`,
+        sql`b.status IN ${PAID_STATUSES_SQL}`,
+      ]);
+      daily = await db.execute(sql`
+        SELECT
+          py.paid_at::date::text as date,
+          COALESCE(SUM(py.amount::numeric), 0) as revenue,
+          COUNT(DISTINCT b.id)::int as bookings
+        FROM payments py
+        INNER JOIN bookings b ON py.booking_id = b.id
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${payWhere}
+        GROUP BY py.paid_at::date
+        ORDER BY py.paid_at::date
+      `);
+    } else {
+      const dd = dailyDateSelect(f, 'b', 't');
+      daily = await db.execute(sql`
+        SELECT
+          ${dd.sel},
+          COALESCE(SUM(b.total_amount::numeric), 0) as revenue,
+          COUNT(*)::int as bookings
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${where}
+        GROUP BY ${dd.grp}
+        ORDER BY ${dd.ord}
+      `);
+    }
 
     const byChannel = await db.execute(sql`
       SELECT
@@ -124,6 +232,7 @@ export class ReportsService {
   }
 
   async getSalesReport(f: ReportFilters) {
+    const mode = f.dateMode || 'departure';
     const where = joinConditions(bookingFilters(f, 'b', 't'));
 
     const summary = await db.execute(sql`
@@ -179,19 +288,42 @@ export class ReportsService {
       ORDER BY count DESC
     `);
 
-    const daily = await db.execute(sql`
-      SELECT
-        t.service_date::text as date,
-        COUNT(*)::int as bookings,
-        COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as revenue,
-        COUNT(*) FILTER (WHERE b.status = 'paid')::int as paid,
-        COUNT(*) FILTER (WHERE b.status = 'canceled')::int as canceled
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      WHERE ${where}
-      GROUP BY t.service_date
-      ORDER BY t.service_date
-    `);
+    let daily;
+    if (mode === 'paid') {
+      const payWhere = joinConditions([
+        ...paymentFilters(f, 'py', 'b', 't'),
+        sql`py.status = 'success'`,
+      ]);
+      daily = await db.execute(sql`
+        SELECT
+          py.paid_at::date::text as date,
+          COUNT(DISTINCT b.id)::int as bookings,
+          COALESCE(SUM(py.amount::numeric), 0) as revenue,
+          COUNT(DISTINCT b.id) FILTER (WHERE b.status = 'paid')::int as paid,
+          0::int as canceled
+        FROM payments py
+        INNER JOIN bookings b ON py.booking_id = b.id
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${payWhere}
+        GROUP BY py.paid_at::date
+        ORDER BY py.paid_at::date
+      `);
+    } else {
+      const dd = dailyDateSelect(f, 'b', 't');
+      daily = await db.execute(sql`
+        SELECT
+          ${dd.sel},
+          COUNT(*)::int as bookings,
+          COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as revenue,
+          COUNT(*) FILTER (WHERE b.status = 'paid')::int as paid,
+          COUNT(*) FILTER (WHERE b.status = 'canceled')::int as canceled
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${where}
+        GROUP BY ${dd.grp}
+        ORDER BY ${dd.ord}
+      `);
+    }
 
     const recent = await db.execute(sql`
       SELECT
@@ -414,7 +546,8 @@ export class ReportsService {
   }
 
   async getCancellationsReport(f: ReportFilters) {
-    const where = joinConditions(bookingFilters(f, 'b', 't'));
+    const mode = f.dateMode || 'departure';
+    const where = joinConditions(cancellationFilters(f, 'bh', 'b', 't'));
 
     const summary = await db.execute(sql`
       SELECT
@@ -442,9 +575,13 @@ export class ReportsService {
       ORDER BY count DESC
     `);
 
+    const dailyDateCol = mode === 'paid' ? sql.raw(`bh.created_at::date`)
+      : mode === 'created' ? sql.raw(`b.created_at::date`)
+      : sql.raw(`t.service_date`);
+
     const daily = await db.execute(sql`
       SELECT
-        t.service_date::text as date,
+        ${dailyDateCol}::text as date,
         COUNT(*) FILTER (WHERE bh.action = 'canceled')::int as canceled,
         COUNT(*) FILTER (WHERE bh.action = 'unseated')::int as unseated,
         COUNT(*) FILTER (WHERE bh.action = 'rescheduled')::int as rescheduled,
@@ -453,8 +590,8 @@ export class ReportsService {
       INNER JOIN bookings b ON bh.booking_id = b.id
       INNER JOIN trips t ON b.trip_id = t.id
       WHERE ${where}
-      GROUP BY t.service_date
-      ORDER BY t.service_date
+      GROUP BY ${dailyDateCol}
+      ORDER BY ${dailyDateCol}
     `);
 
     const byRoute = await db.execute(sql`
@@ -500,12 +637,16 @@ export class ReportsService {
   }
 
   async getCargoReport(f: ReportFilters) {
-    const where = joinConditions([
-      sql.raw(`t.service_date >= `).append(sql`${f.dateFrom}`),
-      sql.raw(`t.service_date <= `).append(sql`${f.dateTo}`),
-      ...(f.patternId ? [sql.raw(`t.pattern_id = `).append(sql`${f.patternId}`)] : []),
-      ...(f.outletId ? [sql.raw(`cs.outlet_id = `).append(sql`${f.outletId}`)] : []),
-    ]);
+    const mode = f.dateMode || 'departure';
+    const dateConds = cargoDateConditions(f, 'cs', 't');
+    const extraConds: SQL[] = [];
+    if (f.patternId) extraConds.push(sql.raw(`t.pattern_id = `).append(sql`${f.patternId}`));
+    if (f.outletId) extraConds.push(sql.raw(`cs.outlet_id = `).append(sql`${f.outletId}`));
+    const where = joinConditions([...dateConds, ...extraConds]);
+
+    const dailyDateCol = mode === 'paid' ? sql.raw(`cs.paid_at::date`)
+      : mode === 'created' ? sql.raw(`cs.created_at::date`)
+      : sql.raw(`t.service_date`);
 
     const summary = await db.execute(sql`
       SELECT
@@ -534,14 +675,14 @@ export class ReportsService {
 
     const daily = await db.execute(sql`
       SELECT
-        t.service_date::text as date,
+        ${dailyDateCol}::text as date,
         COUNT(*)::int as shipments,
         COALESCE(SUM(cs.total_amount::numeric), 0) as revenue
       FROM cargo_shipments cs
       INNER JOIN trips t ON cs.trip_id = t.id
       WHERE ${where}
-      GROUP BY t.service_date
-      ORDER BY t.service_date
+      GROUP BY ${dailyDateCol}
+      ORDER BY ${dailyDateCol}
     `);
 
     const byRoute = await db.execute(sql`
@@ -587,7 +728,12 @@ export class ReportsService {
   }
 
   async getPaymentsReport(f: ReportFilters) {
-    const where = joinConditions(bookingFilters(f, 'b', 't'));
+    const mode = f.dateMode || 'departure';
+    const where = joinConditions(paymentFilters(f, 'py', 'b', 't'));
+
+    const dailyDateCol = mode === 'paid' ? sql.raw(`py.paid_at::date`)
+      : mode === 'created' ? sql.raw(`b.created_at::date`)
+      : sql.raw(`t.service_date`);
 
     const summary = await db.execute(sql`
       SELECT
@@ -632,15 +778,15 @@ export class ReportsService {
 
     const daily = await db.execute(sql`
       SELECT
-        t.service_date::text as date,
+        ${dailyDateCol}::text as date,
         COUNT(*)::int as payments,
         COALESCE(SUM(py.amount::numeric) FILTER (WHERE py.status = 'success'), 0) as amount
       FROM payments py
       INNER JOIN bookings b ON py.booking_id = b.id
       INNER JOIN trips t ON b.trip_id = t.id
       WHERE ${where}
-      GROUP BY t.service_date
-      ORDER BY t.service_date
+      GROUP BY ${dailyDateCol}
+      ORDER BY ${dailyDateCol}
     `);
 
     const byOutlet = await db.execute(sql`

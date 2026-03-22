@@ -14,12 +14,20 @@ interface FilterOptions {
   channels: string[];
 }
 
+export type DateMode = 'departure' | 'paid' | 'created';
+
 export interface ReportFilterValues {
   dateFrom: string;
   dateTo: string;
+  dateMode?: DateMode;
   outletId?: string;
   channel?: string;
   patternId?: string;
+}
+
+export interface DateModeOption {
+  value: DateMode;
+  label: string;
 }
 
 interface ReportFiltersProps {
@@ -29,6 +37,7 @@ interface ReportFiltersProps {
   showChannel?: boolean;
   showRoute?: boolean;
   lockedOutletId?: string;
+  dateModeOptions?: DateModeOption[];
 }
 
 const PRESETS = [
@@ -38,7 +47,7 @@ const PRESETS = [
   { label: 'Bulan Ini', getValue: () => { const t = new Date(); const f = new Date(t.getFullYear(), t.getMonth(), 1); return { dateFrom: f.toISOString().split('T')[0], dateTo: t.toISOString().split('T')[0] }; } },
 ];
 
-export default function ReportFilters({ value, onChange, showOutlet = true, showChannel = true, showRoute = true, lockedOutletId }: ReportFiltersProps) {
+export default function ReportFilters({ value, onChange, showOutlet = true, showChannel = true, showRoute = true, lockedOutletId, dateModeOptions }: ReportFiltersProps) {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
@@ -83,6 +92,28 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
 
   return (
     <div className="space-y-2.5">
+      {dateModeOptions && dateModeOptions.length > 1 && (
+        <div className="flex items-center gap-1.5" data-testid="date-mode-toggle">
+          <span className="text-[11px] font-medium text-muted-foreground mr-1">Berdasarkan:</span>
+          {dateModeOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange({ ...value, dateMode: opt.value })}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-lg border transition-all",
+                value.dateMode === opt.value
+                  ? "bg-blue-50 border-blue-300 text-blue-700"
+                  : "bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+              )}
+              data-testid={`btn-date-mode-${opt.value}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <Input
           type="date"

@@ -6,13 +6,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { XCircle, UserMinus, ArrowRightLeft, History, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import ReportFilters, { type ReportFilterValues } from '@/components/reports/ReportFilters';
+import ReportFilters, { type ReportFilterValues, type DateModeOption } from '@/components/reports/ReportFilters';
 import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
 import ReportPageLayout from '@/components/reports/ReportPageLayout';
 import { HISTORY_ACTION_MAP, fmtDate } from '@/lib/constants';
 
+const DATE_MODES: DateModeOption[] = [
+  { value: 'paid', label: 'Tanggal Batal' },
+  { value: 'created', label: 'Tanggal Booking' },
+];
+
 function buildQuery(f: ReportFilterValues) {
   const params = new URLSearchParams({ dateFrom: f.dateFrom, dateTo: f.dateTo });
+  if (f.dateMode) params.set('dateMode', f.dateMode);
   if (f.outletId) params.set('outletId', f.outletId);
   if (f.channel) params.set('channel', f.channel);
   if (f.patternId) params.set('patternId', f.patternId);
@@ -49,7 +55,7 @@ export default function CancellationsReportPage() {
   const { outletId: scopedOutletId } = usePermissions();
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
-  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today });
+  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'paid' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['/api/reports/cancellations', filters],
@@ -80,7 +86,7 @@ export default function CancellationsReportPage() {
       description="Tracking pembatalan, unseat, reschedule, dan pindah kursi beserta alasannya."
       icon={AlertTriangle}
       isLoading={isLoading}
-      filterBar={<ReportFilters value={filters} onChange={setFilters} lockedOutletId={scopedOutletId ?? undefined} />}
+      filterBar={<ReportFilters value={filters} onChange={setFilters} lockedOutletId={scopedOutletId ?? undefined} dateModeOptions={DATE_MODES} />}
     >
       <SummaryCardsGrid items={[
         { label: 'Total Event', value: Number(summary?.total_events || 0).toLocaleString(), icon: History, iconBg: 'bg-gray-100', iconColor: 'text-gray-600' },

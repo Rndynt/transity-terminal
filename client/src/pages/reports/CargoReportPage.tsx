@@ -6,14 +6,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Package, DollarSign, Weight, CheckCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import ReportFilters, { type ReportFilterValues } from '@/components/reports/ReportFilters';
+import ReportFilters, { type ReportFilterValues, type DateModeOption } from '@/components/reports/ReportFilters';
 import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
 import ReportPageLayout from '@/components/reports/ReportPageLayout';
 import { fmtCurrency, CARGO_STATUS_MAP, type CargoStatus } from '@/lib/constants';
 import { CargoStatusBadge } from '@/components/shared/StatusBadges';
 
+const DATE_MODES: DateModeOption[] = [
+  { value: 'paid', label: 'Tanggal Bayar' },
+  { value: 'created', label: 'Tanggal Kirim' },
+];
+
 function buildQuery(f: ReportFilterValues) {
   const params = new URLSearchParams({ dateFrom: f.dateFrom, dateTo: f.dateTo });
+  if (f.dateMode) params.set('dateMode', f.dateMode);
   if (f.outletId) params.set('outletId', f.outletId);
   if (f.patternId) params.set('patternId', f.patternId);
   return params.toString();
@@ -23,7 +29,7 @@ export default function CargoReportPage() {
   const { outletId: scopedOutletId } = usePermissions();
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
-  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today });
+  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'created' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['/api/reports/cargo', filters],
@@ -52,7 +58,7 @@ export default function CargoReportPage() {
       description="Ringkasan pengiriman kargo per periode, status, dan rute."
       icon={Package}
       isLoading={isLoading}
-      filterBar={<ReportFilters value={filters} onChange={setFilters} showChannel={false} lockedOutletId={scopedOutletId ?? undefined} />}
+      filterBar={<ReportFilters value={filters} onChange={setFilters} showChannel={false} lockedOutletId={scopedOutletId ?? undefined} dateModeOptions={DATE_MODES} />}
     >
       <SummaryCardsGrid items={[
         { label: 'Total Kiriman', value: Number(summary?.total_shipments || 0).toLocaleString(), icon: Package, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },

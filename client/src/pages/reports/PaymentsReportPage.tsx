@@ -6,14 +6,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { CreditCard, DollarSign, CheckCircle, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import ReportFilters, { type ReportFilterValues } from '@/components/reports/ReportFilters';
+import ReportFilters, { type ReportFilterValues, type DateModeOption } from '@/components/reports/ReportFilters';
 import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
 import ReportPageLayout from '@/components/reports/ReportPageLayout';
 import { fmtCurrency, getPaymentLabel } from '@/lib/constants';
 import { ChannelBadge } from '@/components/shared/StatusBadges';
 
+const DATE_MODES: DateModeOption[] = [
+  { value: 'paid', label: 'Tanggal Bayar' },
+  { value: 'created', label: 'Tanggal Transaksi' },
+];
+
 function buildQuery(f: ReportFilterValues) {
   const params = new URLSearchParams({ dateFrom: f.dateFrom, dateTo: f.dateTo });
+  if (f.dateMode) params.set('dateMode', f.dateMode);
   if (f.outletId) params.set('outletId', f.outletId);
   if (f.channel) params.set('channel', f.channel);
   if (f.patternId) params.set('patternId', f.patternId);
@@ -32,7 +38,7 @@ export default function PaymentsReportPage() {
   const { outletId: scopedOutletId } = usePermissions();
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
-  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today });
+  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'paid' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['/api/reports/payments', filters],
@@ -68,7 +74,7 @@ export default function PaymentsReportPage() {
       description="Breakdown pembayaran per metode, status, dan outlet."
       icon={CreditCard}
       isLoading={isLoading}
-      filterBar={<ReportFilters value={filters} onChange={setFilters} lockedOutletId={scopedOutletId ?? undefined} />}
+      filterBar={<ReportFilters value={filters} onChange={setFilters} lockedOutletId={scopedOutletId ?? undefined} dateModeOptions={DATE_MODES} />}
     >
       <SummaryCardsGrid items={[
         { label: 'Total Pembayaran', value: Number(summary?.total_payments || 0).toLocaleString(), icon: CreditCard, iconBg: 'bg-blue-100', iconColor: 'text-blue-600' },

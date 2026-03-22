@@ -5,13 +5,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DollarSign, Ticket, TrendingUp, Bus } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import ReportFilters, { type ReportFilterValues } from '@/components/reports/ReportFilters';
+import ReportFilters, { type ReportFilterValues, type DateModeOption } from '@/components/reports/ReportFilters';
 import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
 import ReportPageLayout from '@/components/reports/ReportPageLayout';
 import { fmtCurrency, CHANNEL_MAP } from '@/lib/constants';
 
+const DATE_MODES: DateModeOption[] = [
+  { value: 'paid', label: 'Tanggal Bayar' },
+  { value: 'created', label: 'Tanggal Transaksi' },
+];
+
 function buildQuery(f: ReportFilterValues) {
   const params = new URLSearchParams({ dateFrom: f.dateFrom, dateTo: f.dateTo });
+  if (f.dateMode) params.set('dateMode', f.dateMode);
   if (f.outletId) params.set('outletId', f.outletId);
   if (f.channel) params.set('channel', f.channel);
   if (f.patternId) params.set('patternId', f.patternId);
@@ -22,7 +28,7 @@ export default function RevenueReportPage() {
   const { outletId: scopedOutletId } = usePermissions();
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
-  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today });
+  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'paid' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['/api/reports/revenue', filters],
@@ -51,7 +57,7 @@ export default function RevenueReportPage() {
       description="Analisis pendapatan berdasarkan periode, rute, outlet, dan channel."
       icon={DollarSign}
       isLoading={isLoading}
-      filterBar={<ReportFilters value={filters} onChange={setFilters} lockedOutletId={scopedOutletId ?? undefined} />}
+      filterBar={<ReportFilters value={filters} onChange={setFilters} lockedOutletId={scopedOutletId ?? undefined} dateModeOptions={DATE_MODES} />}
     >
       <SummaryCardsGrid items={[
         { label: 'Total Pendapatan', value: fmtCurrency(Number(summary?.total_revenue || 0)), icon: DollarSign, iconBg: 'bg-green-100', iconColor: 'text-green-600' },

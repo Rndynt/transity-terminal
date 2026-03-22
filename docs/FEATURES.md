@@ -668,6 +668,19 @@ Semua laporan mendukung:
 - Filter rute (pattern)
 - Export data
 
+### Mode Tanggal (dateMode)
+
+Laporan keuangan (Revenue, Sales, Payments, Cancellations, Cargo) mendukung toggle `dateMode`:
+
+| dateMode | Kolom Filter | Keterangan |
+|----------|-------------|------------|
+| `paid` | `payments.paid_at` / `cargo_shipments.paid_at` | Filter berdasarkan tanggal pembayaran |
+| `created` | `bookings.created_at` / `cargo_shipments.created_at` | Filter berdasarkan tanggal transaksi/kirim |
+| `departure` | `trips.service_date` | Filter berdasarkan tanggal keberangkatan |
+
+Default per laporan: Revenue & Payments → `paid`, Sales & Cargo → `created`, Cancellations → `paid` (tanggal batal).
+Laba Rugi Trip dan Load Factor selalu menggunakan `departure` (tanpa toggle dateMode).
+
 ---
 
 ## 14. Unseat, Reschedule & Riwayat Booking

@@ -5,14 +5,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Ticket, CheckCircle, XCircle, DollarSign } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import ReportFilters, { type ReportFilterValues } from '@/components/reports/ReportFilters';
+import ReportFilters, { type ReportFilterValues, type DateModeOption } from '@/components/reports/ReportFilters';
 import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
 import ReportPageLayout from '@/components/reports/ReportPageLayout';
 import { fmtCurrency } from '@/lib/constants';
 import { BookingStatusBadge, ChannelBadge } from '@/components/shared/StatusBadges';
 
+const DATE_MODES: DateModeOption[] = [
+  { value: 'paid', label: 'Tanggal Bayar' },
+  { value: 'created', label: 'Tanggal Transaksi' },
+];
+
 function buildQuery(f: ReportFilterValues) {
   const params = new URLSearchParams({ dateFrom: f.dateFrom, dateTo: f.dateTo });
+  if (f.dateMode) params.set('dateMode', f.dateMode);
   if (f.outletId) params.set('outletId', f.outletId);
   if (f.channel) params.set('channel', f.channel);
   if (f.patternId) params.set('patternId', f.patternId);
@@ -23,7 +29,7 @@ export default function SalesReportPage() {
   const { outletId: scopedOutletId } = usePermissions();
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
-  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today });
+  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'created' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['/api/reports/sales', filters],
@@ -53,7 +59,7 @@ export default function SalesReportPage() {
       description="Detail penjualan tiket per periode dengan breakdown status dan channel."
       icon={Ticket}
       isLoading={isLoading}
-      filterBar={<ReportFilters value={filters} onChange={setFilters} lockedOutletId={scopedOutletId ?? undefined} />}
+      filterBar={<ReportFilters value={filters} onChange={setFilters} lockedOutletId={scopedOutletId ?? undefined} dateModeOptions={DATE_MODES} />}
     >
       <SummaryCardsGrid items={[
         { label: 'Total Booking', value: Number(summary?.total_bookings || 0).toLocaleString(), icon: Ticket, iconBg: 'bg-blue-100', iconColor: 'text-blue-600' },

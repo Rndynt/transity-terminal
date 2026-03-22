@@ -523,6 +523,13 @@ GET    /api/reports/cargo                       # Laporan kargo
 GET    /api/reports/payments                    # Laporan pembayaran
 ```
 
+Query parameter `dateMode` (`departure` | `paid` | `created`) menentukan kolom tanggal yang digunakan untuk filter:
+- `paid` — filter berdasarkan tanggal pembayaran (`payments.paid_at` / `cargo_shipments.paid_at`)
+- `created` — filter berdasarkan tanggal transaksi (`bookings.created_at` / `cargo_shipments.created_at`)
+- `departure` — filter berdasarkan tanggal keberangkatan (`trips.service_date`)
+
+Laba Rugi Trip dan Load Factor selalu menggunakan `departure` (tanpa toggle).
+
 ### Mobile B2C API
 
 ```http

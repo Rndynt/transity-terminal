@@ -8,6 +8,7 @@ function parseFilters(req: FastifyRequest) {
   const raw = {
     dateFrom: req.query.dateFrom || today,
     dateTo: req.query.dateTo || today,
+    dateMode: req.query.dateMode || undefined,
     outletId: req.query.outletId || undefined,
     channel: req.query.channel || undefined,
     patternId: req.query.patternId || undefined,
