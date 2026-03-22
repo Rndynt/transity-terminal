@@ -278,7 +278,7 @@ import { SpjController } from "./modules/spj/spj.controller";
 import { appAuthMiddleware, optionalAuthMiddleware } from "./modules/app/app.auth";
 import { registerAuthRoutes } from "./modules/auth/auth.routes";
 import { requireAuth } from "./modules/auth/realmio";
-import { requireFlag, requireOutletScope } from "./modules/rbac/rbac.middleware";
+import { requireFlag, requireAnyFlag, requireOutletScope } from "./modules/rbac/rbac.middleware";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   registerAuthRoutes(app);
@@ -665,7 +665,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ── Admin API (/api/admin/) ──────────────────────────────────
 
   // List all roles
-  app.get('/api/admin/roles', requireFlag('admin.flags.manage'), asyncHandler(async (_req: any, res: any) => {
+  app.get('/api/admin/roles', requireAnyFlag('admin.flags.manage', 'admin.staff.manage'), asyncHandler(async (_req: any, res: any) => {
     const { db } = await import('./db');
     const { roles } = await import('../shared/schema');
     const allRoles = await db.select().from(roles);

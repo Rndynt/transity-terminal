@@ -91,7 +91,7 @@ export default function AdminStaffPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
+    mutationFn: ({ id, data }: { id: string; data: { roleId?: string; outletId?: string | null; isActive?: boolean } }) =>
       apiFetch(`/api/admin/staff/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/staff'] });

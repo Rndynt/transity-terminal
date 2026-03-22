@@ -95,37 +95,37 @@ function Router() {
                   </RequireFlag>
                 </Route>
                 <Route path="/reports/revenue">
-                  <RequireFlag flag="report.revenue">
+                  <RequireFlag flags={["page.reports", "report.revenue"]}>
                     <RevenueReportPage />
                   </RequireFlag>
                 </Route>
                 <Route path="/reports/sales">
-                  <RequireFlag flag="report.sales">
+                  <RequireFlag flags={["page.reports", "report.sales"]}>
                     <SalesReportPage />
                   </RequireFlag>
                 </Route>
                 <Route path="/reports/trip-profitability">
-                  <RequireFlag flag="report.trip_profitability">
+                  <RequireFlag flags={["page.reports", "report.trip_profitability"]}>
                     <TripProfitabilityPage />
                   </RequireFlag>
                 </Route>
                 <Route path="/reports/load-factor">
-                  <RequireFlag flag="report.load_factor">
+                  <RequireFlag flags={["page.reports", "report.load_factor"]}>
                     <LoadFactorPage />
                   </RequireFlag>
                 </Route>
                 <Route path="/reports/cancellations">
-                  <RequireFlag flag="report.cancellations">
+                  <RequireFlag flags={["page.reports", "report.cancellations"]}>
                     <CancellationsReportPage />
                   </RequireFlag>
                 </Route>
                 <Route path="/reports/cargo">
-                  <RequireFlag flag="report.cargo">
+                  <RequireFlag flags={["page.reports", "report.cargo"]}>
                     <CargoReportPage />
                   </RequireFlag>
                 </Route>
                 <Route path="/reports/payments">
-                  <RequireFlag flag="report.payments">
+                  <RequireFlag flags={["page.reports", "report.payments"]}>
                     <PaymentsReportPage />
                   </RequireFlag>
                 </Route>

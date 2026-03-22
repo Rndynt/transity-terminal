@@ -10,6 +10,16 @@ export function requireFlag(flagId: string) {
   };
 }
 
+export function requireAnyFlag(...flagIds: string[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.rbac || !flagIds.some(f => req.rbac!.flags.has(f))) {
+      res.status(403).json({ error: "Forbidden", requiredFlags: flagIds });
+      return;
+    }
+    next();
+  };
+}
+
 export function requireOutletScope() {
   return (req: Request, _res: Response, next: NextFunction): void => {
     const outletId = req.rbac?.outletId ?? null;
