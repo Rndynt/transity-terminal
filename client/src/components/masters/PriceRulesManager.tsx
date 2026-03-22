@@ -44,10 +44,10 @@ function SectionDivider({ label }: { label: string }) {
 }
 
 const SCOPE_LABELS: Record<string, string> = {
-  pattern: 'Pattern',
+  pattern: 'Pola',
   trip: 'Trip',
-  leg: 'Leg',
-  time: 'Time-based'
+  leg: 'Segmen',
+  time: 'Waktu'
 };
 
 const SCOPE_VARIANTS: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
@@ -61,8 +61,8 @@ const formatRupiah = (value: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
 
 const PRICING_MODE_LABELS: Record<string, string> = {
-  per_leg: 'Per Leg',
-  flat: 'Tarif Tetap',
+  per_leg: 'Legs',
+  flat: 'Flat',
 };
 
 const DEFAULT_FORM: PriceRuleFormData = {
@@ -271,15 +271,15 @@ export default function PriceRulesManager() {
   };
 
   const scopeFilterOptions = [
-    { value: 'pattern', label: 'Pattern' },
+    { value: 'pattern', label: 'Pola' },
     { value: 'trip', label: 'Trip' },
-    { value: 'leg', label: 'Leg' },
-    { value: 'time', label: 'Time-based' },
+    { value: 'leg', label: 'Segmen' },
+    { value: 'time', label: 'Waktu' },
   ];
 
   const modeFilterOptions = [
-    { value: 'per_leg', label: 'Per Leg' },
-    { value: 'flat', label: 'Tarif Tetap' },
+    { value: 'per_leg', label: 'Legs' },
+    { value: 'flat', label: 'Flat' },
   ];
 
   return (
@@ -383,8 +383,8 @@ export default function PriceRulesManager() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="per_leg">Per Leg — harga dikalikan jumlah segmen</SelectItem>
-              <SelectItem value="flat">Tarif Tetap — harga sama berapa pun segmen</SelectItem>
+              <SelectItem value="per_leg">Legs — harga × jumlah segmen</SelectItem>
+              <SelectItem value="flat">Flat — harga tetap</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -504,7 +504,7 @@ export default function PriceRulesManager() {
           <Table data-testid="price-rules-table">
             <TableHeader>
               <TableRow className="bg-muted/10 hover:bg-muted/10">
-                <TableHead className="w-[90px] font-semibold text-xs uppercase tracking-wide">Scope</TableHead>
+                <TableHead className="w-[90px] font-semibold text-xs uppercase tracking-wide">Cakupan</TableHead>
                 <TableHead className="font-semibold text-xs uppercase tracking-wide">Target</TableHead>
                 <TableHead className="w-[80px] font-semibold text-xs uppercase tracking-wide">Mode</TableHead>
                 <TableHead className="w-[160px] font-semibold text-xs uppercase tracking-wide">Harga</TableHead>
@@ -562,9 +562,9 @@ export default function PriceRulesManager() {
                       <TableCell>
                         <Badge
                           variant={pricingMode === 'flat' ? 'default' : 'secondary'}
-                          className="text-[11px] font-mono px-1.5"
+                          className="text-[11px] px-1.5"
                         >
-                          {PRICING_MODE_LABELS[pricingMode] || 'Per Leg'}
+                          {PRICING_MODE_LABELS[pricingMode] || 'Per Segmen'}
                         </Badge>
                       </TableCell>
 
