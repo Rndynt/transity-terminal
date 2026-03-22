@@ -43,7 +43,14 @@ server/
   index.ts         → Fastify app bootstrap (decorateRequest, contentTypeParser, logging, error handler)
   routes.ts        → Route orchestrator (delegates to module .routes.ts files)
   storage.interface.ts → IStorage interface + manifest types
-  storage.ts       → DatabaseStorage implementation (thin facade)
+  storage.ts       → Thin facade delegating to domain repositories
+  repositories/
+    fleet.repository.ts       → drivers, vehicles, layouts
+    network.repository.ts     → stops, outlets
+    scheduling.repository.ts  → trips, patterns, bases, stopTimes, legs, inventory, priceRules, manifest
+    booking.repository.ts     → bookings, passengers, payments, printJobs
+    cargo.repository.ts       → cargoTypes, cargoRates, cargoShipments
+    finance.repository.ts     → costTemplates, costItems, promotions, vouchers
   vite.ts          → Vite HMR integration (@fastify/middie) + static serving (@fastify/static)
   types/
     fastify.d.ts   → FastifyRequest type augmentations (user, rbac, appUser, scopedOutletId, rawBody)

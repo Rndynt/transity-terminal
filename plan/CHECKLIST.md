@@ -20,7 +20,13 @@
 - [x] Update semua ~40 module files import IStorage dari `storage.interface.ts` (bukan routes.ts)
 - [x] Hapus re-export dari `routes.ts`
 - [x] Verifikasi: server start tanpa error, semua API endpoints berfungsi
-- [ ] (Optional) Pecah storage.ts ke domain repositories — deferred, low ROI vs risk
+- [x] Pecah storage.ts (1463L → 172L facade) ke 6 domain repositories:
+  - fleet.repository.ts (83L) — drivers, vehicles, layouts
+  - network.repository.ts (70L) — stops, outlets
+  - scheduling.repository.ts (833L) — trips, patterns, bases, stopTimes, legs, inventory, priceRules, manifest
+  - booking.repository.ts (125L) — bookings, passengers, payments, printJobs
+  - cargo.repository.ts (198L) — cargoTypes, cargoRates, cargoShipments
+  - finance.repository.ts (123L) — costTemplates, costItems, promotions, vouchers
 
 ## Phase 3: Decentralize Routes
 - [x] Tambahkan `registerXxxRoutes()` di setiap controller/module
