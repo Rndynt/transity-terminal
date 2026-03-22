@@ -625,10 +625,10 @@ export default function SeatMap({
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
-        <div className="flex flex-col gap-1 items-center w-full">
-          {seatGrid.map((row, ri) => (
-            <div key={ri} className="flex gap-1 justify-center">
-              {row.map((seat, ci) => {
+        <div className="w-full flex justify-center">
+          <div className="inline-grid gap-1" style={{ gridTemplateColumns: `repeat(${gridCols}, 2.25rem)` }}>
+            {seatGrid.flatMap((row, ri) =>
+              row.map((seat, ci) => {
                 if (seat === null) return <div key={`gap-${ri}-${ci}`} className="w-9 h-9" />;
                 const status = getSeatStatus(seat.seat_no);
                 const holdTTL = getHoldTTL(seat.seat_no);
@@ -660,9 +660,9 @@ export default function SeatMap({
                     )}
                   </div>
                 );
-              })}
-            </div>
-          ))}
+              })
+            )}
+          </div>
         </div>
 
         <div className="w-full flex items-center gap-2 text-[10px] text-gray-400">
