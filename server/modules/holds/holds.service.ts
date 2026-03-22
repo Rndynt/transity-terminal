@@ -147,21 +147,27 @@ export class HoldsService {
 
   async releaseHoldByRef(holdRef: string): Promise<void> {
     try {
-      const [dbHold] = await db.select()
-        .from(seatHolds)
-        .where(eq(seatHolds.holdRef, holdRef))
-        .limit(1);
+      const released = await db.transaction(async (tx) => {
+        const [dbHold] = await tx.select()
+          .from(seatHolds)
+          .where(eq(seatHolds.holdRef, holdRef))
+          .limit(1);
 
-      if (dbHold) {
-        await db.update(seatInventory)
+        if (!dbHold) return null;
+
+        await tx.update(seatInventory)
           .set({ holdRef: null })
           .where(eq(seatInventory.holdRef, holdRef));
 
-        await db.delete(seatHolds)
+        await tx.delete(seatHolds)
           .where(eq(seatHolds.holdRef, holdRef));
 
-        webSocketService.emitInventoryUpdated(dbHold.tripId, dbHold.seatNo, dbHold.legIndexes as number[]);
-        webSocketService.emitHoldsReleased(dbHold.tripId, [dbHold.seatNo]);
+        return dbHold;
+      });
+
+      if (released) {
+        webSocketService.emitInventoryUpdated(released.tripId, released.seatNo, released.legIndexes as number[]);
+        webSocketService.emitHoldsReleased(released.tripId, [released.seatNo]);
       }
     } catch (dbError) {
       console.error(`[HOLDS] Failed to release hold ${holdRef}:`, dbError);
