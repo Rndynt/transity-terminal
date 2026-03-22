@@ -51,7 +51,10 @@ Client (React) ←→ Fastify API Server ←→ PostgreSQL
                    Socket.IO (Real-time)
 ```
 
-- **Controller-Service-Storage Pattern**: Setiap modul memiliki controller (HTTP handler), service (business logic), dan storage (database query).
+- **Route → Controller → Service → Repository Pattern**: Setiap modul memiliki routes (endpoint registration + preHandler), controller (HTTP handler), service (business logic), dan repository (database query).
+- **Decentralized Route Registration**: Setiap module mendaftarkan route sendiri via `registerXxxRoutes(app)`, di-orchestrate dari `server/routes.ts`.
+- **Repository Pattern**: Data access dipecah ke 6 domain repositories (`server/repositories/`), diakses via thin facade `storage.ts` (IStorage interface).
+- **Domain-Split Schema**: Drizzle schema dipecah per domain di `shared/schema/` (13 file), di-re-export dari `shared/schema/index.ts`.
 - **Fastify preHandler**: Middleware autentikasi dan RBAC menggunakan hook `preHandler` Fastify.
 - **Modular Structure**: 20+ modul di `server/modules/`, masing-masing mandiri.
 
@@ -60,10 +63,12 @@ Client (React) ←→ Fastify API Server ←→ PostgreSQL
 | File | Fungsi |
 |------|--------|
 | `server/index.ts` | Bootstrap Fastify, dekorasi request, error handler |
-| `server/routes.ts` | 104+ endpoint API dengan preHandler RBAC |
-| `server/storage.ts` | Implementasi DatabaseStorage (Drizzle ORM) |
+| `server/routes.ts` | Route orchestrator — delegates ke `registerXxxRoutes()` per module |
+| `server/storage.interface.ts` | IStorage interface + manifest types |
+| `server/storage.ts` | Thin facade — delegasi ke 6 domain repositories |
+| `server/repositories/*.ts` | Domain-specific data access (fleet, network, scheduling, booking, cargo, finance) |
 | `server/realtime/ws.ts` | WebSocket server (Socket.IO) |
-| `shared/schema.ts` | Definisi tabel Drizzle + Zod schemas |
+| `shared/schema/index.ts` | Re-exports 13 domain schema files (Drizzle tables + Zod schemas) |
 | `client/src/pages/cso/CsoPage.tsx` | Halaman utama terminal CSO |
 
 ---

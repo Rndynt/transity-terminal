@@ -700,69 +700,242 @@ app.get('/api/bookings', { preHandler: [requireOutletScope] }, handler);
 ## Struktur Project
 
 ```
-client/src/
-  pages/              Halaman utama
-    auth/             Login page
-    admin/            Staff & Feature Flag management
-    schedule/         Jadwal Harian
-    spj/              SPJ page
-    reports/          7 report pages
-  components/
-    cso/              Terminal CSO (TripSelector, SeatMap, PassengerForm, RouteTimeline)
-    masters/          Master data managers
-    manifest/         ManifestDialog + ThermalManifest
-    reports/          Report components (ReportFilters, SummaryCards)
-    shared/           Reusable components (StatusBadge, LoadingState, EmptyState)
-  hooks/              Custom hooks (useBookingFlow, useWebSocket, useSeatHold)
-  lib/
-    constants.ts      Centralized constants
-    api.ts            API client
-    auth.tsx          AuthProvider + useAuth
-    queryClient.ts    React Query config
+shared/
+  schema/                    Drizzle table definitions, dipecah per domain
+    index.ts                 Re-exports semua domain schemas
+    enums.ts                 Semua pgEnum definitions
+    fleet.ts                 drivers, vehicles, layouts
+    network.ts               stops, outlets
+    scheduling.ts            tripPatterns, patternStops, tripBases, trips, tripStopTimes, tripLegs
+    inventory.ts             seatInventory, seatHolds, priceRules
+    booking.ts               bookings, passengers, payments, printJobs
+    cargo.ts                 cargoShipments, cargoTypes, cargoRates
+    finance.ts               tripCostTemplates, tripCostItems
+    promo.ts                 promotions, vouchers
+    spj.ts                   SPJ tables
+    rbac.ts                  roles, featureFlags, roleFlags, staffMembers
+    app-users.ts             appUsers (mobile B2C)
+    relations.ts             Drizzle relations definitions
 
 server/
-  index.ts            Fastify app bootstrap
-  routes.ts           104+ API endpoints (preHandler arrays)
-  storage.ts          DatabaseStorage (Drizzle ORM)
-  vite.ts             Vite HMR + static serving
-  scheduler.ts        Expired holds/bookings cleanup
+  index.ts                   Fastify app bootstrap (decorateRequest, logging, error handler)
+  routes.ts                  Route orchestrator — delegates ke registerXxxRoutes() per module
+  storage.interface.ts       IStorage interface + manifest types
+  storage.ts                 Thin facade — delegasi ke 6 domain repositories
+  db.ts                      Drizzle ORM instance + PostgreSQL pool
+  vite.ts                    Vite HMR (@fastify/middie) + static serving (@fastify/static)
+  scheduler.ts               Expired holds/bookings cleanup (1 menit interval)
   types/
-    fastify.d.ts      Request type augmentations (user, rbac, appUser, scopedOutletId, rawBody)
+    fastify.d.ts             Request type augmentations (user, rbac, appUser, scopedOutletId, rawBody)
   realtime/
-    ws.ts             Socket.io WebSocket server
-  modules/
-    auth/             Realmio auth proxy
-    rbac/             RBAC + ABAC + Feature Flags
-    app/              Mobile B2C API
-    bookings/         BookingsService + UnseatService
-    pricing/          PricingService (scope-based pricing)
-    cargo/            CargoService
-    spj/              SPJ (Surat Perintah Jalan)
-    reports/          7 report types
-    promos/           Promo & Voucher system
-    payments/         Payment processing
-    holds/            Seat hold management
-    seatInventory/    Seat inventory service
-    tripBases/        Virtual → Real trip materialization
-    tripLegs/         Trip leg computation
-    drivers/          Driver management
-    vehicles/         Vehicle management
-    stops/            Stop management
-    outlets/          Outlet management
-    layouts/          Bus seat layouts
-    trips/            Trip management
-    tripPatterns/     Trip pattern management
-    patternStops/     Pattern stop management
-    tripStopTimes/    Trip stop time overrides
-    priceRules/       Price rule management
-    printing/         Thermal print service
+    ws.ts                    Socket.io WebSocket server
+  repositories/              Domain-specific data access (SQL queries via Drizzle)
+    fleet.repository.ts      drivers, vehicles, layouts
+    network.repository.ts    stops, outlets
+    scheduling.repository.ts trips, patterns, bases, stopTimes, legs, inventory, priceRules, manifest
+    booking.repository.ts    bookings, passengers, payments, printJobs
+    cargo.repository.ts      cargoTypes, cargoRates, cargoShipments
+    finance.repository.ts    costTemplates, costItems, promotions, vouchers
+  modules/                   Business logic + API controllers (1 folder per domain)
+    auth/                    Realmio auth proxy (realmio.ts middleware, auth.routes.ts)
+    rbac/                    RBAC + Feature Flags (rbac.middleware.ts, rbac.service.ts, rbac.admin.routes.ts)
+    app/                     Mobile B2C API auth + controllers
+    bookings/                BookingsService + BookingsController + UnseatService
+    pricing/                 PricingService + PricingController
+    cargo/                   CargoService + CargoController
+    seatInventory/           SeatInventoryService
+    tripBases/               TripBasesService (materialisasi virtual → real)
+    tripLegs/                TripLegsService
+    spj/                     SpjService + SpjController (Surat Perintah Jalan)
+    reports/                 ReportsService + ReportsController (7 report types)
+    promos/                  PromosService + PromosController (promo & voucher)
+    payments/                PaymentsController
+    holds/                   HoldsService (seat hold management)
+    drivers/                 DriversController + DriversService
+    vehicles/                VehiclesController + VehiclesService
+    stops/                   StopsController + StopsService
+    outlets/                 OutletsController
+    layouts/                 LayoutsController
+    trips/                   TripsController
+    tripPatterns/            TripPatternsController
+    patternStops/            PatternStopsController
+    tripStopTimes/           TripStopTimesController
+    priceRules/              PriceRulesController
+    printing/                PrintService
 
-shared/
-  schema.ts           Drizzle table definitions + Zod schemas + shared types
+client/src/
+  App.tsx                    Root router (wouter) + React.lazy page imports
+  pages/
+    cso/                     CsoPage — terminal reservasi CSO utama
+    cargo/                   CargoListPage — daftar pengiriman kargo
+    bookings/                AllBookingsPage — daftar semua booking
+    schedule/                SchedulePage — jadwal harian + assign driver + buat SPJ
+    manifest/                ManifestPage
+    spj/                     SpjPage — manajemen Surat Perintah Jalan
+    masters/                 MastersPage — CRUD master data
+    reports/                 7 report pages (Revenue, Sales, Profitability, dll)
+    admin/                   StaffManagement + FeatureFlagManagement
+    auth/                    LoginPage
+    dashboard/               DashboardPage
+  components/
+    cso/                     Komponen terminal CSO
+      TripSelector.tsx       Pilih outlet + tanggal + trip
+      RouteTimeline.tsx      Timeline halte naik/turun
+      SeatMap.tsx            Peta kursi interaktif + real-time
+      PassengerForm.tsx      Form penumpang + pembayaran
+      PassengerDetailModal   Detail penumpang + unseat/reschedule/cancel
+      BookingStepper.tsx     Step indicator booking
+      CargoForm.tsx          Form kargo di CSO
+    masters/                 Komponen CRUD master data
+      StopsManager           CRUD halte
+      TripPatternsManager    CRUD pola trip
+      TripBasesManager       CRUD jadwal template (→ TripBaseFormDialog + TripBaseGroupList)
+      TripsManager           Manage trip instances (→ TripsFilterPanel)
+      DriversManager         CRUD driver
+      VehiclesManager        CRUD kendaraan
+      LayoutsManager         CRUD layout kursi
+      OutletsManager         CRUD outlet
+      PriceRulesManager      CRUD aturan harga
+      CargoTypesManager      CRUD tipe kargo
+      CargoRatesManager      CRUD tarif kargo
+      PromosManager          CRUD promo & voucher
+    manifest/                ManifestDialog + ThermalManifest (cetak 80mm)
+    reports/                 ReportFilters, SummaryCards, ReportPageLayout
+    shared/                  Reusable: DataTable, StatusBadges
+    layout/                  Sidebar, ProtectedRoute
+    rbac/                    RequireFlag + CanAccess permission components
+    ui/                      shadcn/ui components
+  hooks/
+    useBookingFlow.ts        State machine booking flow CSO
+    useSeatHold.ts           Seat hold timer + auto-release
+    useWebSocket.ts          Socket.io connection management
+    use-toast.ts             Toast notifications
+  lib/
+    api.ts                   API client functions (grouped per domain)
+    auth.tsx                 AuthProvider + useAuth context
+    permissions.tsx          usePermissions().can(flagId) hook
+    constants.ts             Centralized constants (status maps, formatters)
+    queryClient.ts           React Query config + apiRequest helper
 
-apps/mobile/          Expo React Native B2C app
-plan/                 Technical documentation
+apps/mobile/                 Expo React Native B2C app
+plan/                        Dokumentasi teknis & plan fitur
 ```
+
+### Lapisan Arsitektur Backend
+
+```
+Request → Fastify Route → preHandler (auth, RBAC) → Controller → Service → Repository → Database
+                                                                        ↘ storage.ts facade (IStorage)
+```
+
+1. **Route** (`*.routes.ts`) — Definisi endpoint HTTP + middleware chain
+2. **Controller** (`*.controller.ts`) — Parse request, validasi input, panggil service, format response
+3. **Service** (`*.service.ts`) — Business logic, orchestrate repository calls, transaksi DB
+4. **Repository** (`server/repositories/*.repository.ts`) — Raw SQL/Drizzle queries per domain
+5. **Storage Facade** (`server/storage.ts`) — Thin facade delegasi ke repositories (IStorage interface)
+
+### Module File Convention
+
+Setiap module di `server/modules/` mengikuti pola:
+```
+server/modules/myFeature/
+  myFeature.routes.ts      → registerMyFeatureRoutes(app) — endpoint registration
+  myFeature.controller.ts  → Request/response handling
+  myFeature.service.ts     → Business logic
+```
+
+---
+
+## Panduan Membuat Fitur Baru
+
+Berikut langkah-langkah untuk menambahkan fitur baru ke TransityTerminal:
+
+### 1. Schema — Definisikan tabel di `shared/schema/`
+
+Buat atau tambahkan di file domain yang sesuai (`shared/schema/<domain>.ts`):
+
+```typescript
+import { sql } from "drizzle-orm";
+import { pgTable, uuid, varchar, timestamp } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
+
+export const myNewTable = pgTable("my_new_table", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 255 }).notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
+export const insertMyNewTableSchema = createInsertSchema(myNewTable).omit({ id: true, deletedAt: true });
+export type InsertMyNewTable = z.infer<typeof insertMyNewTableSchema>;
+export type MyNewTable = typeof myNewTable.$inferSelect;
+```
+
+Re-export dari `shared/schema/index.ts`, lalu jalankan `npm run db:push`.
+
+**Konvensi:**
+- UUID primary key (`uuid("id").primaryKey().default(sql\`gen_random_uuid()\`)`)
+- Soft delete: `deletedAt: timestamp("deleted_at", { withTimezone: true })`
+- Export: table definition, insert schema, insert type, select type
+
+### 2. Repository — Tambah data access di `server/repositories/`
+
+Tambah methods di repository domain yang sesuai. Semua query gunakan `isNull(table.deletedAt)` untuk filter soft-deleted records.
+
+### 3. IStorage Interface — Update `server/storage.interface.ts`
+
+Tambahkan method signatures baru ke interface `IStorage`.
+
+### 4. Storage Facade — Update `server/storage.ts`
+
+Tambahkan delegasi ke repository (satu baris per method):
+```typescript
+async getMyItems() { return this.xxxRepo.getMyItems(); }
+```
+
+### 5. Module — Buat folder `server/modules/myFeature/`
+
+Buat 3 file:
+- `myFeature.routes.ts` — `registerMyFeatureRoutes(app)` dengan endpoint definitions
+- `myFeature.controller.ts` — Request/response handling
+- `myFeature.service.ts` — Business logic
+
+### 6. Register Routes — Update `server/routes.ts`
+
+```typescript
+import { registerMyFeatureRoutes } from "./modules/myFeature/myFeature.routes";
+registerMyFeatureRoutes(app);
+```
+
+### 7. Frontend — Buat page + API functions
+
+- Page di `client/src/pages/myFeature/MyFeaturePage.tsx`
+- Lazy import + route di `client/src/App.tsx`
+- API functions di `client/src/lib/api.ts`
+- React Query dengan proper `queryKey` dan cache invalidation
+- Sidebar menu item di `client/src/components/layout/Sidebar.tsx`
+
+### 8. RBAC (opsional) — Tambah feature flag
+
+```sql
+INSERT INTO feature_flags (id, name, category) VALUES ('master.myFeature', 'My Feature', 'master');
+INSERT INTO role_flags (role_id, flag_id, enabled) VALUES ('admin', 'master.myFeature', true);
+```
+
+Gunakan `requireFlag("master.myFeature")` di route preHandler, dan `usePermissions().can("master.myFeature")` di frontend.
+
+### Checklist
+
+- [ ] Schema + `db:push`
+- [ ] Repository methods
+- [ ] IStorage interface
+- [ ] Storage facade
+- [ ] Module (routes + controller + service)
+- [ ] Register routes
+- [ ] Frontend page + API + React Query
+- [ ] Sidebar menu
+- [ ] RBAC flags (jika perlu)
+- [ ] `data-testid` pada elemen interaktif
 
 ---
 
@@ -786,6 +959,7 @@ plan/                 Technical documentation
 | Authentication (Realmio) | Done |
 | RBAC + ABAC + Feature Flags | Done |
 | Admin UI (Staff & Flag Management) | Done |
+| Hybrid Refactor (Schema split, Repository pattern, Route decentralization) | Done |
 | Mobile B2C (Expo React Native) | In Progress |
 | Backend: Fastify 5 Migration | Done |
 
