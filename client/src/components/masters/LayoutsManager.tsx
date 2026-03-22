@@ -11,6 +11,7 @@ import { queryClient } from '@/lib/queryClient';
 import { Plus, Pencil, Trash2, Wand2, MousePointer2, CircleDot } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
+import { RowActionsMenu } from './RowActionsMenu';
 import type { Layout } from '@/types';
 
 interface LayoutFormData {
@@ -723,25 +724,13 @@ export default function LayoutsManager() {
             key: 'actions', header: 'Aksi',
             headerClassName: 'text-right', className: 'text-right w-16',
             render: (l) => (
-              <div className="flex items-center justify-end gap-0.5">
-                <Button
-                  size="sm" variant="ghost"
-                  onClick={() => handleEdit(l)}
-                  className="h-7 w-7 p-0 rounded-lg hover:bg-primary/10"
-                  data-testid={`edit-layout-${l.id}`}
-                >
-                  <Pencil className="h-3.5 w-3.5 text-primary" />
-                </Button>
-                <Button
-                  size="sm" variant="ghost"
-                  onClick={() => handleDelete(l.id)}
-                  disabled={deleteMutation.isPending}
-                  className="h-7 w-7 p-0 rounded-lg hover:bg-destructive/10"
-                  data-testid={`delete-layout-${l.id}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                </Button>
-              </div>
+              <RowActionsMenu
+                actions={[
+                  { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(l) },
+                  { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(l.id), variant: 'destructive', disabled: deleteMutation.isPending },
+                ]}
+                data-testid={`actions-layout-${l.id}`}
+              />
             ),
           },
         ]}
