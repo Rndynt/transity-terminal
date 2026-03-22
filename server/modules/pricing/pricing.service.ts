@@ -20,13 +20,16 @@ export class PricingService {
     const ruleData = rule.rule as any;
     const basePricePerLeg: number = ruleData.basePricePerLeg ?? 0;
     const multiplier: number = ruleData.multiplier ?? 1;
+    const pricingMode: string = ruleData.pricingMode ?? 'per_leg';
 
     const legs = await this.storage.getTripLegs(tripId);
     const journeyLegs = legs.filter(leg =>
       leg.legIndex >= originSeq && leg.legIndex < destinationSeq
     );
 
-    const totalBase = journeyLegs.length * basePricePerLeg;
+    const totalBase = pricingMode === 'flat'
+      ? basePricePerLeg
+      : journeyLegs.length * basePricePerLeg;
     const totalAmount = Math.round(totalBase * multiplier);
 
     return {
@@ -36,6 +39,7 @@ export class PricingService {
         base: totalBase,
         legs: journeyLegs.length,
         pricePerLeg: basePricePerLeg,
+        pricingMode,
         multiplier,
         ruleId: rule.id,
         ruleScope: rule.scope,

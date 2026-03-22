@@ -25,6 +25,7 @@ interface PriceRuleFormData {
   patternId: string;
   tripId: string;
   legIndex: string;
+  pricingMode: 'per_leg' | 'flat';
   basePricePerLeg: string;
   currency: string;
   multiplier: string;
@@ -59,11 +60,17 @@ const SCOPE_VARIANTS: Record<string, 'default' | 'secondary' | 'outline' | 'dest
 const formatRupiah = (value: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
 
+const PRICING_MODE_LABELS: Record<string, string> = {
+  per_leg: 'Per Leg',
+  flat: 'Tarif Tetap',
+};
+
 const DEFAULT_FORM: PriceRuleFormData = {
   scope: 'pattern',
   patternId: '',
   tripId: '',
   legIndex: '',
+  pricingMode: 'per_leg',
   basePricePerLeg: '',
   currency: 'IDR',
   multiplier: '1',
@@ -78,6 +85,9 @@ export default function PriceRulesManager() {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [formData, setFormData] = useState<PriceRuleFormData>(DEFAULT_FORM);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterScope, setFilterScope] = useState('');
+  const [filterMode, setFilterMode] = useState('');
+  const [filterPatternId, setFilterPatternId] = useState('');
   const { toast } = useToast();
 
   const { data: priceRules = [], isLoading } = useQuery({
@@ -116,12 +126,14 @@ export default function PriceRulesManager() {
   });
 
   const buildRule = (data: PriceRuleFormData) => ({
+    pricingMode: data.pricingMode || 'per_leg',
     basePricePerLeg: parseFloat(data.basePricePerLeg) || 0,
     currency: data.currency || 'IDR',
     multiplier: parseFloat(data.multiplier) || 1,
   });
 
   const parseRule = (rule: any): Partial<PriceRuleFormData> => ({
+    pricingMode: rule?.pricingMode || 'per_leg',
     basePricePerLeg: rule?.basePricePerLeg?.toString() || '',
     currency: rule?.currency || 'IDR',
     multiplier: rule?.multiplier?.toString() || '1',
@@ -190,7 +202,7 @@ export default function PriceRulesManager() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.basePricePerLeg || isNaN(parseFloat(formData.basePricePerLeg))) {
-      toast({ title: 'Harga tidak valid', description: 'Masukkan harga dasar per leg yang valid', variant: 'destructive' });
+      toast({ title: 'Harga tidak valid', description: 'Masukkan harga dasar yang valid', variant: 'destructive' });
       return;
     }
     const submitData = {
@@ -232,7 +244,14 @@ export default function PriceRulesManager() {
     return parts.join(' · ') || tripId.slice(0, 8);
   };
 
+  const activeFilterCount = [filterScope, filterMode, filterPatternId].filter(Boolean).length;
+
   const filteredPriceRules = priceRules.filter(rule => {
+    if (filterScope && rule.scope !== filterScope) return false;
+    const ruleMode = rule.rule?.pricingMode || 'per_leg';
+    if (filterMode && ruleMode !== filterMode) return false;
+    if (filterPatternId && rule.patternId !== filterPatternId) return false;
+
     const q = searchQuery.toLowerCase();
     if (!q) return true;
     const scope = rule.scope.toLowerCase();
@@ -243,6 +262,25 @@ export default function PriceRulesManager() {
     ).toLowerCase();
     return scope.includes(q) || target.includes(q);
   });
+
+  const clearAllFilters = () => {
+    setFilterScope('');
+    setFilterMode('');
+    setFilterPatternId('');
+    setSearchQuery('');
+  };
+
+  const scopeFilterOptions = [
+    { value: 'pattern', label: 'Pattern' },
+    { value: 'trip', label: 'Trip' },
+    { value: 'leg', label: 'Leg' },
+    { value: 'time', label: 'Time-based' },
+  ];
+
+  const modeFilterOptions = [
+    { value: 'per_leg', label: 'Per Leg' },
+    { value: 'flat', label: 'Tarif Tetap' },
+  ];
 
   return (
     <div className="space-y-6" data-testid="price-rules-manager">
@@ -335,9 +373,26 @@ export default function PriceRulesManager() {
 
         {/* ── Tarif ── */}
         <SectionDivider label="Tarif" />
+        <div className="space-y-1.5">
+          <Label>Mode Harga <span className="text-destructive">*</span></Label>
+          <Select
+            value={formData.pricingMode}
+            onValueChange={(v: 'per_leg' | 'flat') => setFormData(prev => ({ ...prev, pricingMode: v }))}
+          >
+            <SelectTrigger data-testid="select-pricing-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="per_leg">Per Leg — harga dikalikan jumlah segmen</SelectItem>
+              <SelectItem value="flat">Tarif Tetap — harga sama berapa pun segmen</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="sm:col-span-2 space-y-1.5">
-            <Label htmlFor="basePricePerLeg">Harga Dasar per Leg <span className="text-destructive">*</span></Label>
+            <Label htmlFor="basePricePerLeg">
+              {formData.pricingMode === 'flat' ? 'Harga Tarif Tetap' : 'Harga Dasar per Leg'} <span className="text-destructive">*</span>
+            </Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">Rp</span>
               <Input
@@ -354,7 +409,9 @@ export default function PriceRulesManager() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Harga yang dikenakan per segmen perjalanan (leg)
+              {formData.pricingMode === 'flat'
+                ? 'Harga tetap untuk seluruh perjalanan, berapa pun jumlah halte yang dilewati'
+                : 'Harga yang dikenakan per segmen perjalanan (leg)'}
             </p>
           </div>
           <div className="space-y-1.5">
@@ -379,7 +436,9 @@ export default function PriceRulesManager() {
         {/* Preview */}
         {formData.basePricePerLeg && !isNaN(parseFloat(formData.basePricePerLeg)) && (
           <div className="rounded-lg bg-muted/40 border px-4 py-3 flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Harga efektif per leg</span>
+            <span className="text-sm text-muted-foreground">
+              {formData.pricingMode === 'flat' ? 'Harga tetap per penumpang' : 'Harga efektif per leg'}
+            </span>
             <span className="font-semibold text-base">
               {formatRupiah(parseFloat(formData.basePricePerLeg) * (parseFloat(formData.multiplier) || 1))}
             </span>
@@ -447,7 +506,8 @@ export default function PriceRulesManager() {
               <TableRow className="bg-muted/10 hover:bg-muted/10">
                 <TableHead className="w-[90px] font-semibold text-xs uppercase tracking-wide">Scope</TableHead>
                 <TableHead className="font-semibold text-xs uppercase tracking-wide">Target</TableHead>
-                <TableHead className="w-[160px] font-semibold text-xs uppercase tracking-wide">Harga / Leg</TableHead>
+                <TableHead className="w-[80px] font-semibold text-xs uppercase tracking-wide">Mode</TableHead>
+                <TableHead className="w-[160px] font-semibold text-xs uppercase tracking-wide">Harga</TableHead>
                 <TableHead className="w-[70px] font-semibold text-xs uppercase tracking-wide">Mult.</TableHead>
                 <TableHead className="w-[60px] font-semibold text-xs uppercase tracking-wide">Prior.</TableHead>
                 <TableHead className="w-[180px] font-semibold text-xs uppercase tracking-wide">Periode</TableHead>
@@ -457,7 +517,7 @@ export default function PriceRulesManager() {
             <TableBody>
               {filteredPriceRules.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                     <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-30" />
                     <p className="text-sm font-medium">
                       {searchQuery ? `Tidak ada hasil untuk '${searchQuery}'` : 'Belum ada aturan harga'}
@@ -468,6 +528,7 @@ export default function PriceRulesManager() {
                 filteredPriceRules.map(rule => {
                   const basePrice = rule.rule?.basePricePerLeg;
                   const multiplier = rule.rule?.multiplier ?? 1;
+                  const pricingMode = rule.rule?.pricingMode || 'per_leg';
                   const effectivePrice = basePrice != null ? basePrice * multiplier : null;
 
                   return (
@@ -497,7 +558,17 @@ export default function PriceRulesManager() {
                         </span>
                       </TableCell>
 
-                      {/* Price per leg */}
+                      {/* Pricing Mode */}
+                      <TableCell>
+                        <Badge
+                          variant={pricingMode === 'flat' ? 'default' : 'secondary'}
+                          className="text-[11px] font-mono px-1.5"
+                        >
+                          {PRICING_MODE_LABELS[pricingMode] || 'Per Leg'}
+                        </Badge>
+                      </TableCell>
+
+                      {/* Price */}
                       <TableCell>
                         {effectivePrice != null ? (
                           <div className="flex flex-col gap-0.5">

@@ -185,8 +185,8 @@ plan/              → Dokumentasi teknis fitur
 
 ### Pricing
 - Price rules: scope `pattern | trip | leg | time`, prioritas tertinggi dipakai
-- Rule JSON: `{ basePricePerLeg, currency, multiplier }`
-- Total = basePricePerLeg × multiplier × jumlah leg
+- Rule JSON: `{ pricingMode, basePricePerLeg, currency, multiplier }`
+- `pricingMode`: `per_leg` (default, harga × jumlah leg × multiplier) atau `flat` (tarif tetap × multiplier, berapa pun jumlah leg)
 - Trip tanpa price rule: disabled di CSO, tidak bisa dipesan
 
 ### Seat Management
