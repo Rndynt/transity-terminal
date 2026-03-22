@@ -395,32 +395,12 @@ export default function SeatMap({
 
   const minTTL = getMinTTL();
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-3" />
-        <p className="text-sm text-gray-400">Memuat layout kursi...</p>
-      </div>
-    );
-  }
-
-  if (!seatmap) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <AlertTriangle className="w-10 h-10 text-red-400 mb-3" />
-        <p className="text-sm text-gray-400 mb-3">Gagal memuat layout kursi</p>
-        <button onClick={() => refetch()} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 flex items-center gap-1.5" data-testid="button-retry-seatmap">
-          <RotateCcw className="w-3.5 h-3.5" /> Coba Lagi
-        </button>
-      </div>
-    );
-  }
-
-  const seatMapLayout = seatmap.layout.seatMap as any[];
-  const availableCount = getAvailableCount();
-  const totalSeats = seatMapLayout.length;
+  const seatMapLayout = seatmap?.layout?.seatMap as any[] | undefined;
 
   const { maxCol, maxRow, gridCols, seatGrid } = useMemo(() => {
+    if (!seatMapLayout || seatMapLayout.length === 0) {
+      return { maxCol: 0, maxRow: 0, gridCols: 1, seatGrid: [] as (any | null)[][] };
+    }
     const mc = Math.max(...seatMapLayout.map((s: any) => s.col));
     const mr = Math.max(...seatMapLayout.map((s: any) => s.row));
     const grid: (any | null)[][] = [];
@@ -435,6 +415,30 @@ export default function SeatMap({
     });
     return { maxCol: mc, maxRow: mr, gridCols: mc + 1, seatGrid: grid };
   }, [seatMapLayout]);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-3" />
+        <p className="text-sm text-gray-400">Memuat layout kursi...</p>
+      </div>
+    );
+  }
+
+  if (!seatmap || !seatMapLayout) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <AlertTriangle className="w-10 h-10 text-red-400 mb-3" />
+        <p className="text-sm text-gray-400 mb-3">Gagal memuat layout kursi</p>
+        <button onClick={() => refetch()} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 flex items-center gap-1.5" data-testid="button-retry-seatmap">
+          <RotateCcw className="w-3.5 h-3.5" /> Coba Lagi
+        </button>
+      </div>
+    );
+  }
+
+  const availableCount = getAvailableCount();
+  const totalSeats = seatMapLayout.length;
 
   return (
     <div className="space-y-3">
