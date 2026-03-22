@@ -3,7 +3,7 @@ import { storage } from './storage';
 import { getConfig } from './config';
 import { db } from './db';
 import { seatHolds, seatInventory } from '@shared/schema';
-import { lt, eq, and } from 'drizzle-orm';
+import { lt, eq, and, isNotNull, notInArray, sql } from 'drizzle-orm';
 
 export class Scheduler {
   private bookingsService: BookingsService;
@@ -50,6 +50,26 @@ export class Scheduler {
     }
   }
 
+  async cleanupOrphanHoldRefs(): Promise<void> {
+    try {
+      const validHoldRefs = db.select({ holdRef: seatHolds.holdRef }).from(seatHolds);
+      const result = await db
+        .update(seatInventory)
+        .set({ holdRef: null })
+        .where(and(
+          isNotNull(seatInventory.holdRef),
+          notInArray(seatInventory.holdRef, validHoldRefs)
+        ))
+        .returning({ id: seatInventory.id });
+
+      if (result.length > 0) {
+        console.log(`[SCHEDULER] Cleaned up ${result.length} orphan holdRefs in seat_inventory`);
+      }
+    } catch (error) {
+      console.error('[SCHEDULER] Error cleaning up orphan holdRefs:', error);
+    }
+  }
+
   start(): void {
     const config = getConfig();
     
@@ -58,6 +78,9 @@ export class Scheduler {
       try {
         // Cleanup expired holds
         await this.cleanupExpiredHolds();
+
+        // Cleanup orphan holdRefs in seat_inventory
+        await this.cleanupOrphanHoldRefs();
         
         // Cleanup expired pending bookings
         if (config.pendingBookingAutoRelease) {
