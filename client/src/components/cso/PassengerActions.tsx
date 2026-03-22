@@ -6,7 +6,7 @@ import { UserMinus, CalendarClock, Ban, Loader2, Armchair } from 'lucide-react';
 import { passengersApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import CanAccess from '@/components/rbac/CanAccess';
+import { CanAccess } from '@/components/rbac/CanAccess';
 
 export interface PassengerActionTarget {
   id: string;
