@@ -1,5 +1,4 @@
 import { db } from "../../db";
-import { roles, featureFlags, roleFlags } from "../../../shared/schema";
 import { sql } from "drizzle-orm";
 
 const ROLES = [
@@ -13,7 +12,6 @@ const ROLES = [
 ];
 
 const FEATURE_FLAGS = [
-  // page
   { id: "page.cso",       name: "Halaman CSO",          description: "Akses halaman Reservasi / CSO",         category: "page" },
   { id: "page.cargo",     name: "Halaman Kargo",         description: "Akses halaman Kargo",                   category: "page" },
   { id: "page.bookings",  name: "Halaman All Bookings",  description: "Akses halaman semua booking",            category: "page" },
@@ -23,30 +21,27 @@ const FEATURE_FLAGS = [
   { id: "page.reports",   name: "Halaman Laporan",       description: "Akses section Laporan",                 category: "page" },
   { id: "page.masters",   name: "Halaman Master",        description: "Akses section Master Data",             category: "page" },
 
-  // report
-  { id: "report.revenue",           name: "Laporan Pendapatan",     description: "Akses laporan pendapatan",      category: "report" },
-  { id: "report.sales",             name: "Laporan Penjualan",      description: "Akses laporan penjualan",       category: "report" },
-  { id: "report.trip_profitability",name: "Laba Rugi Trip",         description: "Akses laporan laba rugi trip",  category: "report" },
-  { id: "report.load_factor",       name: "Load Factor",            description: "Akses laporan load factor",     category: "report" },
-  { id: "report.cancellations",     name: "Laporan Pembatalan",     description: "Akses laporan pembatalan",      category: "report" },
-  { id: "report.cargo",             name: "Laporan Kargo",          description: "Akses laporan kargo",           category: "report" },
-  { id: "report.payments",          name: "Laporan Pembayaran",     description: "Akses laporan pembayaran",      category: "report" },
+  { id: "report.revenue",            name: "Laporan Pendapatan",     description: "Akses laporan pendapatan",      category: "report" },
+  { id: "report.sales",              name: "Laporan Penjualan",      description: "Akses laporan penjualan",       category: "report" },
+  { id: "report.trip_profitability", name: "Laba Rugi Trip",         description: "Akses laporan laba rugi trip",  category: "report" },
+  { id: "report.load_factor",        name: "Load Factor",            description: "Akses laporan load factor",     category: "report" },
+  { id: "report.cancellations",      name: "Laporan Pembatalan",     description: "Akses laporan pembatalan",      category: "report" },
+  { id: "report.cargo",              name: "Laporan Kargo",          description: "Akses laporan kargo",           category: "report" },
+  { id: "report.payments",           name: "Laporan Pembayaran",     description: "Akses laporan pembayaran",      category: "report" },
 
-  // master
-  { id: "master.stops",          name: "Master Stops",           description: "Kelola data stops",           category: "master" },
-  { id: "master.outlets",        name: "Master Outlets",         description: "Kelola data outlets",         category: "master" },
-  { id: "master.vehicles",       name: "Master Kendaraan",       description: "Kelola data kendaraan",       category: "master" },
-  { id: "master.drivers",        name: "Master Driver",          description: "Kelola data driver",          category: "master" },
-  { id: "master.layouts",        name: "Layout Kursi",           description: "Kelola layout kursi",         category: "master" },
-  { id: "master.trip_patterns",  name: "Trip Patterns",          description: "Kelola trip patterns",        category: "master" },
-  { id: "master.trips",          name: "Data Trips",             description: "Kelola data trips",           category: "master" },
-  { id: "master.price_rules",    name: "Aturan Harga",           description: "Kelola aturan harga",         category: "master" },
-  { id: "master.promos",         name: "Promo & Voucher",        description: "Kelola promo dan voucher",    category: "master" },
-  { id: "master.cargo_types",    name: "Jenis Kargo",            description: "Kelola jenis kargo",          category: "master" },
-  { id: "master.cargo_rates",    name: "Tarif Kargo",            description: "Kelola tarif kargo",          category: "master" },
-  { id: "master.cost_templates", name: "Biaya Perjalanan",       description: "Kelola template biaya perjalanan", category: "master" },
+  { id: "master.stops",          name: "Master Stops",           description: "Kelola data stops",                  category: "master" },
+  { id: "master.outlets",        name: "Master Outlets",         description: "Kelola data outlets",                category: "master" },
+  { id: "master.vehicles",       name: "Master Kendaraan",       description: "Kelola data kendaraan",              category: "master" },
+  { id: "master.drivers",        name: "Master Driver",          description: "Kelola data driver",                 category: "master" },
+  { id: "master.layouts",        name: "Layout Kursi",           description: "Kelola layout kursi",                category: "master" },
+  { id: "master.trip_patterns",  name: "Trip Patterns",          description: "Kelola trip patterns",               category: "master" },
+  { id: "master.trips",          name: "Data Trips",             description: "Kelola data trips",                  category: "master" },
+  { id: "master.price_rules",    name: "Aturan Harga",           description: "Kelola aturan harga",                category: "master" },
+  { id: "master.promos",         name: "Promo & Voucher",        description: "Kelola promo dan voucher",           category: "master" },
+  { id: "master.cargo_types",    name: "Jenis Kargo",            description: "Kelola jenis kargo",                 category: "master" },
+  { id: "master.cargo_rates",    name: "Tarif Kargo",            description: "Kelola tarif kargo",                 category: "master" },
+  { id: "master.cost_templates", name: "Biaya Perjalanan",       description: "Kelola template biaya perjalanan",   category: "master" },
 
-  // action
   { id: "action.booking.create",        name: "Buat Booking",           description: "Buat booking baru",                     category: "action" },
   { id: "action.booking.cancel",        name: "Cancel Tiket",           description: "Cancel tiket atau booking",              category: "action" },
   { id: "action.passenger.unseat",      name: "Unseat Penumpang",       description: "Unseat penumpang dari kursi",            category: "action" },
@@ -61,20 +56,12 @@ const FEATURE_FLAGS = [
   { id: "action.spj.issue",             name: "Terbitkan SPJ",          description: "Terbitkan / issue SPJ",                 category: "action" },
   { id: "action.spj.settle",            name: "Settle SPJ",             description: "Selesaikan / settle SPJ",               category: "action" },
 
-  // admin
   { id: "admin.staff.manage", name: "Kelola Staff",         description: "Tambah/edit/hapus staff dan assign role & outlet", category: "admin" },
   { id: "admin.flags.manage", name: "Kelola Feature Flags", description: "Toggle feature flags per role",                    category: "admin" },
 ];
 
-type FlagMatrix = {
-  owner: boolean;
-  finance: boolean;
-  manager: boolean;
-  spv_operations: boolean;
-  operations: boolean;
-  spv_cso: boolean;
-  cso: boolean;
-};
+type RoleId = "owner" | "finance" | "manager" | "spv_operations" | "operations" | "spv_cso" | "cso";
+type FlagMatrix = Record<RoleId, boolean>;
 
 const DEFAULT_MATRIX: Record<string, FlagMatrix> = {
   "page.cso":       { owner: true,  finance: false, manager: true,  spv_operations: false, operations: false, spv_cso: true,  cso: true  },
@@ -86,13 +73,13 @@ const DEFAULT_MATRIX: Record<string, FlagMatrix> = {
   "page.reports":   { owner: true,  finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
   "page.masters":   { owner: true,  finance: false, manager: false, spv_operations: false, operations: false, spv_cso: false, cso: false },
 
-  "report.revenue":           { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
-  "report.sales":             { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
-  "report.trip_profitability":{ owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
-  "report.load_factor":       { owner: true, finance: false, manager: true,  spv_operations: true,  operations: false, spv_cso: false, cso: false },
-  "report.cancellations":     { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
-  "report.cargo":             { owner: true, finance: true,  manager: true,  spv_operations: true,  operations: false, spv_cso: false, cso: false },
-  "report.payments":          { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
+  "report.revenue":            { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
+  "report.sales":              { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
+  "report.trip_profitability": { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
+  "report.load_factor":        { owner: true, finance: false, manager: true,  spv_operations: true,  operations: false, spv_cso: false, cso: false },
+  "report.cancellations":      { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
+  "report.cargo":              { owner: true, finance: true,  manager: true,  spv_operations: true,  operations: false, spv_cso: false, cso: false },
+  "report.payments":           { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
 
   "master.stops":          { owner: true, finance: false, manager: false, spv_operations: false, operations: false, spv_cso: false, cso: false },
   "master.outlets":        { owner: true, finance: false, manager: false, spv_operations: false, operations: false, spv_cso: false, cso: false },
@@ -149,18 +136,17 @@ export async function seedRbac() {
   console.log("[RBAC] Seeding role_flags (default matrix)...");
   let count = 0;
   for (const [flagId, matrix] of Object.entries(DEFAULT_MATRIX)) {
-    for (const [roleId, enabled] of Object.entries(matrix)) {
-      if (enabled) {
-        await db.execute(sql`
-          INSERT INTO role_flags (role_id, flag_id, enabled)
-          VALUES (${roleId}, ${flagId}, true)
-          ON CONFLICT (role_id, flag_id) DO NOTHING
-        `);
-        count++;
-      }
+    for (const roleId of Object.keys(matrix) as RoleId[]) {
+      const enabled = matrix[roleId];
+      await db.execute(sql`
+        INSERT INTO role_flags (role_id, flag_id, enabled)
+        VALUES (${roleId}, ${flagId}, ${enabled})
+        ON CONFLICT (role_id, flag_id) DO UPDATE SET enabled = EXCLUDED.enabled
+      `);
+      count++;
     }
   }
-  console.log(`  ✓ ${count} role-flag mappings`);
+  console.log(`  ✓ ${count} role-flag mappings (upserted)`);
 
   console.log("[RBAC] Seed complete.");
 }

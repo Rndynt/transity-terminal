@@ -1,10 +1,22 @@
 import { db } from "../../db";
-import { sql } from "drizzle-orm";
+import { roleFlags, staffMembers } from "../../../shared/schema";
+import { eq, and } from "drizzle-orm";
 
 export interface EffectivePermissions {
   flags: Set<string>;
   outletId: string | null;
   roleId: string | null;
+}
+
+interface StaffRow {
+  roleId: string;
+  outletId: string | null;
+  isActive: boolean;
+}
+
+interface RoleFlagRow {
+  flagId: string;
+  enabled: boolean;
 }
 
 const FALLBACK_FLAGS: Record<string, string[]> = {
@@ -52,13 +64,19 @@ const FALLBACK_FLAGS: Record<string, string[]> = {
 
 async function getFlagsFromDb(roleId: string): Promise<Set<string>> {
   try {
-    const rows = await db.execute(sql`
-      SELECT flag_id FROM role_flags WHERE role_id = ${roleId} AND enabled = true
-    `);
-    return new Set((rows as any[]).map((r: any) => r.flag_id));
+    const rows: RoleFlagRow[] = await db
+      .select({ flagId: roleFlags.flagId, enabled: roleFlags.enabled })
+      .from(roleFlags)
+      .where(and(eq(roleFlags.roleId, roleId), eq(roleFlags.enabled, true)));
+    return new Set(rows.map((r) => r.flagId));
   } catch {
     return new Set(FALLBACK_FLAGS[roleId] ?? []);
   }
+}
+
+export async function getEffectiveFlags(userId: string, userRoleHint?: string | null): Promise<Set<string>> {
+  const perms = await getEffectivePermissions(userId, userRoleHint);
+  return perms.flags;
 }
 
 export async function getEffectivePermissions(
@@ -66,21 +84,24 @@ export async function getEffectivePermissions(
   userRoleHint?: string | null
 ): Promise<EffectivePermissions> {
   try {
-    const staffRows = await db.execute(sql`
-      SELECT role_id, outlet_id, is_active
-      FROM staff_members
-      WHERE user_id = ${userId} AND is_active = true
-      LIMIT 1
-    `);
+    const staffRows: StaffRow[] = await db
+      .select({
+        roleId: staffMembers.roleId,
+        outletId: staffMembers.outletId,
+        isActive: staffMembers.isActive,
+      })
+      .from(staffMembers)
+      .where(and(eq(staffMembers.userId, userId), eq(staffMembers.isActive, true)))
+      .limit(1);
 
-    const staff = (staffRows as any[])[0];
+    const staff = staffRows[0];
 
     if (staff) {
-      const flags = await getFlagsFromDb(staff.role_id);
+      const flags = await getFlagsFromDb(staff.roleId);
       return {
         flags,
-        outletId: staff.outlet_id ?? null,
-        roleId:   staff.role_id,
+        outletId: staff.outletId ?? null,
+        roleId: staff.roleId,
       };
     }
 
@@ -90,9 +111,9 @@ export async function getEffectivePermissions(
         return { flags, outletId: null, roleId: userRoleHint };
       }
       return {
-        flags:    new Set(FALLBACK_FLAGS[userRoleHint] ?? []),
+        flags: new Set(FALLBACK_FLAGS[userRoleHint] ?? []),
         outletId: null,
-        roleId:   userRoleHint,
+        roleId: userRoleHint,
       };
     }
 
@@ -100,9 +121,9 @@ export async function getEffectivePermissions(
   } catch {
     if (userRoleHint) {
       return {
-        flags:    new Set(FALLBACK_FLAGS[userRoleHint] ?? []),
+        flags: new Set(FALLBACK_FLAGS[userRoleHint] ?? []),
         outletId: null,
-        roleId:   userRoleHint,
+        roleId: userRoleHint,
       };
     }
     return { flags: new Set(), outletId: null, roleId: null };

@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { getEffectivePermissions, type EffectivePermissions } from "../rbac/rbac.service";
 
 export interface RealmioUser {
   id: string;
@@ -13,6 +14,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: RealmioUser;
+      rbac?: EffectivePermissions;
     }
   }
 }
@@ -55,18 +57,29 @@ async function verifyWithRealmio(
   }
 }
 
+async function attachRbac(req: Request): Promise<void> {
+  if (!req.user) return;
+  try {
+    req.rbac = await getEffectivePermissions(req.user.id, req.user.role);
+  } catch {
+    req.rbac = { flags: new Set(), outletId: null, roleId: req.user.role ?? null };
+  }
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (DEV_BYPASS_AUTH) {
     req.user = DEV_USER;
-    return next();
+    attachRbac(req).then(() => next()).catch(() => next());
+    return;
   }
 
   verifyWithRealmio(req.headers.cookie, req.headers.authorization)
-    .then((user) => {
+    .then(async (user) => {
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
       req.user = user;
+      await attachRbac(req);
       next();
     })
     .catch(() => {
@@ -77,12 +90,16 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
   if (DEV_BYPASS_AUTH) {
     req.user = DEV_USER;
-    return next();
+    attachRbac(req).then(() => next()).catch(() => next());
+    return;
   }
 
   verifyWithRealmio(req.headers.cookie, req.headers.authorization)
-    .then((user) => {
-      if (user) req.user = user;
+    .then(async (user) => {
+      if (user) {
+        req.user = user;
+        await attachRbac(req);
+      }
       next();
     })
     .catch(() => {
