@@ -707,24 +707,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async bulkUpsertTripStopTimes(tripId: string, stopTimes: any[]): Promise<void> {
-    // Delete existing trip stop times for this trip
-    await db.delete(tripStopTimes).where(eq(tripStopTimes.tripId, tripId));
-    
-    // Insert new stop times
-    if (stopTimes.length > 0) {
-      const insertData = stopTimes.map(st => ({
-        tripId,
-        stopId: st.stopId,
-        stopSequence: st.stopSequence,
-        arriveAt: st.arriveAt,
-        departAt: st.departAt,
-        dwellSeconds: st.dwellSeconds ?? 0,
-        boardingAllowed: st.boardingAllowed,
-        alightingAllowed: st.alightingAllowed,
-      }));
-      
-      await db.insert(tripStopTimes).values(insertData);
-    }
+    await db.transaction(async (tx) => {
+      await tx.delete(tripStopTimes).where(eq(tripStopTimes.tripId, tripId));
+
+      if (stopTimes.length > 0) {
+        const insertData = stopTimes.map(st => ({
+          tripId,
+          stopId: st.stopId,
+          stopSequence: st.stopSequence,
+          arriveAt: st.arriveAt,
+          departAt: st.departAt,
+          dwellSeconds: st.dwellSeconds ?? 0,
+          boardingAllowed: st.boardingAllowed,
+          alightingAllowed: st.alightingAllowed,
+        }));
+
+        await tx.insert(tripStopTimes).values(insertData);
+      }
+    });
   }
 
   // Trip Legs

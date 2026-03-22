@@ -90,34 +90,38 @@ export class SpjService {
     const vehicleId = overrides?.vehicleId || trip.vehicle_id;
     const spjNumber = await this.generateSpjNumber();
 
-    const [created] = await db.insert(spj).values({
-      spjNumber,
-      tripId,
-      driverId,
-      vehicleId,
-      status: 'draft',
-      notes: overrides?.notes || null,
-    }).returning();
+    const created = await db.transaction(async (tx) => {
+      const [spjRecord] = await tx.insert(spj).values({
+        spjNumber,
+        tripId,
+        driverId,
+        vehicleId,
+        status: 'draft',
+        notes: overrides?.notes || null,
+      }).returning();
 
-    const templateRows = await db.execute(sql`
-      SELECT tci.* FROM trip_cost_items tci
-      JOIN trip_cost_templates tct ON tci.template_id = tct.id
-      WHERE tct.pattern_id = ${trip.pattern_id} AND tct.is_active = true
-      ORDER BY tci.created_at ASC
-    `);
+      const templateRows = await tx.execute(sql`
+        SELECT tci.* FROM trip_cost_items tci
+        JOIN trip_cost_templates tct ON tci.template_id = tct.id
+        WHERE tct.pattern_id = ${trip.pattern_id} AND tct.is_active = true
+        ORDER BY tci.created_at ASC
+      `);
 
-    if (templateRows.rows?.length) {
-      for (const item of templateRows.rows as any[]) {
-        await db.insert(spjCostLines).values({
-          spjId: created.id,
-          category: item.category,
-          label: item.label,
-          estimatedAmount: item.amount,
-          isAdvance: item.is_advance,
-          notes: item.notes,
-        });
+      if (templateRows.rows?.length) {
+        for (const item of templateRows.rows as any[]) {
+          await tx.insert(spjCostLines).values({
+            spjId: spjRecord.id,
+            category: item.category,
+            label: item.label,
+            estimatedAmount: item.amount,
+            isAdvance: item.is_advance,
+            notes: item.notes,
+          });
+        }
       }
-    }
+
+      return spjRecord;
+    });
 
     return (await this.getById(created.id))!;
   }
@@ -165,8 +169,10 @@ export class SpjService {
   }
 
   async delete(id: string): Promise<void> {
-    await db.delete(spjCostLines).where(eq(spjCostLines.spjId, id));
-    await db.delete(spj).where(eq(spj.id, id));
+    await db.transaction(async (tx) => {
+      await tx.delete(spjCostLines).where(eq(spjCostLines.spjId, id));
+      await tx.delete(spj).where(eq(spj.id, id));
+    });
   }
 
   async getTripProfit(tripId: string) {

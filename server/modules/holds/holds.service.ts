@@ -28,23 +28,27 @@ export class HoldsService {
   private async cleanupExpiredHolds(): Promise<void> {
     try {
       const now = new Date();
-      const expiredHolds = await db.select()
-        .from(seatHolds)
-        .where(lt(seatHolds.expiresAt, now));
 
-      if (expiredHolds.length === 0) return;
+      const expiredHolds = await db.transaction(async (tx) => {
+        const holds = await tx.select()
+          .from(seatHolds)
+          .where(lt(seatHolds.expiresAt, now));
 
-      const expiredRefs = expiredHolds.map(h => h.holdRef);
+        if (holds.length === 0) return [];
 
-      await db.update(seatInventory)
-        .set({ holdRef: null })
-        .where(inArray(seatInventory.holdRef, expiredRefs));
+        const expiredRefs = holds.map(h => h.holdRef);
 
-      await db.delete(seatHolds)
-        .where(inArray(seatHolds.holdRef, expiredRefs));
+        await tx.update(seatInventory)
+          .set({ holdRef: null })
+          .where(inArray(seatInventory.holdRef, expiredRefs));
 
-      const tripIds = [...new Set(expiredHolds.map(h => h.tripId))];
-      for (const tid of tripIds) {
+        await tx.delete(seatHolds)
+          .where(inArray(seatHolds.holdRef, expiredRefs));
+
+        return holds;
+      });
+
+      for (const tid of [...new Set(expiredHolds.map(h => h.tripId))]) {
         const seats = expiredHolds.filter(h => h.tripId === tid).map(h => h.seatNo);
         webSocketService.emitHoldsReleased(tid, seats);
       }
@@ -67,63 +71,69 @@ export class HoldsService {
     const holdRef = randomUUID();
 
     try {
-      const existingRows = await db.select()
-        .from(seatInventory)
-        .where(and(
-          eq(seatInventory.tripId, tripId),
-          eq(seatInventory.seatNo, seatNo),
-          inArray(seatInventory.legIndex, legIndexes)
-        ));
+      const result = await db.transaction(async (tx) => {
+        const existingRows = await tx.select()
+          .from(seatInventory)
+          .where(and(
+            eq(seatInventory.tripId, tripId),
+            eq(seatInventory.seatNo, seatNo),
+            inArray(seatInventory.legIndex, legIndexes)
+          ));
 
-      if (existingRows.some(r => r.booked)) {
-        return { ok: false, reason: 'already-booked', ownedByYou: false };
-      }
+        if (existingRows.some(r => r.booked)) {
+          return { ok: false as const, reason: 'already-booked', ownedByYou: false };
+        }
 
-      const activeHoldRefs = [...new Set(existingRows.map(r => r.holdRef).filter(Boolean))] as string[];
-      if (activeHoldRefs.length > 0) {
-        const activeHolds = await db.select()
-          .from(seatHolds)
-          .where(inArray(seatHolds.holdRef, activeHoldRefs));
-        
-        const now = new Date();
-        for (const h of activeHolds) {
-          if (new Date(h.expiresAt) > now) {
-            if (h.operatorId === owner.operatorId) {
-              return { ok: false, reason: 'already-held-by-you', ownedByYou: true };
-            } else {
-              return { ok: false, reason: 'held-by-other', ownedByYou: false };
+        const activeHoldRefs = [...new Set(existingRows.map(r => r.holdRef).filter(Boolean))] as string[];
+        if (activeHoldRefs.length > 0) {
+          const activeHolds = await tx.select()
+            .from(seatHolds)
+            .where(inArray(seatHolds.holdRef, activeHoldRefs));
+
+          const now = new Date();
+          for (const h of activeHolds) {
+            if (new Date(h.expiresAt) > now) {
+              if (h.operatorId === owner.operatorId) {
+                return { ok: false as const, reason: 'already-held-by-you', ownedByYou: true };
+              } else {
+                return { ok: false as const, reason: 'held-by-other', ownedByYou: false };
+              }
             }
           }
         }
-      }
 
-      await db.insert(seatHolds).values({
-        holdRef,
-        tripId,
-        seatNo,
-        legIndexes,
-        operatorId: owner.operatorId,
-        bookingId: owner.bookingId || null,
-        ttlClass,
-        expiresAt
+        await tx.insert(seatHolds).values({
+          holdRef,
+          tripId,
+          seatNo,
+          legIndexes,
+          operatorId: owner.operatorId,
+          bookingId: owner.bookingId || null,
+          ttlClass,
+          expiresAt
+        });
+
+        await tx.update(seatInventory)
+          .set({ holdRef })
+          .where(and(
+            eq(seatInventory.tripId, tripId),
+            eq(seatInventory.seatNo, seatNo),
+            inArray(seatInventory.legIndex, legIndexes)
+          ));
+
+        return {
+          ok: true as const,
+          holdRef,
+          expiresAt: expiresAt.getTime(),
+          ownedByYou: true
+        };
       });
 
-      await db.update(seatInventory)
-        .set({ holdRef })
-        .where(and(
-          eq(seatInventory.tripId, tripId),
-          eq(seatInventory.seatNo, seatNo),
-          inArray(seatInventory.legIndex, legIndexes)
-        ));
+      if (result.ok) {
+        webSocketService.emitInventoryUpdated(tripId, seatNo, legIndexes);
+      }
 
-      webSocketService.emitInventoryUpdated(tripId, seatNo, legIndexes);
-
-      return {
-        ok: true,
-        holdRef,
-        expiresAt: expiresAt.getTime(),
-        ownedByYou: true
-      };
+      return result;
     } catch (error) {
       console.error(`[HOLDS] Failed to create hold for ${tripId}:${seatNo}:`, error);
       return { ok: false, reason: 'internal-error' };
