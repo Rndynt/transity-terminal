@@ -37,7 +37,7 @@ interface Role {
 interface Outlet {
   id: string;
   name: string;
-  code: string;
+  stopId?: string;
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -288,7 +288,7 @@ export default function AdminStaffPage() {
                     <SelectItem key={o.id} value={o.id}>
                       <span className="flex items-center gap-2">
                         <Store className="w-3.5 h-3.5 text-gray-400" />
-                        {o.name} {o.code && <span className="text-gray-400 text-xs">({o.code})</span>}
+                        {o.name}
                       </span>
                     </SelectItem>
                   ))}
