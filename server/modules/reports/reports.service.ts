@@ -366,6 +366,7 @@ export class ReportsService {
         tp.code as route_code,
         d.name as driver_name,
         v.plate as vehicle_plate,
+        t.origin_depart_hhmm as departure_time,
         COALESCE(bk.ticket_revenue, 0) as ticket_revenue,
         COALESCE(bk.passenger_count, 0)::int as passenger_count,
         COALESCE(cr.cargo_revenue, 0) as cargo_revenue,
@@ -399,7 +400,7 @@ export class ReportsService {
         GROUP BY s.trip_id
       ) sc ON sc.trip_id = t.id
       WHERE ${where}
-      ORDER BY t.service_date DESC, tp.name
+      ORDER BY t.service_date DESC, t.origin_depart_hhmm ASC NULLS LAST, tp.name
     `);
 
     const totals = await db.execute(sql`

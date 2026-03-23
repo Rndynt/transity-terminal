@@ -96,7 +96,8 @@ export default function TripProfitabilityPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-xs">Tanggal</TableHead>
-                  <TableHead className="text-xs">Rute</TableHead>
+                  <TableHead className="text-xs">Jam</TableHead>
+                  <TableHead className="text-xs">Trip</TableHead>
                   <TableHead className="text-xs">Supir</TableHead>
                   <TableHead className="text-xs">Kendaraan</TableHead>
                   <TableHead className="text-xs text-right">Pax</TableHead>
@@ -109,10 +110,17 @@ export default function TripProfitabilityPage() {
               <TableBody>
                 {trips.length > 0 ? trips.map((t: any) => {
                   const profit = Number(t.profit);
+                  const depTime = t.departure_time || '-';
                   return (
                     <TableRow key={t.trip_id}>
                       <TableCell className="text-sm">{t.service_date}</TableCell>
-                      <TableCell className="text-sm font-medium">{t.route_name || '-'}</TableCell>
+                      <TableCell className="text-sm font-mono">{depTime}</TableCell>
+                      <TableCell className="text-sm">
+                        <div>
+                          <span className="font-medium">{t.route_name || '-'}</span>
+                          {t.route_code && <span className="text-xs text-muted-foreground ml-1">({t.route_code})</span>}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-sm">{t.driver_name || '-'}</TableCell>
                       <TableCell className="text-sm">{t.vehicle_plate || '-'}</TableCell>
                       <TableCell className="text-sm text-right">{t.passenger_count}</TableCell>
@@ -127,7 +135,7 @@ export default function TripProfitabilityPage() {
                     </TableRow>
                   );
                 }) : (
-                  <TableRow><TableCell colSpan={9} className="text-center text-sm text-muted-foreground">Tidak ada data</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={10} className="text-center text-sm text-muted-foreground">Tidak ada data</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
