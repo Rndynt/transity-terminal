@@ -678,7 +678,7 @@ export default function CsoPage() {
                     lockedOutletId={scopedOutletId ?? undefined}
                     initialTripId={initialTripId}
                     onInitialConsumed={() => navigate('/cso', { replace: true })}
-                    canViewClosed={can('page.schedule.closed')}
+                    canViewClosed={can('page.cso.view_closed')}
                   />
                 </div>
 
@@ -888,6 +888,7 @@ export default function CsoPage() {
             queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
           }}
           isClosing={closeTripMutation.isPending}
+          canBatchReschedule={can('action.trip.batch_reschedule')}
         />
       )}
     </div>

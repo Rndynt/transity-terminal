@@ -39,6 +39,7 @@ interface BatchRescheduleDialogProps {
   onCloseOnly: () => void;
   onRescheduleComplete: (result: BatchRescheduleResult) => void;
   isClosing: boolean;
+  canBatchReschedule: boolean;
 }
 
 const formatTime = (isoString: string | null | undefined): string => {
@@ -60,6 +61,7 @@ export default function BatchRescheduleDialog({
   onCloseOnly,
   onRescheduleComplete,
   isClosing,
+  canBatchReschedule,
 }: BatchRescheduleDialogProps) {
   const [step, setStep] = useState<'choose' | 'select-trip' | 'confirm' | 'result'>('choose');
   const [selectedTargetTrip, setSelectedTargetTrip] = useState<CsoAvailableTrip | null>(null);
@@ -187,13 +189,15 @@ export default function BatchRescheduleDialog({
               </div>
 
               <div className="grid grid-cols-1 gap-2 pt-2">
-                <button
-                  onClick={() => setStep('select-trip')}
-                  className="w-full px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2"
-                >
-                  <ArrowRight className="w-4 h-4" />
-                  Tutup & Reschedule Semua
-                </button>
+                {canBatchReschedule && (
+                  <button
+                    onClick={() => setStep('select-trip')}
+                    className="w-full px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                    Tutup & Reschedule Semua
+                  </button>
+                )}
                 <button
                   onClick={onCloseOnly}
                   disabled={isClosing}
