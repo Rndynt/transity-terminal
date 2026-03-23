@@ -23,6 +23,8 @@ Dokumen ini menjelaskan seluruh fitur yang telah dibangun di sistem TransityCore
 15. [Aplikasi Mobile (B2C)](#15-aplikasi-mobile-b2c)
 16. [Optimasi Performa](#16-optimasi-performa)
 17. [Database & Skema](#17-database--skema)
+18. [Data Integrity — Snapshot System](#18-data-integrity--snapshot-system)
+19. [Security](#19-security)
 
 ---
 
@@ -543,9 +545,9 @@ User → Staff Member (role + outlet) → Role → Feature Flags → Akses
 
 | Prefix | Keterangan | Contoh |
 |--------|------------|--------|
-| `page.*` | Akses halaman | `page.cso`, `page.cargo`, `page.reports` |
-| `action.*` | Aksi spesifik | `action.booking.cancel`, `action.passenger.unseat` |
-| `report.*` | Akses laporan | `report.revenue`, `report.load_factor` |
+| `page.*` | Akses halaman | `page.cso`, `page.cargo`, `page.reports`, `page.schedule.closed`, `page.cso.view_closed` |
+| `action.*` | Aksi spesifik | `action.booking.cancel`, `action.passenger.unseat`, `action.trip.batch_reschedule` |
+| `report.*` | Akses laporan | `report.revenue`, `report.load_factor`, `report.commercial_fee` |
 | `master.*` | Kelola master data | `master.stops`, `master.vehicles` |
 | `admin.*` | Administrasi | `admin.staff.manage`, `admin.flags.manage` |
 
@@ -634,6 +636,37 @@ refetchInterval: isConnected ? false : 30000
 | Cancellations | `/api/reports/cancellations` | Pembatalan, reschedule, unseat |
 | Cargo | `/api/reports/cargo` | Jumlah kiriman, total berat, revenue kargo |
 | Payments | `/api/reports/payments` | Analisis metode pembayaran, status payment |
+| Commercial Fee | `/api/reports/commercial-fee` | Biaya komersial 3% gross + 11% PPN, volume discount |
+
+### Data Historis (Snapshot System)
+
+Semua laporan menggunakan **snapshot columns** untuk menjaga akurasi historis:
+
+```
+COALESCE(booking.snap_origin_stop_name, stop.name) AS origin_stop_name
+```
+
+Snapshot disimpan saat:
+- **Trip dimaterialisasi**: `snap_route_name`, `snap_route_code`
+- **Booking dibuat**: `snap_origin_stop_name`, `snap_destination_stop_name`, `snap_departure_hhmm`, `snap_outlet_name`
+- **Driver/kendaraan di-assign**: `snap_driver_name`, `snap_vehicle_plate`
+
+Dengan pola COALESCE, data lama tanpa snapshot tetap bisa tampil (fallback ke data master terkini).
+
+### Per-Report Permission Flags
+
+Setiap laporan dilindungi permission flag tersendiri:
+
+| Flag | Laporan |
+|------|---------|
+| `report.revenue` | Pendapatan |
+| `report.sales` | Penjualan |
+| `report.trip_profitability` | Laba Rugi Trip |
+| `report.load_factor` | Load Factor |
+| `report.cancellations` | Pembatalan |
+| `report.cargo` | Kargo |
+| `report.payments` | Pembayaran |
+| `report.commercial_fee` | Biaya Komersial |
 
 ### Cara Perhitungan
 
@@ -729,6 +762,30 @@ Detail penumpang → "Batalkan Tiket" → Isi alasan → Konfirmasi
 - Kursi dilepas di seat_inventory
 - Jika semua penumpang canceled → status booking → `canceled`
 - Record di booking_history
+
+### Batch Reschedule (Close Trip)
+
+Saat menutup trip yang masih memiliki penumpang aktif, CSO dapat melakukan batch reschedule:
+
+```
+Close Trip → Cek penumpang aktif → Tampilkan BatchRescheduleDialog
+    → Pilih trip tujuan → Reschedule semua penumpang sekaligus → Trip closed
+```
+
+**Endpoint**:
+- `GET /api/trips/:id/active-passengers` — Daftar penumpang aktif
+- `POST /api/trips/:id/close-with-reschedule` — Close trip + batch reschedule
+
+**Permission Flags**:
+- `action.trip.close` — Izin menutup trip
+- `action.trip.batch_reschedule` — Izin batch reschedule penumpang
+- `page.schedule.closed` — Izin melihat closed trips di halaman jadwal
+- `page.cso.view_closed` — Izin melihat closed trips di halaman CSO
+
+**Komponen Frontend**: `BatchRescheduleDialog`
+- Menampilkan daftar penumpang aktif + kursi
+- Selector trip tujuan (trip yang masih scheduled pada rute yang sama)
+- Konfirmasi batch reschedule sebelum close
 
 ### Riwayat Booking
 
@@ -878,3 +935,88 @@ Endpoint mobile di `/api/app/`:
 | `feature_flags` | Definisi permission/fitur |
 | `role_flags` | Mapping role ↔ flag |
 | `staff_members` | Link user ↔ role ↔ outlet |
+
+---
+
+## 18. Data Integrity — Snapshot System
+
+### Mengapa Perlu Snapshot?
+
+Data master (nama halte, nama rute, plat kendaraan) bisa berubah kapan saja. Tanpa snapshot, laporan historis akan menampilkan data terbaru — bukan data pada saat transaksi terjadi. Ini menyebabkan inkonsistensi laporan.
+
+### Snapshot Columns
+
+**Tabel `trips`**:
+| Kolom | Sumber | Kapan Diisi |
+|-------|--------|-------------|
+| `snap_route_name` | Trip pattern name | Saat trip dimaterialisasi |
+| `snap_route_code` | Trip pattern code | Saat trip dimaterialisasi |
+| `snap_driver_name` | Driver name | Saat driver di-assign |
+| `snap_vehicle_plate` | Vehicle plate number | Saat vehicle di-assign |
+
+**Tabel `bookings`**:
+| Kolom | Sumber | Kapan Diisi |
+|-------|--------|-------------|
+| `snap_origin_stop_name` | Origin stop name | Saat booking dibuat |
+| `snap_destination_stop_name` | Destination stop name | Saat booking dibuat |
+| `snap_departure_hhmm` | Departure time (HH:MM) | Saat booking dibuat |
+| `snap_outlet_name` | Outlet name | Saat booking dibuat |
+
+### Pola Query
+
+```sql
+COALESCE(b.snap_origin_stop_name, s.name) AS origin_stop_name
+```
+
+- Pakai snapshot jika tersedia
+- Fallback ke data master terkini (backward compatible untuk data lama)
+
+### Impact Check
+
+Sebelum mengubah data master, sistem dapat mengecek berapa banyak trip/booking yang terdampak:
+
+- `GET /api/stops/:id/impact` — Jumlah trip dan booking aktif yang menggunakan stop ini
+- `GET /api/trip-patterns/:id/impact` — Jumlah trip aktif yang menggunakan pattern ini
+
+### Backfill
+
+Untuk data existing yang belum punya snapshot, jalankan:
+```bash
+npx tsx server/scripts/backfill-snapshots.ts
+```
+
+---
+
+## 19. Security
+
+### Rate Limiting
+
+`@fastify/rate-limit` dengan konfigurasi per-route:
+- Login: 10 request/menit
+- Register: 5 request/menit
+
+### Input Validation
+
+| Domain | Metode |
+|--------|--------|
+| Booking | Custom Zod schema + cross-field validation |
+| Cargo | Drizzle-Zod insert schemas |
+| SPJ cost-line | Zod schema (category, label, amount, notes) |
+| Reports | `reportFiltersSchema` untuk query params |
+| Trips | Zod schema untuk seatmap query coercion |
+
+### Webhook Security
+
+Payment webhook menggunakan HMAC-SHA256:
+```
+signature = HMAC-SHA256(PAYMENT_WEBHOOK_SECRET, requestBody)
+x-webhook-signature header = signature
+```
+Verifikasi menggunakan `crypto.timingSafeEqual` untuk mencegah timing attacks.
+
+### Production Guards
+
+- `DEV_BYPASS_AUTH` di-hardcode ke `!IS_PRODUCTION` — mustahil aktif di production
+- `JWT_SECRET` wajib di production (fatal error jika kosong)
+- Seed endpoints (`/api/seed`, `/api/seed/rbac`) diblokir total di production
+- Response logging me-redact semua data sensitif (token, password, session)

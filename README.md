@@ -26,11 +26,13 @@ Dokumentasi teknis lengkap dengan penjelasan cara kerja, teknologi, dan logika p
 | [10. Manifest](docs/FEATURES.md#10-manifest-perjalanan) | Manifest trip, cetak thermal 80mm |
 | [11. RBAC](docs/FEATURES.md#11-rbac-kontrol-akses-berbasis-peran) | Roles, feature flags, outlet scoping |
 | [12. WebSocket](docs/FEATURES.md#12-real-time-websocket) | Rooms, events, fallback polling |
-| [13. Laporan](docs/FEATURES.md#13-laporan--analitik) | 7 jenis report, cara perhitungan |
-| [14. Unseat & Reschedule](docs/FEATURES.md#14-unseat-reschedule--riwayat-booking) | Unseat, assign, reschedule, cancel, audit trail |
+| [13. Laporan](docs/FEATURES.md#13-laporan--analitik) | 8 jenis report, snapshot-based, cara perhitungan |
+| [14. Unseat & Reschedule](docs/FEATURES.md#14-unseat-reschedule--riwayat-booking) | Unseat, assign, reschedule, batch reschedule, cancel, audit trail |
 | [15. Aplikasi Mobile](docs/FEATURES.md#15-aplikasi-mobile-b2c) | Expo React Native B2C |
 | [16. Optimasi Performa](docs/FEATURES.md#16-optimasi-performa) | Index, N+1 fix, paralelisasi, caching |
 | [17. Database & Skema](docs/FEATURES.md#17-database--skema) | Semua tabel dengan keterangan |
+| [18. Data Integrity](docs/FEATURES.md#18-data-integrity--snapshot-system) | Snapshot columns, impact check, backfill |
+| [19. Security](docs/FEATURES.md#19-security) | Rate limit, validation, webhook, production guards |
 
 ---
 
@@ -75,11 +77,13 @@ Dokumentasi teknis lengkap dengan penjelasan cara kerja, teknologi, dan logika p
 - **Virtual → Real Trip** — Trip bases auto-materialize saat booking pertama
 - **Seat Inventory** — Pre-computed per seat per leg, real-time hold system dengan TTL
 - **Unseat / Reassign / Reschedule** — Full seat management dengan mandatory reason notes dan audit trail
+- **Batch Reschedule on Close** — Saat close trip, otomatis deteksi penumpang aktif dan batch reschedule ke trip lain
 - **WebSocket Broadcast** — Update ketersediaan kursi real-time ke semua terminal CSO
 
 ### Laporan (Reports)
-- Revenue, Sales, Trip Profitability, Load Factor, Cancellations, Cargo, Payments
+- Revenue, Sales, Trip Profitability, Load Factor, Cancellations, Cargo, Payments, Commercial Fee
 - Filter tanggal dengan presets, selector outlet/channel/route
+- Snapshot-based: laporan historis menggunakan data snapshot saat transaksi, bukan data master terkini
 
 ### Admin
 - **Staff Management** — CRUD dengan role assignment dan outlet scoping
@@ -334,17 +338,25 @@ npm start
 | `PORT` | 5000 | Port server | Tidak |
 | `AUTHCORE_BASE_URL` | — | URL Realmio auth server | Tidak (dev bypass tersedia) |
 | `AUTHCORE_TENANT_ID` | — | Realmio tenant ID | Tidak |
-| `DEV_BYPASS_AUTH` | — | Set `true` untuk skip auth di development | Tidak |
+| `DEV_BYPASS_AUTH` | — | Hanya aktif jika `NODE_ENV !== 'production'` | Tidak |
+| `JWT_SECRET` | — | Secret untuk JWT mobile auth | Ya (production) |
+| `PAYMENT_WEBHOOK_SECRET` | — | Secret untuk verifikasi webhook pembayaran | Ya (production) |
+| `APP_CORS_ORIGINS` | `*` | Allowed origins untuk mobile API | Tidak |
 | `HOLD_TTL_SHORT_SECONDS` | 300 | TTL hold singkat (5 menit) | Tidak |
 | `HOLD_TTL_LONG_SECONDS` | 1800 | TTL hold panjang (30 menit) | Tidak |
 | `PENDING_BOOKING_AUTO_RELEASE` | true | Auto-cleanup booking pending | Tidak |
 
 ### Dev Mode
 
-Jika `AUTHCORE_BASE_URL` kosong atau `DEV_BYPASS_AUTH=true`, sistem akan auto-login dengan dev user:
-- **Email**: cso@transity.id
-- **Role**: cso
-- **Flags**: page.cso, page.cargo, page.manifest, action.booking.create, action.booking.cancel, action.passenger.assign_seat, action.payment.create, action.cargo.create
+Jika `NODE_ENV !== 'production'` dan `AUTHCORE_BASE_URL` kosong, sistem akan auto-login sebagai owner dengan semua permission. `DEV_BYPASS_AUTH` di-hardcode ke `!IS_PRODUCTION` — tidak bisa aktif di production meskipun env var di-set.
+
+### Security Notes
+
+- **Rate Limiting**: Login 10 req/menit, Register 5 req/menit (`@fastify/rate-limit`)
+- **Webhook**: HMAC-SHA256 signature verification dengan timing-safe comparison
+- **Response Redaction**: Token, password, session data di-redact dari semua log
+- **Seed Protection**: `/api/seed` diblokir total di production + memerlukan `admin.flags.manage`
+- **CORS**: Mobile API dikonfigurasi via `APP_CORS_ORIGINS`, admin dashboard same-origin
 
 ---
 
@@ -453,6 +465,12 @@ GET    /api/trips/:id/unseated-passengers
 # Virtual Scheduling
 POST   /api/cso/materialize-trip
 POST   /api/trips/:id/close
+POST   /api/trips/:id/close-with-reschedule    # Close + batch reschedule penumpang aktif
+GET    /api/trips/:id/active-passengers         # Daftar penumpang aktif di trip
+
+# Impact Check (Data Integrity)
+GET    /api/stops/:id/impact                    # Cek trip/booking terdampak jika stop diubah
+GET    /api/trip-patterns/:id/impact            # Cek trip terdampak jika pattern diubah
 
 # Manifest
 GET    /api/trips/:id/manifest
@@ -521,6 +539,7 @@ GET    /api/reports/load-factor                 # Laporan load factor
 GET    /api/reports/cancellations               # Laporan pembatalan
 GET    /api/reports/cargo                       # Laporan kargo
 GET    /api/reports/payments                    # Laporan pembayaran
+GET    /api/reports/commercial-fee              # Laporan biaya komersial
 ```
 
 Query parameter `dateMode` (`departure` | `paid` | `created`) menentukan kolom tanggal yang digunakan untuk filter:
@@ -664,6 +683,10 @@ Sistem otorisasi 3 lapis:
 | `action.passenger.assign_seat` | Assign kursi ke penumpang |
 | `action.payment.create` | Buat pembayaran |
 | `action.cargo.create` | Buat shipment kargo |
+| `action.trip.batch_reschedule` | Batch reschedule saat close trip |
+| `page.schedule.closed` | Lihat closed trips di halaman jadwal |
+| `page.cso.view_closed` | Lihat closed trips di halaman CSO |
+| `report.commercial_fee` | Akses laporan biaya komersial |
 | `master.stops` | CRUD master stops |
 | `master.vehicles` | CRUD master vehicles |
 
@@ -754,7 +777,7 @@ server/
     tripBases/               TripBasesService (materialisasi virtual → real)
     tripLegs/                TripLegsService
     spj/                     SpjService + SpjController (Surat Perintah Jalan)
-    reports/                 ReportsService + ReportsController (7 report types)
+    reports/                 ReportsService + ReportsController (8 report types) + ReportsRepository
     promos/                  PromosService + PromosController (promo & voucher)
     payments/                PaymentsController
     holds/                   HoldsService (seat hold management)
@@ -780,7 +803,7 @@ client/src/
     manifest/                ManifestPage
     spj/                     SpjPage — manajemen Surat Perintah Jalan
     masters/                 MastersPage — CRUD master data
-    reports/                 7 report pages (Revenue, Sales, Profitability, dll)
+    reports/                 8 report pages (Revenue, Sales, Profitability, Commercial Fee, dll)
     admin/                   StaffManagement + FeatureFlagManagement
     auth/                    LoginPage
     dashboard/               DashboardPage
@@ -791,6 +814,7 @@ client/src/
       SeatMap.tsx            Peta kursi interaktif + real-time
       PassengerForm.tsx      Form penumpang + pembayaran
       PassengerDetailModal   Detail penumpang + unseat/reschedule/cancel
+      BatchRescheduleDialog  Dialog batch reschedule saat close trip
       BookingStepper.tsx     Step indicator booking
       CargoForm.tsx          Form kargo di CSO
     masters/                 Komponen CRUD master data
@@ -962,11 +986,14 @@ Gunakan `requireFlag("master.myFeature")` di route preHandler, dan `usePermissio
 | Jadwal Harian | Done |
 | Unseat / Reassign / Reschedule | Done |
 | Booking History (Audit Trail) | Done |
-| Reports (7 jenis laporan) | Done |
+| Reports (8 jenis laporan termasuk Commercial Fee) | Done |
 | Authentication (Realmio) | Done |
-| RBAC + ABAC + Feature Flags | Done |
+| RBAC + ABAC + Feature Flags (33+ flags) | Done |
 | Admin UI (Staff & Flag Management) | Done |
 | Hybrid Refactor (Schema split, Repository pattern, Route decentralization) | Done |
+| Data Integrity — Snapshot System | Done |
+| Batch Reschedule on Trip Close | Done |
+| Security Hardening (rate limit, CORS, webhook, redaction) | Done |
 | Mobile B2C (Expo React Native) | In Progress |
 | Backend: Fastify 5 Migration | Done |
 

@@ -21,13 +21,15 @@ Sistem manajemen perjalanan multi-stop (bus/travel) untuk operator Indonesia. Fi
 3. Set environment variables (production):
    - `DATABASE_URL` — PostgreSQL connection string (wajib)
    - `PORT` — port server (default 5000)
-   - `JWT_SECRET` — secret untuk JWT (wajib)
-   - `AUTHCORE_BASE_URL` — URL Realmio auth server (wajib)
-   - `AUTHCORE_TENANT_ID` — Tenant ID di Realmio (wajib)
-4. `npm start` — jalankan production build
+   - `JWT_SECRET` — secret untuk JWT mobile app (wajib, fatal error jika tidak diset)
+   - `AUTHCORE_BASE_URL` — URL Realmio auth server (wajib, auth akan reject semua request jika kosong)
+   - `AUTHCORE_TENANT_ID` — Tenant ID di Realmio (default: `transity`)
+   - `PAYMENT_WEBHOOK_SECRET` — HMAC secret untuk verifikasi webhook pembayaran (wajib jika pakai payment gateway)
+   - `APP_CORS_ORIGINS` — Comma-separated allowed origins untuk mobile API (default: `*`, set ke domain spesifik di production)
+4. `npm start` → jalankan production build
 5. Variabel dev-only (JANGAN dipakai di production):
-   - `DEV_BYPASS_AUTH=true` — bypass auth, auto-login sebagai owner
-   - `npm run start:dev` — production build dengan auto bypass auth
+   - `DEV_BYPASS_AUTH=true` — bypass auth, auto-login sebagai owner (hardcoded tidak bisa aktif di production)
+   - `npm run start:dev` → production build dengan auto bypass auth
 - Vite plugin Replit (`@replit/vite-plugin-*`) otomatis di-skip jika `REPL_ID` tidak ada (bukan di Replit)
 
 ---
@@ -66,12 +68,15 @@ server/
   realtime/
     ws.ts                → Socket.io WebSocket server (seat updates, booking broadcasts)
   repositories/          → Domain-specific data access (SQL queries)
-    fleet.repository.ts       → drivers, vehicles, layouts (83L)
-    network.repository.ts     → stops, outlets (70L)
-    scheduling.repository.ts  → trips, patterns, bases, stopTimes, legs, inventory, priceRules, manifest (833L)
-    booking.repository.ts     → bookings, passengers, payments, printJobs (125L)
-    cargo.repository.ts       → cargoTypes, cargoRates, cargoShipments (198L)
-    finance.repository.ts     → costTemplates, costItems, promotions, vouchers (123L)
+    fleet.repository.ts       → drivers, vehicles, layouts
+    network.repository.ts     → stops, outlets + impact check queries (active trip/booking counts)
+    scheduling.repository.ts  → trips, patterns, bases, stopTimes, legs, inventory, priceRules, manifest + impact checks
+    booking.repository.ts     → bookings, passengers, payments, printJobs
+    cargo.repository.ts       → cargoTypes, cargoRates, cargoShipments
+    finance.repository.ts     → costTemplates, costItems, promotions, vouchers
+    reports.repository.ts     → 8 analytical report queries (revenue, sales, profitability, load factor, cancellations, cargo, payments, commercial fee)
+  scripts/
+    backfill-snapshots.ts     → One-time script: populate snapshot columns for existing trips & bookings
   modules/               → Business logic + API controllers, 1 folder per domain
     auth/                → Realmio auth proxy (realmio.ts middleware, auth.routes.ts)
     rbac/                → RBAC + ABAC + Feature Flags (rbac.middleware.ts, rbac.service.ts, rbac.admin.routes.ts, rbac.seed.ts)
@@ -82,8 +87,8 @@ server/
     seatInventory/       → SeatInventoryService
     tripBases/           → TripBasesService (materialisasi virtual → real)
     tripLegs/            → TripLegsService
-    spj/                 → SpjService + SpjController (Surat Perintah Jalan)
-    reports/             → ReportsService + ReportsController (7 report types)
+    spj/                 → SpjService + SpjController (Surat Perintah Jalan) — Zod-validated cost-line input
+    reports/             → ReportsService + ReportsController (8 report types) — delegasi ke ReportsRepository
     promos/              → PromosService + PromosController (promo & voucher)
     payments/            → PaymentsController
     holds/               → HoldsService (seat hold management)
@@ -109,7 +114,7 @@ client/src/
     manifest/            → ManifestPage.tsx — cetak manifest perjalanan
     spj/                 → SpjPage.tsx — manajemen Surat Perintah Jalan
     masters/             → MastersPage.tsx — CRUD master data (stops, pola, armada, dll)
-    reports/             → 7 report pages (Revenue, Sales, TripProfitability, LoadFactor, Cancellations, Cargo, Payments)
+    reports/             → 8 report pages (Revenue, Sales, TripProfitability, LoadFactor, Cancellations, Cargo, Payments, CommercialFee)
     admin/               → StaffManagement + FeatureFlagManagement
     auth/                → LoginPage.tsx
     dashboard/           → DashboardPage.tsx
@@ -127,6 +132,7 @@ client/src/
       PassengerCard.tsx       → Card info penumpang
       PassengerActions.tsx    → Aksi unseat/pindah kursi
       PaymentPanel.tsx        → Panel pembayaran
+      BatchRescheduleDialog.tsx → Dialog batch reschedule saat close trip
     masters/             → Komponen CRUD master data
       StopsManager.tsx        → CRUD halte
       TripPatternsManager.tsx → CRUD pola trip
@@ -452,7 +458,8 @@ Saat induk dihapus, semua anak ikut di-soft-delete:
   - Global auth: `addHook('preHandler', ...)` di `routes.ts` (skip `/api/auth/` dan `/api/app/`)
   - Per-route: `{ preHandler: [requireFlag('master.stops'), requireOutletScope] }`
 - **Error handling**: Centralized `setErrorHandler` — PG duplicate key (409), ZodError (400), generic (500)
-- **Logging**: `onSend` hook logs semua `/api` requests
+- **Logging**: `onSend` hook logs semua `/api` requests — auth/session/profile/webhook paths otomatis redacted (token, password, dll tidak ter-log)
+- **Rate Limiting**: `@fastify/rate-limit` (global: false, per-route config) — login 10/mnt, register 5/mnt
 - **WebSocket**: Socket.io di-attach ke `app.server` setelah `listen()`
 
 ### Frontend Conventions
@@ -497,8 +504,9 @@ Saat induk dihapus, semua anak ikut di-soft-delete:
 - **Model**: Whitelabel — 1 operator = 1 TransityTerminal instance
 - **Backend**: `server/modules/auth/realmio.ts` (middleware), `auth.routes.ts` (proxy)
 - **Frontend**: `client/src/lib/auth.tsx` (AuthProvider + useAuth)
-- **Dev Mode**: `DEV_BYPASS_AUTH=true` atau `AUTHCORE_BASE_URL` kosong → auto-login user dev
-- **Env Vars**: `AUTHCORE_BASE_URL`, `AUTHCORE_TENANT_ID`, `DEV_BYPASS_AUTH`
+- **Dev Mode**: Hanya aktif jika `NODE_ENV !== 'production'` — bypass auth, auto-login sebagai owner
+- **Production Safety**: `DEV_BYPASS_AUTH` hardcoded `!IS_PRODUCTION` — mustahil aktif di production. Jika `AUTHCORE_BASE_URL` kosong di production, semua auth request akan di-reject
+- **Env Vars**: `AUTHCORE_BASE_URL` (wajib prod), `AUTHCORE_TENANT_ID`, `DEV_BYPASS_AUTH` (dev only)
 
 ### RBAC + ABAC + Feature Flags
 - **Roles**: `cso` (operator), `admin` (full access), `finance` (reports only), `dispatcher` (schedule only)
@@ -537,12 +545,92 @@ Saat induk dihapus, semua anak ikut di-soft-delete:
 - Issue + settle workflow
 
 ### Reports (`/reports/*`)
-- 7 tipe: Revenue, Sales, Trip Profitability, Load Factor, Cancellations, Cargo, Payments
+- 8 tipe: Revenue, Sales, Trip Profitability, Load Factor, Cancellations, Cargo, Payments, Commercial Fee
 - Shared components: ReportFilters, SummaryCards, ReportPageLayout
-- SQL aggregation queries di backend
+- SQL aggregation queries di `ReportsRepository` — service layer hanya business logic (commercial fee rules)
+- Semua report menggunakan `COALESCE(snapshot, master)` — laporan historis tetap akurat walau data master berubah
+- Per-report permission flags: setiap report punya flag sendiri (e.g., `report.revenue`, `report.commercial_fee`)
+- Commercial fee: 3% gross, 11% PPN, volume discounts 0–15% berdasarkan total bulanan
+
+### Batch Reschedule on Trip Close (`/cso`)
+- Saat close trip, sistem cek apakah ada penumpang aktif
+- Jika ada: tampilkan `BatchRescheduleDialog` dengan daftar penumpang + pilih trip tujuan
+- Endpoint: `GET /api/trips/:id/active-passengers` + `POST /api/trips/:id/close-with-reschedule`
+- Dilindungi: `action.trip.close` + `action.trip.batch_reschedule`
+- Closed trip bisa dilihat di Schedule (`page.schedule.closed`) dan CSO (`page.cso.view_closed`)
 
 ### Master Data (`/masters`)
 - Tabs: Halte, Pola Trip, Jadwal, Trip, Driver, Kendaraan, Layout, Outlet, Aturan Harga, Tipe Kargo, Tarif Kargo, Template Biaya, Promo & Voucher
+
+---
+
+## Data Integrity — Snapshot System
+
+Untuk menjaga akurasi laporan historis, sistem menggunakan **snapshot columns** pada `trips` dan `bookings`. Data master (nama halte, nama rute, plat kendaraan, dll) bisa berubah kapan saja, tapi laporan harus tetap menampilkan data saat transaksi terjadi.
+
+### Cara Kerja
+- **Saat trip dimaterialisasi**: kolom `snap_route_name`, `snap_route_code` diisi dari trip pattern
+- **Saat booking dibuat**: kolom `snap_origin_stop_name`, `snap_destination_stop_name`, `snap_departure_hhmm`, `snap_outlet_name` diisi dari data master saat itu
+- **Saat driver/kendaraan di-assign**: `snap_driver_name`, `snap_vehicle_plate` diisi
+
+### Penggunaan di Laporan
+Semua query laporan menggunakan pola:
+```sql
+COALESCE(b.snap_origin_stop_name, s.name) AS origin_stop_name
+```
+Ini artinya: pakai snapshot jika ada, fallback ke data master jika belum ada snapshot (backward compatible untuk data lama).
+
+### Impact Check
+Saat user mengubah data master (nama halte, pola trip), endpoint impact check (`/api/stops/:id/impact`, `/api/trip-patterns/:id/impact`) mengembalikan jumlah trip/booking aktif yang terpengaruh. Frontend bisa menampilkan warning sebelum perubahan dilakukan.
+
+### Backfill
+Script `server/scripts/backfill-snapshots.ts` mengisi snapshot untuk data existing yang belum punya. Jalankan sekali:
+```bash
+npx tsx server/scripts/backfill-snapshots.ts
+```
+
+---
+
+## Security
+
+### Authentication
+- **Staff/Admin**: Realmio external auth — proxy di `auth.routes.ts`, middleware di `realmio.ts`
+- **Mobile App**: JWT internal (`jsonwebtoken`, bcryptjs) — 30 hari expiry
+- **Production Guard**: `DEV_BYPASS_AUTH` hardcoded hanya di non-production; `JWT_SECRET` wajib di production (fatal error jika kosong)
+
+### Authorization (RBAC)
+- Semua endpoint `/api/*` dilindungi `requireAuth` global (kecuali `/api/auth/` dan `/api/app/`)
+- Per-endpoint permission: `requireFlag('report.revenue')`, `requireAnyFlag(...)`, `requireOutletScope()`
+- 7 role bawaan: owner, finance, manager, spv_operations, operations, spv_cso, cso
+- 33+ permission flags di 5 kategori: page, report, master, action, admin
+
+### Rate Limiting
+- `@fastify/rate-limit` (global: false, per-route)
+- Login endpoints: 10 request/menit
+- Register endpoints: 5 request/menit
+
+### Input Validation
+- Booking: custom Zod schema dengan cross-field validation
+- Cargo: Drizzle-Zod insert schemas
+- SPJ cost-line: Zod schema (category, label, amount format, notes length)
+- Reports: `reportFiltersSchema` untuk query params
+- Trips: Zod schema untuk seatmap query coercion
+
+### Webhook Security
+- Payment webhook: HMAC-SHA256 signature verification (`x-webhook-signature` header)
+- `crypto.timingSafeEqual` untuk timing-safe comparison
+
+### CORS
+- Admin dashboard: same-origin (tidak perlu CORS)
+- Mobile API (`/api/app/*`): dikonfigurasi via `APP_CORS_ORIGINS` env var
+
+### Response Logging
+- Semua auth/session/profile/webhook response di-redact — token, password, session data tidak ter-log
+- Sensitive keys: `token`, `password`, `passwordHash`, `providerRef`, `authorization`
+
+### Seed Protection
+- `/api/seed` dan `/api/seed/rbac` memerlukan `admin.flags.manage` permission
+- Diblokir total di production (`NODE_ENV === 'production'`)
 
 ---
 

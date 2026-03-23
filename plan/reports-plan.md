@@ -64,7 +64,14 @@
   - [x] Backend: aggregate payments by method, status, outlet, daily
   - [x] Frontend: summary cards + tren harian chart + pie chart metode bayar + tabel per metode + per status + per outlet + transaksi terbaru
 
-### Prioritas 3 — Enhancement
+### Prioritas 3 — DONE (Partial)
+- [x] **Laporan Biaya Komersial (Commercial Fee)**
+  - [x] Backend: perhitungan 3% gross, 11% PPN, volume discount 0–15% berdasarkan total bulanan
+  - [x] Frontend: summary cards + tabel detail per outlet + breakdown per bulan
+  - [x] Permission flag: `report.commercial_fee`
+  - [x] Query via `ReportsRepository` (standalone, tidak via IStorage)
+
+### Prioritas 4 — Enhancement
 - [ ] **Laporan Promo & Voucher**
   - [ ] Penggunaan promo, total diskon, efektivitas
 - [ ] **Laporan Performa Supir**

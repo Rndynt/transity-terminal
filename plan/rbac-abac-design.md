@@ -106,6 +106,20 @@ Effective Permissions = Set<flagId>
 | `action.spj.create` | Buat SPJ | `POST /api/spj` |
 | `action.spj.issue` | Terbitkan SPJ | `PATCH /api/spj/:id/issue` |
 | `action.spj.settle` | Settle SPJ | `PATCH /api/spj/:id/settle` |
+| `action.trip.batch_reschedule` | Batch Reschedule saat Close Trip | `POST /api/trips/:id/close-with-reschedule` |
+
+### Kategori `page` — Flag Tambahan
+
+| Flag ID | Nama | Deskripsi |
+|---|---|---|
+| `page.schedule.closed` | Lihat Closed Trips (Jadwal) | Toggle melihat trip berstatus closed di halaman jadwal |
+| `page.cso.view_closed` | Lihat Closed Trips (CSO) | Toggle melihat trip berstatus closed di halaman CSO |
+
+### Kategori `report` — Flag Tambahan
+
+| Flag ID | Nama |
+|---|---|
+| `report.commercial_fee` | Laporan Biaya Komersial |
 
 ### Kategori `admin` — Administrasi Sistem
 
@@ -160,6 +174,10 @@ Effective Permissions = Set<flagId>
 | **action.spj.create** | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ |
 | **action.spj.issue** | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | **action.spj.settle** | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **action.trip.batch_reschedule** | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **page.schedule.closed** | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **page.cso.view_closed** | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ | ❌ |
+| **report.commercial_fee** | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **admin.staff.manage** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **admin.flags.manage** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 

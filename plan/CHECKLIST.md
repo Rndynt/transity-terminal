@@ -45,3 +45,39 @@
 - [x] Review cache headers — no cache headers on any route; recommendations documented
 - [x] Bundle observations — tree-shaking OK, lazy-load reports recommended
 - [x] Documented in `plan/PERFORMANCE_REVIEW.md`
+
+## Phase 6: Security Hardening
+- [x] Reports gated per-flag (`report.revenue`, `report.commercial_fee`, dll)
+- [x] Manifest endpoint dilindungi permission flag
+- [x] Stop-time mutations dilindungi permission flag
+- [x] Seed endpoints admin-only + diblokir di production
+- [x] `DEV_BYPASS_AUTH` hardcoded `!IS_PRODUCTION`
+- [x] Rate limiting: 10/min login, 5/min register (`@fastify/rate-limit`)
+- [x] SPJ cost-line Zod validation (category, label, amount, notes)
+- [x] CORS via `APP_CORS_ORIGINS` env var
+- [x] Response logging redaction (token, password, session)
+- [x] Passenger-detail endpoints dilindungi permission flag
+
+## Phase 7: Data Integrity — Snapshot System
+- [x] Tambah snapshot columns ke tabel `trips` (snap_route_name, snap_route_code, snap_driver_name, snap_vehicle_plate)
+- [x] Tambah snapshot columns ke tabel `bookings` (snap_origin_stop_name, snap_destination_stop_name, snap_departure_hhmm, snap_outlet_name)
+- [x] Populate snapshot saat materialisasi trip
+- [x] Populate snapshot saat booking dibuat
+- [x] Update semua query laporan dengan COALESCE(snapshot, master)
+- [x] Impact check endpoints: `/api/stops/:id/impact`, `/api/trip-patterns/:id/impact`
+- [x] Backfill script: `server/scripts/backfill-snapshots.ts`
+- [x] Backfill data existing: 7 trips + 11 bookings
+
+## Phase 8: Batch Reschedule on Trip Close
+- [x] Permission flags: `action.trip.batch_reschedule`, `page.schedule.closed`, `page.cso.view_closed`
+- [x] Backend: `GET /api/trips/:id/active-passengers`
+- [x] Backend: `POST /api/trips/:id/close-with-reschedule`
+- [x] Frontend: `BatchRescheduleDialog` component
+- [x] CSO close trip flow: cek penumpang aktif → dialog → reschedule
+- [x] Schedule page: toggle filter untuk lihat closed trips (gated by permission)
+
+## Phase 9: Commercial Fee Report
+- [x] Backend: ReportsRepository (standalone, tidak via IStorage)
+- [x] Perhitungan: 3% gross, 11% PPN, volume discount 0–15%
+- [x] Frontend: report page + summary cards
+- [x] Permission flag: `report.commercial_fee`
