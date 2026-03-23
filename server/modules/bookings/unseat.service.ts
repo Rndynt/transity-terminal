@@ -3,6 +3,7 @@ import { bookings, passengers, seatInventory, bookingHistory } from "@shared/sch
 import { eq, and, inArray } from "drizzle-orm";
 import { webSocketService } from "../../realtime/ws";
 import { IStorage } from "../../storage.interface";
+import { generateBookingCode } from "../../utils/codeGenerator";
 
 function getLegIndexes(originSeq: number, destinationSeq: number): number[] {
   const legs: number[] = [];
@@ -151,11 +152,16 @@ export class UnseatService {
   ): Promise<{ success: boolean; oldBooking: any; newBooking: any }> {
     const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
     if (!passenger) throw new Error("Penumpang tidak ditemukan");
+    if (passenger.ticketStatus === 'unseated' || passenger.ticketStatus === 'canceled') {
+      throw new Error("Penumpang sudah di-unseat atau dibatalkan, tidak bisa di-reschedule");
+    }
 
-    const oldBooking = await this.storage.getBookingById(passenger.bookingId);
-    if (!oldBooking) throw new Error("Booking lama tidak ditemukan");
+    const booking = await this.storage.getBookingById(passenger.bookingId);
+    if (!booking) throw new Error("Booking tidak ditemukan");
 
-    const oldLegIndexes = getLegIndexes(oldBooking.originSeq, oldBooking.destinationSeq);
+    const oldTripId = booking.tripId;
+    const oldSeatNo = passenger.seatNo;
+    const oldLegIndexes = getLegIndexes(booking.originSeq, booking.destinationSeq);
     const newLegIndexes = getLegIndexes(newOriginSeq, newDestinationSeq);
 
     const newSeatAvailability = await db.select().from(seatInventory)
@@ -174,56 +180,23 @@ export class UnseatService {
       throw new Error(`Kursi ${newSeatNo} di trip baru tidak tersedia`);
     }
 
-    const result = await db.transaction(async (tx) => {
-      await tx.update(passengers)
-        .set({ ticketStatus: 'unseated' })
-        .where(eq(passengers.id, passengerId));
+    const allPax = await db.select().from(passengers).where(eq(passengers.bookingId, booking.id));
+    const activeSiblings = allPax.filter(
+      p => p.id !== passengerId && p.ticketStatus !== 'unseated' && p.ticketStatus !== 'canceled'
+    );
+    const isSoleActivePassenger = activeSiblings.length === 0;
+    const tripChanged = oldTripId !== newTripId;
 
+    let resultBookingId = booking.id;
+
+    await db.transaction(async (tx) => {
       await tx.update(seatInventory)
         .set({ booked: false, holdRef: null })
         .where(and(
-          eq(seatInventory.tripId, oldBooking.tripId),
-          eq(seatInventory.seatNo, passenger.seatNo),
+          eq(seatInventory.tripId, oldTripId),
+          eq(seatInventory.seatNo, oldSeatNo),
           inArray(seatInventory.legIndex, oldLegIndexes)
         ));
-
-      const allOldPax = await tx.select().from(passengers).where(eq(passengers.bookingId, oldBooking.id));
-      const allUnseated = allOldPax.every(
-        p => p.id === passengerId || p.ticketStatus === 'unseated' || p.ticketStatus === 'canceled'
-      );
-      if (allUnseated) {
-        await tx.update(bookings)
-          .set({ status: 'unseated' })
-          .where(eq(bookings.id, oldBooking.id));
-      }
-
-      const [newBooking] = await tx.insert(bookings).values({
-        tripId: newTripId,
-        originStopId: newOriginStopId,
-        destinationStopId: newDestinationStopId,
-        originSeq: newOriginSeq,
-        destinationSeq: newDestinationSeq,
-        channel: oldBooking.channel,
-        outletId: oldBooking.outletId,
-        totalAmount: passenger.fareAmount,
-        discountAmount: '0',
-        currency: oldBooking.currency || 'IDR',
-        createdBy: performedBy,
-        status: oldBooking.status === 'paid' ? 'paid' : 'confirmed',
-        bookingCode: `RSC-${Date.now().toString(36).toUpperCase()}`
-      }).returning();
-
-      const [newPassenger] = await tx.insert(passengers).values({
-        bookingId: newBooking.id,
-        seatNo: newSeatNo,
-        fullName: passenger.fullName,
-        phone: passenger.phone,
-        idNumber: passenger.idNumber,
-        fareAmount: passenger.fareAmount,
-        fareBreakdown: passenger.fareBreakdown,
-        ticketNumber: `RSC-${Date.now().toString(36).toUpperCase()}-${newSeatNo}`,
-        ticketStatus: 'active'
-      }).returning();
 
       await tx.update(seatInventory)
         .set({ booked: true, holdRef: null })
@@ -233,50 +206,77 @@ export class UnseatService {
           inArray(seatInventory.legIndex, newLegIndexes)
         ));
 
+      if (isSoleActivePassenger || !tripChanged) {
+        await tx.update(passengers)
+          .set({ seatNo: newSeatNo })
+          .where(eq(passengers.id, passengerId));
+
+        await tx.update(bookings)
+          .set({
+            tripId: newTripId,
+            originStopId: newOriginStopId,
+            destinationStopId: newDestinationStopId,
+            originSeq: newOriginSeq,
+            destinationSeq: newDestinationSeq,
+          })
+          .where(eq(bookings.id, booking.id));
+      } else {
+        const [newBooking] = await tx.insert(bookings).values({
+          bookingCode: generateBookingCode(),
+          tripId: newTripId,
+          originStopId: newOriginStopId,
+          destinationStopId: newDestinationStopId,
+          originSeq: newOriginSeq,
+          destinationSeq: newDestinationSeq,
+          channel: booking.channel,
+          outletId: booking.outletId,
+          totalAmount: passenger.fareAmount,
+          discountAmount: '0',
+          currency: booking.currency || 'IDR',
+          createdBy: performedBy,
+          appUserId: booking.appUserId,
+          status: booking.status === 'paid' ? 'paid' : 'confirmed',
+        }).returning();
+
+        resultBookingId = newBooking.id;
+
+        await tx.update(passengers)
+          .set({ seatNo: newSeatNo, bookingId: newBooking.id })
+          .where(eq(passengers.id, passengerId));
+      }
+
       await tx.insert(bookingHistory).values({
-        bookingId: oldBooking.id,
+        bookingId: booking.id,
         passengerId: passengerId,
         action: 'rescheduled',
         details: {
-          oldTripId: oldBooking.tripId,
-          oldSeatNo: passenger.seatNo,
+          oldTripId,
+          oldSeatNo,
+          oldOriginStopId: booking.originStopId,
+          oldDestinationStopId: booking.destinationStopId,
           newTripId,
           newSeatNo,
-          newBookingId: newBooking.id,
-          newPassengerId: newPassenger.id,
+          newOriginStopId,
+          newDestinationStopId,
+          newBookingId: resultBookingId !== booking.id ? resultBookingId : undefined,
           reason: reason || 'Reschedule'
         },
         performedBy
       });
-
-      await tx.insert(bookingHistory).values({
-        bookingId: newBooking.id,
-        passengerId: newPassenger.id,
-        action: 'rescheduled',
-        details: {
-          rescheduledFrom: oldBooking.id,
-          originalPassengerId: passengerId,
-          originalSeatNo: passenger.seatNo,
-          originalTripId: oldBooking.tripId,
-          reason: reason || 'Reschedule'
-        },
-        performedBy
-      });
-
-      return { newBooking, newPassenger };
     });
 
     for (const legIdx of oldLegIndexes) {
-      webSocketService.emitInventoryUpdated(oldBooking.tripId, passenger.seatNo, [legIdx]);
+      webSocketService.emitInventoryUpdated(oldTripId, oldSeatNo, [legIdx]);
     }
     for (const legIdx of newLegIndexes) {
       webSocketService.emitInventoryUpdated(newTripId, newSeatNo, [legIdx]);
     }
 
+    const updatedBooking = await this.storage.getBookingById(resultBookingId);
     return {
       success: true,
-      oldBooking: await this.storage.getBookingById(oldBooking.id),
-      newBooking: await this.storage.getBookingById(result.newBooking.id)
+      oldBooking: updatedBooking,
+      newBooking: updatedBooking
     };
   }
 
