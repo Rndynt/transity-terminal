@@ -32,12 +32,13 @@ export default function CargoReportPage() {
   const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'created' });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['/api/reports/cargo', filters],
+    queryKey: ['/api/reports/cargo', buildQuery(filters)],
     queryFn: async () => {
       const res = await fetch(`/api/reports/cargo?${buildQuery(filters)}`);
       if (!res.ok) throw new Error('Failed to fetch');
       return res.json();
     },
+    staleTime: 30_000,
   });
 
   const summary = data?.summary;

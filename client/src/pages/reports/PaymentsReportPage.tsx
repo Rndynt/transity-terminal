@@ -41,12 +41,13 @@ export default function PaymentsReportPage() {
   const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'paid' });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['/api/reports/payments', filters],
+    queryKey: ['/api/reports/payments', buildQuery(filters)],
     queryFn: async () => {
       const res = await fetch(`/api/reports/payments?${buildQuery(filters)}`);
       if (!res.ok) throw new Error('Failed to fetch');
       return res.json();
     },
+    staleTime: 30_000,
   });
 
   const summary = data?.summary;

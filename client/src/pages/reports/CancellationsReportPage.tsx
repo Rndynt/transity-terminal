@@ -58,12 +58,13 @@ export default function CancellationsReportPage() {
   const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'paid' });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['/api/reports/cancellations', filters],
+    queryKey: ['/api/reports/cancellations', buildQuery(filters)],
     queryFn: async () => {
       const res = await fetch(`/api/reports/cancellations?${buildQuery(filters)}`);
       if (!res.ok) throw new Error('Failed to fetch');
       return res.json();
     },
+    staleTime: 30_000,
   });
 
   const summary = data?.summary;

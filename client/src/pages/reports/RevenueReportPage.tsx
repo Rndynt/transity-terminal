@@ -31,12 +31,13 @@ export default function RevenueReportPage() {
   const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'paid' });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['/api/reports/revenue', filters],
+    queryKey: ['/api/reports/revenue', buildQuery(filters)],
     queryFn: async () => {
       const res = await fetch(`/api/reports/revenue?${buildQuery(filters)}`);
       if (!res.ok) throw new Error('Failed to fetch');
       return res.json();
     },
+    staleTime: 30_000,
   });
 
   const summary = data?.summary;
