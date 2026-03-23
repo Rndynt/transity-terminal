@@ -8,7 +8,7 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.DATABASE_URL.replace(/^[\u2018\u2019'"]+|[\u2018\u2019'"]+$/g, '');
 const useSSL = connectionString.includes('sslmode=require') || connectionString.includes('neon.tech');
 
 export const pool = new Pool({ 
