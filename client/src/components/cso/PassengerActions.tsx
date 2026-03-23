@@ -103,7 +103,7 @@ export default function PassengerActions({
         {onStartAssignMode && (
           <Button
             size="sm"
-            className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 w-full"
+            className="h-7 text-xs gap-1 bg-amber-500 hover:bg-amber-600 w-full"
             onClick={() => {
               onStartAssignMode({
                 id: p.id,
@@ -122,7 +122,7 @@ export default function PassengerActions({
         {onAssignInCso && (
           <Button
             size="sm"
-            className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 w-full"
+            className="h-7 text-xs gap-1 bg-amber-500 hover:bg-amber-600 w-full"
             onClick={() => onAssignInCso(p.id, p.fullName, p.bookingCode, p.ticketNumber)}
             data-testid={`btn-assign-${p.id}`}
           >
@@ -200,19 +200,19 @@ export default function PassengerActions({
 
   if (showRescheduleReason) {
     return (
-      <div className="space-y-2 p-2 bg-purple-50 border border-purple-200 rounded-lg">
-        <p className="text-xs text-purple-700 font-semibold">Alasan reschedule</p>
+      <div className="space-y-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+        <p className="text-xs text-amber-700 font-semibold">Alasan reschedule</p>
         <Textarea
           placeholder="Alasan reschedule (wajib diisi)..."
           value={rescheduleReason}
           onChange={e => setRescheduleReason(e.target.value)}
-          className="min-h-[50px] text-xs border-purple-200 focus:border-purple-400 focus:ring-purple-100"
+          className="min-h-[50px] text-xs border-amber-200 focus:border-amber-400 focus:ring-amber-100"
           data-testid={`input-reschedule-reason-${p.id}`}
         />
         <div className="flex items-center gap-2">
           <Button
             size="sm"
-            className="h-7 text-xs gap-1 bg-purple-600 hover:bg-purple-700"
+            className="h-7 text-xs gap-1 bg-amber-500 hover:bg-amber-600"
             disabled={!rescheduleReason.trim()}
             onClick={() => {
               if (onStartRescheduleMode) {
@@ -263,7 +263,7 @@ export default function PassengerActions({
           <Button
             size="sm"
             variant="outline"
-            className="h-7 text-xs gap-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50 border-purple-200"
+            className="h-7 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 border-amber-200"
             onClick={() => setShowRescheduleReason(true)}
             data-testid={`btn-reschedule-${p.id}`}
           >
