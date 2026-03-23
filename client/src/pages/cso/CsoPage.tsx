@@ -20,7 +20,7 @@ import { useSeatHold } from '@/hooks/useSeatHold';
 import {
   ChevronRight, ChevronLeft, Loader2, MapPin,
   Armchair, ArrowRight, Ticket, Package, Clock,
-  FileText, Lock
+  FileText, Lock, CalendarClock, User, X
 } from 'lucide-react';
 import type { Stop, Outlet, CsoAvailableTrip, CargoShipmentWithStops } from '@/types';
 
@@ -392,6 +392,51 @@ export default function CsoPage() {
           </div>
         </div>
       </div>
+
+      {rescheduleModeInfo && (
+        <div className="bg-purple-50 border-b-2 border-purple-300 px-3 md:px-5 py-2 flex-shrink-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <CalendarClock className="w-4 h-4 text-purple-600 flex-shrink-0" />
+              <span className="text-xs font-bold text-purple-700">Mode Reschedule</span>
+            </div>
+            <button
+              onClick={() => setRescheduleModeInfo(null)}
+              className="p-1 rounded-md text-purple-400 hover:text-purple-600 hover:bg-purple-100 transition-colors flex-shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2 mt-1 px-6">
+            <User className="w-3 h-3 text-purple-500 flex-shrink-0" />
+            <div className="text-[11px] text-gray-700 min-w-0">
+              <span className="font-semibold">{rescheduleModeInfo.passengerName}</span>
+              <span className="text-gray-400 mx-1">·</span>
+              <span className="font-mono text-purple-600">{rescheduleModeInfo.bookingCode}</span>
+              {rescheduleModeInfo.ticketNumber && (
+                <>
+                  <span className="text-gray-400 mx-1">·</span>
+                  <span className="font-mono text-gray-500">{rescheduleModeInfo.ticketNumber}</span>
+                </>
+              )}
+              <span className="text-gray-400 mx-1">·</span>
+              <span className="text-gray-500">
+                Kursi {rescheduleModeInfo.seatNo} ({rescheduleModeInfo.originStopName} → {rescheduleModeInfo.destinationStopName})
+              </span>
+            </div>
+          </div>
+          {rescheduleModeInfo.reason && (
+            <p className="text-[10px] text-purple-500 mt-0.5 px-6 italic">
+              Alasan: {rescheduleModeInfo.reason}
+            </p>
+          )}
+          {phase === 'select' && (
+            <p className="text-[10px] text-purple-600 font-medium mt-1 px-6">
+              Pilih jadwal dan rute tujuan baru, lalu klik kursi yang tersedia
+            </p>
+          )}
+        </div>
+      )}
 
       {showCargoWaybill ? (
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
