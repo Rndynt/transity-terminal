@@ -11,13 +11,13 @@ title = "Dokumentasi Mobile App Transity"
 id = "jNw9kPOOGfYtohC4Q7SRC"
 uri = "file://docs/PKS_Perjanjian_Kerja_Sama.pdf"
 type = "pdf"
-title = "PKS - Perjanjian Kerja Sama Transity"
+title = "PKS - Perjanjian Kerja Sama Transity (Updated)"
 
 [[outputs]]
 id = "j8wyTYvvkzk3lD4VgBi6v"
 uri = "file://docs/Commercial_Fee_Agreement.pdf"
 type = "pdf"
-title = "Perjanjian Commercial Fee Transity"
+title = "Perjanjian Commercial Fee Transity (Updated)"
 
 [[outputs]]
 id = "eV4cib5tN1U4VgZh9mNBO"

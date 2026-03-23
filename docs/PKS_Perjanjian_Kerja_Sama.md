@@ -16,7 +16,7 @@ Pada hari ini, tanggal __________, bertempat di __________, telah ditandatangani
 | **Nama** | PT Transity Teknologi Indonesia |
 | **Alamat** | ________________________________ |
 | **NPWP** | ________________________________ |
-| **Diwakili oleh** | ________________________________ |
+| **Diwakili oleh** | Rendyanta Maulana |
 | **Jabatan** | Direktur Utama |
 
 Selanjutnya disebut **"PIHAK PERTAMA"** atau **"TRANSITY"**
@@ -205,20 +205,15 @@ Demikian Perjanjian ini dibuat dalam rangkap 2 (dua), masing-masing bermaterai c
 | PT Transity Teknologi Indonesia | ________________________________ |
 | | |
 | | |
-| | |
-| | |
 | ________________________________ | ________________________________ |
-| Nama: | Nama: |
+| Nama: Rendyanta Maulana | Nama: |
 | Jabatan: Direktur Utama | Jabatan: |
 | Tanggal: | Tanggal: |
-
-&nbsp;
 
 **Saksi-saksi:**
 
 | **Saksi 1** | **Saksi 2** |
 |---|---|
-| | |
 | | |
 | ________________________________ | ________________________________ |
 | Nama: | Nama: |
