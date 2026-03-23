@@ -22,6 +22,7 @@ interface TripSelectorProps {
   lockedOutletId?: string;
   initialTripId?: string;
   onInitialConsumed?: () => void;
+  canViewClosed?: boolean;
 }
 
 const MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
@@ -349,7 +350,8 @@ export default function TripSelector({
   initialOutletId,
   lockedOutletId,
   initialTripId,
-  onInitialConsumed
+  onInitialConsumed,
+  canViewClosed = false
 }: TripSelectorProps) {
   const effectiveInitialOutletId = lockedOutletId || initialOutletId;
   const setSelectedDate = onDateChange;
@@ -504,7 +506,7 @@ export default function TripSelector({
       toast({ title: "Belum Ada Harga", description: "Trip ini belum memiliki aturan harga. Hubungi admin untuk mengatur harga.", variant: "destructive" });
       return;
     }
-    if (trip.status === 'closed') {
+    if (trip.status === 'closed' && !canViewClosed) {
       toast({ title: "Trip Ditutup", description: "Trip ini sudah ditutup", variant: "destructive" });
       return;
     }
@@ -767,7 +769,8 @@ export default function TripSelector({
                       const isPast = getTripIsPast(trip);
                       const isPastVirtual = isPast && trip.isVirtual;
                       const noPrice = !trip.hasPriceRule;
-                      const isDisabled = trip.status === 'closed' || trip.status === 'canceled' || isPastVirtual || noPrice;
+                      const isClosed = trip.status === 'closed';
+                      const isDisabled = (isClosed && !canViewClosed) || trip.status === 'canceled' || isPastVirtual || noPrice;
                       const isMaterializing = materializingBaseId === trip.baseId;
                       const seatCount = trip.availableSeats ?? trip.capacity ?? 0;
                       const totalSeats = trip.capacity ?? 40;

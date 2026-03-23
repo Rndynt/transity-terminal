@@ -47,7 +47,7 @@ const formatTime = (isoString: string | null | undefined): string => {
 };
 
 export default function CsoPage() {
-  const { outletId: scopedOutletId } = usePermissions();
+  const { outletId: scopedOutletId, can } = usePermissions();
   const { toast } = useToast();
   const searchString = useSearch();
   const [, navigate] = useLocation();
@@ -678,6 +678,7 @@ export default function CsoPage() {
                     lockedOutletId={scopedOutletId ?? undefined}
                     initialTripId={initialTripId}
                     onInitialConsumed={() => navigate('/cso', { replace: true })}
+                    canViewClosed={can('page.schedule.closed')}
                   />
                 </div>
 
