@@ -7,7 +7,7 @@ import {
 } from "./realmio";
 
 export function registerAuthRoutes(app: FastifyInstance) {
-  app.post("/api/auth/sign-in/email", async (req, reply) => {
+  app.post("/api/auth/sign-in/email", { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     if (DEV_BYPASS_AUTH) {
       return reply.send({
         user: DEV_USER,
@@ -43,7 +43,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post("/api/auth/sign-up/email", async (req, reply) => {
+  app.post("/api/auth/sign-up/email", { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
     if (DEV_BYPASS_AUTH) {
       return reply.send({
         user: { ...DEV_USER, email: (req.body as any).email, name: (req.body as any).name },

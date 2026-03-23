@@ -600,6 +600,18 @@ Saat induk dihapus, semua anak ikut di-soft-delete:
 - Admin pages: `/admin/staff` dan `/admin/flags`
 - Full REST CRUD at `/api/admin/staff` dan `/api/admin/flags`
 
+**2026-03-23 — Security Audit & Hardening**
+- Report endpoints dilindungi per-report permission flags (`report.revenue`, `report.sales`, dll)
+- Manifest & manifest print dilindungi `page.manifest` flag
+- Trip stop-time mutations dilindungi `master.trips` flag
+- Seed endpoints (`/api/seed`, `/api/seed/rbac`) dilindungi `admin.flags.manage` + diblokir di production
+- `DEV_BYPASS_AUTH` tidak bisa aktif di production (hardcoded `!IS_PRODUCTION`)
+- Rate limiting: login (10/mnt), register (5/mnt) via `@fastify/rate-limit`
+- SPJ cost-line input validation dengan Zod schema
+- CORS `/api/app/` dikonfigurasi via `APP_CORS_ORIGINS` env var (default `*` untuk backward compat)
+- Data integrity snapshots backfilled untuk semua existing trips & bookings
+- `ReportsRepository` exported di `repositories/index.ts`
+
 **2026-03-22 — Express → Fastify 5 Migration**
 - Semua 104+ endpoints migrated ke Fastify
 - `preHandler` arrays replace Express middleware

@@ -12,13 +12,12 @@ export interface RealmioUser {
 
 const AUTHCORE_BASE_URL = process.env.AUTHCORE_BASE_URL || "";
 const AUTHCORE_TENANT_ID = process.env.AUTHCORE_TENANT_ID || "transity";
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const DEV_BYPASS_AUTH =
-  process.env.DEV_BYPASS_AUTH === "true" ||
-  (process.env.NODE_ENV !== "production" && !AUTHCORE_BASE_URL);
+  !IS_PRODUCTION && (process.env.DEV_BYPASS_AUTH === "true" || !AUTHCORE_BASE_URL);
 
-if (DEV_BYPASS_AUTH && process.env.NODE_ENV === "production") {
-  console.warn("⚠️  WARNING: DEV_BYPASS_AUTH is active in PRODUCTION mode!");
-  console.warn("⚠️  All requests will auto-authenticate as owner. DO NOT use on public-facing servers.");
+if (IS_PRODUCTION && !AUTHCORE_BASE_URL) {
+  console.error("FATAL: AUTHCORE_BASE_URL is required in production. Auth will reject all requests.");
 }
 
 const DEV_USER: RealmioUser = {

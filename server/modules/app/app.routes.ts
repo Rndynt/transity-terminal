@@ -3,25 +3,41 @@ import { AppController } from "./app.controller";
 import { IStorage } from "../../storage.interface";
 import { appAuthMiddleware, optionalAuthMiddleware } from "./app.auth";
 
+const ALLOWED_APP_ORIGINS = (process.env.APP_CORS_ORIGINS || '*').split(',').map(s => s.trim());
+
+function getAppCorsOrigin(reqOrigin: string | undefined): string {
+  if (ALLOWED_APP_ORIGINS.includes('*')) return '*';
+  if (reqOrigin && ALLOWED_APP_ORIGINS.includes(reqOrigin)) return reqOrigin;
+  return '';
+}
+
 export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
   app.addHook('preHandler', async (req, reply) => {
     if (!req.url.startsWith('/api/app/')) return;
-    reply.header('Access-Control-Allow-Origin', '*');
-    reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    const origin = getAppCorsOrigin(req.headers.origin);
+    if (origin) {
+      reply.header('Access-Control-Allow-Origin', origin);
+      reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      if (origin !== '*') reply.header('Vary', 'Origin');
+    }
   });
 
-  app.options('/api/app/*', async (_req, reply) => {
-    reply.header('Access-Control-Allow-Origin', '*');
-    reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  app.options('/api/app/*', async (req, reply) => {
+    const origin = getAppCorsOrigin(req.headers.origin);
+    if (origin) {
+      reply.header('Access-Control-Allow-Origin', origin);
+      reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      if (origin !== '*') reply.header('Vary', 'Origin');
+    }
     reply.code(204).send();
   });
 
   const appController = new AppController(storage);
 
-  app.post('/api/app/auth/register', async (req, reply) => appController.register(req, reply));
-  app.post('/api/app/auth/login', async (req, reply) => appController.login(req, reply));
+  app.post('/api/app/auth/register', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => appController.register(req, reply));
+  app.post('/api/app/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => appController.login(req, reply));
   app.get('/api/app/auth/me', { preHandler: [appAuthMiddleware] }, async (req, reply) => appController.getMe(req, reply));
 
   app.get('/api/app/profile', { preHandler: [appAuthMiddleware] }, async (req, reply) => appController.getProfile(req, reply));

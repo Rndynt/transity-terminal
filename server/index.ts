@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import { ZodError } from "zod";
+import rateLimit from "@fastify/rate-limit";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { scheduler } from "./scheduler";
@@ -17,6 +18,10 @@ app.decorateRequest('outletId', undefined);
 app.decorateRequest('appUser', undefined);
 app.decorateRequest('rawBody', undefined);
 
+app.register(rateLimit, {
+  global: false,
+});
+
 app.register(import("@fastify/middie"));
 
 app.addContentTypeParser('application/json', { parseAs: 'buffer' }, function (req, body, done) {
@@ -29,7 +34,13 @@ app.addContentTypeParser('application/json', { parseAs: 'buffer' }, function (re
   }
 });
 
-const SENSITIVE_PATHS = ['/api/app/auth/login', '/api/app/auth/register', '/api/app/payments/webhook'];
+const SENSITIVE_PATHS = [
+  '/api/app/auth/login', '/api/app/auth/register', '/api/app/payments/webhook',
+  '/api/auth/sign-in/email', '/api/auth/sign-up/email', '/api/auth/sign-out',
+  '/api/auth/session', '/api/auth/me',
+  '/api/app/auth/me', '/api/app/profile',
+  '/api/permissions/me',
+];
 const SENSITIVE_KEYS = new Set(['token', 'password', 'passwordHash', 'providerRef', 'authorization']);
 
 function redactSensitive(obj: Record<string, unknown>): Record<string, unknown> {

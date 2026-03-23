@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { storage } from "./storage";
 import { registerAuthRoutes } from "./modules/auth/auth.routes";
 import { requireAuth } from "./modules/auth/realmio";
+import { requireFlag } from "./modules/rbac/rbac.middleware";
 
 import { registerDriversRoutes } from "./modules/drivers/drivers.routes";
 import { registerStopsRoutes } from "./modules/stops/stops.routes";
@@ -66,13 +67,19 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
   registerReportsRoutes(app);
   registerAdminRoutes(app);
 
-  app.post('/api/seed', async (req: any, reply: any) => {
+  app.post('/api/seed', { preHandler: [requireFlag('admin.flags.manage')] }, async (req: any, reply: any) => {
+    if (process.env.NODE_ENV === 'production') {
+      return reply.code(403).send({ error: 'Seed disabled in production' });
+    }
     const { seedData } = await import('./seed');
     await seedData();
     reply.send({ message: 'Seed data created successfully' });
   });
 
-  app.post('/api/seed/rbac', async (req: any, reply: any) => {
+  app.post('/api/seed/rbac', { preHandler: [requireFlag('admin.flags.manage')] }, async (req: any, reply: any) => {
+    if (process.env.NODE_ENV === 'production') {
+      return reply.code(403).send({ error: 'Seed disabled in production' });
+    }
     const { seedRbac } = await import('./modules/rbac/rbac.seed');
     await seedRbac();
     reply.send({ message: 'RBAC seed completed successfully' });

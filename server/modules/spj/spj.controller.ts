@@ -1,7 +1,21 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { SpjService } from "./spj.service";
+import { z } from "zod";
 
 const spjService = new SpjService();
+
+const addCostLineSchema = z.object({
+  category: z.string().min(1),
+  label: z.string().min(1).max(200),
+  estimatedAmount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  isAdvance: z.boolean(),
+  notes: z.string().max(500).optional(),
+});
+
+const updateCostLineSchema = z.object({
+  actualAmount: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
+  notes: z.string().max(500).nullable().optional(),
+});
 
 export class SpjController {
   async getAll(req: FastifyRequest, reply: FastifyReply) {
@@ -81,18 +95,22 @@ export class SpjController {
 
   async updateCostLine(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const line = await spjService.updateCostLine(req.params.id, req.body);
+      const parsed = updateCostLineSchema.parse(req.body);
+      const line = await spjService.updateCostLine((req.params as any).id, parsed);
       reply.send(line);
     } catch (e: any) {
+      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Invalid input', details: e.errors });
       reply.code(400).send({ error: e.message });
     }
   }
 
   async addCostLine(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const line = await spjService.addCostLine(req.params.spjId, req.body);
+      const parsed = addCostLineSchema.parse(req.body);
+      const line = await spjService.addCostLine((req.params as any).spjId, parsed);
       reply.code(201).send(line);
     } catch (e: any) {
+      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Invalid input', details: e.errors });
       reply.code(400).send({ error: e.message });
     }
   }
