@@ -4,3 +4,4 @@ export { SchedulingRepository } from './scheduling.repository';
 export { BookingRepository } from './booking.repository';
 export { CargoRepository } from './cargo.repository';
 export { FinanceRepository } from './finance.repository';
+export { ReportsRepository } from './reports.repository';
