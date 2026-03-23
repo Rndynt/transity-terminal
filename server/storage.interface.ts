@@ -223,5 +223,6 @@ export interface IStorage {
   tripHasBookings(tripId: string): Promise<boolean>;
   getTripByBaseAndDate(baseId: string, serviceDate: string): Promise<Trip | undefined>;
   releaseHoldsForTrip(tripId: string): Promise<void>;
+  getActivePassengersForTrip(tripId: string): Promise<any[]>;
   getUnseatedPassengers(tripId: string): Promise<any[]>;
 }

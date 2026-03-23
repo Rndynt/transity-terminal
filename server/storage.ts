@@ -118,6 +118,7 @@ export class DatabaseStorage implements IStorage {
   getPassengerByTicketNumber(ticketNumber: string): Promise<Passenger | undefined> { return this.booking.getPassengerByTicketNumber(ticketNumber); }
   createPassenger(data: InsertPassenger): Promise<Passenger> { return this.booking.createPassenger(data); }
   updatePassenger(id: string, data: Partial<InsertPassenger>): Promise<Passenger> { return this.booking.updatePassenger(id, data); }
+  getActivePassengersForTrip(tripId: string): Promise<any[]> { return this.booking.getActivePassengersForTrip(tripId); }
   getUnseatedPassengers(tripId: string): Promise<any[]> { return this.booking.getUnseatedPassengers(tripId); }
   getPayments(bookingId: string): Promise<Payment[]> { return this.booking.getPayments(bookingId); }
   getPaymentsByBookingIds(bookingIds: string[]): Promise<Payment[]> { return this.booking.getPaymentsByBookingIds(bookingIds); }

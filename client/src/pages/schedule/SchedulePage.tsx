@@ -19,6 +19,7 @@ import {
 import type { TripWithDetails, TripPattern, Driver, SpjWithDetails } from '@/types';
 import { TripStatusBadge } from '@/components/shared/StatusBadges';
 import { CanAccess } from '@/components/rbac/CanAccess';
+import { usePermissions } from '@/lib/permissions';
 
 function todayStr() {
   const d = new Date();
@@ -49,10 +50,13 @@ function formatDisplayDate(dateStr: string) {
 export default function SchedulePage() {
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [search, setSearch] = useState('');
+  const [showClosed, setShowClosed] = useState(false);
   const [manifestTripId, setManifestTripId] = useState<string | null>(null);
   const [driverDialogTrip, setDriverDialogTrip] = useState<TripWithDetails | null>(null);
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const { toast } = useToast();
+  const { can } = usePermissions();
+  const canViewClosed = can('page.schedule.closed');
 
   const { data: trips = [], isLoading } = useQuery<TripWithDetails[]>({
     queryKey: ['/api/trips', selectedDate],
@@ -79,7 +83,10 @@ export default function SchedulePage() {
   const getPatternName = (patternId: string) => patterns.find(p => p.id === patternId)?.name ?? '—';
   const getPatternCode = (patternId: string) => patterns.find(p => p.id === patternId)?.code ?? '';
 
+  const closedCount = trips.filter(t => t.status === 'closed').length;
+
   const filtered = trips.filter(t => {
+    if (t.status === 'closed' && !showClosed) return false;
     const name = getPatternName(t.patternId).toLowerCase();
     const code = getPatternCode(t.patternId).toLowerCase();
     const q = search.toLowerCase();
@@ -189,6 +196,20 @@ export default function SchedulePage() {
                 <ClipboardList className="w-3 h-3 mr-1" />
                 {tripsNoSpj.length} belum ada SPJ
               </Badge>
+            )}
+            {canViewClosed && closedCount > 0 && (
+              <button
+                onClick={() => setShowClosed(v => !v)}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                  showClosed
+                    ? 'border-gray-400 text-gray-700 bg-gray-100'
+                    : 'border-gray-200 text-gray-400 bg-white hover:border-gray-300 hover:text-gray-500'
+                }`}
+                data-testid="toggle-show-closed"
+              >
+                {showClosed ? <CheckCircle className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                {closedCount} closed {showClosed ? '(tampil)' : '(tersembunyi)'}
+              </button>
             )}
           </div>
         )}

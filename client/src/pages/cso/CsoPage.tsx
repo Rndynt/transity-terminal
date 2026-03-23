@@ -14,6 +14,7 @@ import PrintPreview from '@/components/cso/PrintPreview';
 import CargoWaybillPreview from '@/components/cso/CargoWaybillPreview';
 import CsoCargoPanel from './CsoCargoPanel';
 import ManifestDialog from '@/components/manifest/ManifestDialog';
+import BatchRescheduleDialog from '@/components/cso/BatchRescheduleDialog';
 
 import { useBookingFlow } from '@/hooks/useBookingFlow';
 import { useSeatHold } from '@/hooks/useSeatHold';
@@ -86,6 +87,11 @@ export default function CsoPage() {
   });
   const [manifestDialogTripId, setManifestDialogTripId] = useState<string | null>(null);
   const [confirmCloseTrip, setConfirmCloseTrip] = useState(false);
+  const [batchRescheduleState, setBatchRescheduleState] = useState<{
+    show: boolean;
+    passengers: any[];
+    checking: boolean;
+  }>({ show: false, passengers: [], checking: false });
   const [pendingRouteAutoSelect, setPendingRouteAutoSelect] = useState<{
     originStopId: string;
     destinationStopId: string;
@@ -566,17 +572,34 @@ export default function CsoPage() {
                     <div className="flex items-center gap-1.5 px-2 py-1 bg-red-50 border border-red-300 rounded-lg">
                       <span className="text-[11px] text-red-700 font-medium whitespace-nowrap">Yakin tutup trip?</span>
                       <button
-                        onClick={() => {
-                          if (selectedCsoTrip?.tripId) {
-                            closeTripMutation.mutate(selectedCsoTrip.tripId);
-                          }
+                        onClick={async () => {
+                          if (!selectedCsoTrip?.tripId) return;
                           setConfirmCloseTrip(false);
+                          setBatchRescheduleState(prev => ({ ...prev, checking: true }));
+                          try {
+                            const res = await fetch(`/api/trips/${selectedCsoTrip.tripId}/active-passengers`, { credentials: 'include' });
+                            if (!res.ok) {
+                              setBatchRescheduleState({ show: false, passengers: [], checking: false });
+                              toast({ title: 'Gagal mengecek penumpang', description: `HTTP ${res.status}`, variant: 'destructive' });
+                              return;
+                            }
+                            const passengers = await res.json();
+                            if (passengers.length > 0) {
+                              setBatchRescheduleState({ show: true, passengers, checking: false });
+                            } else {
+                              setBatchRescheduleState({ show: false, passengers: [], checking: false });
+                              closeTripMutation.mutate(selectedCsoTrip.tripId);
+                            }
+                          } catch (err) {
+                            setBatchRescheduleState({ show: false, passengers: [], checking: false });
+                            toast({ title: 'Gagal mengecek penumpang', description: err instanceof Error ? err.message : 'Terjadi kesalahan', variant: 'destructive' });
+                          }
                         }}
-                        disabled={closeTripMutation.isPending}
+                        disabled={closeTripMutation.isPending || batchRescheduleState.checking}
                         className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-semibold transition-colors disabled:opacity-50"
                         data-testid="btn-confirm-close-trip"
                       >
-                        {closeTripMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Ya'}
+                        {(closeTripMutation.isPending || batchRescheduleState.checking) ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Ya'}
                       </button>
                       <button
                         onClick={() => setConfirmCloseTrip(false)}
@@ -843,6 +866,29 @@ export default function CsoPage() {
         open={!!manifestDialogTripId}
         onOpenChange={(open) => { if (!open) setManifestDialogTripId(null); }}
       />
+
+      {batchRescheduleState.show && selectedCsoTrip?.tripId && state.outlet && (
+        <BatchRescheduleDialog
+          tripId={selectedCsoTrip.tripId}
+          tripLabel={`${selectedCsoTrip.patternCode} — ${selectedCsoTrip.vehicle?.plate || '-'}`}
+          outletId={state.outlet.id}
+          selectedDate={selectedDate}
+          passengers={batchRescheduleState.passengers}
+          onClose={() => {
+            setBatchRescheduleState({ show: false, passengers: [], checking: false });
+            queryClient.invalidateQueries({ queryKey: ['/api/cso/available-trips'] });
+          }}
+          onCloseOnly={() => {
+            setBatchRescheduleState({ show: false, passengers: [], checking: false });
+            closeTripMutation.mutate(selectedCsoTrip.tripId!);
+          }}
+          onRescheduleComplete={() => {
+            queryClient.invalidateQueries({ queryKey: ['/api/cso/available-trips'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+          }}
+          isClosing={closeTripMutation.isPending}
+        />
+      )}
     </div>
   );
 }

@@ -80,6 +80,36 @@ export class BookingRepository {
     return passenger;
   }
 
+  async getActivePassengersForTrip(tripId: string): Promise<any[]> {
+    const rows = await db.execute(sql`
+      SELECT
+        p.id,
+        p.full_name             AS "fullName",
+        p.phone,
+        p.seat_no               AS "seatNo",
+        p.ticket_number         AS "ticketNumber",
+        p.ticket_status         AS "ticketStatus",
+        p.fare_amount           AS "fareAmount",
+        b.booking_code          AS "bookingCode",
+        b.id                    AS "bookingId",
+        b.origin_stop_id        AS "originStopId",
+        b.destination_stop_id   AS "destinationStopId",
+        b.origin_seq            AS "originSeq",
+        b.destination_seq       AS "destinationSeq",
+        os.name                 AS "originStopName",
+        ds.name                 AS "destinationStopName"
+      FROM ${passengers} p
+      INNER JOIN ${bookings} b ON b.id = p.booking_id
+      LEFT JOIN ${stops} os ON os.id = b.origin_stop_id
+      LEFT JOIN ${stops} ds ON ds.id = b.destination_stop_id
+      WHERE b.trip_id = ${tripId}
+        AND b.status NOT IN ('canceled', 'refunded')
+        AND COALESCE(p.ticket_status, 'active') NOT IN ('canceled', 'refunded', 'unseated')
+      ORDER BY p.full_name ASC
+    `);
+    return rows.rows as any[];
+  }
+
   async getUnseatedPassengers(tripId: string): Promise<any[]> {
     const rows = await db.execute(sql`
       SELECT

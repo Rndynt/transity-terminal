@@ -1,6 +1,7 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { BookingsService } from "./bookings.service";
 import { UnseatService } from "./unseat.service";
+import { RescheduleService } from "./reschedule.service";
 import { IStorage } from "../../storage.interface";
 import { insertBookingSchema, insertPassengerSchema, insertPaymentSchema } from "@shared/schema";
 import { z } from "zod";
@@ -77,10 +78,12 @@ const cancelTicketSchema = z.object({
 export class BookingsController {
   private bookingsService: BookingsService;
   private unseatService: UnseatService;
+  private rescheduleService: RescheduleService;
 
   constructor(storage: IStorage) {
     this.bookingsService = new BookingsService(storage);
     this.unseatService = new UnseatService(storage);
+    this.rescheduleService = new RescheduleService(storage);
   }
 
   async getAll(req: FastifyRequest, reply: FastifyReply) {
@@ -402,7 +405,7 @@ export class BookingsController {
       const { passengerId } = req.params;
       const data = reschedulePassengerSchema.parse(req.body);
       const performedBy = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
-      const result = await this.unseatService.reschedulePassenger(
+      const result = await this.rescheduleService.reschedulePassenger(
         passengerId,
         data.newTripId,
         data.newSeatNo,
