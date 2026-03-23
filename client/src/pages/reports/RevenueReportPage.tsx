@@ -117,7 +117,7 @@ export default function RevenueReportPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Per Rute</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -147,7 +147,7 @@ export default function RevenueReportPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Per Outlet</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>

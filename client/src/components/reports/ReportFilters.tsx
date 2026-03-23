@@ -93,7 +93,7 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
   return (
     <div className="space-y-2.5">
       {dateModeOptions && dateModeOptions.length > 1 && (
-        <div className="flex items-center gap-1.5" data-testid="date-mode-toggle">
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="date-mode-toggle">
           <span className="text-[11px] font-medium text-muted-foreground mr-1">Berdasarkan:</span>
           {dateModeOptions.map((opt) => (
             <button
@@ -101,7 +101,7 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
               type="button"
               onClick={() => onChange({ ...value, dateMode: opt.value })}
               className={cn(
-                "px-3 py-1.5 text-xs font-medium rounded-lg border transition-all",
+                "px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-all whitespace-nowrap",
                 value.dateMode === opt.value
                   ? "bg-blue-50 border-blue-300 text-blue-700"
                   : "bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
@@ -114,28 +114,30 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          type="date"
-          value={value.dateFrom}
-          onChange={(e) => onChange({ ...value, dateFrom: e.target.value })}
-          className="h-9 w-36 text-sm"
-        />
-        <span className="text-sm text-muted-foreground">—</span>
-        <Input
-          type="date"
-          value={value.dateTo}
-          onChange={(e) => onChange({ ...value, dateTo: e.target.value })}
-          className="h-9 w-36 text-sm"
-        />
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <Input
+            type="date"
+            value={value.dateFrom}
+            onChange={(e) => onChange({ ...value, dateFrom: e.target.value })}
+            className="h-9 text-sm min-w-0"
+          />
+          <span className="text-sm text-muted-foreground">—</span>
+          <Input
+            type="date"
+            value={value.dateTo}
+            onChange={(e) => onChange({ ...value, dateTo: e.target.value })}
+            className="h-9 text-sm min-w-0"
+          />
+        </div>
 
-        <div className="flex items-center gap-1 ml-1">
+        <div className="flex items-center gap-1 flex-wrap">
           {PRESETS.map((p) => (
             <Button
               key={p.label}
               variant="outline"
               size="sm"
-              className="h-8 text-xs"
+              className="h-8 text-xs px-2.5 sm:px-3"
               onClick={() => {
                 const range = p.getValue();
                 onChange({ ...value, ...range });
@@ -144,33 +146,33 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
               {p.label}
             </Button>
           ))}
-        </div>
 
-        {hasExtraFilters && (
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn("h-8 text-xs gap-1.5 ml-auto", filtersOpen && "bg-muted")}
-            onClick={() => setFiltersOpen(!filtersOpen)}
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            Filter
-            {activeFilterCount > 0 && (
-              <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-bold rounded-full">
-                {activeFilterCount}
-              </Badge>
-            )}
-            <ChevronDown className={cn("w-3 h-3 transition-transform", filtersOpen && "rotate-180")} />
-          </Button>
-        )}
+          {hasExtraFilters && (
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn("h-8 text-xs gap-1.5", filtersOpen && "bg-muted")}
+              onClick={() => setFiltersOpen(!filtersOpen)}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Filter
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-bold rounded-full">
+                  {activeFilterCount}
+                </Badge>
+              )}
+              <ChevronDown className={cn("w-3 h-3 transition-transform", filtersOpen && "rotate-180")} />
+            </Button>
+          )}
+        </div>
       </div>
 
       {hasExtraFilters && (
         <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
           <CollapsibleContent>
-            <div className="flex flex-wrap items-end gap-3 pt-2 pb-1 border-t border-border/50">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2 pb-1 border-t border-border/50">
               {showRoute && (
-                <div className="min-w-[220px] max-w-[280px]">
+                <div className="min-w-0">
                   <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Rute</label>
                   <SearchableSelect
                     value={value.patternId || ''}
@@ -185,7 +187,7 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
               )}
 
               {showOutlet && (
-                <div className="min-w-[200px] max-w-[260px]">
+                <div className="min-w-0">
                   <label className="text-[11px] font-medium text-muted-foreground mb-1 flex items-center gap-1">
                     Outlet
                     {lockedOutletId && <Lock className="w-2.5 h-2.5 text-amber-500" />}
@@ -212,7 +214,7 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
               )}
 
               {showChannel && (
-                <div className="min-w-[160px] max-w-[200px]">
+                <div className="min-w-0">
                   <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Channel</label>
                   <SearchableSelect
                     value={value.channel || ''}
@@ -227,9 +229,11 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
               )}
 
               {activeFilterCount > 0 && (
-                <Button variant="ghost" size="sm" className="h-10 text-xs text-muted-foreground gap-1" onClick={clearFilters}>
-                  <X className="w-3.5 h-3.5" /> Reset Filter
-                </Button>
+                <div className="flex items-end">
+                  <Button variant="ghost" size="sm" className="h-9 text-xs text-muted-foreground gap-1" onClick={clearFilters}>
+                    <X className="w-3.5 h-3.5" /> Reset Filter
+                  </Button>
+                </div>
               )}
             </div>
           </CollapsibleContent>

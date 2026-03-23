@@ -77,7 +77,7 @@ export default function CommercialFeeReportPage() {
 
       <Card>
         <CardContent className="pt-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <div className="bg-blue-50 rounded-lg p-3">
               <div className="flex items-center gap-1.5 text-blue-700 font-medium mb-1">
                 <Ticket className="w-3.5 h-3.5" /> Tiket
@@ -155,7 +155,7 @@ export default function CommercialFeeReportPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Fee Tiket per Rute</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -185,7 +185,7 @@ export default function CommercialFeeReportPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Fee Kargo per Rute</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -217,7 +217,7 @@ export default function CommercialFeeReportPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Fee Tiket per Outlet</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -246,7 +246,7 @@ export default function CommercialFeeReportPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-semibold">Skema Diskon Volume (per PKS)</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

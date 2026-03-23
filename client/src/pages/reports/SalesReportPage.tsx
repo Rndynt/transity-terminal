@@ -97,7 +97,7 @@ export default function SalesReportPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Per Status</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -123,7 +123,7 @@ export default function SalesReportPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Per Channel</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -151,7 +151,7 @@ export default function SalesReportPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Per Outlet</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
