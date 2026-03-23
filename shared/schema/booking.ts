@@ -30,6 +30,7 @@ export const bookings = pgTable("bookings", {
 }, (table) => ({
   idxBookingsTripId: sql`CREATE INDEX IF NOT EXISTS idx_bookings_trip_id ON ${table} (trip_id)`,
   idxBookingsStatus: sql`CREATE INDEX IF NOT EXISTS idx_bookings_status ON ${table} (status)`,
+  idxBookingsTripStatus: sql`CREATE INDEX IF NOT EXISTS idx_bookings_trip_status ON ${table} (trip_id, status)`,
   idxBookingsOutletId: sql`CREATE INDEX IF NOT EXISTS idx_bookings_outlet_id ON ${table} (outlet_id)`,
   idxBookingsCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_bookings_created_at ON ${table} (created_at)`,
   idxBookingsPendingExpiry: sql`CREATE INDEX IF NOT EXISTS idx_bookings_pending_expiry ON ${table} (pending_expires_at) WHERE status = 'pending'`

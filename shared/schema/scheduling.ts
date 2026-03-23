@@ -145,7 +145,9 @@ export const tripStopTimes = pgTable("trip_stop_times", {
   deletedAt:        timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
   idxTstTripId: sql`CREATE INDEX IF NOT EXISTS idx_tst_trip_id ON ${table} (trip_id)`,
-  idxTstStopId: sql`CREATE INDEX IF NOT EXISTS idx_tst_stop_id ON ${table} (stop_id)`
+  idxTstStopId: sql`CREATE INDEX IF NOT EXISTS idx_tst_stop_id ON ${table} (stop_id)`,
+  idxTstTripStop: sql`CREATE INDEX IF NOT EXISTS idx_tst_trip_stop ON ${table} (trip_id, stop_id) WHERE deleted_at IS NULL`,
+  idxTstTripSeq: sql`CREATE INDEX IF NOT EXISTS idx_tst_trip_seq ON ${table} (trip_id, stop_sequence) WHERE deleted_at IS NULL`
 }));
 
 export const insertTripStopTimeSchema = createInsertSchema(tripStopTimes).omit({ id: true });

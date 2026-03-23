@@ -191,135 +191,143 @@ export class SchedulingRepository {
   }
 
   private async getRealTripsForCso(serviceDate: string, outletStopId: string): Promise<CsoAvailableTrip[]> {
-    const result = await db.select({
-      tripId: trips.id,
-      baseId: trips.baseId,
-      patternCode: tripPatterns.code,
-      vehicleCode: vehicles.code,
-      vehiclePlate: vehicles.plate,
-      capacity: trips.capacity,
-      status: trips.status,
-      departAtOutlet: sql<string>`outlet_tst.depart_at_outlet`.as('depart_at_outlet'),
-      finalArrivalAt: sql<string>`trip_agg.final_arrival_at`.as('final_arrival_at'),
-      outletStopSequence: sql<number>`outlet_tst.stop_sequence`.as('outlet_stop_sequence'),
-      stopCount: sql<number>`trip_agg.stop_count`.as('stop_count'),
-      patternStops: sql<string>`(
-        SELECT STRING_AGG(s.name, ' → ' ORDER BY ps.stop_sequence)
-        FROM ${patternStops} ps
-        JOIN ${stops} s ON ps.stop_id = s.id
-        WHERE ps.pattern_id = ${trips.patternId}
-          AND ps.deleted_at IS NULL
-      )`,
-      availableSeats: sql<number>`(
-        SELECT COALESCE(${trips.capacity}, 0) - COALESCE(
-          (SELECT COUNT(p.id)
-           FROM ${bookings} b
-           LEFT JOIN ${passengers} p ON p.booking_id = b.id
-           INNER JOIN ${tripStopTimes} origin_tst ON origin_tst.trip_id = b.trip_id AND origin_tst.stop_id = b.origin_stop_id
-           INNER JOIN ${tripStopTimes} dest_tst ON dest_tst.trip_id = b.trip_id AND dest_tst.stop_id = b.destination_stop_id
-           INNER JOIN ${tripStopTimes} outlet_tst ON outlet_tst.trip_id = b.trip_id AND outlet_tst.stop_id = ${outletStopId}
-           WHERE b.trip_id = ${trips.id}
-           AND b.status IN ('pending', 'confirmed', 'checked_in', 'paid')
-           AND origin_tst.stop_sequence <= outlet_tst.stop_sequence
-           AND outlet_tst.stop_sequence < dest_tst.stop_sequence), 0) - COALESCE(
-          (SELECT COUNT(*)
-           FROM ${seatHolds} sh
-           INNER JOIN ${tripStopTimes} outlet_tst ON outlet_tst.trip_id = ${trips.id} AND outlet_tst.stop_id = ${outletStopId}
-           WHERE sh.trip_id = ${trips.id}
-           AND sh.expires_at > NOW()
-           AND sh.booking_id IS NULL
-           AND EXISTS (
-             SELECT 1 FROM unnest(sh.leg_indexes) AS leg_idx
-             INNER JOIN ${tripLegs} tl ON tl.trip_id = ${trips.id} AND tl.leg_index = leg_idx
-             INNER JOIN ${tripStopTimes} leg_origin_tst ON leg_origin_tst.trip_id = ${trips.id} AND leg_origin_tst.stop_id = tl.from_stop_id
-             INNER JOIN ${tripStopTimes} leg_dest_tst ON leg_dest_tst.trip_id = ${trips.id} AND leg_dest_tst.stop_id = tl.to_stop_id
-             WHERE leg_origin_tst.stop_sequence <= outlet_tst.stop_sequence
-             AND outlet_tst.stop_sequence < leg_dest_tst.stop_sequence
-           )), 0)
-      )`.as('available_seats'),
-      hasPriceRule: sql<boolean>`EXISTS (
-        SELECT 1 FROM ${priceRules} pr
-        WHERE pr.deleted_at IS NULL
-        AND (pr.trip_id = ${trips.id}
-        OR (pr.pattern_id = ${trips.patternId} AND pr.trip_id IS NULL))
-      )`.as('has_price_rule')
-    })
-    .from(trips)
-    .innerJoin(tripPatterns, eq(trips.patternId, tripPatterns.id))
-    .leftJoin(vehicles, eq(trips.vehicleId, vehicles.id))
-    .innerJoin(
-      sql`LATERAL (
-        SELECT tst.stop_sequence, COALESCE(tst.depart_at, tst.arrive_at) AS depart_at_outlet
-        FROM ${tripStopTimes} tst
-        WHERE tst.trip_id = ${trips.id} AND tst.stop_id = ${outletStopId} AND tst.deleted_at IS NULL
-        LIMIT 1
-      ) AS outlet_tst`,
-      sql`true`
-    )
-    .innerJoin(
-      sql`LATERAL (
-        SELECT 
-          MAX(tst.arrive_at) FILTER (WHERE tst.stop_sequence = (SELECT MAX(t2.stop_sequence) FROM ${tripStopTimes} t2 WHERE t2.trip_id = ${trips.id} AND t2.deleted_at IS NULL)) AS final_arrival_at,
-          COUNT(*)::int AS stop_count
-        FROM ${tripStopTimes} tst
-        WHERE tst.trip_id = ${trips.id} AND tst.deleted_at IS NULL
-      ) AS trip_agg`,
-      sql`true`
-    )
-    .where(
-      and(
-        eq(trips.serviceDate, serviceDate),
-        isNull(trips.deletedAt),
-        sql`EXISTS (
-          SELECT 1 
-          FROM ${tripStopTimes} tst
-          LEFT JOIN ${patternStops} ps ON ps.pattern_id = ${trips.patternId} AND ps.stop_id = tst.stop_id AND ps.deleted_at IS NULL
-          WHERE tst.trip_id = ${trips.id} 
-          AND tst.stop_id = ${outletStopId}
+    const result = await db.execute(sql`
+      WITH eligible_trips AS (
+        SELECT t.id, t.base_id, t.pattern_id, t.vehicle_id, t.capacity, t.status
+        FROM trips t
+        WHERE t.service_date = ${serviceDate}
+          AND t.deleted_at IS NULL
+      ),
+      outlet_stop_info AS (
+        SELECT tst.trip_id, tst.stop_sequence, COALESCE(tst.depart_at, tst.arrive_at) AS depart_at_outlet
+        FROM trip_stop_times tst
+        WHERE tst.stop_id = ${outletStopId}
           AND tst.deleted_at IS NULL
+          AND tst.trip_id IN (SELECT id FROM eligible_trips)
+      ),
+      trip_bounds AS (
+        SELECT tst.trip_id,
+               MIN(tst.stop_sequence) AS min_seq,
+               MAX(tst.stop_sequence) AS max_seq,
+               COUNT(*)::int AS stop_count,
+               MAX(tst.arrive_at) FILTER (WHERE tst.stop_sequence = (
+                 SELECT MAX(t2.stop_sequence) FROM trip_stop_times t2
+                 WHERE t2.trip_id = tst.trip_id AND t2.deleted_at IS NULL
+               )) AS final_arrival_at
+        FROM trip_stop_times tst
+        WHERE tst.deleted_at IS NULL
+          AND tst.trip_id IN (SELECT id FROM eligible_trips)
+        GROUP BY tst.trip_id
+      ),
+      boarding_check AS (
+        SELECT tst.trip_id
+        FROM trip_stop_times tst
+        LEFT JOIN pattern_stops ps ON ps.pattern_id = (
+          SELECT et.pattern_id FROM eligible_trips et WHERE et.id = tst.trip_id
+        ) AND ps.stop_id = tst.stop_id AND ps.deleted_at IS NULL
+        INNER JOIN trip_bounds tb ON tb.trip_id = tst.trip_id
+        WHERE tst.stop_id = ${outletStopId}
+          AND tst.deleted_at IS NULL
+          AND tst.trip_id IN (SELECT id FROM eligible_trips)
           AND (
-            (
-              COALESCE(tst.boarding_allowed, ps.boarding_allowed, true) = true
-              AND tst.depart_at IS NOT NULL
-              AND tst.stop_sequence < (
-                SELECT MAX(tst2.stop_sequence) 
-                FROM ${tripStopTimes} tst2 
-                WHERE tst2.trip_id = ${trips.id} AND tst2.deleted_at IS NULL
-              )
-            )
+            (COALESCE(tst.boarding_allowed, ps.boarding_allowed, true) = true
+             AND tst.depart_at IS NOT NULL
+             AND tst.stop_sequence < tb.max_seq)
             OR
-            (
-              COALESCE(tst.alighting_allowed, ps.alighting_allowed, true) = true
-              AND tst.arrive_at IS NOT NULL
-              AND tst.stop_sequence > (
-                SELECT MIN(tst2.stop_sequence) 
-                FROM ${tripStopTimes} tst2 
-                WHERE tst2.trip_id = ${trips.id} AND tst2.deleted_at IS NULL
-              )
-            )
+            (COALESCE(tst.alighting_allowed, ps.alighting_allowed, true) = true
+             AND tst.arrive_at IS NOT NULL
+             AND tst.stop_sequence > tb.min_seq)
           )
-        )`
+      ),
+      booked_counts AS (
+        SELECT b.trip_id, COUNT(p.id) AS cnt
+        FROM bookings b
+        JOIN passengers p ON p.booking_id = b.id
+        JOIN trip_stop_times origin_tst ON origin_tst.trip_id = b.trip_id AND origin_tst.stop_id = b.origin_stop_id AND origin_tst.deleted_at IS NULL
+        JOIN trip_stop_times dest_tst ON dest_tst.trip_id = b.trip_id AND dest_tst.stop_id = b.destination_stop_id AND dest_tst.deleted_at IS NULL
+        JOIN outlet_stop_info osi ON osi.trip_id = b.trip_id
+        WHERE b.trip_id IN (SELECT id FROM eligible_trips)
+          AND b.status IN ('pending', 'confirmed', 'checked_in', 'paid')
+          AND origin_tst.stop_sequence <= osi.stop_sequence
+          AND osi.stop_sequence < dest_tst.stop_sequence
+        GROUP BY b.trip_id
+      ),
+      hold_counts AS (
+        SELECT sh.trip_id, COUNT(*) AS cnt
+        FROM seat_holds sh
+        INNER JOIN outlet_stop_info osi ON osi.trip_id = sh.trip_id
+        WHERE sh.trip_id IN (SELECT id FROM eligible_trips)
+          AND sh.expires_at > NOW()
+          AND sh.booking_id IS NULL
+          AND EXISTS (
+            SELECT 1 FROM unnest(sh.leg_indexes) AS leg_idx
+            INNER JOIN trip_legs tl ON tl.trip_id = sh.trip_id AND tl.leg_index = leg_idx
+            INNER JOIN trip_stop_times lo ON lo.trip_id = sh.trip_id AND lo.stop_id = tl.from_stop_id AND lo.deleted_at IS NULL
+            INNER JOIN trip_stop_times ld ON ld.trip_id = sh.trip_id AND ld.stop_id = tl.to_stop_id AND ld.deleted_at IS NULL
+            WHERE lo.stop_sequence <= osi.stop_sequence
+              AND osi.stop_sequence < ld.stop_sequence
+          )
+        GROUP BY sh.trip_id
+      ),
+      pattern_paths AS (
+        SELECT ps.pattern_id, STRING_AGG(s.name, ' → ' ORDER BY ps.stop_sequence) AS path
+        FROM pattern_stops ps
+        JOIN stops s ON ps.stop_id = s.id
+        WHERE ps.deleted_at IS NULL
+          AND ps.pattern_id IN (SELECT DISTINCT pattern_id FROM eligible_trips)
+        GROUP BY ps.pattern_id
+      ),
+      price_rule_check AS (
+        SELECT DISTINCT COALESCE(pr.trip_id, pr.pattern_id) AS ref_id, pr.trip_id, pr.pattern_id
+        FROM price_rules pr
+        WHERE pr.deleted_at IS NULL
+          AND (pr.trip_id IN (SELECT id FROM eligible_trips)
+               OR pr.pattern_id IN (SELECT DISTINCT pattern_id FROM eligible_trips))
       )
-    );
+      SELECT
+        et.id AS trip_id,
+        et.base_id,
+        tp.code AS pattern_code,
+        v.code AS vehicle_code,
+        v.plate AS vehicle_plate,
+        et.capacity,
+        et.status,
+        osi.depart_at_outlet,
+        tb.final_arrival_at,
+        osi.stop_sequence AS outlet_stop_sequence,
+        tb.stop_count,
+        pp.path AS pattern_stops,
+        GREATEST(0, COALESCE(et.capacity, 0) - COALESCE(bc.cnt, 0) - COALESCE(hc.cnt, 0)) AS available_seats,
+        (EXISTS (SELECT 1 FROM price_rule_check prc WHERE prc.trip_id = et.id OR (prc.pattern_id = et.pattern_id AND prc.trip_id IS NULL))) AS has_price_rule
+      FROM eligible_trips et
+      INNER JOIN trip_patterns tp ON tp.id = et.pattern_id
+      LEFT JOIN vehicles v ON v.id = et.vehicle_id
+      INNER JOIN outlet_stop_info osi ON osi.trip_id = et.id
+      INNER JOIN trip_bounds tb ON tb.trip_id = et.id
+      INNER JOIN boarding_check bc_check ON bc_check.trip_id = et.id
+      LEFT JOIN booked_counts bc ON bc.trip_id = et.id
+      LEFT JOIN hold_counts hc ON hc.trip_id = et.id
+      LEFT JOIN pattern_paths pp ON pp.pattern_id = et.pattern_id
+    `);
 
-    return result.map(row => ({
-      tripId: row.tripId,
-      baseId: row.baseId || undefined,
+    return (result.rows as any[]).map(row => ({
+      tripId: row.trip_id,
+      baseId: row.base_id || undefined,
       isVirtual: false,
-      patternCode: row.patternCode,
-      patternPath: row.patternStops || 'Unknown Route',
-      vehicle: row.vehicleCode && row.vehiclePlate ? {
-        code: row.vehicleCode,
-        plate: row.vehiclePlate
+      patternCode: row.pattern_code,
+      patternPath: row.pattern_stops || 'Unknown Route',
+      vehicle: row.vehicle_code && row.vehicle_plate ? {
+        code: row.vehicle_code,
+        plate: row.vehicle_plate
       } : null,
       capacity: row.capacity,
       status: (row.status || 'scheduled') as any,
-      departAtAtOutlet: row.departAtOutlet,
-      finalArrivalAt: row.finalArrivalAt,
-      stopCount: row.stopCount,
-      outletStopSequence: row.outletStopSequence || 1,
-      availableSeats: Math.max(0, row.availableSeats || row.capacity || 0),
-      hasPriceRule: Boolean(row.hasPriceRule)
+      departAtAtOutlet: row.depart_at_outlet,
+      finalArrivalAt: row.final_arrival_at,
+      stopCount: row.stop_count,
+      outletStopSequence: row.outlet_stop_sequence || 1,
+      availableSeats: Math.max(0, Number(row.available_seats) || row.capacity || 0),
+      hasPriceRule: Boolean(row.has_price_rule)
     }));
   }
 

@@ -34,7 +34,8 @@ export const seatHolds = pgTable("seat_holds", {
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
   idxSeatHoldsTripId: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_trip_id ON ${table} (trip_id)`,
-  idxSeatHoldsExpiresAt: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_expires_at ON ${table} (expires_at)`
+  idxSeatHoldsExpiresAt: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_expires_at ON ${table} (expires_at)`,
+  idxSeatHoldsActive: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_active ON ${table} (trip_id, expires_at) WHERE booking_id IS NULL`
 }));
 
 export const priceRules = pgTable("price_rules", {

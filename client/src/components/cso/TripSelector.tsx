@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, keepPreviousData } from '@tanstack/react-query';
 import {
   Store, Calendar, Bus, Loader2, Search, ChevronDown,
   ArrowRight, Armchair, Route, X, Check, ChevronLeft, ChevronRight as ChevronRightIcon,
@@ -369,13 +369,14 @@ export default function TripSelector({
     queryFn: stopsApi.getAll
   });
 
-  const { data: trips = [], isLoading: tripsLoading, refetch: refetchTrips } = useQuery<CsoAvailableTrip[]>({
+  const { data: trips = [], isLoading: tripsLoading, isFetching: tripsFetching, refetch: refetchTrips } = useQuery<CsoAvailableTrip[]>({
     queryKey: ['/api/cso/available-trips', selectedDate, selectedOutlet?.id],
     queryFn: () => tripsApi.getCsoAvailableTrips(selectedDate, selectedOutlet!.id),
     enabled: !!selectedDate && !!selectedOutlet?.id,
     refetchInterval: 30000,
     refetchOnMount: 'always',
     staleTime: 0,
+    placeholderData: keepPreviousData,
   });
 
   // WebSocket: subscribe to each real (non-virtual) tripId in the list
@@ -590,7 +591,12 @@ export default function TripSelector({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-gray-800">Pilih Jadwal</h3>
+        <h3 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+          Pilih Jadwal
+          {tripsFetching && !tripsLoading && (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+          )}
+        </h3>
         <span className="text-[10px] text-gray-400">{filteredTrips.length} jadwal</span>
       </div>
 
