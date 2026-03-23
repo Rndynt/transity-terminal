@@ -66,7 +66,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <span className="text-sm font-semibold text-gray-800">Transity</span>
+            <span className="text-sm font-semibold text-gray-800">PT. Dari Sini Ke Sana</span>
           </div>
         )}
         {children}

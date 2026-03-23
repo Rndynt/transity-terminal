@@ -15,7 +15,7 @@ Pada hari ini, tanggal __________, bertempat di __________, telah ditandatangani
 
 | | |
 |---|---|
-| **Nama** | PT Transity Teknologi Indonesia |
+| **Nama** | PT. Dari Sini Ke Sana |
 | **Alamat** | ________________________________ |
 | **NPWP** | ________________________________ |
 | **Diwakili oleh** | Rendyanta Maulana |
@@ -166,7 +166,7 @@ Pembayaran dilakukan melalui transfer bank ke rekening PIHAK PERTAMA:
 |---|---|
 | **Bank** | ________________________________ |
 | **Nomor Rekening** | ________________________________ |
-| **Atas Nama** | PT Transity Teknologi Indonesia |
+| **Atas Nama** | PT. Dari Sini Ke Sana |
 
 ### 6.3 Bukti Pembayaran
 1. PIHAK KEDUA wajib mengirimkan bukti transfer kepada PIHAK PERTAMA melalui email atau kanal komunikasi yang disepakati.
@@ -256,7 +256,7 @@ Demikian Perjanjian ini dibuat dan ditandatangani oleh PARA PIHAK pada tanggal d
 
 | **PIHAK PERTAMA** | **PIHAK KEDUA** |
 |---|---|
-| PT Transity Teknologi Indonesia | ________________________________ |
+| PT. Dari Sini Ke Sana | ________________________________ |
 | | |
 | | |
 | ________________________________ | ________________________________ |

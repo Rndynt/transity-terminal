@@ -13,7 +13,7 @@ Pada hari ini, tanggal __________, bertempat di __________, telah ditandatangani
 
 | | |
 |---|---|
-| **Nama** | PT Transity Teknologi Indonesia |
+| **Nama** | PT. Dari Sini Ke Sana |
 | **Alamat** | ________________________________ |
 | **NPWP** | ________________________________ |
 | **Diwakili oleh** | Rendyanta Maulana |
@@ -202,7 +202,7 @@ Demikian Perjanjian ini dibuat dalam rangkap 2 (dua), masing-masing bermaterai c
 
 | **PIHAK PERTAMA** | **PIHAK KEDUA** |
 |---|---|
-| PT Transity Teknologi Indonesia | ________________________________ |
+| PT. Dari Sini Ke Sana | ________________________________ |
 | | |
 | | |
 | ________________________________ | ________________________________ |
