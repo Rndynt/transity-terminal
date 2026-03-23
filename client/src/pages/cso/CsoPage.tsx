@@ -17,6 +17,7 @@ import ManifestDialog from '@/components/manifest/ManifestDialog';
 
 import { useBookingFlow } from '@/hooks/useBookingFlow';
 import { useSeatHold } from '@/hooks/useSeatHold';
+import ModeTimer from '@/components/cso/ModeTimer';
 import {
   ChevronRight, ChevronLeft, Loader2, MapPin,
   Armchair, ArrowRight, Ticket, Package, Clock,
@@ -393,26 +394,72 @@ export default function CsoPage() {
         </div>
       </div>
 
-      {rescheduleModeInfo && (
-        <div className="bg-purple-50 border-b-2 border-purple-300 px-3 md:px-5 py-2 flex-shrink-0">
+      {assignModeInfo && !rescheduleModeInfo && (
+        <div className="bg-amber-50 border-b-2 border-amber-300 px-3 md:px-5 py-2 flex-shrink-0">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <CalendarClock className="w-4 h-4 text-purple-600 flex-shrink-0" />
-              <span className="text-xs font-bold text-purple-700">Mode Reschedule</span>
+              <Armchair className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span className="text-xs font-bold text-amber-700">Mode Assign Kursi</span>
+              <span className="text-[10px] text-amber-600">Klik kursi yang tersedia</span>
             </div>
-            <button
-              onClick={() => setRescheduleModeInfo(null)}
-              className="p-1 rounded-md text-purple-400 hover:text-purple-600 hover:bg-purple-100 transition-colors flex-shrink-0"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <ModeTimer
+                key={`assign-${assignModeInfo.passengerId}`}
+                onExpire={() => setAssignModeInfo(null)}
+                colorClass="text-amber-600"
+              />
+              <button
+                onClick={() => setAssignModeInfo(null)}
+                className="p-1 rounded-md text-amber-400 hover:text-amber-600 hover:bg-amber-100 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-2 mt-1 px-6">
-            <User className="w-3 h-3 text-purple-500 flex-shrink-0" />
+            <User className="w-3 h-3 text-amber-500 flex-shrink-0" />
+            <div className="text-[11px] text-gray-700 min-w-0">
+              <span className="font-semibold">{assignModeInfo.passengerName}</span>
+              <span className="text-gray-400 mx-1">·</span>
+              <span className="font-mono text-amber-600">{assignModeInfo.bookingCode}</span>
+              {assignModeInfo.ticketNumber && (
+                <>
+                  <span className="text-gray-400 mx-1">·</span>
+                  <span className="font-mono text-gray-500">{assignModeInfo.ticketNumber}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rescheduleModeInfo && (
+        <div className="bg-amber-50 border-b-2 border-amber-300 px-3 md:px-5 py-2 flex-shrink-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <CalendarClock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span className="text-xs font-bold text-amber-700">Mode Reschedule</span>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <ModeTimer
+                key={`reschedule-${rescheduleModeInfo.passengerId}`}
+                onExpire={() => setRescheduleModeInfo(null)}
+                colorClass="text-amber-600"
+              />
+              <button
+                onClick={() => setRescheduleModeInfo(null)}
+                className="p-1 rounded-md text-amber-400 hover:text-amber-600 hover:bg-amber-100 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-1 px-6">
+            <User className="w-3 h-3 text-amber-500 flex-shrink-0" />
             <div className="text-[11px] text-gray-700 min-w-0">
               <span className="font-semibold">{rescheduleModeInfo.passengerName}</span>
               <span className="text-gray-400 mx-1">·</span>
-              <span className="font-mono text-purple-600">{rescheduleModeInfo.bookingCode}</span>
+              <span className="font-mono text-amber-600">{rescheduleModeInfo.bookingCode}</span>
               {rescheduleModeInfo.ticketNumber && (
                 <>
                   <span className="text-gray-400 mx-1">·</span>
@@ -426,12 +473,12 @@ export default function CsoPage() {
             </div>
           </div>
           {rescheduleModeInfo.reason && (
-            <p className="text-[10px] text-purple-500 mt-0.5 px-6 italic">
+            <p className="text-[10px] text-amber-500 mt-0.5 px-6 italic">
               Alasan: {rescheduleModeInfo.reason}
             </p>
           )}
           {phase === 'select' && (
-            <p className="text-[10px] text-purple-600 font-medium mt-1 px-6">
+            <p className="text-[10px] text-amber-600 font-medium mt-1 px-6">
               Pilih jadwal dan rute tujuan baru, lalu klik kursi yang tersedia
             </p>
           )}
