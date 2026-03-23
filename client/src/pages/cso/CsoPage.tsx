@@ -85,6 +85,7 @@ export default function CsoPage() {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   });
   const [manifestDialogTripId, setManifestDialogTripId] = useState<string | null>(null);
+  const [confirmCloseTrip, setConfirmCloseTrip] = useState(false);
   const [pendingRouteAutoSelect, setPendingRouteAutoSelect] = useState<{
     originStopId: string;
     destinationStopId: string;
@@ -561,19 +562,45 @@ export default function CsoPage() {
                   <span className="sm:hidden">Manifest</span>
                 </button>
                 <CanAccess flag="action.trip.close">
-                  <button
-                    onClick={() => selectedCsoTrip?.tripId && closeTripMutation.mutate(selectedCsoTrip.tripId)}
-                    disabled={closeTripMutation.isPending || selectedCsoTrip?.status === 'closed'}
-                    className="px-2 md:px-3 py-1.5 bg-white border border-gray-200 hover:border-red-300 hover:bg-red-50 text-gray-600 hover:text-red-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                    data-testid="btn-close-trip"
-                  >
-                    {closeTripMutation.isPending
-                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      : <Lock className="w-3.5 h-3.5" />
-                    }
-                    <span className="hidden sm:inline">Tutup Trip</span>
-                    <span className="sm:hidden">Tutup</span>
-                  </button>
+                  {confirmCloseTrip ? (
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-red-50 border border-red-300 rounded-lg">
+                      <span className="text-[11px] text-red-700 font-medium whitespace-nowrap">Yakin tutup trip?</span>
+                      <button
+                        onClick={() => {
+                          if (selectedCsoTrip?.tripId) {
+                            closeTripMutation.mutate(selectedCsoTrip.tripId);
+                          }
+                          setConfirmCloseTrip(false);
+                        }}
+                        disabled={closeTripMutation.isPending}
+                        className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-semibold transition-colors disabled:opacity-50"
+                        data-testid="btn-confirm-close-trip"
+                      >
+                        {closeTripMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Ya'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmCloseTrip(false)}
+                        className="px-2 py-0.5 bg-white hover:bg-gray-100 text-gray-600 rounded text-[11px] font-semibold border border-gray-200 transition-colors"
+                        data-testid="btn-cancel-close-trip"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmCloseTrip(true)}
+                      disabled={closeTripMutation.isPending || selectedCsoTrip?.status === 'closed'}
+                      className="px-2 md:px-3 py-1.5 bg-white border border-gray-200 hover:border-red-300 hover:bg-red-50 text-gray-600 hover:text-red-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                      data-testid="btn-close-trip"
+                    >
+                      {closeTripMutation.isPending
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <Lock className="w-3.5 h-3.5" />
+                      }
+                      <span className="hidden sm:inline">Tutup Trip</span>
+                      <span className="sm:hidden">Tutup</span>
+                    </button>
+                  )}
                 </CanAccess>
                 <button
                   onClick={handleBackToSelect}
