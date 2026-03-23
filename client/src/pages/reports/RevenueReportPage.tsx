@@ -37,7 +37,8 @@ export default function RevenueReportPage() {
       if (!res.ok) throw new Error('Failed to fetch');
       return res.json();
     },
-    staleTime: 30_000,
+    staleTime: 0,
+    gcTime: 0,
   });
 
   const summary = data?.summary;
