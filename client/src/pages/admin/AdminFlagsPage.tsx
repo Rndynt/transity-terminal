@@ -109,6 +109,36 @@ export default function AdminFlagsPage() {
     return acc;
   }, {});
 
+  const allFlagIds = new Set(flagsList.map(f => f.id));
+
+  const getParentFlagId = (flagId: string): string | null => {
+    const parts = flagId.split('.');
+    if (parts.length <= 2) return null;
+    const parentId = parts.slice(0, 2).join('.');
+    return allFlagIds.has(parentId) ? parentId : null;
+  };
+
+  const isSubFlag = (flagId: string): boolean => getParentFlagId(flagId) !== null;
+
+  const getSubLabel = (flagId: string): string => {
+    const parts = flagId.split('.');
+    return parts.slice(2).join('.');
+  };
+
+  const orderFlagsWithSubs = (flags: FeatureFlag[]): FeatureFlag[] => {
+    const parentFlags = flags.filter(f => !isSubFlag(f.id));
+    const subFlags = flags.filter(f => isSubFlag(f.id));
+    const result: FeatureFlag[] = [];
+    for (const parent of parentFlags) {
+      result.push(parent);
+      const children = subFlags.filter(s => getParentFlagId(s.id) === parent.id);
+      result.push(...children);
+    }
+    const orphans = subFlags.filter(s => !parentFlags.some(p => p.id === getParentFlagId(s.id)));
+    result.push(...orphans);
+    return result;
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="admin-flags-page">
       <div className="flex-1 overflow-y-auto">
@@ -134,7 +164,7 @@ export default function AdminFlagsPage() {
           ) : (
             <div className="space-y-6">
               {CATEGORY_ORDER.map(cat => {
-                const flags = flagsByCategory[cat] || [];
+                const flags = orderFlagsWithSubs(flagsByCategory[cat] || []);
                 if (flags.length === 0) return null;
                 return (
                   <Card key={cat} className="overflow-hidden">
@@ -161,12 +191,25 @@ export default function AdminFlagsPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {flags.map((flag, idx) => (
+                          {flags.map((flag, idx) => {
+                            const isSub = isSubFlag(flag.id);
+                            return (
                             <tr key={flag.id} className={`border-b last:border-0 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
                               <td className="py-2 px-3 sticky left-0 bg-inherit border-r border-gray-200">
-                                <div>
-                                  <p className="font-mono text-[11px] text-gray-700">{flag.id}</p>
-                                  <p className="text-gray-400 text-[10px]">{flag.name}</p>
+                                <div className={isSub ? 'pl-4 border-l-2 border-gray-200 ml-1' : ''}>
+                                  {isSub ? (
+                                    <>
+                                      <p className="font-mono text-[11px] text-gray-500">
+                                        <span className="text-gray-300">{getParentFlagId(flag.id)}.</span>{getSubLabel(flag.id)}
+                                      </p>
+                                      <p className="text-gray-400 text-[10px]">{flag.name}</p>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p className="font-mono text-[11px] text-gray-700">{flag.id}</p>
+                                      <p className="text-gray-400 text-[10px]">{flag.name}</p>
+                                    </>
+                                  )}
                                 </div>
                               </td>
                               {sortedRoles.map(role => {
@@ -194,7 +237,8 @@ export default function AdminFlagsPage() {
                                 );
                               })}
                             </tr>
-                          ))}
+                          );
+                          })}
                         </tbody>
                       </table>
                     </CardContent>
