@@ -6,3 +6,27 @@ id = "060nrjL-qvtwkXnaaYDPt"
 uri = "file://apps/mobile/MOBILE_APP_DOCS.md"
 type = "text"
 title = "Dokumentasi Mobile App Transity"
+
+[[outputs]]
+id = "jNw9kPOOGfYtohC4Q7SRC"
+uri = "file://docs/PKS_Perjanjian_Kerja_Sama.pdf"
+type = "pdf"
+title = "PKS - Perjanjian Kerja Sama Transity"
+
+[[outputs]]
+id = "j8wyTYvvkzk3lD4VgBi6v"
+uri = "file://docs/Commercial_Fee_Agreement.pdf"
+type = "pdf"
+title = "Perjanjian Commercial Fee Transity"
+
+[[outputs]]
+id = "eV4cib5tN1U4VgZh9mNBO"
+uri = "file://docs/PKS_Perjanjian_Kerja_Sama.md"
+type = "text"
+title = "PKS (Markdown Source)"
+
+[[outputs]]
+id = "ZLAoozaDzQYYswBehq2Ww"
+uri = "file://docs/Commercial_Fee_Agreement.md"
+type = "text"
+title = "Commercial Fee (Markdown Source)"
