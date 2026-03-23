@@ -509,12 +509,19 @@ Saat induk dihapus, semua anak ikut di-soft-delete:
 - **Env Vars**: `AUTHCORE_BASE_URL` (wajib prod), `AUTHCORE_TENANT_ID`, `DEV_BYPASS_AUTH` (dev only)
 
 ### RBAC + ABAC + Feature Flags
-- **Roles**: `cso` (operator), `admin` (full access), `finance` (reports only), `dispatcher` (schedule only)
+- **7 Roles**: `owner` (full access), `manager` (operasional + laporan), `finance` (laporan finansial, read-only), `spv_operations` (jadwal/SPJ/manifest/kargo), `operations` (operasional terbatas), `spv_cso` (CSO + unseat/reschedule), `cso` (booking harian)
+- **33+ Permission Flags** di 5 kategori:
+  - `page.*` — akses halaman (cso, cargo, bookings, schedule, spj, manifest, reports, masters, schedule.closed, cso.view_closed)
+  - `report.*` — akses per-laporan (revenue, sales, trip_profitability, load_factor, cancellations, cargo, payments, commercial_fee)
+  - `master.*` — CRUD master data (stops, outlets, vehicles, drivers, layouts, trip_patterns, trips, price_rules, promos, cargo_types, cargo_rates, cost_templates)
+  - `action.*` — aksi operasional (booking.create, booking.cancel, passenger.unseat, passenger.reschedule, passenger.assign_seat, trip.materialize, trip.close, trip.batch_reschedule, payment.create, cargo.create, cargo.manage, spj.create, spj.issue, spj.settle)
+  - `admin.*` — administrasi (staff.manage, flags.manage)
 - **Database**: `roles` → `role_flags` (role-flag mapping) → `feature_flags` (flag id, name, category); `staff_members` (userId, role, outletId scope)
 - **Backend**: `rbac.service.ts` (resolvePermissions, checkFlag), `rbac.middleware.ts` (requireFlag, requireAnyFlag, requireOutletScope), `rbac.admin.routes.ts` (admin CRUD)
 - **Frontend**: `usePermissions().can(flagId)` untuk cek akses; `<RequireFlag>` dan `<CanAccess>` wrapper components
 - **Middleware**: `requireFlag('master.stops')`, `requireAnyFlag('page.cso', 'page.cargo')`, `requireOutletScope`
 - **Admin UI**: `/admin/staff` + `/admin/flags`
+- **Seed**: `rbac.seed.ts` berisi default roles + flags + matrix — jalankan via `/api/seed/rbac` (dev only)
 
 ---
 
@@ -671,53 +678,116 @@ npx tsx server/scripts/backfill-snapshots.ts
 
 ---
 
-## Recent Changes
+## Critical Business Rules (WAJIB DIPAHAMI)
 
-**2026-03-22 — Hybrid Refactor (Pendekatan C) Complete**
-- **Phase 1**: `shared/schema.ts` (1400L) → dipecah ke 13 domain files di `shared/schema/`
-- **Phase 2**: `IStorage` interface extracted ke `server/storage.interface.ts`; semua module imports di-update
-- **Phase 3**: Route registration decentralized — setiap module punya `*.routes.ts`, `routes.ts` jadi orchestrator
-- **Phase 4**: Frontend components dipecah:
-  - TripBasesManager (1143L → 579L) → TripBaseFormDialog + TripBaseGroupList
-  - TripsManager (~960L → 801L) → TripsFilterPanel
-  - CsoPage (~850L → 724L) → CsoCargoPanel
-- **Phase 5**: Performance review documented di `plan/PERFORMANCE_REVIEW.md`
-- **Storage Split**: `storage.ts` (1463L → 172L facade) → 6 domain repositories di `server/repositories/`
+### Aturan Arsitektur — TIDAK BOLEH DILANGGAR
+1. **TIDAK ADA SQL langsung di service layer** — Semua query database HARUS melalui rantai: Repository → IStorage → storage.ts facade. Service hanya boleh panggil `storage.xxx()` atau repository method. Satu-satunya exception: `ReportsRepository` yang standalone (tidak via IStorage) karena query-nya hanya read-only aggregasi.
+2. **Semua endpoint `/api/*` dilindungi `requireAuth` global** — Hanya `/api/auth/*` dan `/api/app/*` yang di-exclude. Jangan pernah tambah endpoint tanpa auth.
+3. **Soft delete wajib** untuk semua master data — Gunakan `deletedAt` column, bukan hard delete. Query list filter `isNull(deletedAt)`. Query by-id boleh return deleted (untuk referensi historis/laporan).
+4. **Snapshot columns wajib diisi** saat create trip/booking — Semua laporan bergantung pada snapshot. Jika lupa isi, laporan akan fallback ke data master terkini (tidak fatal, tapi inaccurate secara historis).
 
-**2026-03-22 — RBAC Admin UI: Staff & Flag Management**
-- Admin pages: `/admin/staff` dan `/admin/flags`
-- Full REST CRUD at `/api/admin/staff` dan `/api/admin/flags`
+### Aturan Bisnis — Logika Domain
+1. **Trip status enum**: hanya 3 value — `scheduled`, `canceled`, `closed`. Tidak ada status lain.
+2. **Booking status lifecycle**: `pending` → `paid` → `completed` (atau `canceled` kapan saja). Pending auto-cleanup oleh scheduler.
+3. **Passenger status**: `active`, `unseated`, `canceled`. Penumpang `unseated` masih ada di booking tapi tidak punya kursi.
+4. **Seat hold TTL**: Short (300s, saat pilih kursi) → Long (1800s, saat isi form) → Released (saat booking dibuat). Expired holds di-cleanup tiap 1 menit oleh scheduler.
+5. **Pricing rule priority**: `leg` > `trip` > `time_of_day` > `pattern`. Scope paling spesifik menang. Trip tanpa price rule = disabled, tidak bisa dipesan.
+6. **Commercial fee**: 3% dari gross revenue, 11% PPN, volume discount 0-15% berdasarkan total bulanan. Ini kontrak bisnis dengan operator.
+7. **Close trip**: Jika ada penumpang aktif, WAJIB batch reschedule atau cancel dulu. Endpoint `close-with-reschedule` handle ini atomically.
+8. **Waybill format**: `TRN-YYYYMMDD-XXXXX` (5 digit random, retry max 5x untuk uniqueness).
+9. **SPJ workflow**: Draft → Issued → Settled. Cost lines punya estimasi (template) dan aktual (diisi saat settle).
 
-**2026-03-23 — Security Audit & Hardening**
-- Report endpoints dilindungi per-report permission flags (`report.revenue`, `report.sales`, dll)
-- Manifest & manifest print dilindungi `page.manifest` flag
-- Trip stop-time mutations dilindungi `master.trips` flag
-- Seed endpoints (`/api/seed`, `/api/seed/rbac`) dilindungi `admin.flags.manage` + diblokir di production
-- `DEV_BYPASS_AUTH` tidak bisa aktif di production (hardcoded `!IS_PRODUCTION`)
-- Rate limiting: login (10/mnt), register (5/mnt) via `@fastify/rate-limit`
-- SPJ cost-line input validation dengan Zod schema
-- CORS `/api/app/` dikonfigurasi via `APP_CORS_ORIGINS` env var (default `*` untuk backward compat)
-- Data integrity snapshots backfilled untuk semua existing trips & bookings
-- `ReportsRepository` exported di `repositories/index.ts`
+### Aturan Keuangan
+1. **Mata uang**: Semua amount dalam IDR (Indonesian Rupiah), integer (tidak ada desimal).
+2. **Payment methods**: cash, qr, ewallet, bank_transfer.
+3. **Payment channels**: CSO (terminal), WEB, APP, OTA.
+4. **Revenue = bookings.totalAmount** dimana status IN ('paid', 'completed').
 
-**2026-03-22 — Express → Fastify 5 Migration**
-- Semua 104+ endpoints migrated ke Fastify
-- `preHandler` arrays replace Express middleware
-- Type augmentations di `server/types/fastify.d.ts`
+---
 
-**2026-03-21 — Realmio Auth + RBAC + Reason Notes + Unseat/Reschedule + Deep-Link + Jadwal Harian + SPJ + Promo + Bug Fixes + Pricing Enforcement**
+## Common Pitfalls & Troubleshooting
 
-**2026-03-19 — Manifest Perjalanan + Cargo Terminal + CSO Booking Terminal Redesign**
+### Database
+- **`DATABASE_URL` Unicode issue**: Neon connection string dari UI kadang punya Unicode left-quote (U+2018). `db.ts` dan `drizzle.config.ts` sudah punya regex strip untuk ini (`replace(/[\u2018\u2019\u201C\u201D]/g, ...)`). Jika koneksi DB gagal, cek ini pertama.
+- **Schema push**: Selalu gunakan `npm run db:push`. Jangan tulis SQL migration manual. Jika ada konflik, gunakan `npm run db:push --force`.
+- **ID columns**: Semua tabel pakai UUID (`uuid("id").primaryKey().default(sql\`gen_random_uuid()\`)`). JANGAN pernah ganti tipe ID column.
+
+### Replit Environment
+- **Port**: Aplikasi jalan di port 5000. Replit proxy ke public URL via `$REPLIT_DEV_DOMAIN`.
+- **Vite plugin**: `@replit/vite-plugin-*` otomatis di-skip jika `REPL_ID` tidak ada. Saat deploy ke VPS, plugin ini diabaikan.
+- **Host config**: Vite dev server harus allow semua host (`server.allowedHosts: true` di `vite.config.ts`) agar bisa diakses via Replit proxy.
+
+### Frontend
+- **React Query key convention**: Gunakan URL path sebagai query key, misal `['/api/trips']`. Saat invalidate, gunakan key yang sama: `queryClient.invalidateQueries({ queryKey: ['/api/trips'] })`.
+- **apiRequest helper**: Semua API call harus via `apiRequest(method, url, data)` dari `lib/queryClient.ts` — sudah handle error parsing, response formatting, dan auth header.
+- **Form dialog pattern**: Gunakan `MasterFormDialog` untuk CRUD master data — sudah terintegrasi dengan React Hook Form + Zod + shadcn.
+
+### Backend
+- **Fastify 5 vs Express**: Tidak perlu `asyncHandler` wrapper. Fastify native async. Return value dari handler otomatis di-serialize ke JSON.
+- **preHandler vs middleware**: Fastify tidak punya Express middleware. Gunakan `preHandler` hooks array di route config.
+- **Request body parsing**: Fastify auto-parse JSON body. Untuk webhook (butuh raw body), gunakan `contentTypeParser` custom di `index.ts`.
+- **WebSocket rooms**: Setelah mutasi yang mempengaruhi trip (booking, unseat, hold, release), HARUS emit event ke room `trip:{tripId}` agar SeatMap di-refresh.
+
+---
+
+## Recent Changes (Kronologis)
+
+| Tanggal | Perubahan |
+|---------|-----------|
+| 2026-03-23 | **Security Audit & Hardening** — 10 vulnerabilities fixed: rate limiting, CORS, response redaction, seed protection, per-report permission flags, webhook HMAC, Zod validation |
+| 2026-03-23 | **Data Integrity — Snapshot System** — Snapshot columns di trips & bookings, COALESCE queries di laporan, impact check endpoints, backfill script |
+| 2026-03-23 | **Batch Reschedule on Trip Close** — Permission flags, active-passengers endpoint, close-with-reschedule endpoint, BatchRescheduleDialog UI |
+| 2026-03-23 | **Commercial Fee Report** — Laporan ke-8, standalone ReportsRepository, 3% gross + 11% PPN + volume discount |
+| 2026-03-22 | **Hybrid Refactor Complete** — Schema split (13 files), repository pattern (6 repos), route decentralization, frontend component split |
+| 2026-03-22 | **Express → Fastify 5 Migration** — 104+ endpoints, preHandler arrays, type augmentations |
+| 2026-03-22 | **RBAC Admin UI** — Staff management + feature flag matrix |
+| 2026-03-21 | **Realmio Auth + RBAC + Unseat/Reschedule + Deep-Link + SPJ + Promo + Pricing Enforcement** |
+| 2026-03-19 | **Manifest + Cargo Terminal + CSO Booking Redesign** |
 
 ---
 
 ## Dokumentasi Teknis
-- `plan/REFACTOR_PLAN.md` — Pendekatan C Hybrid Refactor plan
-- `plan/CHECKLIST.md` — Progress checklist refactor (semua phase complete)
-- `plan/PERFORMANCE_REVIEW.md` — N+1 queries, missing indexes, cache headers, bundle review
-- `plan/pricing-enforcement.md` — Pricing enforcement design
-- `plan/reports-plan.md` — Reports module phases
-- `plan/manifest-spj-biaya-perjalanan.md` — Manifest + SPJ + biaya design
-- `plan/rbac-abac-design.md` — RBAC/ABAC architecture
-- `plan/panduan-operasional.md` — Panduan operasional CSO
-- `plan/audit-report.md` — Audit & quality report
+
+| File | Topik |
+|------|-------|
+| `README.md` | Overview proyek, arsitektur, API endpoints, panduan fitur baru |
+| `docs/FEATURES.md` | Dokumentasi fitur lengkap (19 bab), cara kerja, logika perhitungan |
+| `docs/Commercial_Fee_Agreement.md` | Kontrak biaya komersial operator |
+| `docs/PKS_Perjanjian_Kerja_Sama.md` | Perjanjian kerja sama operator |
+| `plan/REFACTOR_PLAN.md` | Hybrid refactor plan (Pendekatan C) |
+| `plan/CHECKLIST.md` | Progress checklist refactor (Phase 1-9, semua complete) |
+| `plan/PERFORMANCE_REVIEW.md` | N+1 queries, missing indexes, cache headers, bundle review |
+| `plan/pricing-enforcement.md` | Pricing enforcement design |
+| `plan/reports-plan.md` | Reports module phases (Prioritas 1-4) |
+| `plan/manifest-spj-biaya-perjalanan.md` | Manifest + SPJ + biaya design |
+| `plan/rbac-abac-design.md` | RBAC/ABAC architecture + flag matrix (33+ flags, 7 roles) |
+| `plan/panduan-operasional.md` | Panduan operasional CSO |
+| `plan/audit-report.md` | Audit & quality report (bugs, UI inconsistencies, saran) |
+
+---
+
+## Frequently Asked Questions (untuk Agent)
+
+**Q: Dimana query SQL untuk laporan?**
+A: Semua di `server/repositories/reports.repository.ts`. Service layer (`reports.service.ts`) hanya business logic (commercial fee calculation, formatting). JANGAN tulis SQL baru di service.
+
+**Q: Bagaimana cara tambah permission flag baru?**
+A: 1) Tambah di `rbac.seed.ts` (default flags + matrix), 2) Gunakan `requireFlag('flag.id')` di route, 3) Gunakan `usePermissions().can('flag.id')` di frontend, 4) Jalankan `/api/seed/rbac` untuk apply.
+
+**Q: Kenapa data laporan berbeda dari data master?**
+A: Laporan menggunakan snapshot columns. Jika data master diubah setelah booking/trip dibuat, laporan tetap menampilkan data saat transaksi. Ini by design.
+
+**Q: Bagaimana menambah laporan baru?**
+A: 1) Tambah query di `reports.repository.ts`, 2) Tambah method di `reports.service.ts`, 3) Tambah endpoint di `reports.routes.ts` dengan `requireFlag('report.xxx')`, 4) Tambah flag di `rbac.seed.ts`, 5) Buat frontend page di `client/src/pages/reports/`, 6) Register lazy route di `App.tsx`, 7) Tambah sidebar entry.
+
+**Q: Bagaimana cara kerja virtual trip?**
+A: Trip Base (template) + eligible date = Virtual Trip (computed, belum di DB). Saat CSO booking → materialize → Real Trip (UUID, ada di DB, punya stop times + legs + seat inventory). Proses materialisasi ada di `tripBases.service.ts`.
+
+**Q: Bagaimana seat inventory bekerja?**
+A: Pre-computed per seat per leg. 1 trip dengan 3 stops = 2 legs. Jika penumpang naik di stop A turun di stop C, maka leg 1 (A→B) dan leg 2 (B→C) ditandai booked untuk kursi itu. Hold TTL-based — short saat pilih, long saat isi form.
+
+**Q: Kenapa booking bisa "pending"?**
+A: CSO memilih kursi → hold → isi form → create booking (status: pending) → bayar → paid. Jika CSO abandon (tutup browser), scheduler akan auto-release pending bookings yang sudah expired (`PENDING_BOOKING_AUTO_RELEASE=true`).
+
+**Q: Dimana semua WebSocket events dikirim?**
+A: Cari `wsService.emit` atau `broadcast` di codebase. Utamanya di: `holds.service.ts` (hold/release), `bookings.service.ts` (booking created), `unseat.service.ts` (unseat/reschedule), `tripBases.service.ts` (materialize/close).
