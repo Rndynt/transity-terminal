@@ -3,27 +3,74 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Separator } from '@/components/ui/separator';
 import {
   CreditCard, MapPin, Armchair, Ticket,
-  ChevronDown, ChevronUp, ArrowRight, Calendar, Building2, Bus,
-  Loader2
+  ChevronDown, ChevronUp, ArrowRight,
+  Loader2, Users, Phone, Hash
 } from 'lucide-react';
 import PassengerCard from './PassengerCard';
 import { BookingStatusBadge, ChannelBadge } from '@/components/shared/StatusBadges';
-import { fmtCurrency, fmtDate, getPaymentLabel } from '@/lib/constants';
-import type { Passenger, Booking, Payment, Stop } from '@/types';
+import { fmtCurrency, fmtDate, getPaymentLabel, BOOKING_STATUS_MAP, type BookingStatus } from '@/lib/constants';
+
+interface OtherPassenger {
+  id: string;
+  fullName: string;
+  seatNo: string;
+  phone?: string | null;
+  ticketNumber: string | null;
+  ticketStatus?: string | null;
+  fareAmount?: string | number | null;
+}
+
+interface BookingDetail {
+  id: string;
+  bookingCode?: string;
+  status?: string;
+  channel?: string;
+  totalAmount?: string | number;
+  discountAmount?: string | number;
+  voucherCode?: string;
+  createdAt?: string;
+  createdBy?: string;
+  originSeq?: number;
+  destinationSeq?: number;
+  originStopId?: string;
+  destinationStopId?: string;
+  outletId?: string;
+  originStop?: { id: string; name: string };
+  destinationStop?: { id: string; name: string };
+  outlet?: { id: string; name: string; code?: string };
+  vehicle?: { id: string; plate: string; code: string };
+  departAt?: string | null;
+  arriveAt?: string | null;
+  bookingType?: string;
+  overlapType?: string;
+}
+
+interface PassengerDetail {
+  id: string;
+  fullName: string;
+  seatNo: string;
+  phone?: string | null;
+  idNumber?: string | null;
+  ticketNumber: string | null;
+  ticketStatus?: string | null;
+  fareAmount?: string | number | null;
+}
+
+interface PaymentDetail {
+  id: string;
+  bookingId: string;
+  method: string;
+  amount?: string | number | null;
+  paidAt?: string | null;
+}
 
 interface PassengerDetailsData {
   seatNo: string;
   bookings: Array<{
-    booking: Booking & {
-      originStop?: Stop;
-      destinationStop?: Stop;
-      outlet?: { id: string; name: string; code?: string };
-      vehicle?: { id: string; plate: string; code: string };
-      departAt?: string | null;
-      arriveAt?: string | null;
-    };
-    passenger: Passenger;
-    payments: Payment[];
+    booking: BookingDetail;
+    passenger: PassengerDetail;
+    otherPassengers?: OtherPassenger[];
+    payments: PaymentDetail[];
   }>;
   available: boolean;
   error?: string;
@@ -71,10 +118,10 @@ export default function PassengerDetailModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Armchair className="w-4 h-4 text-primary" />
-            Detail Penumpang — Kursi {passengerDetails?.seatNo || selectedSeatNo || ''}
+            Detail Kursi {passengerDetails?.seatNo || selectedSeatNo || ''}
             {isMulti && (
-              <span className="ml-1 text-xs font-normal text-muted-foreground">
-                ({passengerDetails!.bookings.length} booking)
+              <span className="ml-1 text-xs font-normal bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                {passengerDetails!.bookings.length} booking
               </span>
             )}
           </DialogTitle>
@@ -82,9 +129,9 @@ export default function PassengerDetailModal({
 
         <div data-testid="modal-content">
           {isLoading && (
-            <div className="flex items-center justify-center py-12" data-testid="loading-state">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
-              <span className="ml-2 text-sm text-muted-foreground">Memuat detail penumpang...</span>
+            <div className="flex flex-col items-center justify-center py-12 gap-2" data-testid="loading-state">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <span className="text-sm text-muted-foreground">Memuat detail...</span>
             </div>
           )}
 
@@ -105,41 +152,44 @@ export default function PassengerDetailModal({
             <div className="space-y-4">
               {passengerDetails.bookings.map((bookingData, index) => {
                 const isOpen = openIndices.has(index);
-                const b = bookingData.booking as any;
-                const p = bookingData.passenger as any;
+                const b = bookingData.booking;
+                const p = bookingData.passenger;
+                const others = bookingData.otherPassengers || [];
+                const totalPassengers = 1 + others.length;
 
                 return (
-                  <div key={b.id} className="space-y-4" data-testid={`booking-${index}`}>
-                    {isMulti && (
-                      <button
-                        type="button"
-                        onClick={() => toggle(index)}
-                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-sm font-medium"
-                        data-testid={`booking-header-${index}`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-primary/10 text-primary text-xs font-bold font-mono">{p.seatNo}</span>
-                          <span>{p.fullName}</span>
-                          <BookingStatusBadge status={b.status || 'unknown'} />
+                  <div key={b.id} className="rounded-xl border overflow-hidden" data-testid={`booking-${index}`}>
+                    <button
+                      type="button"
+                      onClick={() => toggle(index)}
+                      className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors"
+                      data-testid={`booking-header-${index}`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-primary/10 text-primary text-xs font-bold font-mono flex-shrink-0">
+                          {p.seatNo}
                         </span>
-                        {isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                      </button>
-                    )}
-
-                    {(!isMulti || isOpen) && (
-                      <>
-                        {/* Booking Header */}
-                        <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <p className="text-xs text-muted-foreground">Kode Booking</p>
-                              <p className="font-mono font-bold text-base text-blue-700" data-testid="booking-code">
-                                {b.bookingCode ?? b.id?.slice(0, 8).toUpperCase()}
-                              </p>
-                            </div>
+                        <div className="min-w-0 text-left">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold truncate">{p.fullName}</span>
                             <BookingStatusBadge status={b.status || 'unknown'} />
                           </div>
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                            <span className="font-mono">{b.bookingCode ?? b.id?.slice(0, 8).toUpperCase()}</span>
+                            {totalPassengers > 1 && (
+                              <span className="inline-flex items-center gap-0.5 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                                <Users className="w-2.5 h-2.5" /> {totalPassengers} pax
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+                    </button>
 
+                    {isOpen && (
+                      <div className="p-4 space-y-4">
+                        <div className="rounded-lg border bg-muted/20 p-3.5 space-y-3">
                           <div className="flex items-center gap-2 text-sm font-medium" data-testid="origin-destination">
                             <MapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                             <span className="truncate">{b.originStop?.name ?? '—'}</span>
@@ -147,7 +197,7 @@ export default function PassengerDetailModal({
                             <span className="truncate">{b.destinationStop?.name ?? '—'}</span>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                             <div>
                               <p className="text-muted-foreground">Channel</p>
                               <p className="font-medium mt-0.5">
@@ -216,7 +266,56 @@ export default function PassengerDetailModal({
                           onStartAssignMode={onStartAssignMode}
                         />
 
-                        {/* Payment Summary */}
+                        {others.length > 0 && (
+                          <div className="rounded-lg border overflow-hidden">
+                            <div className="px-4 py-2.5 bg-blue-50/50 flex items-center gap-2 text-sm font-semibold text-blue-800">
+                              <Users className="w-3.5 h-3.5" />
+                              Penumpang Lain ({others.length})
+                            </div>
+                            <div className="divide-y">
+                              {others.map((op) => {
+                                const isActive = op.ticketStatus !== 'unseated' && op.ticketStatus !== 'canceled';
+                                return (
+                                  <div key={op.id} className="px-4 py-2.5 flex items-center justify-between gap-2" data-testid={`other-pax-${op.seatNo}`}>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className={`text-sm font-medium truncate ${!isActive ? 'line-through text-muted-foreground' : ''}`}>
+                                          {op.fullName}
+                                        </span>
+                                        {op.ticketStatus && op.ticketStatus !== 'active' && (
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                                            BOOKING_STATUS_MAP[op.ticketStatus as BookingStatus]?.bg || 'bg-gray-50'
+                                          } ${BOOKING_STATUS_MAP[op.ticketStatus as BookingStatus]?.color || 'text-gray-700'}`}>
+                                            {BOOKING_STATUS_MAP[op.ticketStatus as BookingStatus]?.label || op.ticketStatus}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
+                                        <span className="flex items-center gap-0.5">
+                                          <Armchair className="w-2.5 h-2.5" /> {op.seatNo}
+                                        </span>
+                                        {op.phone && (
+                                          <span className="flex items-center gap-0.5">
+                                            <Phone className="w-2.5 h-2.5" /> {op.phone}
+                                          </span>
+                                        )}
+                                        {op.ticketNumber && (
+                                          <span className="flex items-center gap-0.5">
+                                            <Hash className="w-2.5 h-2.5" /> {op.ticketNumber}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <span className="text-xs font-semibold text-emerald-700 flex-shrink-0">
+                                      {fmtCurrency(op.fareAmount ?? 0)}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
                         {(() => {
                           const discount = parseFloat(String(b.discountAmount || 0));
                           const total = parseFloat(String(b.totalAmount || 0));
@@ -224,7 +323,7 @@ export default function PassengerDetailModal({
                           const hasDiscount = discount > 0;
                           return hasDiscount ? (
                             <div className="rounded-lg border overflow-hidden" data-testid="payment-summary">
-                              <div className="px-4 py-3 bg-muted/20 flex items-center gap-2 text-sm font-semibold">
+                              <div className="px-4 py-2.5 bg-muted/20 flex items-center gap-2 text-sm font-semibold">
                                 <Ticket className="w-3.5 h-3.5 text-muted-foreground" />
                                 Rincian Pembayaran
                               </div>
@@ -247,16 +346,15 @@ export default function PassengerDetailModal({
                           ) : null;
                         })()}
 
-                        {/* Payments */}
                         {bookingData.payments.length > 0 && (
                           <div className="rounded-lg border overflow-hidden">
-                            <div className="px-4 py-3 bg-muted/20 flex items-center gap-2 text-sm font-semibold">
+                            <div className="px-4 py-2.5 bg-muted/20 flex items-center gap-2 text-sm font-semibold">
                               <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
                               Pembayaran
                             </div>
                             <div className="divide-y">
                               {bookingData.payments.map((pay, pi) => (
-                                <div key={pay.id} className="px-4 py-3 flex items-center justify-between text-sm" data-testid={`payment-${pi}`}>
+                                <div key={pay.id} className="px-4 py-2.5 flex items-center justify-between text-sm" data-testid={`payment-${pi}`}>
                                   <div>
                                     <p className="font-medium">{getPaymentLabel(pay.method)}</p>
                                     {pay.paidAt && <p className="text-xs text-muted-foreground mt-0.5">{fmtDate(pay.paidAt)}</p>}
@@ -270,18 +368,14 @@ export default function PassengerDetailModal({
 
                         {bookingData.payments.length === 0 && (
                           <div className="rounded-lg border overflow-hidden">
-                            <div className="px-4 py-3 bg-muted/20 flex items-center gap-2 text-sm font-semibold">
+                            <div className="px-4 py-2.5 bg-muted/20 flex items-center gap-2 text-sm font-semibold">
                               <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
                               Pembayaran
                             </div>
                             <p className="px-4 py-3 text-muted-foreground text-xs">Belum ada data pembayaran</p>
                           </div>
                         )}
-
-                        {isMulti && index < passengerDetails.bookings.length - 1 && (
-                          <Separator />
-                        )}
-                      </>
+                      </div>
                     )}
                   </div>
                 );

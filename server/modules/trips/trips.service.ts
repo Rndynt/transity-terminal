@@ -330,14 +330,9 @@ export class TripsService {
     const seatBookings = [];
     const totalStops = tripStopTimes.length;
 
-    let vehicle: any = null;
-    if (trip?.vehicleId) {
-      vehicle = await this.storage.getVehicleById(trip.vehicleId);
-    }
-    
     const activeBookings = allBookings.filter(b => b.status === 'paid' || b.status === 'pending');
     const activeBookingIds = activeBookings.map(b => b.id);
-    
+
     const allPassengers = activeBookingIds.length > 0
       ? await this.storage.getPassengersByBookingIds(activeBookingIds)
       : [];
@@ -347,7 +342,7 @@ export class TripsService {
       list.push(p);
       passengersByBooking.set(p.bookingId, list);
     }
-    
+
     const matchingBookings = activeBookings.filter(booking => {
       const passengers = passengersByBooking.get(booking.id) || [];
       return passengers.some(p => p.seatNo === seatNo) &&
@@ -357,14 +352,15 @@ export class TripsService {
     if (matchingBookings.length > 0) {
       const stopIds = [...new Set(matchingBookings.flatMap(b => [b.originStopId, b.destinationStopId]))];
       const outletIds = [...new Set(matchingBookings.map(b => b.outletId).filter(Boolean))] as string[];
-      
+
       const matchingBookingIds = matchingBookings.map(b => b.id);
-      const [stopsData, outletsData, allPayments] = await Promise.all([
+      const [stopsData, outletsData, allPayments, vehicle] = await Promise.all([
         this.storage.getStopsByIds(stopIds),
         outletIds.length > 0 ? this.storage.getOutletsByIds(outletIds) : Promise.resolve([]),
-        this.storage.getPaymentsByBookingIds(matchingBookingIds)
+        this.storage.getPaymentsByBookingIds(matchingBookingIds),
+        trip?.vehicleId ? this.storage.getVehicleById(trip.vehicleId) : Promise.resolve(null)
       ]);
-      
+
       const stopsMap = new Map<string, any>();
       stopsData.forEach((s: any) => { if (s) stopsMap.set(s.id, s); });
       const outletsMap = new Map<string, any>();
@@ -376,7 +372,7 @@ export class TripsService {
         paymentsByBooking.set(p.bookingId, list);
       }
 
-      matchingBookings.forEach((booking, idx) => {
+      matchingBookings.forEach((booking) => {
         const passengers = passengersByBooking.get(booking.id) || [];
         const seatPassenger = passengers.find(p => p.seatNo === seatNo);
         if (!seatPassenger) return;
@@ -384,18 +380,18 @@ export class TripsService {
         const originStop = stopsMap.get(booking.originStopId);
         const destinationStop = stopsMap.get(booking.destinationStopId);
         const payments = paymentsByBooking.get(booking.id) || [];
-        
+
         const bookingStopCoverage = booking.destinationSeq - booking.originSeq;
         const totalTripCoverage = totalStops - 1;
         const bookingType: 'main' | 'transit' = (bookingStopCoverage / totalTripCoverage) > 0.7 ? 'main' : 'transit';
-        
-        const overlapType = 
+
+        const overlapType =
           (booking.originSeq <= originSeq && booking.destinationSeq >= destinationSeq) ? 'covers' :
           (booking.originSeq >= originSeq && booking.destinationSeq <= destinationSeq) ? 'within' :
           (booking.originSeq < originSeq && booking.destinationSeq > originSeq && booking.destinationSeq < destinationSeq) ? 'starts_before' :
           (booking.originSeq > originSeq && booking.originSeq < destinationSeq && booking.destinationSeq > destinationSeq) ? 'ends_after' :
           'partial_overlap';
-        
+
         const outlet = booking.outletId ? outletsMap.get(booking.outletId) : null;
 
         let departAt = null;
@@ -408,6 +404,18 @@ export class TripsService {
           const destTime = tripStopTimes.find(st => st.stopSequence === booking.destinationSeq);
           if (destTime?.arriveAt) arriveAt = destTime.arriveAt;
         }
+
+        const otherPassengers = passengers
+          .filter(p => p.id !== seatPassenger.id)
+          .map(p => ({
+            id: p.id,
+            fullName: p.fullName,
+            seatNo: p.seatNo,
+            phone: p.phone,
+            ticketNumber: p.ticketNumber,
+            ticketStatus: p.ticketStatus,
+            fareAmount: p.fareAmount
+          }));
 
         seatBookings.push({
           booking: {
@@ -422,19 +430,19 @@ export class TripsService {
             arriveAt
           },
           passenger: seatPassenger,
+          otherPassengers,
           payments
         });
       });
     }
 
     if (seatBookings.length === 0) {
-      return { 
+      return {
         error: 'No passenger details found for this seat',
-        available: false 
+        available: false
       };
     }
 
-    // Sort bookings by relevance: covers -> within -> partial overlaps
     seatBookings.sort((a, b) => {
       const relevanceOrder = { covers: 0, within: 1, starts_before: 2, ends_after: 3, partial_overlap: 4 };
       const aRelevance = relevanceOrder[a.booking.overlapType as keyof typeof relevanceOrder] || 99;

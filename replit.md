@@ -559,7 +559,7 @@ Saat induk dihapus, semua anak ikut di-soft-delete:
 
 ### N+1 Query Fixes
 - `getSeatmap`: batch passenger fetch via `getPassengersByBookingIds()`
-- `getSeatPassengerDetails`: batch stops + outlets + payments dalam single `Promise.all`
+- `getSeatPassengerDetails`: batch stops + outlets + payments + vehicle dalam single `Promise.all`; returns `otherPassengers` (semua penumpang lain dalam booking yang sama)
 - `getVirtualTripsForCso`: batch pattern/patternStops dengan Maps
 - `cleanupExpiredHolds`: bulk UPDATE+DELETE, bukan per-hold loop
 
