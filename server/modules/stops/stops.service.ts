@@ -21,12 +21,20 @@ export class StopsService {
   }
 
   async updateStop(id: string, data: Partial<InsertStop>): Promise<Stop> {
-    await this.getStopById(id); // Check if exists
+    await this.getStopById(id);
     return await this.storage.updateStop(id, data);
   }
 
   async deleteStop(id: string): Promise<void> {
-    await this.getStopById(id); // Check if exists
+    await this.getStopById(id);
     await this.storage.deleteStop(id);
+  }
+
+  async getActiveBookingCountForStop(stopId: string): Promise<number> {
+    return await this.storage.getActiveBookingCountForStop(stopId);
+  }
+
+  async getActiveTripsForStop(stopId: string): Promise<number> {
+    return await this.storage.getActiveTripsForStop(stopId);
   }
 }

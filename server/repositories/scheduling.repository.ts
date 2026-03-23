@@ -838,4 +838,28 @@ export class SchedulingRepository {
       },
     };
   }
+
+  async getActiveTripsForPattern(patternId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(trips)
+      .where(and(
+        eq(trips.patternId, patternId),
+        eq(trips.status, 'scheduled'),
+        isNull(trips.deletedAt)
+      ));
+    return result?.count || 0;
+  }
+
+  async getActiveBookingCountForPattern(patternId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(bookings)
+      .innerJoin(trips, eq(bookings.tripId, trips.id))
+      .where(and(
+        eq(trips.patternId, patternId),
+        inArray(bookings.status, ['pending', 'paid', 'confirmed'])
+      ));
+    return result?.count || 0;
+  }
 }

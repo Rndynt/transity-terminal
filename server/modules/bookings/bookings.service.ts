@@ -177,6 +177,13 @@ export class BookingsService {
       throw new Error(`Payment amount ${paymentAmount} does not match expected total ${expectedTotal}`);
     }
 
+    const [originStop, destinationStop, trip, outlet] = await Promise.all([
+      this.storage.getStopById(bookingData.originStopId),
+      this.storage.getStopById(bookingData.destinationStopId),
+      this.storage.getTripById(bookingData.tripId),
+      bookingData.outletId ? this.storage.getOutletById(bookingData.outletId) : null,
+    ]);
+
     const booking = await db.transaction(async (tx) => {
       const newBooking = await this.storage.createBooking({
         ...bookingData,
@@ -186,6 +193,10 @@ export class BookingsService {
         discountAmount: discountAmount.toString(),
         promoId: promoId || null,
         voucherCode: voucherCode || null,
+        snapOriginStopName: originStop?.name || null,
+        snapDestinationStopName: destinationStop?.name || null,
+        snapDepartureHHMM: trip?.originDepartHHMM || null,
+        snapOutletName: outlet?.name || null,
       });
 
       for (const passengerData of passengers) {
@@ -369,14 +380,24 @@ export class BookingsService {
     const now = new Date();
     const pendingExpiresAt = new Date(now.getTime() + (config.holdTtlLongSeconds * 1000));
 
-    // Create pending booking
+    const [originStop, destinationStop, tripForSnap, outlet] = await Promise.all([
+      this.storage.getStopById(bookingData.originStopId),
+      this.storage.getStopById(bookingData.destinationStopId),
+      this.storage.getTripById(bookingData.tripId),
+      bookingData.outletId ? this.storage.getOutletById(bookingData.outletId) : null,
+    ]);
+
     const expectedTotal = Number(fareQuote.total) * passengers.length;
     const booking = await this.storage.createBooking({
       ...bookingData,
       bookingCode: generateBookingCode(),
       status: 'pending',
       totalAmount: expectedTotal.toString(),
-      pendingExpiresAt
+      pendingExpiresAt,
+      snapOriginStopName: originStop?.name || null,
+      snapDestinationStopName: destinationStop?.name || null,
+      snapDepartureHHMM: tripForSnap?.originDepartHHMM || null,
+      snapOutletName: outlet?.name || null,
     });
 
     // Create passengers and mark seats as booked (pending status)

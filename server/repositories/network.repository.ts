@@ -1,7 +1,7 @@
 import { db } from "../db";
-import { eq, inArray, isNull } from "drizzle-orm";
+import { eq, and, inArray, isNull, sql } from "drizzle-orm";
 import {
-  stops, outlets, patternStops,
+  stops, outlets, patternStops, bookings, tripStopTimes, trips,
   type Stop, type InsertStop,
   type Outlet, type InsertOutlet
 } from "@shared/schema";
@@ -66,5 +66,30 @@ export class NetworkRepository {
 
   async deleteOutlet(id: string): Promise<void> {
     await db.update(outlets).set({ deletedAt: new Date() }).where(eq(outlets.id, id));
+  }
+
+  async getActiveBookingCountForStop(stopId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(bookings)
+      .where(and(
+        sql`(${bookings.originStopId} = ${stopId} OR ${bookings.destinationStopId} = ${stopId})`,
+        inArray(bookings.status, ['pending', 'paid', 'confirmed'])
+      ));
+    return result?.count || 0;
+  }
+
+  async getActiveTripsForStop(stopId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(distinct ${tripStopTimes.tripId})::int` })
+      .from(tripStopTimes)
+      .innerJoin(trips, eq(tripStopTimes.tripId, trips.id))
+      .where(and(
+        eq(tripStopTimes.stopId, stopId),
+        eq(trips.status, 'scheduled'),
+        isNull(trips.deletedAt),
+        isNull(tripStopTimes.deletedAt)
+      ));
+    return result?.count || 0;
   }
 }

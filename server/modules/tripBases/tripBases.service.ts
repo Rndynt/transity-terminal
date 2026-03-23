@@ -234,20 +234,29 @@ export class TripBasesService {
       const originDepartHHMM = firstStopTime?.departAt ? 
         formatTimeInTZ(firstStopTime.departAt, timezone) : null;
 
-      // Create trip data
+      const [pattern, driver, vehicle] = await Promise.all([
+        this.storage.getTripPatternById(base.patternId),
+        base.defaultDriverId ? this.storage.getDriverById(base.defaultDriverId) : null,
+        this.storage.getVehicleById(vehicleId),
+      ]);
+
       const tripData: InsertTrip = {
         patternId: base.patternId,
         serviceDate,
         vehicleId,
         layoutId: base.defaultLayoutId,
-        capacity: capacity || 50, // fallback capacity
+        capacity: capacity || 50,
         status: 'scheduled',
         channelFlags: base.channelFlags as any,
         baseId: base.id,
-        originDepartHHMM
+        driverId: base.defaultDriverId,
+        originDepartHHMM,
+        snapRouteName: pattern?.name || null,
+        snapRouteCode: pattern?.code || null,
+        snapDriverName: driver?.name || null,
+        snapVehiclePlate: vehicle?.plate || null,
       };
 
-      // Create the trip
       const trip = await this.storage.createTrip(tripData);
       
       // Create trip stop times from defaultStopTimes

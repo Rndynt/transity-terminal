@@ -11,4 +11,5 @@ export function registerStopsRoutes(app: FastifyInstance, storage: IStorage, cac
   app.post('/api/stops', { preHandler: [requireFlag('master.stops')] }, async (req, reply) => controller.create(req, reply));
   app.put('/api/stops/:id', { preHandler: [requireFlag('master.stops')] }, async (req, reply) => controller.update(req, reply));
   app.delete('/api/stops/:id', { preHandler: [requireFlag('master.stops')] }, async (req, reply) => controller.delete(req, reply));
+  app.get('/api/stops/:id/impact', async (req, reply) => controller.getImpact(req, reply));
 }

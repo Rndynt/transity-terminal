@@ -39,4 +39,13 @@ export class StopsController {
     await this.stopsService.deleteStop(id);
     reply.code(204).send();
   }
+
+  async getImpact(req: FastifyRequest, reply: FastifyReply) {
+    const { id } = req.params;
+    const [activeBookings, activeTrips] = await Promise.all([
+      this.stopsService.getActiveBookingCountForStop(id),
+      this.stopsService.getActiveTripsForStop(id),
+    ]);
+    reply.send({ activeBookings, activeTrips });
+  }
 }

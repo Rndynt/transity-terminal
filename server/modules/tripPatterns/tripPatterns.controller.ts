@@ -39,4 +39,13 @@ export class TripPatternsController {
     await this.tripPatternsService.deleteTripPattern(id);
     reply.code(204).send();
   }
+
+  async getImpact(req: FastifyRequest, reply: FastifyReply) {
+    const { id } = req.params;
+    const [activeTrips, activeBookings] = await Promise.all([
+      this.tripPatternsService.getActiveTripsForPattern(id),
+      this.tripPatternsService.getActiveBookingCountForPattern(id),
+    ]);
+    reply.send({ activeTrips, activeBookings });
+  }
 }

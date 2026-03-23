@@ -225,4 +225,9 @@ export interface IStorage {
   releaseHoldsForTrip(tripId: string): Promise<void>;
   getActivePassengersForTrip(tripId: string): Promise<any[]>;
   getUnseatedPassengers(tripId: string): Promise<any[]>;
+
+  getActiveBookingCountForStop(stopId: string): Promise<number>;
+  getActiveTripsForStop(stopId: string): Promise<number>;
+  getActiveTripsForPattern(patternId: string): Promise<number>;
+  getActiveBookingCountForPattern(patternId: string): Promise<number>;
 }

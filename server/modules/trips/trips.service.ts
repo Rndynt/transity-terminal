@@ -52,7 +52,7 @@ export class TripsService {
   }
 
   async updateTrip(id: string, data: Partial<InsertTrip>): Promise<Trip> {
-    await this.getTripById(id);
+    const trip = await this.getTripById(id);
     
     const safeFields = new Set(['driverId', 'status', 'channelFlags']);
     const changedFields = Object.keys(data);
@@ -63,6 +63,11 @@ export class TripsService {
       if (hasBookings) {
         throw new Error("Cannot modify trip structure (vehicle, layout, pattern) when bookings exist");
       }
+    }
+
+    if (data.driverId && data.driverId !== trip.driverId) {
+      const driver = await this.storage.getDriverById(data.driverId);
+      (data as any).snapDriverName = driver?.name || null;
     }
     
     return await this.storage.updateTrip(id, data);

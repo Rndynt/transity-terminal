@@ -29,4 +29,12 @@ export class TripPatternsService {
     await this.getTripPatternById(id);
     await this.storage.deleteTripPattern(id);
   }
+
+  async getActiveTripsForPattern(patternId: string): Promise<number> {
+    return await this.storage.getActiveTripsForPattern(patternId);
+  }
+
+  async getActiveBookingCountForPattern(patternId: string): Promise<number> {
+    return await this.storage.getActiveBookingCountForPattern(patternId);
+  }
 }

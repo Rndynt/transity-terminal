@@ -106,6 +106,11 @@ export class DatabaseStorage implements IStorage {
   recordManifestPrint(tripId: string): Promise<string | null> { return this.scheduling.recordManifestPrint(tripId); }
   getManifestFull(tripId: string): Promise<ManifestFull> { return this.scheduling.getManifestFull(tripId); }
 
+  getActiveBookingCountForStop(stopId: string): Promise<number> { return this.network.getActiveBookingCountForStop(stopId); }
+  getActiveTripsForStop(stopId: string): Promise<number> { return this.network.getActiveTripsForStop(stopId); }
+  getActiveTripsForPattern(patternId: string): Promise<number> { return this.scheduling.getActiveTripsForPattern(patternId); }
+  getActiveBookingCountForPattern(patternId: string): Promise<number> { return this.scheduling.getActiveBookingCountForPattern(patternId); }
+
   // Booking
   getBookings(tripId?: string): Promise<Booking[]> { return this.booking.getBookings(tripId); }
   getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }> { return this.booking.getBookingsPaginated(options); }

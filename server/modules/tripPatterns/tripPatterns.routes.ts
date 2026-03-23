@@ -13,6 +13,7 @@ export function registerTripPatternsRoutes(app: FastifyInstance, storage: IStora
   app.post('/api/trip-patterns', { preHandler: [requireFlag('master.trip_patterns')] }, async (req, reply) => tripPatternsController.create(req, reply));
   app.put('/api/trip-patterns/:id', { preHandler: [requireFlag('master.trip_patterns')] }, async (req, reply) => tripPatternsController.update(req, reply));
   app.delete('/api/trip-patterns/:id', { preHandler: [requireFlag('master.trip_patterns')] }, async (req, reply) => tripPatternsController.delete(req, reply));
+  app.get('/api/trip-patterns/:id/impact', async (req, reply) => tripPatternsController.getImpact(req, reply));
 
   app.get('/api/trip-patterns/:patternId/stops', async (req, reply) => patternStopsController.getByPattern(req, reply));
   app.post('/api/pattern-stops', { preHandler: [requireFlag('master.trip_patterns')] }, async (req, reply) => patternStopsController.create(req, reply));

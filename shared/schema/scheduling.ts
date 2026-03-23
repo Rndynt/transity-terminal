@@ -90,6 +90,10 @@ export const trips = pgTable("trips", {
   originDepartHHMM:         text("origin_depart_hhmm"),
   channelFlags:             jsonb("channel_flags").default(sql`'{"CSO":true,"WEB":false,"APP":false,"OTA":false}'`),
   manifestFirstPrintedAt:   timestamp("manifest_first_printed_at", { withTimezone: true }),
+  snapRouteName:            text("snap_route_name"),
+  snapRouteCode:            text("snap_route_code"),
+  snapDriverName:           text("snap_driver_name"),
+  snapVehiclePlate:         text("snap_vehicle_plate"),
   createdAt:                timestamp("created_at", { withTimezone: true }).defaultNow(),
   deletedAt:                timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({

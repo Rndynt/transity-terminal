@@ -197,28 +197,28 @@ export class ReportsService {
 
     const byOutlet = await db.execute(sql`
       SELECT
-        o.name as outlet_name,
+        COALESCE(b.snap_outlet_name, o.name) as outlet_name,
         COALESCE(SUM(b.total_amount::numeric), 0) as revenue,
         COUNT(*)::int as bookings
       FROM bookings b
       INNER JOIN trips t ON b.trip_id = t.id
       LEFT JOIN outlets o ON b.outlet_id = o.id
       WHERE ${where}
-      GROUP BY o.name
+      GROUP BY COALESCE(b.snap_outlet_name, o.name)
       ORDER BY revenue DESC
     `);
 
     const byRoute = await db.execute(sql`
       SELECT
-        tp.name as route_name,
-        tp.code as route_code,
+        COALESCE(t.snap_route_name, tp.name) as route_name,
+        COALESCE(t.snap_route_code, tp.code) as route_code,
         COALESCE(SUM(b.total_amount::numeric), 0) as revenue,
         COUNT(*)::int as bookings
       FROM bookings b
       INNER JOIN trips t ON b.trip_id = t.id
       LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
       WHERE ${where}
-      GROUP BY tp.name, tp.code
+      GROUP BY COALESCE(t.snap_route_name, tp.name), COALESCE(t.snap_route_code, tp.code)
       ORDER BY revenue DESC
     `);
 
@@ -277,14 +277,14 @@ export class ReportsService {
 
     const byOutlet = await db.execute(sql`
       SELECT
-        COALESCE(o.name, 'Tanpa Outlet') as outlet_name,
+        COALESCE(b.snap_outlet_name, o.name, 'Tanpa Outlet') as outlet_name,
         COUNT(*)::int as count,
         COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as revenue
       FROM bookings b
       INNER JOIN trips t ON b.trip_id = t.id
       LEFT JOIN outlets o ON b.outlet_id = o.id
       WHERE ${where}
-      GROUP BY o.name
+      GROUP BY COALESCE(b.snap_outlet_name, o.name, 'Tanpa Outlet')
       ORDER BY count DESC
     `);
 
@@ -329,9 +329,10 @@ export class ReportsService {
       SELECT
         b.id, b.booking_code, b.status, b.channel, b.total_amount,
         b.created_at, t.service_date,
-        tp.name as route_name,
-        COALESCE(o.name, '-') as outlet_name,
-        os.name as origin_name, ds.name as destination_name
+        COALESCE(t.snap_route_name, tp.name) as route_name,
+        COALESCE(b.snap_outlet_name, o.name, '-') as outlet_name,
+        COALESCE(b.snap_origin_stop_name, os.name) as origin_name,
+        COALESCE(b.snap_destination_stop_name, ds.name) as destination_name
       FROM bookings b
       INNER JOIN trips t ON b.trip_id = t.id
       LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
@@ -362,10 +363,10 @@ export class ReportsService {
         t.service_date::text,
         t.status as trip_status,
         t.capacity,
-        tp.name as route_name,
-        tp.code as route_code,
-        d.name as driver_name,
-        v.plate as vehicle_plate,
+        COALESCE(t.snap_route_name, tp.name) as route_name,
+        COALESCE(t.snap_route_code, tp.code) as route_code,
+        COALESCE(t.snap_driver_name, d.name) as driver_name,
+        COALESCE(t.snap_vehicle_plate, v.plate) as vehicle_plate,
         t.origin_depart_hhmm as departure_time,
         COALESCE(bk.ticket_revenue, 0) as ticket_revenue,
         COALESCE(bk.passenger_count, 0)::int as passenger_count,
@@ -448,9 +449,9 @@ export class ReportsService {
         t.service_date::text,
         t.status as trip_status,
         t.capacity,
-        tp.name as route_name,
-        tp.code as route_code,
-        d.name as driver_name,
+        COALESCE(t.snap_route_name, tp.name) as route_name,
+        COALESCE(t.snap_route_code, tp.code) as route_code,
+        COALESCE(t.snap_driver_name, d.name) as driver_name,
         COALESCE(pax.count, 0)::int as passenger_count,
         CASE WHEN t.capacity > 0
           THEN ROUND(COALESCE(pax.count, 0)::numeric / t.capacity * 100, 1)
@@ -472,8 +473,8 @@ export class ReportsService {
 
     const byRoute = await db.execute(sql`
       SELECT
-        tp.name as route_name,
-        tp.code as route_code,
+        COALESCE(t.snap_route_name, tp.name) as route_name,
+        COALESCE(t.snap_route_code, tp.code) as route_code,
         COUNT(t.id)::int as trip_count,
         SUM(t.capacity)::int as total_capacity,
         COALESCE(SUM(pax.count), 0)::int as total_passengers,
@@ -491,7 +492,7 @@ export class ReportsService {
         GROUP BY b.trip_id
       ) pax ON pax.trip_id = t.id
       WHERE ${where}
-      GROUP BY tp.name, tp.code
+      GROUP BY COALESCE(t.snap_route_name, tp.name), COALESCE(t.snap_route_code, tp.code)
       ORDER BY avg_load_factor_pct DESC
     `);
 
@@ -597,8 +598,8 @@ export class ReportsService {
 
     const byRoute = await db.execute(sql`
       SELECT
-        COALESCE(tp.name, '-') as route_name,
-        tp.code as route_code,
+        COALESCE(t.snap_route_name, tp.name, '-') as route_name,
+        COALESCE(t.snap_route_code, tp.code) as route_code,
         COUNT(*)::int as total,
         COUNT(*) FILTER (WHERE bh.action = 'canceled')::int as canceled,
         COUNT(*) FILTER (WHERE bh.action = 'unseated')::int as unseated
@@ -607,7 +608,7 @@ export class ReportsService {
       INNER JOIN trips t ON b.trip_id = t.id
       LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
       WHERE ${where}
-      GROUP BY tp.name, tp.code
+      GROUP BY COALESCE(t.snap_route_name, tp.name, '-'), COALESCE(t.snap_route_code, tp.code)
       ORDER BY total DESC
     `);
 
@@ -616,7 +617,7 @@ export class ReportsService {
         bh.id, bh.action, bh.details, bh.performed_by, bh.created_at,
         b.booking_code,
         p.full_name as passenger_name, p.ticket_number,
-        tp.name as route_name,
+        COALESCE(t.snap_route_name, tp.name) as route_name,
         t.service_date::text
       FROM booking_history bh
       INNER JOIN bookings b ON bh.booking_id = b.id
@@ -688,8 +689,8 @@ export class ReportsService {
 
     const byRoute = await db.execute(sql`
       SELECT
-        COALESCE(tp.name, '-') as route_name,
-        tp.code as route_code,
+        COALESCE(t.snap_route_name, tp.name, '-') as route_name,
+        COALESCE(t.snap_route_code, tp.code) as route_code,
         COUNT(*)::int as shipments,
         COALESCE(SUM(cs.total_amount::numeric), 0) as revenue,
         COALESCE(SUM(cs.weight_kg::numeric), 0) as total_weight
@@ -697,7 +698,7 @@ export class ReportsService {
       INNER JOIN trips t ON cs.trip_id = t.id
       LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
       WHERE ${where}
-      GROUP BY tp.name, tp.code
+      GROUP BY COALESCE(t.snap_route_name, tp.name, '-'), COALESCE(t.snap_route_code, tp.code)
       ORDER BY revenue DESC
     `);
 
@@ -706,7 +707,7 @@ export class ReportsService {
         cs.id, cs.waybill_number, cs.status, cs.sender_name, cs.recipient_name,
         cs.item_description, cs.quantity, cs.weight_kg, cs.total_amount,
         cs.payment_method, cs.created_at,
-        tp.name as route_name,
+        COALESCE(t.snap_route_name, tp.name) as route_name,
         t.service_date::text,
         os.name as origin_name, ds.name as destination_name
       FROM cargo_shipments cs
@@ -792,7 +793,7 @@ export class ReportsService {
 
     const byOutlet = await db.execute(sql`
       SELECT
-        COALESCE(o.name, 'Tanpa Outlet') as outlet_name,
+        COALESCE(b.snap_outlet_name, o.name, 'Tanpa Outlet') as outlet_name,
         COUNT(*)::int as count,
         COALESCE(SUM(py.amount::numeric) FILTER (WHERE py.status = 'success'), 0) as amount
       FROM payments py
@@ -800,7 +801,7 @@ export class ReportsService {
       INNER JOIN trips t ON b.trip_id = t.id
       LEFT JOIN outlets o ON b.outlet_id = o.id
       WHERE ${where}
-      GROUP BY o.name
+      GROUP BY COALESCE(b.snap_outlet_name, o.name, 'Tanpa Outlet')
       ORDER BY amount DESC
     `);
 
@@ -808,9 +809,9 @@ export class ReportsService {
       SELECT
         py.id, py.method, py.status, py.amount, py.provider_ref, py.paid_at,
         b.booking_code, b.channel,
-        tp.name as route_name,
+        COALESCE(t.snap_route_name, tp.name) as route_name,
         t.service_date::text,
-        COALESCE(o.name, '-') as outlet_name
+        COALESCE(b.snap_outlet_name, o.name, '-') as outlet_name
       FROM payments py
       INNER JOIN bookings b ON py.booking_id = b.id
       INNER JOIN trips t ON b.trip_id = t.id
@@ -933,46 +934,48 @@ export class ReportsService {
       })(),
       db.execute(sql`
         SELECT
-          tp.name as route_name, tp.code as route_code,
+          COALESCE(t.snap_route_name, tp.name) as route_name,
+          COALESCE(t.snap_route_code, tp.code) as route_code,
           COALESCE(SUM(b.total_amount::numeric), 0) as gross_amount,
           COUNT(*)::int as count
         FROM bookings b
         INNER JOIN trips t ON b.trip_id = t.id
         LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
         WHERE ${bookingWhere}
-        GROUP BY tp.name, tp.code
+        GROUP BY COALESCE(t.snap_route_name, tp.name), COALESCE(t.snap_route_code, tp.code)
         ORDER BY gross_amount DESC
       `),
       db.execute(sql`
         SELECT
-          tp.name as route_name, tp.code as route_code,
+          COALESCE(t.snap_route_name, tp.name) as route_name,
+          COALESCE(t.snap_route_code, tp.code) as route_code,
           COALESCE(SUM(cs.total_amount::numeric), 0) as gross_amount,
           COUNT(*)::int as count
         FROM cargo_shipments cs
         INNER JOIN trips t ON cs.trip_id = t.id
         LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
         WHERE ${cargoWhere}
-        GROUP BY tp.name, tp.code
+        GROUP BY COALESCE(t.snap_route_name, tp.name), COALESCE(t.snap_route_code, tp.code)
         ORDER BY gross_amount DESC
       `),
       db.execute(sql`
         SELECT
-          COALESCE(o.name, '-') as outlet_name,
+          COALESCE(b.snap_outlet_name, o.name, '-') as outlet_name,
           COALESCE(SUM(b.total_amount::numeric), 0) as gross_amount,
           COUNT(*)::int as count
         FROM bookings b
         INNER JOIN trips t ON b.trip_id = t.id
         LEFT JOIN outlets o ON b.outlet_id = o.id
         WHERE ${bookingWhere}
-        GROUP BY o.name
+        GROUP BY COALESCE(b.snap_outlet_name, o.name, '-')
         ORDER BY gross_amount DESC
       `),
       db.execute(sql`
         SELECT
           b.booking_code, b.total_amount, b.channel,
           t.service_date::text,
-          tp.name as route_name,
-          COALESCE(o.name, '-') as outlet_name
+          COALESCE(t.snap_route_name, tp.name) as route_name,
+          COALESCE(b.snap_outlet_name, o.name, '-') as outlet_name
         FROM bookings b
         INNER JOIN trips t ON b.trip_id = t.id
         LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
@@ -985,7 +988,7 @@ export class ReportsService {
         SELECT
           cs.waybill_number, cs.total_amount, cs.payment_method,
           t.service_date::text,
-          tp.name as route_name
+          COALESCE(t.snap_route_name, tp.name) as route_name
         FROM cargo_shipments cs
         INNER JOIN trips t ON cs.trip_id = t.id
         LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
