@@ -101,6 +101,18 @@ export class ReportsController {
     }
   }
 
+  async getCommercialFee(req: FastifyRequest, reply: FastifyReply) {
+    try {
+      const filters = parseFilters(req);
+      const data = await reportsService.getCommercialFeeReport(filters);
+      reply.send(data);
+    } catch (e: any) {
+      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
+      console.error('[reports] commercial-fee error:', e);
+      reply.code(500).send({ error: 'Gagal memuat laporan commercial fee' });
+    }
+  }
+
   async getFilterOptions(_req: FastifyRequest, reply: FastifyReply) {
     try {
       const data = await reportsService.getFilterOptions();

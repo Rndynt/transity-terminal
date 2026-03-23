@@ -12,4 +12,5 @@ export function registerReportsRoutes(app: FastifyInstance) {
   app.get('/api/reports/cancellations', async (req, reply) => reportsController.getCancellations(req, reply));
   app.get('/api/reports/cargo', async (req, reply) => reportsController.getCargo(req, reply));
   app.get('/api/reports/payments', async (req, reply) => reportsController.getPayments(req, reply));
+  app.get('/api/reports/commercial-fee', async (req, reply) => reportsController.getCommercialFee(req, reply));
 }

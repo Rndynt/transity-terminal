@@ -4,7 +4,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   MapPin, Store, Truck, UserCheck, LayoutGrid, Route, Calendar, DollarSign,
   Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText, BadgePercent, ClipboardList, CalendarDays, LogOut,
-  BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard, ShieldCheck
+  BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard, ShieldCheck, Receipt
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { usePermissions } from "@/lib/permissions";
@@ -31,6 +31,7 @@ const NAV_SECTIONS = [
       { name: "Pembatalan", path: "/reports/cancellations", icon: AlertTriangle, flag: "report.cancellations" },
       { name: "Kargo", path: "/reports/cargo", icon: Package, flag: "report.cargo" },
       { name: "Pembayaran", path: "/reports/payments", icon: CreditCard, flag: "report.payments" },
+      { name: "Commercial Fee", path: "/reports/commercial-fee", icon: Receipt, flag: "report.commercial_fee" },
     ]
   },
   {

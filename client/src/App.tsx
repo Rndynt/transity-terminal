@@ -26,6 +26,7 @@ const LoadFactorPage = lazy(() => import("@/pages/reports/LoadFactorPage"));
 const CancellationsReportPage = lazy(() => import("@/pages/reports/CancellationsReportPage"));
 const CargoReportPage = lazy(() => import("@/pages/reports/CargoReportPage"));
 const PaymentsReportPage = lazy(() => import("@/pages/reports/PaymentsReportPage"));
+const CommercialFeeReportPage = lazy(() => import("@/pages/reports/CommercialFeeReportPage"));
 const AdminStaffPage = lazy(() => import("@/pages/admin/AdminStaffPage"));
 const AdminFlagsPage = lazy(() => import("@/pages/admin/AdminFlagsPage"));
 
@@ -138,6 +139,11 @@ function Router() {
                     <Route path="/reports/payments">
                       <RequireFlag flags={["page.reports", "report.payments"]}>
                         <PaymentsReportPage />
+                      </RequireFlag>
+                    </Route>
+                    <Route path="/reports/commercial-fee">
+                      <RequireFlag flags={["page.reports", "report.commercial_fee"]}>
+                        <CommercialFeeReportPage />
                       </RequireFlag>
                     </Route>
                     <Route path="/masters">

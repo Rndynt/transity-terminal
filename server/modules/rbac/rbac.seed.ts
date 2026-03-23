@@ -28,6 +28,7 @@ const FEATURE_FLAGS = [
   { id: "report.cancellations",      name: "Laporan Pembatalan",     description: "Akses laporan pembatalan",      category: "report" },
   { id: "report.cargo",              name: "Laporan Kargo",          description: "Akses laporan kargo",           category: "report" },
   { id: "report.payments",           name: "Laporan Pembayaran",     description: "Akses laporan pembayaran",      category: "report" },
+  { id: "report.commercial_fee",    name: "Laporan Commercial Fee", description: "Akses laporan commercial fee",  category: "report" },
 
   { id: "master.stops",          name: "Master Stops",           description: "Kelola data stops",                  category: "master" },
   { id: "master.outlets",        name: "Master Outlets",         description: "Kelola data outlets",                category: "master" },
@@ -83,6 +84,7 @@ const DEFAULT_MATRIX: Record<string, FlagMatrix> = {
   "report.cancellations":      { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
   "report.cargo":              { owner: true, finance: true,  manager: true,  spv_operations: true,  operations: false, spv_cso: false, cso: false },
   "report.payments":           { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
+  "report.commercial_fee":    { owner: true, finance: true,  manager: false, spv_operations: false, operations: false, spv_cso: false, cso: false },
 
   "master.stops":          { owner: true, finance: false, manager: false, spv_operations: false, operations: false, spv_cso: false, cso: false },
   "master.outlets":        { owner: true, finance: false, manager: false, spv_operations: false, operations: false, spv_cso: false, cso: false },

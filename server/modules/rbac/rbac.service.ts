@@ -22,7 +22,7 @@ interface RoleFlagRow {
 const FALLBACK_FLAGS: Record<string, string[]> = {
   owner: [
     "page.cso", "page.cargo", "page.bookings", "page.schedule", "page.spj", "page.manifest", "page.reports", "page.masters",
-    "report.revenue", "report.sales", "report.trip_profitability", "report.load_factor", "report.cancellations", "report.cargo", "report.payments",
+    "report.revenue", "report.sales", "report.trip_profitability", "report.load_factor", "report.cancellations", "report.cargo", "report.payments", "report.commercial_fee",
     "master.stops", "master.outlets", "master.vehicles", "master.drivers", "master.layouts", "master.trip_patterns", "master.trips", "master.price_rules", "master.promos", "master.cargo_types", "master.cargo_rates", "master.cost_templates",
     "action.booking.create", "action.booking.cancel", "action.passenger.unseat", "action.passenger.reschedule", "action.passenger.assign_seat",
     "action.trip.materialize", "action.trip.close", "action.trip.batch_reschedule", "action.payment.create", "action.cargo.create", "action.cargo.manage",
@@ -31,7 +31,7 @@ const FALLBACK_FLAGS: Record<string, string[]> = {
   ],
   finance: [
     "page.bookings", "page.reports",
-    "report.revenue", "report.sales", "report.trip_profitability", "report.cancellations", "report.cargo", "report.payments",
+    "report.revenue", "report.sales", "report.trip_profitability", "report.cancellations", "report.cargo", "report.payments", "report.commercial_fee",
   ],
   manager: [
     "page.cso", "page.cargo", "page.bookings", "page.schedule", "page.spj", "page.manifest", "page.reports",

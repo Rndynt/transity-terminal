@@ -830,6 +830,244 @@ export class ReportsService {
     };
   }
 
+  async getCommercialFeeReport(f: ReportFilters) {
+    const FEE_RATE = 0.03;
+    const PPN_RATE = 0.11;
+
+    const VOLUME_TIERS = [
+      { min: 1_000_000_000, discount: 0.15 },
+      { min: 500_000_000, discount: 0.10 },
+      { min: 100_000_000, discount: 0.05 },
+      { min: 0, discount: 0 },
+    ];
+
+    const bookingWhere = joinConditions([
+      ...bookingFilters(f, 'b', 't'),
+      sql`b.status IN ${PAID_STATUSES_SQL}`,
+    ]);
+
+    const cargoDateConds = cargoDateConditions(f, 'cs', 't');
+    const cargoConds: SQL[] = [...cargoDateConds, sql`cs.status NOT IN ${EXCLUDE_CARGO_SQL}`, sql`cs.paid_at IS NOT NULL`];
+    if (f.outletId) cargoConds.push(sql`cs.origin_outlet_id = ${f.outletId}`);
+    if (f.patternId) cargoConds.push(sql`t.pattern_id = ${f.patternId}`);
+    const cargoWhere = joinConditions(cargoConds);
+
+    const [ticketSummary, cargoSummary, ticketDaily, cargoDaily, ticketByRoute, cargoByRoute, ticketByOutlet, recentTickets, recentCargo] = await Promise.all([
+      db.execute(sql`
+        SELECT
+          COALESCE(SUM(b.total_amount::numeric), 0) as gross_amount,
+          COUNT(*)::int as total_bookings
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${bookingWhere}
+      `),
+      db.execute(sql`
+        SELECT
+          COALESCE(SUM(cs.total_amount::numeric), 0) as gross_amount,
+          COUNT(*)::int as total_shipments
+        FROM cargo_shipments cs
+        INNER JOIN trips t ON cs.trip_id = t.id
+        WHERE ${cargoWhere}
+      `),
+      (() => {
+        const mode = f.dateMode || 'departure';
+        if (mode === 'paid') {
+          const payWhere = joinConditions([
+            ...paymentFilters(f, 'py', 'b', 't'),
+            sql`py.status = 'success'`,
+            sql`b.status IN ${PAID_STATUSES_SQL}`,
+          ]);
+          return db.execute(sql`
+            SELECT
+              py.paid_at::date::text as date,
+              COALESCE(SUM(py.amount::numeric), 0) as gross_amount,
+              COUNT(DISTINCT b.id)::int as count
+            FROM payments py
+            INNER JOIN bookings b ON py.booking_id = b.id
+            INNER JOIN trips t ON b.trip_id = t.id
+            WHERE ${payWhere}
+            GROUP BY py.paid_at::date
+            ORDER BY py.paid_at::date
+          `);
+        }
+        const dd = dailyDateSelect(f, 'b', 't');
+        return db.execute(sql`
+          SELECT
+            ${dd.sel},
+            COALESCE(SUM(b.total_amount::numeric), 0) as gross_amount,
+            COUNT(*)::int as count
+          FROM bookings b
+          INNER JOIN trips t ON b.trip_id = t.id
+          WHERE ${bookingWhere}
+          GROUP BY ${dd.grp}
+          ORDER BY ${dd.ord}
+        `);
+      })(),
+      (() => {
+        const mode = f.dateMode || 'departure';
+        if (mode === 'paid') {
+          return db.execute(sql`
+            SELECT
+              cs.paid_at::date::text as date,
+              COALESCE(SUM(cs.total_amount::numeric), 0) as gross_amount,
+              COUNT(*)::int as count
+            FROM cargo_shipments cs
+            INNER JOIN trips t ON cs.trip_id = t.id
+            WHERE ${cargoWhere}
+            GROUP BY cs.paid_at::date
+            ORDER BY cs.paid_at::date
+          `);
+        }
+        return db.execute(sql`
+          SELECT
+            t.service_date::text as date,
+            COALESCE(SUM(cs.total_amount::numeric), 0) as gross_amount,
+            COUNT(*)::int as count
+          FROM cargo_shipments cs
+          INNER JOIN trips t ON cs.trip_id = t.id
+          WHERE ${cargoWhere}
+          GROUP BY t.service_date
+          ORDER BY t.service_date
+        `);
+      })(),
+      db.execute(sql`
+        SELECT
+          tp.name as route_name, tp.code as route_code,
+          COALESCE(SUM(b.total_amount::numeric), 0) as gross_amount,
+          COUNT(*)::int as count
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
+        WHERE ${bookingWhere}
+        GROUP BY tp.name, tp.code
+        ORDER BY gross_amount DESC
+      `),
+      db.execute(sql`
+        SELECT
+          tp.name as route_name, tp.code as route_code,
+          COALESCE(SUM(cs.total_amount::numeric), 0) as gross_amount,
+          COUNT(*)::int as count
+        FROM cargo_shipments cs
+        INNER JOIN trips t ON cs.trip_id = t.id
+        LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
+        WHERE ${cargoWhere}
+        GROUP BY tp.name, tp.code
+        ORDER BY gross_amount DESC
+      `),
+      db.execute(sql`
+        SELECT
+          COALESCE(o.name, '-') as outlet_name,
+          COALESCE(SUM(b.total_amount::numeric), 0) as gross_amount,
+          COUNT(*)::int as count
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        LEFT JOIN outlets o ON b.outlet_id = o.id
+        WHERE ${bookingWhere}
+        GROUP BY o.name
+        ORDER BY gross_amount DESC
+      `),
+      db.execute(sql`
+        SELECT
+          b.booking_code, b.total_amount, b.channel,
+          t.service_date::text,
+          tp.name as route_name,
+          COALESCE(o.name, '-') as outlet_name
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
+        LEFT JOIN outlets o ON b.outlet_id = o.id
+        WHERE ${bookingWhere}
+        ORDER BY b.created_at DESC
+        LIMIT 50
+      `),
+      db.execute(sql`
+        SELECT
+          cs.waybill_number, cs.total_amount, cs.payment_method,
+          t.service_date::text,
+          tp.name as route_name
+        FROM cargo_shipments cs
+        INNER JOIN trips t ON cs.trip_id = t.id
+        LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
+        WHERE ${cargoWhere}
+        ORDER BY cs.created_at DESC
+        LIMIT 50
+      `),
+    ]);
+
+    const ticketGross = Number(ticketSummary.rows[0]?.gross_amount || 0);
+    const cargoGross = Number(cargoSummary.rows[0]?.gross_amount || 0);
+    const totalGross = ticketGross + cargoGross;
+
+    const tier = VOLUME_TIERS.find(t => totalGross >= t.min) || VOLUME_TIERS[VOLUME_TIERS.length - 1];
+    const feeBeforeDiscount = totalGross * FEE_RATE;
+    const discountAmount = feeBeforeDiscount * tier.discount;
+    const feeAfterDiscount = feeBeforeDiscount - discountAmount;
+    const ppnAmount = feeAfterDiscount * PPN_RATE;
+    const totalCharge = feeAfterDiscount + ppnAmount;
+
+    const dailyMap = new Map<string, { ticket: number; cargo: number }>();
+    for (const row of ticketDaily.rows as any[]) {
+      const existing = dailyMap.get(row.date) || { ticket: 0, cargo: 0 };
+      existing.ticket = Number(row.gross_amount);
+      dailyMap.set(row.date, existing);
+    }
+    for (const row of cargoDaily.rows as any[]) {
+      const existing = dailyMap.get(row.date) || { ticket: 0, cargo: 0 };
+      existing.cargo = Number(row.gross_amount);
+      dailyMap.set(row.date, existing);
+    }
+    const daily = Array.from(dailyMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, vals]) => ({
+        date,
+        ticket_gross: vals.ticket,
+        cargo_gross: vals.cargo,
+        total_gross: vals.ticket + vals.cargo,
+        fee: (vals.ticket + vals.cargo) * FEE_RATE,
+      }));
+
+    return {
+      summary: {
+        ticket_gross: ticketGross,
+        cargo_gross: cargoGross,
+        total_gross: totalGross,
+        total_bookings: Number(ticketSummary.rows[0]?.total_bookings || 0),
+        total_shipments: Number(cargoSummary.rows[0]?.total_shipments || 0),
+        fee_rate: FEE_RATE,
+        fee_before_discount: feeBeforeDiscount,
+        volume_discount_pct: tier.discount,
+        discount_amount: discountAmount,
+        fee_after_discount: feeAfterDiscount,
+        ppn_rate: PPN_RATE,
+        ppn_amount: ppnAmount,
+        total_charge: totalCharge,
+      },
+      daily,
+      ticketByRoute: (ticketByRoute.rows as any[]).map(r => ({
+        ...r,
+        gross_amount: Number(r.gross_amount),
+        fee: Number(r.gross_amount) * FEE_RATE,
+      })),
+      cargoByRoute: (cargoByRoute.rows as any[]).map(r => ({
+        ...r,
+        gross_amount: Number(r.gross_amount),
+        fee: Number(r.gross_amount) * FEE_RATE,
+      })),
+      ticketByOutlet: (ticketByOutlet.rows as any[]).map(r => ({
+        ...r,
+        gross_amount: Number(r.gross_amount),
+        fee: Number(r.gross_amount) * FEE_RATE,
+      })),
+      recentTickets: recentTickets.rows,
+      recentCargo: recentCargo.rows,
+      volumeTiers: VOLUME_TIERS.map(t => ({
+        min: t.min,
+        discount: t.discount,
+        effective_rate: FEE_RATE * (1 - t.discount),
+      })),
+    };
+  }
+
   async getFilterOptions() {
     const outlets = await db.execute(sql`SELECT id, name FROM outlets ORDER BY name`);
     const patterns = await db.execute(sql`SELECT id, code, name FROM trip_patterns WHERE active = true ORDER BY name`);
