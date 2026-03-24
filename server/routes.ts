@@ -44,7 +44,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
 
   const masterDataCache = {
     onSend: async (_req: FastifyRequest, reply: FastifyReply, payload: string) => {
-      reply.header('Cache-Control', 'private, max-age=60, stale-while-revalidate=120');
+      reply.header('Cache-Control', 'no-cache');
       return payload;
     }
   };
