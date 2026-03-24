@@ -14,7 +14,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import {
   ClipboardList, Search, Eye, CheckCircle, Trash2, ArrowLeft, Printer,
   User, Bus, MapPin, Calendar, FileText, Wallet, Plus, Pencil, X,
-  ChevronLeft, ChevronRight, CircleDollarSign, TrendingUp, ArrowUpDown, Banknote, Clock
+  ChevronLeft, ChevronRight, CircleDollarSign, TrendingUp, Banknote, Clock, Route
 } from 'lucide-react';
 import type { SpjWithDetails, SpjCostLine, TripWithDetails, TripPattern } from '@/types';
 import { SpjStatusBadge } from '@/components/shared/StatusBadges';
@@ -662,6 +662,41 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
           </CardContent>
         </Card>
 
+        {(spjData as any).stops?.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Route className="w-4 h-4 text-primary" /> Titik Pickup & Drop
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4">
+              <div className="space-y-0">
+                {((spjData as any).stops as any[]).map((stop: any, idx: number, arr: any[]) => {
+                  const isFirst = idx === 0;
+                  const isLast = idx === arr.length - 1;
+                  const typeLabel = stop.boardingAllowed && stop.alightingAllowed ? 'Pickup & Drop'
+                    : stop.boardingAllowed ? 'Pickup' : 'Drop';
+                  return (
+                    <div key={idx} className="flex items-start gap-3" data-testid={`spj-stop-${idx}`}>
+                      <div className="flex flex-col items-center">
+                        <div className={`w-3 h-3 rounded-full border-2 shrink-0 ${isFirst ? 'bg-primary border-primary' : isLast ? 'bg-destructive border-destructive' : 'bg-background border-muted-foreground'}`} />
+                        {!isLast && <div className="w-0.5 h-8 bg-border" />}
+                      </div>
+                      <div className="pb-3 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium" data-testid={`spj-stop-name-${idx}`}>{stop.stopName}</span>
+                          <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{stop.stopCode}</span>
+                          <Badge variant="outline" className={`text-[10px] py-0 ${stop.boardingAllowed ? 'border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-950' : 'border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950'}`} data-testid={`spj-stop-type-${idx}`}>{typeLabel}</Badge>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {spjData.notes && (
           <Card>
             <CardContent className="py-4">
@@ -670,6 +705,21 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
             </CardContent>
           </Card>
         )}
+      </div>
+
+      <ThermalSpj spjData={spjData} costLines={costLines} totalEstimated={totalEstimated} totalActual={totalActual} totalAdvance={totalAdvance} settlement={settlement} />
+
+      <div className="px-6 py-3 border-t shrink-0 bg-background flex items-center justify-between print:hidden">
+        <Button
+          size="sm"
+          variant="default"
+          onClick={() => window.print()}
+          className="gap-1.5"
+          data-testid="btn-print-spj"
+        >
+          <Printer className="w-3.5 h-3.5" />
+          Cetak SPJ
+        </Button>
       </div>
 
       <Dialog open={showAddLine} onOpenChange={setShowAddLine}>
@@ -778,6 +828,118 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function formatDateShort(dateStr: string) {
+  if (!dateStr) return '-';
+  try {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatDateTimePrint(isoStr: string | null) {
+  if (!isoStr) return '-';
+  try {
+    return new Date(isoStr).toLocaleString('id-ID', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+      timeZone: 'Asia/Jakarta'
+    });
+  } catch {
+    return isoStr;
+  }
+}
+
+const STATUS_LABELS_PRINT: Record<string, string> = {
+  draft: 'DRAFT',
+  issued: 'DITERBITKAN',
+  on_trip: 'DALAM PERJALANAN',
+  settled: 'SELESAI',
+};
+
+function ThermalSpj({ spjData, costLines, totalEstimated, totalActual, totalAdvance, settlement }: {
+  spjData: SpjWithDetails;
+  costLines: SpjCostLine[];
+  totalEstimated: number;
+  totalActual: number;
+  totalAdvance: number;
+  settlement: number;
+}) {
+  const line = '————————————————————————————————————————————————';
+  const doubleLine = '================================================';
+  const stops = (spjData as any).stops as any[] | undefined;
+
+  return (
+    <div id="thermal-manifest" className="hidden print:block font-mono text-[11pt] leading-relaxed whitespace-pre-wrap">
+      <div className="text-center font-bold text-[14pt]">SURAT PERINTAH JALAN</div>
+      <div className="text-center font-bold text-[11pt]">TRANSITY SHUTTLE</div>
+      <div>{doubleLine}</div>
+      <div>No SPJ  : {spjData.spjNumber}</div>
+      <div>Status  : {STATUS_LABELS_PRINT[spjData.status || 'draft']}</div>
+      <div>Tanggal : {formatDateShort(spjData.tripServiceDate as string)}</div>
+      <div>{line}</div>
+      <div>Rute    : {spjData.tripPatternName || '-'}</div>
+      {spjData.tripPatternCode && <div>Kode    : {spjData.tripPatternCode}</div>}
+      <div>Plat    : {spjData.vehiclePlate || '-'} ({spjData.vehicleCode || '-'})</div>
+      <div>Driver  : {spjData.driverName || '-'}</div>
+      {spjData.driverLicenseNo && <div>SIM     : {spjData.driverLicenseNo}</div>}
+      {spjData.driverPhone && <div>HP      : {spjData.driverPhone}</div>}
+      <div>{doubleLine}</div>
+
+      {stops && stops.length > 0 && (
+        <>
+          <div className="font-bold">TITIK PICKUP & DROP</div>
+          <div>{line}</div>
+          {stops.map((stop: any, i: number) => {
+            const type = stop.boardingAllowed && stop.alightingAllowed ? 'P/D'
+              : stop.boardingAllowed ? 'Pickup' : 'Drop';
+            return (
+              <div key={i}>
+                {String(i + 1).padStart(2, ' ')}. {stop.stopName} ({stop.stopCode}) [{type}]
+              </div>
+            );
+          })}
+          <div>{doubleLine}</div>
+        </>
+      )}
+
+      <div className="font-bold">RINCIAN BIAYA</div>
+      <div>{line}</div>
+      {costLines.length === 0 ? (
+        <div>  (Belum ada rincian biaya)</div>
+      ) : (
+        costLines.map((cl, i) => (
+          <div key={cl.id} style={{ marginBottom: '4pt' }}>
+            <div>{String(i + 1).padStart(2, ' ')}. [{CATEGORY_LABELS[cl.category] || cl.category}] {cl.label}</div>
+            <div>   Est: {fmtCurrency(cl.estimatedAmount)}{cl.actualAmount ? ` | Aktual: ${fmtCurrency(cl.actualAmount)}` : ''}{cl.isAdvance ? ' [UM]' : ''}</div>
+            {cl.notes && <div>   {cl.notes}</div>}
+          </div>
+        ))
+      )}
+      <div>{line}</div>
+      <div>Total Estimasi : {fmtCurrency(totalEstimated)}</div>
+      <div>Total Aktual   : {fmtCurrency(totalActual)}</div>
+      <div>{doubleLine}</div>
+      <div>Uang Muka      : {fmtCurrency(totalAdvance)}</div>
+      <div>Biaya Aktual   : {fmtCurrency(totalActual)}</div>
+      <div className="font-bold">{settlement >= 0 ? 'Sisa Kembali' : 'Kurang Bayar'}   : {fmtCurrency(Math.abs(settlement))}</div>
+      <div>{doubleLine}</div>
+
+      {spjData.notes && (
+        <>
+          <div>Catatan: {spjData.notes}</div>
+          <div>{line}</div>
+        </>
+      )}
+
+      <div style={{ marginTop: '8pt' }}>Dicetak: {formatDateTimePrint(new Date().toISOString())}</div>
+      {spjData.issuedAt && <div>Diterbitkan: {formatDateTimePrint(spjData.issuedAt as string)}</div>}
+      {spjData.settledAt && <div>Diselesaikan: {formatDateTimePrint(spjData.settledAt as string)}</div>}
     </div>
   );
 }

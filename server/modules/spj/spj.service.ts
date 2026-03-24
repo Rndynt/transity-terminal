@@ -36,7 +36,7 @@ export class SpjService {
       SELECT s.*,
         d.name as driver_name, d.code as driver_code, d.phone as driver_phone, d.license_no as driver_license_no,
         v.code as vehicle_code, v.plate as vehicle_plate,
-        t.service_date as trip_service_date,
+        t.service_date as trip_service_date, t.pattern_id as pattern_id,
         tp.name as trip_pattern_name, tp.code as trip_pattern_code
       FROM spj s
       LEFT JOIN drivers d ON s.driver_id = d.id
@@ -49,6 +49,26 @@ export class SpjService {
     const spjData = this.mapRow(rows.rows[0]);
     const lines = await this.getCostLines(id);
     spjData.costLines = lines;
+
+    const patternId = (rows.rows[0] as any).pattern_id;
+    if (patternId) {
+      const stopsRows = await db.execute(sql`
+        SELECT ps.stop_sequence, ps.boarding_allowed, ps.alighting_allowed,
+          st.name as stop_name, st.code as stop_code
+        FROM pattern_stops ps
+        LEFT JOIN stops st ON ps.stop_id = st.id
+        WHERE ps.pattern_id = ${patternId} AND ps.deleted_at IS NULL
+        ORDER BY ps.stop_sequence ASC
+      `);
+      (spjData as any).stops = (stopsRows.rows || []).map((r: any) => ({
+        sequence: r.stop_sequence,
+        stopName: r.stop_name,
+        stopCode: r.stop_code,
+        boardingAllowed: r.boarding_allowed,
+        alightingAllowed: r.alighting_allowed,
+      }));
+    }
+
     return spjData;
   }
 
