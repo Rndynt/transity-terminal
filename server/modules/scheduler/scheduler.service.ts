@@ -166,7 +166,10 @@ export class SchedulerService {
       stopId: patternStops.stopId,
     })
     .from(patternStops)
-    .where(isNull(patternStops.deletedAt));
+    .where(and(
+      isNull(patternStops.deletedAt),
+      eq(patternStops.boardingAllowed, true)
+    ));
 
     const map: Record<string, string[]> = {};
     for (const row of rows) {
