@@ -13,6 +13,7 @@ const addCostLineSchema = z.object({
 });
 
 const updateCostLineSchema = z.object({
+  estimatedAmount: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
   actualAmount: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
 });

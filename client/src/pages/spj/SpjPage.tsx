@@ -348,12 +348,15 @@ export default function SpjPage() {
 function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const { toast } = useToast();
   const [editingLine, setEditingLine] = useState<string | null>(null);
+  const [editEstimated, setEditEstimated] = useState('');
   const [editActual, setEditActual] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [showAddLine, setShowAddLine] = useState(false);
   const [addForm, setAddForm] = useState({ category: 'lainnya', label: '', estimatedAmount: '', isAdvance: true, notes: '' });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSettleConfirm, setShowSettleConfirm] = useState(false);
+  const [settleMode, setSettleMode] = useState(false);
+  const [settleActuals, setSettleActuals] = useState<Record<string, string>>({});
 
   const { data: spjData, isLoading } = useQuery<SpjWithDetails>({
     queryKey: ['/api/spj', id],
@@ -442,12 +445,38 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
 
   const startEdit = (line: SpjCostLine) => {
     setEditingLine(line.id);
+    setEditEstimated(line.estimatedAmount || '');
     setEditActual(line.actualAmount || '');
     setEditNotes(line.notes || '');
   };
 
   const saveEdit = (lineId: string) => {
-    updateLineMutation.mutate({ lineId, data: { actualAmount: editActual || null, notes: editNotes || null } });
+    if (isDraft) {
+      updateLineMutation.mutate({ lineId, data: { estimatedAmount: editEstimated || null, notes: editNotes || null } });
+    } else {
+      updateLineMutation.mutate({ lineId, data: { actualAmount: editActual || null, notes: editNotes || null } });
+    }
+  };
+
+  const canEditLines = isDraft;
+  const showActualColumn = settleMode || isSettled;
+
+  const enterSettleMode = () => {
+    const actuals: Record<string, string> = {};
+    costLines.forEach(l => { actuals[l.id] = l.actualAmount || l.estimatedAmount || '0'; });
+    setSettleActuals(actuals);
+    setSettleMode(true);
+  };
+
+  const saveAllActualsAndSettle = async () => {
+    for (const line of costLines) {
+      const val = settleActuals[line.id];
+      if (val !== (line.actualAmount || '')) {
+        await spjApi.updateCostLine(line.id, { actualAmount: val || null });
+      }
+    }
+    settleMutation.mutate();
+    setSettleMode(false);
   };
 
   return (
@@ -478,13 +507,25 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
                 </Button>
               </CanAccess>
             )}
-            {(isIssued || spjData.status === 'on_trip') && (
+            {(isIssued || spjData.status === 'on_trip') && !settleMode && (
               <CanAccess flag="action.spj.settle">
-                <Button size="sm" variant="default" onClick={() => setShowSettleConfirm(true)} disabled={settleMutation.isPending} data-testid="btn-settle-spj">
+                <Button size="sm" variant="default" onClick={enterSettleMode} data-testid="btn-settle-spj">
                   <Wallet className="w-4 h-4 sm:mr-1" />
                   <span className="hidden sm:inline">Selesaikan</span>
                 </Button>
               </CanAccess>
+            )}
+            {settleMode && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => setSettleMode(false)} data-testid="btn-cancel-settle">
+                  <X className="w-4 h-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Batal</span>
+                </Button>
+                <Button size="sm" variant="default" onClick={() => setShowSettleConfirm(true)} disabled={settleMutation.isPending} data-testid="btn-confirm-settle">
+                  <CheckCircle className="w-4 h-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Simpan & Selesai</span>
+                </Button>
+              </>
             )}
             {isDraft && (
               <Button size="sm" variant="destructive" onClick={() => setShowDeleteConfirm(true)} data-testid="btn-delete-spj">
@@ -540,7 +581,7 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <Wallet className="w-4 h-4 text-primary" /> Rincian Biaya Perjalanan
               </CardTitle>
-              {!isSettled && (
+              {canEditLines && (
                 <Button size="sm" variant="outline" onClick={() => setShowAddLine(true)} data-testid="btn-add-cost-line">
                   <Plus className="w-3.5 h-3.5 mr-1" /> Tambah
                 </Button>
@@ -558,10 +599,10 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
                       <TableHead className="pl-4">Kategori</TableHead>
                       <TableHead>Keterangan</TableHead>
                       <TableHead className="text-right">Estimasi</TableHead>
-                      <TableHead className="text-right">Aktual</TableHead>
+                      {showActualColumn && <TableHead className="text-right">Aktual</TableHead>}
                       <TableHead className="text-center">Uang Muka</TableHead>
                       <TableHead>Catatan</TableHead>
-                      {!isSettled && <TableHead className="w-20" />}
+                      {canEditLines && <TableHead className="w-20" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -571,25 +612,39 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
                           <Badge variant="outline" className="text-xs">{CATEGORY_LABELS[line.category] || line.category}</Badge>
                         </TableCell>
                         <TableCell className="text-sm">{line.label}</TableCell>
-                        <TableCell className="text-right text-sm font-medium tabular-nums">{fmtCurrency(line.estimatedAmount)}</TableCell>
                         <TableCell className="text-right">
-                          {editingLine === line.id ? (
+                          {editingLine === line.id && isDraft ? (
                             <Input
                               type="number"
-                              value={editActual}
-                              onChange={e => setEditActual(e.target.value)}
+                              value={editEstimated}
+                              onChange={e => setEditEstimated(e.target.value)}
                               className="w-28 h-7 text-sm text-right"
-                              data-testid="input-actual-amount"
+                              data-testid="input-estimated-amount"
                             />
                           ) : (
-                            <span className={`text-sm font-medium tabular-nums ${line.actualAmount ? '' : 'text-muted-foreground'}`}>
-                              {line.actualAmount ? fmtCurrency(line.actualAmount) : '—'}
-                            </span>
+                            <span className="text-sm font-medium tabular-nums">{fmtCurrency(line.estimatedAmount)}</span>
                           )}
                         </TableCell>
+                        {showActualColumn && (
+                          <TableCell className="text-right">
+                            {settleMode ? (
+                              <Input
+                                type="number"
+                                value={settleActuals[line.id] || ''}
+                                onChange={e => setSettleActuals({ ...settleActuals, [line.id]: e.target.value })}
+                                className="w-28 h-7 text-sm text-right"
+                                data-testid={`input-actual-${line.id}`}
+                              />
+                            ) : (
+                              <span className={`text-sm font-medium tabular-nums ${line.actualAmount ? '' : 'text-muted-foreground'}`}>
+                                {line.actualAmount ? fmtCurrency(line.actualAmount) : '—'}
+                              </span>
+                            )}
+                          </TableCell>
+                        )}
                         <TableCell className="text-center">
                           {line.isAdvance ? (
-                            <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-xs">Ya</Badge>
+                            <Badge className="bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800 text-xs">Ya</Badge>
                           ) : (
                             <span className="text-xs text-muted-foreground">Tidak</span>
                           )}
@@ -607,7 +662,7 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
                             line.notes || '—'
                           )}
                         </TableCell>
-                        {!isSettled && (
+                        {canEditLines && (
                           <TableCell>
                             <div className="flex gap-1">
                               {editingLine === line.id ? (
@@ -637,33 +692,50 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
                     <TableRow className="bg-muted/30 font-semibold">
                       <TableCell className="pl-4" colSpan={2}>Total</TableCell>
                       <TableCell className="text-right tabular-nums">{fmtCurrency(totalEstimated)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{fmtCurrency(totalActual)}</TableCell>
+                      {showActualColumn && <TableCell className="text-right tabular-nums">{fmtCurrency(settleMode ? Object.values(settleActuals).reduce((s, v) => s + parseFloat(v || '0'), 0) : totalActual)}</TableCell>}
                       <TableCell />
                       <TableCell />
-                      {!isSettled && <TableCell />}
+                      {canEditLines && <TableCell />}
                     </TableRow>
                   </TableBody>
                 </Table>
               </div>
             )}
 
-            <div className="mt-4 p-3 rounded-lg bg-muted/30 border space-y-1.5">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Uang muka (advance)</span>
-                <span className="font-medium tabular-nums">{fmtCurrency(totalAdvance)}</span>
+            {!showActualColumn && (
+              <div className="mt-4 p-3 rounded-lg bg-muted/30 border space-y-1.5">
+                <div className="flex justify-between text-sm font-semibold">
+                  <span>Total uang muka (advance)</span>
+                  <span className="tabular-nums">{fmtCurrency(totalAdvance)}</span>
+                </div>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total biaya aktual</span>
-                <span className="font-medium tabular-nums">{fmtCurrency(totalActual)}</span>
+            )}
+
+            {showActualColumn && (
+              <div className="mt-4 p-3 rounded-lg bg-muted/30 border space-y-1.5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Uang muka (advance)</span>
+                  <span className="font-medium tabular-nums">{fmtCurrency(totalAdvance)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total biaya aktual</span>
+                  <span className="font-medium tabular-nums">{fmtCurrency(settleMode ? Object.values(settleActuals).reduce((s, v) => s + parseFloat(v || '0'), 0) : totalActual)}</span>
+                </div>
+                <div className="h-px bg-border my-1" />
+                {(() => {
+                  const actualSum = settleMode ? Object.values(settleActuals).reduce((s, v) => s + parseFloat(v || '0'), 0) : totalActual;
+                  const diff = totalAdvance - actualSum;
+                  return (
+                    <div className="flex justify-between text-sm font-semibold">
+                      <span>{diff >= 0 ? 'Sisa dikembalikan' : 'Kurang bayar'}</span>
+                      <span className={`tabular-nums ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {fmtCurrency(Math.abs(diff))}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
-              <div className="h-px bg-border my-1" />
-              <div className="flex justify-between text-sm font-semibold">
-                <span>{settlement >= 0 ? 'Sisa dikembalikan' : 'Kurang bayar'}</span>
-                <span className={`tabular-nums ${settlement >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {fmtCurrency(Math.abs(settlement))}
-                </span>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
@@ -776,28 +848,34 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
             <p className="text-sm text-muted-foreground">
               SPJ <strong>{spjData.spjNumber}</strong> akan ditandai sebagai <strong>Selesai</strong>. Setelah diselesaikan, biaya tidak dapat diubah lagi.
             </p>
-            <div className="p-3 rounded-lg bg-muted/30 border space-y-1.5">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Uang muka</span>
-                <span className="font-medium tabular-nums">{fmtCurrency(totalAdvance)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total biaya aktual</span>
-                <span className="font-medium tabular-nums">{fmtCurrency(totalActual)}</span>
-              </div>
-              <div className="h-px bg-border" />
-              <div className="flex justify-between text-sm font-semibold">
-                <span>{settlement >= 0 ? 'Sisa dikembalikan' : 'Kurang bayar'}</span>
-                <span className={`tabular-nums ${settlement >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {fmtCurrency(Math.abs(settlement))}
-                </span>
-              </div>
-            </div>
+            {(() => {
+              const actualSum = settleMode ? Object.values(settleActuals).reduce((s, v) => s + parseFloat(v || '0'), 0) : totalActual;
+              const diff = totalAdvance - actualSum;
+              return (
+                <div className="p-3 rounded-lg bg-muted/30 border space-y-1.5">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Uang muka</span>
+                    <span className="font-medium tabular-nums">{fmtCurrency(totalAdvance)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total biaya aktual</span>
+                    <span className="font-medium tabular-nums">{fmtCurrency(actualSum)}</span>
+                  </div>
+                  <div className="h-px bg-border" />
+                  <div className="flex justify-between text-sm font-semibold">
+                    <span>{diff >= 0 ? 'Sisa dikembalikan' : 'Kurang bayar'}</span>
+                    <span className={`tabular-nums ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {fmtCurrency(Math.abs(diff))}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSettleConfirm(false)}>Batal</Button>
             <Button
-              onClick={() => { settleMutation.mutate(); setShowSettleConfirm(false); }}
+              onClick={() => { saveAllActualsAndSettle(); setShowSettleConfirm(false); }}
               disabled={settleMutation.isPending}
               data-testid="btn-confirm-settle-spj"
             >

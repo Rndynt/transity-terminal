@@ -166,7 +166,7 @@ export class SpjService {
     return db.select().from(spjCostLines).where(eq(spjCostLines.spjId, spjId)).orderBy(spjCostLines.createdAt);
   }
 
-  async updateCostLine(lineId: string, data: { actualAmount?: string | null; notes?: string | null }): Promise<SpjCostLine> {
+  async updateCostLine(lineId: string, data: { estimatedAmount?: string | null; actualAmount?: string | null; notes?: string | null }): Promise<SpjCostLine> {
     const [updated] = await db.update(spjCostLines).set(data).where(eq(spjCostLines.id, lineId)).returning();
     if (!updated) throw new Error("Cost line tidak ditemukan");
     return updated;
