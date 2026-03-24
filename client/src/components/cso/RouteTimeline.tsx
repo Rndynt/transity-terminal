@@ -257,65 +257,80 @@ export default function RouteTimeline({
         })}
       </div>
 
-      {selectedOrigin && selectedDestination && (
-        <div className={`bg-white border-2 rounded-xl p-4 shadow-sm ${legCount > 0 ? 'border-blue-200' : 'border-rose-200 bg-rose-50/30'}`}>
-          <div className="flex items-center gap-4 mb-3">
-            <div className="flex-1">
-              <p className="text-[9px] text-gray-400 uppercase font-semibold tracking-wider mb-0.5">Naik</p>
-              <p className="text-sm font-bold text-gray-900">{selectedOrigin.name}</p>
-              {originIdx >= 0 && (
-                <p className="text-[11px] text-gray-400 font-mono">
-                  {formatTime(sortedStopTimes[originIdx]?.departAt)}
-                </p>
-              )}
-            </div>
+      {selectedOrigin && selectedDestination && (() => {
+        const originTime = originIdx >= 0 ? formatTime(sortedStopTimes[originIdx]?.departAt) : null;
+        const destTime = destIdx >= 0 ? formatTime(sortedStopTimes[destIdx]?.arriveAt) : null;
+        const totalDuration = (originIdx >= 0 && destIdx >= 0)
+          ? calculateDuration(sortedStopTimes[originIdx]?.departAt, sortedStopTimes[destIdx]?.arriveAt)
+          : null;
+        const isValid = legCount > 0;
 
-            <div className="flex flex-col items-center gap-1 px-3">
-              <div className="flex items-center gap-1">
-                <div className={`w-2 h-2 rounded-full ${legCount > 0 ? 'bg-emerald-400' : 'bg-rose-300'}`} />
-                <div className={`h-px w-8 ${legCount > 0 ? 'bg-blue-400' : 'bg-rose-300'}`} />
-                <div className={`px-2 py-0.5 rounded-full ${legCount > 0 ? 'bg-blue-100' : 'bg-rose-100'}`}>
-                  <span className={`text-[10px] font-bold ${legCount > 0 ? 'text-blue-700' : 'text-rose-600'}`}>{legCount} leg</span>
+        return (
+          <div className={`rounded-xl overflow-hidden shadow-sm border-2 ${isValid ? 'border-blue-200' : 'border-rose-200'}`}>
+            <div className={`px-4 py-3 ${isValid ? 'bg-gradient-to-r from-blue-50 to-indigo-50' : 'bg-rose-50'}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                    <span className="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Naik</span>
+                  </div>
+                  <p className="text-sm font-bold text-gray-900 leading-tight">{selectedOrigin.name}</p>
+                  {originTime && (
+                    <p className="text-xs text-gray-500 font-mono mt-0.5">{originTime}</p>
+                  )}
                 </div>
-                <div className={`h-px w-8 ${legCount > 0 ? 'bg-blue-400' : 'bg-rose-300'}`} />
-                <div className={`w-2 h-2 rounded-full ${legCount > 0 ? 'bg-rose-400' : 'bg-rose-300'}`} />
+
+                <div className="flex flex-col items-center pt-3 px-1 flex-shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    <div className={`h-[2px] w-5 ${isValid ? 'bg-blue-300' : 'bg-rose-300'}`} />
+                    <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${isValid ? 'bg-blue-100' : 'bg-rose-100'}`}>
+                      <ArrowRight className={`w-3 h-3 ${isValid ? 'text-blue-500' : 'text-rose-500'}`} />
+                      <span className={`text-[10px] font-bold ${isValid ? 'text-blue-700' : 'text-rose-600'}`}>{legCount} leg</span>
+                    </div>
+                    <div className={`h-[2px] w-5 ${isValid ? 'bg-blue-300' : 'bg-rose-300'}`} />
+                  </div>
+                  {totalDuration && totalDuration > 0 && (
+                    <span className="text-[9px] text-gray-400 mt-0.5">{formatDuration(totalDuration)}</span>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0 text-right">
+                  <div className="flex items-center gap-1.5 justify-end mb-1">
+                    <span className="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Turun</span>
+                    <div className="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0" />
+                  </div>
+                  <p className="text-sm font-bold text-gray-900 leading-tight">{selectedDestination.name}</p>
+                  {destTime && (
+                    <p className="text-xs text-gray-500 font-mono mt-0.5">{destTime}</p>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="flex-1 text-right">
-              <p className="text-[9px] text-gray-400 uppercase font-semibold tracking-wider mb-0.5">Turun</p>
-              <p className="text-sm font-bold text-gray-900">{selectedDestination.name}</p>
-              {destIdx >= 0 && (
-                <p className="text-[11px] text-gray-400 font-mono">
-                  {formatTime(sortedStopTimes[destIdx]?.arriveAt)}
-                </p>
-              )}
-            </div>
+            {!isValid && (
+              <div className="px-4 py-2 bg-rose-50 border-t border-rose-200 flex items-center gap-2">
+                <span className="text-rose-500 text-sm font-bold">⚠</span>
+                <p className="text-xs text-rose-700 font-medium">Titik naik dan turun tidak boleh sama. Pilih stop yang berbeda.</p>
+              </div>
+            )}
+
+            {onProceed && (
+              <button
+                onClick={isValid ? onProceed : undefined}
+                disabled={!isValid}
+                data-testid="btn-proceed-from-route"
+                className={`w-full py-3 text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                  isValid
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white active:bg-blue-800'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Lanjut Pilih Kursi <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
           </div>
-
-          {legCount === 0 && (
-            <div className="mb-3 px-3 py-2 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2">
-              <span className="text-rose-500 text-sm font-bold">⚠</span>
-              <p className="text-xs text-rose-700 font-medium">Titik naik dan turun tidak boleh sama. Pilih stop yang berbeda.</p>
-            </div>
-          )}
-
-          {onProceed && (
-            <button
-              onClick={legCount > 0 ? onProceed : undefined}
-              disabled={legCount === 0}
-              data-testid="btn-proceed-from-route"
-              className={`w-full py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm flex items-center justify-center gap-2 ${
-                legCount > 0
-                  ? 'bg-blue-600 hover:bg-blue-500 text-white cursor-pointer'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              }`}
-            >
-              Lanjut Pilih Kursi <ChevronRight className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
