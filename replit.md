@@ -44,7 +44,7 @@ shared/
     enums.ts             → Semua pgEnum definitions
     fleet.ts             → drivers, vehicles, layouts
     network.ts           → stops, outlets
-    scheduling.ts        → tripPatterns, patternStops, tripBases, trips, tripStopTimes, tripLegs
+    scheduling.ts        → tripPatterns, patternStops, tripBases, trips, scheduleExceptions, tripStopTimes, tripLegs
     inventory.ts         → seatInventory, seatHolds, priceRules
     booking.ts           → bookings, passengers, payments, printJobs
     cargo.ts             → cargoShipments, cargoTypes, cargoRates

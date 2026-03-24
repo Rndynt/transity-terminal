@@ -59,7 +59,7 @@ function formatDateLabel(dateStr: string) {
 
 type CalendarItem = {
   id: string;
-  type: 'trip' | 'virtual';
+  type: 'trip' | 'virtual' | 'exception';
   serviceDate: string;
   departureTime: string;
   hour: number;
@@ -72,6 +72,8 @@ type CalendarItem = {
   status?: string | null;
   capacity: number | null;
   seatsBooked?: number;
+  exceptionId?: string | null;
+  exceptionReason?: string | null;
 };
 
 function stripTimeFromCode(code: string): string {
@@ -79,6 +81,29 @@ function stripTimeFromCode(code: string): string {
 }
 
 function ScheduleChip({ item, onSelect }: { item: CalendarItem; onSelect?: (item: CalendarItem) => void }) {
+  if (item.type === 'exception') {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className="px-1.5 py-1 rounded text-[10px] leading-tight cursor-pointer border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center gap-1 line-through opacity-70 hover:opacity-100 transition-opacity"
+            data-testid={`chip-exception-${item.id}`}
+            onClick={() => onSelect?.(item)}
+          >
+            <Ban className="w-2.5 h-2.5 shrink-0" />
+            <span className="font-mono opacity-60">{item.departureTime}</span>
+            <span className="truncate">{stripTimeFromCode(item.routeCode)}</span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="max-w-[200px]">
+          <p className="font-semibold text-xs">{item.routeName}</p>
+          <p className="text-xs text-red-500 mt-0.5">Pengecualian — tidak beroperasi</p>
+          {item.exceptionReason && <p className="text-xs text-muted-foreground mt-0.5">Alasan: {item.exceptionReason}</p>}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
   if (item.type === 'virtual') {
     return (
       <Tooltip>
@@ -151,16 +176,65 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   canceled: { label: 'Dibatalkan', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' },
 };
 
-function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip, isMaterializing, isClosingTrip }: {
+function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip, onAddException, onRemoveException, isMaterializing, isClosingTrip, isAddingException, isRemovingException }: {
   item: CalendarItem | null;
   open: boolean;
   onClose: () => void;
   onMaterialize: (item: CalendarItem) => void;
   onCloseTrip: (item: CalendarItem) => void;
+  onAddException: (item: CalendarItem, reason?: string) => void;
+  onRemoveException: (item: CalendarItem) => void;
   isMaterializing: boolean;
   isClosingTrip: boolean;
+  isAddingException: boolean;
+  isRemovingException: boolean;
 }) {
   if (!item) return null;
+
+  if (item.type === 'exception') {
+    return (
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Ban className="w-5 h-5 text-red-500" />
+              Pengecualian Jadwal
+            </DialogTitle>
+            <DialogDescription>Jadwal ini tidak beroperasi pada tanggal ini</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/30">
+              <p className="text-xs text-red-600 dark:text-red-400">Jadwal ini dikecualikan dan tidak akan muncul sebagai virtual trip pada tanggal ini.</p>
+              {item.exceptionReason && (
+                <p className="text-xs text-muted-foreground mt-1.5">Alasan: {item.exceptionReason}</p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <DetailRow icon={MapPin} label="Rute" value={item.routeName} />
+              <DetailRow icon={Bus} label="Kode" value={stripTimeFromCode(item.routeCode)} mono />
+              <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
+              <DetailRow icon={CalendarRange} label="Tanggal" value={formatDateLabel(item.serviceDate)} />
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-green-600 border-green-200 hover:bg-green-50 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-950/30"
+              data-testid="btn-remove-exception"
+              onClick={() => onRemoveException(item)}
+              disabled={isRemovingException}
+            >
+              {isRemovingException ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+              Aktifkan Kembali
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   if (item.type === 'virtual') {
     return (
@@ -180,13 +254,24 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
 
             <div className="space-y-3">
               <DetailRow icon={MapPin} label="Rute" value={item.routeName} />
-              <DetailRow icon={Bus} label="Kode" value={item.routeCode} mono />
+              <DetailRow icon={Bus} label="Kode" value={stripTimeFromCode(item.routeCode)} mono />
               <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
               {item.capacity && <DetailRow icon={Users} label="Kapasitas" value={`${item.capacity} kursi`} />}
             </div>
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="gap-1.5"
+              data-testid="btn-add-exception"
+              onClick={() => onAddException(item)}
+              disabled={isAddingException}
+            >
+              {isAddingException ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
+              Tambah Pengecualian
+            </Button>
             <Button
               size="sm"
               className="gap-1.5"
@@ -425,6 +510,40 @@ export default function SchedulerPage() {
     },
   });
 
+  const addExceptionMutation = useMutation({
+    mutationFn: async ({ item, reason }: { item: CalendarItem; reason?: string }) => {
+      const res = await apiRequest('POST', '/api/scheduler/exceptions', {
+        baseId: item.baseId,
+        exceptionDate: item.serviceDate,
+        reason,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Pengecualian ditambahkan', description: 'Jadwal dikecualikan pada tanggal ini.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/scheduler/calendar'] });
+      setSelectedItem(null);
+    },
+    onError: (err: any) => {
+      toast({ title: 'Gagal menambah pengecualian', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const removeExceptionMutation = useMutation({
+    mutationFn: async (item: CalendarItem) => {
+      const res = await apiRequest('DELETE', `/api/scheduler/exceptions/${item.exceptionId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Pengecualian dihapus', description: 'Jadwal diaktifkan kembali.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/scheduler/calendar'] });
+      setSelectedItem(null);
+    },
+    onError: (err: any) => {
+      toast({ title: 'Gagal menghapus pengecualian', description: err.message, variant: 'destructive' });
+    },
+  });
+
   useEffect(() => {
     if (scrollRef.current) {
       const todayIdx = dates.indexOf(todayStr());
@@ -486,7 +605,7 @@ export default function SchedulerPage() {
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <div className="w-3 h-3 rounded border border-red-300 bg-red-50 dark:bg-red-950/50" />
-            <span>Dibatalkan</span>
+            <span>Pengecualian</span>
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <div className="w-3 h-3 rounded border border-green-300 bg-green-50 dark:bg-green-950/50" />
@@ -604,8 +723,12 @@ export default function SchedulerPage() {
         onClose={() => setSelectedItem(null)}
         onMaterialize={(item) => materializeMutation.mutate(item)}
         onCloseTrip={(item) => closeTripMutation.mutate(item)}
+        onAddException={(item, reason) => addExceptionMutation.mutate({ item, reason })}
+        onRemoveException={(item) => removeExceptionMutation.mutate(item)}
         isMaterializing={materializeMutation.isPending}
         isClosingTrip={closeTripMutation.isPending}
+        isAddingException={addExceptionMutation.isPending}
+        isRemovingException={removeExceptionMutation.isPending}
       />
 
       <EmptyCellDialog

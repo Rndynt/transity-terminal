@@ -136,6 +136,22 @@ export type CsoAvailableTrip = {
   hasPriceRule: boolean;
 };
 
+export const scheduleExceptions = pgTable("schedule_exceptions", {
+  id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  baseId:      uuid("base_id").notNull().references(() => tripBases.id),
+  exceptionDate: date("exception_date").notNull(),
+  reason:      text("reason"),
+  createdBy:   text("created_by"),
+  createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqBaseDate: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_schedule_exception_base_date ON ${table} (base_id, exception_date)`,
+  idxExceptionDate: sql`CREATE INDEX IF NOT EXISTS idx_schedule_exception_date ON ${table} (exception_date)`,
+}));
+
+export const insertScheduleExceptionSchema = createInsertSchema(scheduleExceptions).omit({ id: true, createdAt: true });
+export type ScheduleException = typeof scheduleExceptions.$inferSelect;
+export type InsertScheduleException = z.infer<typeof insertScheduleExceptionSchema>;
+
 export const tripStopTimes = pgTable("trip_stop_times", {
   id:               uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tripId:           uuid("trip_id").notNull().references(() => trips.id),

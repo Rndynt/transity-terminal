@@ -4,10 +4,12 @@ import { TripBase, TripWithDetails } from "@shared/schema";
 import { ensureDefaultTimezone } from "../../utils/timezone";
 import { db } from "../../db";
 import { sql } from "drizzle-orm";
+import { scheduleExceptions } from "@shared/schema/scheduling";
+import { and, eq, gte, lte } from "drizzle-orm";
 
 export type CalendarItem = {
   id: string;
-  type: 'trip' | 'virtual';
+  type: 'trip' | 'virtual' | 'exception';
   serviceDate: string;
   departureTime: string;
   hour: number;
@@ -20,6 +22,8 @@ export type CalendarItem = {
   status?: string | null;
   capacity: number | null;
   seatsBooked?: number;
+  exceptionId?: string | null;
+  exceptionReason?: string | null;
 };
 
 export class SchedulerService {
@@ -30,14 +34,20 @@ export class SchedulerService {
   }
 
   async getCalendar(fromDate: string, toDate: string): Promise<CalendarItem[]> {
-    const [realTrips, allBases] = await Promise.all([
+    const [realTrips, allBases, exceptions] = await Promise.all([
       this.storage.getTripsForDateRange(fromDate, toDate),
       this.storage.getTripBases(),
+      this.getExceptionsForDateRange(fromDate, toDate),
     ]);
 
     const bookingCounts = await this.getBookingCountsForTrips(
       realTrips.map(t => t.id)
     );
+
+    const exceptionMap = new Map<string, { id: string; reason: string | null }>();
+    for (const ex of exceptions) {
+      exceptionMap.set(`${ex.baseId}-${ex.exceptionDate}`, { id: ex.id, reason: ex.reason });
+    }
 
     const items: CalendarItem[] = [];
 
@@ -92,22 +102,46 @@ export class SchedulerService {
             const [hStr] = departHHMM.split(':');
             const hour = parseInt(hStr, 10) || 0;
 
-            items.push({
-              id: `virtual-${base.id}-${dateStr}`,
-              type: 'virtual',
-              serviceDate: dateStr,
-              departureTime: departHHMM,
-              hour,
-              routeName: base.name || '—',
-              routeCode: base.code || '—',
-              baseId: base.id,
-              tripId: null,
-              vehiclePlate: null,
-              driverName: null,
-              status: null,
-              capacity: base.capacity || null,
-              seatsBooked: 0,
-            });
+            const exKey = `${base.id}-${dateStr}`;
+            const exception = exceptionMap.get(exKey);
+
+            if (exception) {
+              items.push({
+                id: `exception-${exception.id}`,
+                type: 'exception',
+                serviceDate: dateStr,
+                departureTime: departHHMM,
+                hour,
+                routeName: base.name || '—',
+                routeCode: base.code || '—',
+                baseId: base.id,
+                tripId: null,
+                vehiclePlate: null,
+                driverName: null,
+                status: 'canceled',
+                capacity: base.capacity || null,
+                seatsBooked: 0,
+                exceptionId: exception.id,
+                exceptionReason: exception.reason,
+              });
+            } else {
+              items.push({
+                id: `virtual-${base.id}-${dateStr}`,
+                type: 'virtual',
+                serviceDate: dateStr,
+                departureTime: departHHMM,
+                hour,
+                routeName: base.name || '—',
+                routeCode: base.code || '—',
+                baseId: base.id,
+                tripId: null,
+                vehiclePlate: null,
+                driverName: null,
+                status: null,
+                capacity: base.capacity || null,
+                seatsBooked: 0,
+              });
+            }
           }
         }
 
@@ -121,6 +155,31 @@ export class SchedulerService {
     });
 
     return items;
+  }
+
+  async addException(baseId: string, exceptionDate: string, reason?: string, createdBy?: string) {
+    const [inserted] = await db.insert(scheduleExceptions).values({
+      baseId,
+      exceptionDate,
+      reason: reason || null,
+      createdBy: createdBy || null,
+    }).onConflictDoUpdate({
+      target: [scheduleExceptions.baseId, scheduleExceptions.exceptionDate],
+      set: { reason: reason || null, createdBy: createdBy || null },
+    }).returning();
+    return inserted;
+  }
+
+  async removeException(exceptionId: string) {
+    await db.delete(scheduleExceptions).where(eq(scheduleExceptions.id, exceptionId));
+  }
+
+  private async getExceptionsForDateRange(fromDate: string, toDate: string) {
+    return db.select().from(scheduleExceptions)
+      .where(and(
+        gte(scheduleExceptions.exceptionDate, fromDate),
+        lte(scheduleExceptions.exceptionDate, toDate),
+      ));
   }
 
   private getBaseDepartureTime(base: TripBase): string {
