@@ -7,6 +7,7 @@ import { PromosService } from "../promos/promos.service";
 import { PrintService } from "../printing/print.service";
 import { db } from "../../db";
 import { bookings as bookingsTable, seatHolds, seatInventory } from "@shared/schema";
+import { scheduleStopExceptions } from "@shared/schema/scheduling";
 import { eq, and, inArray, gt, lt } from "drizzle-orm";
 import { webSocketService } from "../../realtime/ws";
 import { generateBookingCode, generateTicketNumber } from "../../utils/codeGenerator";
@@ -255,10 +256,8 @@ export class BookingsService {
     originSeq: number,
     destinationSeq: number
   ): Promise<void> {
-    // Get trip stop times with effective flags
     const stopTimes = await this.storage.getTripStopTimesWithEffectiveFlags(tripId);
     
-    // Find origin and destination stops
     const originStop = stopTimes.find(st => st.stopSequence === originSeq);
     const destinationStop = stopTimes.find(st => st.stopSequence === destinationSeq);
     
@@ -270,18 +269,39 @@ export class BookingsService {
       throw new Error(`Destination stop at sequence ${destinationSeq} not found`);
     }
     
-    // Check boarding allowed at origin
     if (!originStop.effectiveBoardingAllowed) {
       const error = new Error('Boarding not allowed at this stop');
       (error as any).code = 'boarding-not-allowed';
       throw error;
     }
     
-    // Check alighting allowed at destination
     if (!destinationStop.effectiveAlightingAllowed) {
       const error = new Error('Alighting not allowed at this stop');
       (error as any).code = 'alighting-not-allowed';
       throw error;
+    }
+
+    const trip = await this.storage.getTripById(tripId);
+    if (trip?.baseId && trip?.serviceDate) {
+      const stopExceptions = await db.select()
+        .from(scheduleStopExceptions)
+        .where(and(
+          eq(scheduleStopExceptions.baseId, trip.baseId),
+          eq(scheduleStopExceptions.exceptionDate, trip.serviceDate),
+        ));
+
+      for (const ex of stopExceptions) {
+        if (ex.stopId === originStop.stopId && ex.disableBoarding) {
+          const error = new Error('Titik naik ini ditutup sementara oleh operasional');
+          (error as any).code = 'stop-closed-by-ops';
+          throw error;
+        }
+        if (ex.stopId === destinationStop.stopId && ex.disableAlighting) {
+          const error = new Error('Titik turun ini ditutup sementara oleh operasional');
+          (error as any).code = 'stop-closed-by-ops';
+          throw error;
+        }
+      }
     }
   }
 

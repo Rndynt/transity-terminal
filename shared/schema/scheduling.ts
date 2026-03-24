@@ -152,6 +152,25 @@ export const insertScheduleExceptionSchema = createInsertSchema(scheduleExceptio
 export type ScheduleException = typeof scheduleExceptions.$inferSelect;
 export type InsertScheduleException = z.infer<typeof insertScheduleExceptionSchema>;
 
+export const scheduleStopExceptions = pgTable("schedule_stop_exceptions", {
+  id:              uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  baseId:          uuid("base_id").notNull().references(() => tripBases.id),
+  exceptionDate:   date("exception_date").notNull(),
+  stopId:          uuid("stop_id").notNull().references(() => stops.id),
+  disableBoarding: boolean("disable_boarding").notNull().default(true),
+  disableAlighting:boolean("disable_alighting").notNull().default(false),
+  reason:          text("reason"),
+  createdBy:       text("created_by"),
+  createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqBaseDateStop: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_stop_exception_base_date_stop ON ${table} (base_id, exception_date, stop_id)`,
+  idxStopExceptionDate: sql`CREATE INDEX IF NOT EXISTS idx_stop_exception_date ON ${table} (exception_date)`,
+}));
+
+export const insertScheduleStopExceptionSchema = createInsertSchema(scheduleStopExceptions).omit({ id: true, createdAt: true });
+export type ScheduleStopException = typeof scheduleStopExceptions.$inferSelect;
+export type InsertScheduleStopException = z.infer<typeof insertScheduleStopExceptionSchema>;
+
 export const tripStopTimes = pgTable("trip_stop_times", {
   id:               uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tripId:           uuid("trip_id").notNull().references(() => trips.id),

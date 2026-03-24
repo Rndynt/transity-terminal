@@ -187,7 +187,19 @@ type PatternStopInfo = {
   stop: { id: string; name: string; code: string } | null;
 };
 
-function RouteStopsTimeline({ patternId }: { patternId: string }) {
+type StopExceptionData = {
+  id: string;
+  stopId: string;
+  disableBoarding: boolean;
+  disableAlighting: boolean;
+  reason: string | null;
+};
+
+function RouteStopsTimeline({ patternId, baseId, serviceDate }: { patternId: string; baseId?: string; serviceDate?: string }) {
+  const { toast } = useToast();
+  const [toggleReasonStop, setToggleReasonStop] = useState<{ stopId: string; field: 'boarding' | 'alighting'; stopName: string } | null>(null);
+  const [toggleReason, setToggleReason] = useState('');
+
   const { data: stops, isLoading } = useQuery<PatternStopInfo[]>({
     queryKey: ['/api/trip-patterns', patternId, 'stops'],
     queryFn: async () => {
@@ -198,6 +210,80 @@ function RouteStopsTimeline({ patternId }: { patternId: string }) {
     enabled: !!patternId,
     staleTime: 60_000,
   });
+
+  const canManageExceptions = !!(baseId && serviceDate);
+
+  const { data: stopExceptions = [] } = useQuery<StopExceptionData[]>({
+    queryKey: ['/api/scheduler/stop-exceptions', baseId, serviceDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/scheduler/stop-exceptions?baseId=${baseId}&date=${serviceDate}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: canManageExceptions,
+    staleTime: 15_000,
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: async (params: { stopId: string; disableBoarding: boolean; disableAlighting: boolean; reason: string }) => {
+      const res = await apiRequest('POST', '/api/scheduler/stop-exceptions', {
+        baseId,
+        exceptionDate: serviceDate,
+        stopId: params.stopId,
+        disableBoarding: params.disableBoarding,
+        disableAlighting: params.disableAlighting,
+        reason: params.reason || null,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/scheduler/stop-exceptions', baseId, serviceDate] });
+      toast({ title: 'Stop exception diperbarui' });
+      setToggleReasonStop(null);
+      setToggleReason('');
+    },
+    onError: () => {
+      toast({ title: 'Gagal update stop exception', variant: 'destructive' });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: async (exceptionId: string) => {
+      await apiRequest('DELETE', `/api/scheduler/stop-exceptions/${exceptionId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/scheduler/stop-exceptions', baseId, serviceDate] });
+      toast({ title: 'Stop exception dihapus' });
+    },
+  });
+
+  const getStopException = (stopId: string) => stopExceptions.find(e => e.stopId === stopId);
+
+  const handleToggle = (stopId: string, field: 'boarding' | 'alighting', stopName: string) => {
+    const existing = getStopException(stopId);
+    if (existing) {
+      const newBoarding = field === 'boarding' ? !existing.disableBoarding : existing.disableBoarding;
+      const newAlighting = field === 'alighting' ? !existing.disableAlighting : existing.disableAlighting;
+      if (!newBoarding && !newAlighting) {
+        removeMutation.mutate(existing.id);
+      } else {
+        toggleMutation.mutate({ stopId, disableBoarding: newBoarding, disableAlighting: newAlighting, reason: existing.reason || '' });
+      }
+    } else {
+      setToggleReasonStop({ stopId, field, stopName });
+      setToggleReason('');
+    }
+  };
+
+  const confirmToggle = () => {
+    if (!toggleReasonStop) return;
+    toggleMutation.mutate({
+      stopId: toggleReasonStop.stopId,
+      disableBoarding: toggleReasonStop.field === 'boarding',
+      disableAlighting: toggleReasonStop.field === 'alighting',
+      reason: toggleReason,
+    });
+  };
 
   if (isLoading) {
     return (
@@ -223,6 +309,12 @@ function RouteStopsTimeline({ patternId }: { patternId: string }) {
       <div className="flex items-center gap-2">
         <MapPin className="w-3.5 h-3.5 text-primary" />
         <span className="text-xs font-semibold">Titik Rute</span>
+        {canManageExceptions && stopExceptions.length > 0 && (
+          <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/30 ml-auto">
+            <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+            {stopExceptions.length} stop ditutup
+          </Badge>
+        )}
       </div>
 
       <div className="relative ml-1.5">
@@ -231,6 +323,7 @@ function RouteStopsTimeline({ patternId }: { patternId: string }) {
           const isLast = idx === sorted.length - 1;
           const isPickup = stop.boardingAllowed;
           const isDropoff = stop.alightingAllowed;
+          const stopEx = getStopException(stop.stop?.id || '');
 
           return (
             <div key={stop.id} className="flex items-start gap-3 relative" data-testid={`route-stop-${stop.stop?.code}`}>
@@ -239,29 +332,105 @@ function RouteStopsTimeline({ patternId }: { patternId: string }) {
               )}
               <div className={cn(
                 "w-[11px] h-[11px] rounded-full border-2 shrink-0 mt-0.5 z-10",
+                stopEx ? "border-amber-500 bg-amber-100 dark:bg-amber-900" :
                 isFirst ? "border-green-500 bg-green-100 dark:bg-green-900" :
                 isLast ? "border-red-500 bg-red-100 dark:bg-red-900" :
                 isPickup ? "border-blue-400 bg-blue-50 dark:bg-blue-950" :
                 "border-orange-400 bg-orange-50 dark:bg-orange-950"
               )} />
-              <div className={cn("pb-3 min-w-0", isLast && "pb-0")}>
+              <div className={cn("pb-3 min-w-0 flex-1", isLast && "pb-0")}>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-medium">{stop.stop?.name || '—'}</span>
                   <span className="text-[10px] font-mono text-muted-foreground">({stop.stop?.code})</span>
                 </div>
-                <div className="flex items-center gap-1 mt-0.5">
-                  {isPickup && (
+                <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                  {isPickup && !stopEx?.disableBoarding && (
                     <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400 font-medium">NAIK</span>
                   )}
-                  {isDropoff && (
+                  {isDropoff && !stopEx?.disableAlighting && (
                     <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-400 font-medium">TURUN</span>
                   )}
+                  {stopEx?.disableBoarding && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400 font-medium line-through">NAIK</span>
+                  )}
+                  {stopEx?.disableAlighting && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400 font-medium line-through">TURUN</span>
+                  )}
                 </div>
+                {stopEx && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <AlertTriangle className="w-2.5 h-2.5 text-amber-500 flex-shrink-0" />
+                    <span className="text-[9px] text-amber-600 dark:text-amber-400 font-medium">Ditutup Ops</span>
+                    {stopEx.reason && <span className="text-[9px] text-muted-foreground">— {stopEx.reason}</span>}
+                  </div>
+                )}
+                {canManageExceptions && stop.stop?.id && (
+                  <div className="flex items-center gap-1 mt-1.5">
+                    {isPickup && (
+                      <button
+                        onClick={() => handleToggle(stop.stop!.id, 'boarding', stop.stop!.name)}
+                        disabled={toggleMutation.isPending || removeMutation.isPending}
+                        data-testid={`toggle-boarding-${stop.stop.code}`}
+                        className={cn(
+                          "text-[9px] px-1.5 py-0.5 rounded border font-medium transition-colors",
+                          stopEx?.disableBoarding
+                            ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400"
+                            : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-400"
+                        )}
+                      >
+                        {stopEx?.disableBoarding ? 'Buka Naik' : 'Tutup Naik'}
+                      </button>
+                    )}
+                    {isDropoff && (
+                      <button
+                        onClick={() => handleToggle(stop.stop!.id, 'alighting', stop.stop!.name)}
+                        disabled={toggleMutation.isPending || removeMutation.isPending}
+                        data-testid={`toggle-alighting-${stop.stop.code}`}
+                        className={cn(
+                          "text-[9px] px-1.5 py-0.5 rounded border font-medium transition-colors",
+                          stopEx?.disableAlighting
+                            ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400"
+                            : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-400"
+                        )}
+                      >
+                        {stopEx?.disableAlighting ? 'Buka Turun' : 'Tutup Turun'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           );
         })}
       </div>
+
+      {toggleReasonStop && (
+        <div className="p-2.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 space-y-2">
+          <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+            Tutup {toggleReasonStop.field === 'boarding' ? 'Naik' : 'Turun'} di {toggleReasonStop.stopName}
+          </p>
+          <input
+            type="text"
+            value={toggleReason}
+            onChange={(e) => setToggleReason(e.target.value)}
+            placeholder="Alasan (opsional)"
+            className="w-full text-xs px-2 py-1.5 rounded border bg-white dark:bg-gray-900 dark:border-gray-700"
+            data-testid="input-stop-exception-reason"
+          />
+          <div className="flex gap-1.5">
+            <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => setToggleReasonStop(null)}>Batal</Button>
+            <Button
+              size="sm"
+              className="h-6 text-[10px] px-2 bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={confirmToggle}
+              disabled={toggleMutation.isPending}
+              data-testid="btn-confirm-stop-exception"
+            >
+              {toggleMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Konfirmasi'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {viaStops.length > 0 && (
         <div className="text-[10px] text-muted-foreground border-t pt-2 mt-1">
@@ -324,7 +493,7 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
               <DetailRow icon={CalendarRange} label="Tanggal" value={formatDateLabel(item.serviceDate)} />
             </div>
 
-            {item.patternId && <RouteStopsTimeline patternId={item.patternId} />}
+            {item.patternId && <RouteStopsTimeline patternId={item.patternId} baseId={item.baseId || undefined} serviceDate={item.serviceDate} />}
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
@@ -368,7 +537,7 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
               {item.capacity && <DetailRow icon={Users} label="Kapasitas" value={`${item.capacity} kursi`} />}
             </div>
 
-            {item.patternId && <RouteStopsTimeline patternId={item.patternId} />}
+            {item.patternId && <RouteStopsTimeline patternId={item.patternId} baseId={item.baseId || undefined} serviceDate={item.serviceDate} />}
           </div>
           {showReasonInput && (
             <div className="space-y-2 border border-red-200 dark:border-red-800 rounded-lg p-3 bg-red-50/50 dark:bg-red-950/30">
@@ -461,7 +630,7 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
             <DetailRow icon={Truck} label="Kendaraan" value={item.vehiclePlate || '—'} mono />
           </div>
 
-          {item.patternId && <RouteStopsTimeline patternId={item.patternId} />}
+          {item.patternId && <RouteStopsTimeline patternId={item.patternId} baseId={item.baseId || undefined} serviceDate={item.serviceDate} />}
 
           {item.seatsBooked !== undefined && item.capacity && (
             <div className="p-3 rounded-lg border bg-muted/20 space-y-2">

@@ -54,4 +54,49 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
     await schedulerService.removeException(id);
     reply.send({ success: true });
   });
+
+  app.get('/api/scheduler/stop-exceptions', async (req: FastifyRequest, reply: FastifyReply) => {
+    const schema = z.object({
+      baseId: z.string().uuid(),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    });
+    const parsed = schema.safeParse(req.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ message: 'baseId and date required' });
+    }
+    const items = await schedulerService.getStopExceptions(parsed.data.baseId, parsed.data.date);
+    reply.send(items);
+  });
+
+  app.post('/api/scheduler/stop-exceptions', { preHandler: [requireFlag('action.trip.close')] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const schema = z.object({
+      baseId: z.string().uuid(),
+      exceptionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      stopId: z.string().uuid(),
+      disableBoarding: z.boolean().default(true),
+      disableAlighting: z.boolean().default(false),
+      reason: z.string().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ message: 'Invalid request', errors: parsed.error.flatten() });
+    }
+    const user = (req as any).user;
+    const exception = await schedulerService.addStopException(
+      parsed.data.baseId,
+      parsed.data.exceptionDate,
+      parsed.data.stopId,
+      parsed.data.disableBoarding,
+      parsed.data.disableAlighting,
+      parsed.data.reason,
+      user?.id || null,
+    );
+    reply.code(201).send(exception);
+  });
+
+  app.delete('/api/scheduler/stop-exceptions/:id', { preHandler: [requireFlag('action.trip.close')] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    await schedulerService.removeStopException(id);
+    reply.send({ success: true });
+  });
 }

@@ -2,9 +2,17 @@ import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { tripsApi, stopsApi } from '@/lib/api';
 import {
-  Clock, ArrowDown, MapPin, ArrowRight, Check, ChevronRight, Loader2
+  Clock, ArrowDown, MapPin, ArrowRight, Check, ChevronRight, Loader2, AlertTriangle
 } from 'lucide-react';
 import type { Trip, Stop } from '@/types';
+
+type StopException = {
+  id: string;
+  stopId: string;
+  disableBoarding: boolean;
+  disableAlighting: boolean;
+  reason: string | null;
+};
 
 interface RouteTimelineProps {
   trip: Trip;
@@ -66,6 +74,19 @@ export default function RouteTimeline({
     queryFn: stopsApi.getAll
   });
 
+  const { data: stopExceptions = [] } = useQuery<StopException[]>({
+    queryKey: ['/api/scheduler/stop-exceptions', trip.baseId, trip.serviceDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/scheduler/stop-exceptions?baseId=${trip.baseId}&date=${trip.serviceDate}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!(trip.baseId && trip.serviceDate),
+    staleTime: 30_000,
+  });
+
+  const getStopException = (stopId: string) => stopExceptions.find(e => e.stopId === stopId);
+
   const getStopById = (stopId: string) => stops.find(s => s.id === stopId);
   const sortedStopTimes = [...stopTimes].sort((a: any, b: any) => a.stopSequence - b.stopSequence);
 
@@ -80,6 +101,13 @@ export default function RouteTimeline({
     const destStop = destSt ? getStopById(destSt.stopId) : undefined;
 
     if (originStop && destStop && originSt && destSt) {
+      const originEx = getStopException(originStop.id);
+      const destEx = getStopException(destStop.id);
+      if (originEx?.disableBoarding || destEx?.disableAlighting) {
+        autoSelectDone.current = true;
+        onInitialRouteConsumed?.();
+        return;
+      }
       autoSelectDone.current = true;
       onOriginSelect(originStop, originSt.stopSequence);
       setTimeout(() => {
@@ -87,7 +115,7 @@ export default function RouteTimeline({
         onInitialRouteConsumed?.();
       }, 50);
     }
-  }, [sortedStopTimes, stops, initialOriginStopId, initialDestinationStopId]);
+  }, [sortedStopTimes, stops, initialOriginStopId, initialDestinationStopId, stopExceptions]);
 
   const originIdx = selectedOrigin ? sortedStopTimes.findIndex((st: any) => st.stopId === selectedOrigin.id) : -1;
   const destIdx = selectedDestination ? sortedStopTimes.findIndex((st: any) => st.stopId === selectedDestination.id) : -1;
@@ -123,8 +151,11 @@ export default function RouteTimeline({
           const isLast = index === sortedStopTimes.length - 1;
           const isOrigin = selectedOrigin?.id === stop.id;
           const isDest = selectedDestination?.id === stop.id;
-          const canBoard = stopTime.effectiveBoardingAllowed !== false;
-          const canAlight = stopTime.effectiveAlightingAllowed !== false;
+          const stopEx = getStopException(stop.id);
+          const boardingClosed = stopEx?.disableBoarding === true;
+          const alightingClosed = stopEx?.disableAlighting === true;
+          const canBoard = stopTime.effectiveBoardingAllowed !== false && !boardingClosed;
+          const canAlight = stopTime.effectiveAlightingAllowed !== false && !alightingClosed;
           const inRange = isInSelectedRange(index);
 
           const nextStopTime = sortedStopTimes[index + 1];
@@ -184,6 +215,20 @@ export default function RouteTimeline({
                       <span className="text-gray-300 ml-1.5">&middot; Berangkat</span>
                     )}
                   </p>
+                  {stopEx && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                      <span className="text-[10px] text-amber-600 font-medium">
+                        Ditutup Ops
+                        {boardingClosed && !alightingClosed && ' (Naik)'}
+                        {alightingClosed && !boardingClosed && ' (Turun)'}
+                        {boardingClosed && alightingClosed && ' (Naik & Turun)'}
+                      </span>
+                      {stopEx.reason && (
+                        <span className="text-[9px] text-amber-400 ml-0.5">— {stopEx.reason}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-1.5 flex-shrink-0">
@@ -263,7 +308,9 @@ export default function RouteTimeline({
         const totalDuration = (originIdx >= 0 && destIdx >= 0)
           ? calculateDuration(sortedStopTimes[originIdx]?.departAt, sortedStopTimes[destIdx]?.arriveAt)
           : null;
-        const isValid = legCount > 0;
+        const originClosed = getStopException(selectedOrigin.id)?.disableBoarding;
+        const destClosed = getStopException(selectedDestination.id)?.disableAlighting;
+        const isValid = legCount > 0 && !originClosed && !destClosed;
 
         return (
           <div className={`rounded-xl overflow-hidden shadow-sm border-2 ${isValid ? 'border-blue-200' : 'border-rose-200'}`}>
@@ -310,7 +357,11 @@ export default function RouteTimeline({
             {!isValid && (
               <div className="px-4 py-2 bg-rose-50 border-t border-rose-200 flex items-center gap-2">
                 <span className="text-rose-500 text-sm font-bold">⚠</span>
-                <p className="text-xs text-rose-700 font-medium">Titik naik dan turun tidak boleh sama. Pilih stop yang berbeda.</p>
+                <p className="text-xs text-rose-700 font-medium">
+                  {originClosed || destClosed
+                    ? 'Titik yang dipilih sedang ditutup oleh operasional. Pilih stop lain.'
+                    : 'Titik naik dan turun tidak boleh sama. Pilih stop yang berbeda.'}
+                </p>
               </div>
             )}
 

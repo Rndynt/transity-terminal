@@ -4,7 +4,8 @@ import { TripBase, TripWithDetails } from "@shared/schema";
 import { ensureDefaultTimezone } from "../../utils/timezone";
 import { db } from "../../db";
 import { sql, inArray, and, eq, gte, lte, isNull } from "drizzle-orm";
-import { scheduleExceptions, patternStops } from "@shared/schema/scheduling";
+import { scheduleExceptions, patternStops, scheduleStopExceptions } from "@shared/schema/scheduling";
+import { stops } from "@shared/schema/network";
 
 export type CalendarItem = {
   id: string;
@@ -194,6 +195,55 @@ export class SchedulerService {
 
   async removeException(exceptionId: string) {
     await db.delete(scheduleExceptions).where(eq(scheduleExceptions.id, exceptionId));
+  }
+
+  async addStopException(baseId: string, exceptionDate: string, stopId: string, disableBoarding: boolean, disableAlighting: boolean, reason?: string, createdBy?: string) {
+    const [inserted] = await db.insert(scheduleStopExceptions).values({
+      baseId,
+      exceptionDate,
+      stopId,
+      disableBoarding,
+      disableAlighting,
+      reason: reason || null,
+      createdBy: createdBy || null,
+    }).onConflictDoUpdate({
+      target: [scheduleStopExceptions.baseId, scheduleStopExceptions.exceptionDate, scheduleStopExceptions.stopId],
+      set: { disableBoarding, disableAlighting, reason: reason || null, createdBy: createdBy || null },
+    }).returning();
+    return inserted;
+  }
+
+  async removeStopException(exceptionId: string) {
+    await db.delete(scheduleStopExceptions).where(eq(scheduleStopExceptions.id, exceptionId));
+  }
+
+  async getStopExceptions(baseId: string, exceptionDate: string) {
+    return db.select({
+      id: scheduleStopExceptions.id,
+      baseId: scheduleStopExceptions.baseId,
+      exceptionDate: scheduleStopExceptions.exceptionDate,
+      stopId: scheduleStopExceptions.stopId,
+      disableBoarding: scheduleStopExceptions.disableBoarding,
+      disableAlighting: scheduleStopExceptions.disableAlighting,
+      reason: scheduleStopExceptions.reason,
+      stopName: stops.name,
+      stopCode: stops.code,
+    })
+    .from(scheduleStopExceptions)
+    .leftJoin(stops, eq(scheduleStopExceptions.stopId, stops.id))
+    .where(and(
+      eq(scheduleStopExceptions.baseId, baseId),
+      eq(scheduleStopExceptions.exceptionDate, exceptionDate),
+    ));
+  }
+
+  async getStopExceptionsForDateRange(fromDate: string, toDate: string) {
+    return db.select()
+    .from(scheduleStopExceptions)
+    .where(and(
+      gte(scheduleStopExceptions.exceptionDate, fromDate),
+      lte(scheduleStopExceptions.exceptionDate, toDate),
+    ));
   }
 
   private async getExceptionsForDateRange(fromDate: string, toDate: string) {
