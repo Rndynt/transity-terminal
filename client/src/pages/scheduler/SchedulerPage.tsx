@@ -1,14 +1,17 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
   CalendarRange, ChevronLeft, ChevronRight, Plus, Bus, Truck,
-  Clock, Users, Ban, MapPin, User, AlertTriangle, ArrowRight,
-  CheckCircle, X, Pencil, ExternalLink
+  Clock, Users, Ban, MapPin, User, AlertTriangle,
+  CheckCircle, X, ExternalLink, Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const TIME_COL_W = 56;
@@ -47,76 +50,31 @@ function formatShortDate(dateStr: string) {
   };
 }
 
-type ScheduleItem = {
+function formatDateLabel(dateStr: string) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  return `${dayNames[d.getDay()]}, ${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+type CalendarItem = {
   id: string;
-  type: 'virtual' | 'trip' | 'exception';
-  routeName: string;
-  routeCode: string;
+  type: 'trip' | 'virtual';
+  serviceDate: string;
   departureTime: string;
   hour: number;
-  vehiclePlate?: string;
-  driverName?: string;
-  status?: string;
+  routeName: string;
+  routeCode: string;
+  baseId?: string | null;
+  tripId?: string | null;
+  vehiclePlate?: string | null;
+  driverName?: string | null;
+  status?: string | null;
+  capacity: number | null;
   seatsBooked?: number;
-  seatsTotal?: number;
-  exceptionReason?: string;
 };
 
-const MOCK_DATA: ScheduleItem[] = [
-  { id: '1', type: 'trip', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-01', departureTime: '06:00', hour: 6, vehiclePlate: 'B 1401 TGJ', driverName: 'Rahmat', status: 'scheduled', seatsBooked: 3, seatsTotal: 11 },
-  { id: '2', type: 'trip', routeName: 'Jakarta → Cirebon', routeCode: 'JKT-CRB-01', departureTime: '06:30', hour: 6, vehiclePlate: 'B 1188 XYZ', driverName: 'Yanto', status: 'scheduled', seatsBooked: 7, seatsTotal: 8 },
-  { id: '3', type: 'trip', routeName: 'Semarang → Jakarta', routeCode: 'SMG-JKT-01', departureTime: '07:00', hour: 7, vehiclePlate: 'B 1523 KJH', driverName: 'Agus', status: 'on_progress', seatsBooked: 8, seatsTotal: 11 },
-  { id: '4', type: 'virtual', routeName: 'Semarang → Yogyakarta', routeCode: 'SMG-YGY-01', departureTime: '07:15', hour: 7, seatsTotal: 8 },
-  { id: '5', type: 'trip', routeName: 'Jakarta → Bandung', routeCode: 'JKT-BDG-01', departureTime: '08:00', hour: 8, vehiclePlate: 'D 2233 AB', driverName: 'Hendra', status: 'on_progress', seatsBooked: 10, seatsTotal: 11 },
-  { id: '6', type: 'virtual', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-02', departureTime: '09:00', hour: 9, seatsTotal: 11 },
-  { id: '7', type: 'trip', routeName: 'Bandung → Jakarta', routeCode: 'BDG-JKT-01', departureTime: '09:30', hour: 9, vehiclePlate: 'D 3344 CD', driverName: 'Eko', status: 'scheduled', seatsBooked: 4, seatsTotal: 11 },
-  { id: '8', type: 'virtual', routeName: 'Semarang → Yogyakarta', routeCode: 'SMG-YGY-02', departureTime: '10:00', hour: 10, seatsTotal: 8 },
-  { id: '9', type: 'trip', routeName: 'Cirebon → Jakarta', routeCode: 'CRB-JKT-01', departureTime: '10:30', hour: 10, vehiclePlate: 'E 5566 GH', driverName: 'Firman', status: 'scheduled', seatsBooked: 2, seatsTotal: 8 },
-  { id: '10', type: 'trip', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-03', departureTime: '12:00', hour: 12, vehiclePlate: 'B 7788 JK', driverName: 'Gilang', status: 'scheduled', seatsBooked: 6, seatsTotal: 11 },
-  { id: '11', type: 'virtual', routeName: 'Semarang → Jakarta', routeCode: 'SMG-JKT-02', departureTime: '12:15', hour: 12, seatsTotal: 11 },
-  { id: '12', type: 'trip', routeName: 'Yogyakarta → Semarang', routeCode: 'YGY-SMG-01', departureTime: '12:45', hour: 12, vehiclePlate: 'AB 9900 LM', driverName: 'Irfan', status: 'on_progress', seatsBooked: 5, seatsTotal: 8 },
-  { id: '13', type: 'trip', routeName: 'Jakarta → Cirebon', routeCode: 'JKT-CRB-02', departureTime: '13:00', hour: 13, vehiclePlate: 'B 1122 NP', driverName: 'Joko', status: 'scheduled', seatsBooked: 9, seatsTotal: 11 },
-  { id: '14', type: 'virtual', routeName: 'Bandung → Semarang', routeCode: 'BDG-SMG-01', departureTime: '13:10', hour: 13, seatsTotal: 11 },
-  { id: '15', type: 'trip', routeName: 'Semarang → Yogyakarta', routeCode: 'SMG-YGY-03', departureTime: '13:40', hour: 13, vehiclePlate: 'H 3344 QR', driverName: 'Kurnia', status: 'scheduled', seatsBooked: 1, seatsTotal: 8 },
-  { id: '16', type: 'exception', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-04', departureTime: '14:00', hour: 14, exceptionReason: 'Kendaraan rusak' },
-  { id: '17', type: 'trip', routeName: 'Cirebon → Semarang', routeCode: 'CRB-SMG-01', departureTime: '14:30', hour: 14, vehiclePlate: 'E 5566 ST', driverName: 'Lukman', status: 'scheduled', seatsBooked: 3, seatsTotal: 8 },
-  { id: '18', type: 'trip', routeName: 'Semarang → Jakarta', routeCode: 'SMG-JKT-03', departureTime: '15:00', hour: 15, vehiclePlate: 'B 7812 PQR', driverName: 'Budi', status: 'scheduled', seatsBooked: 0, seatsTotal: 11 },
-  { id: '19', type: 'virtual', routeName: 'Jakarta → Bandung', routeCode: 'JKT-BDG-02', departureTime: '15:30', hour: 15, seatsTotal: 11 },
-  { id: '20', type: 'trip', routeName: 'Bandung → Cirebon', routeCode: 'BDG-CRB-01', departureTime: '16:00', hour: 16, vehiclePlate: 'D 8899 UV', driverName: 'Mulyadi', status: 'scheduled', seatsBooked: 6, seatsTotal: 8 },
-  { id: '21', type: 'exception', routeName: 'Yogyakarta → Jakarta', routeCode: 'YGY-JKT-01', departureTime: '16:15', hour: 16, exceptionReason: 'Driver tidak tersedia' },
-  { id: '22', type: 'trip', routeName: 'Jakarta → Yogyakarta', routeCode: 'JKT-YGY-01', departureTime: '17:00', hour: 17, vehiclePlate: 'B 2233 WX', driverName: 'Nanda', status: 'scheduled', seatsBooked: 11, seatsTotal: 11 },
-  { id: '23', type: 'virtual', routeName: 'Semarang → Cirebon', routeCode: 'SMG-CRB-01', departureTime: '17:30', hour: 17, seatsTotal: 8 },
-  { id: '24', type: 'trip', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-05', departureTime: '18:00', hour: 18, vehiclePlate: 'B 4455 YZ', driverName: 'Oscar', status: 'scheduled', seatsBooked: 2, seatsTotal: 11 },
-  { id: '25', type: 'virtual', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-06', departureTime: '19:00', hour: 19, seatsTotal: 11 },
-  { id: '26', type: 'trip', routeName: 'Semarang → Yogyakarta', routeCode: 'SMG-YGY-04', departureTime: '20:00', hour: 20, vehiclePlate: 'AB 1234 CD', driverName: 'Dani', status: 'scheduled', seatsBooked: 5, seatsTotal: 8 },
-  { id: '27', type: 'trip', routeName: 'Yogyakarta → Semarang', routeCode: 'YGY-SMG-02', departureTime: '20:30', hour: 20, vehiclePlate: 'AB 6677 EF', driverName: 'Prima', status: 'on_progress', seatsBooked: 7, seatsTotal: 8 },
-  { id: '28', type: 'trip', routeName: 'Semarang → Jakarta', routeCode: 'SMG-JKT-04', departureTime: '21:00', hour: 21, vehiclePlate: 'H 8899 GH', driverName: 'Rizky', status: 'scheduled', seatsBooked: 4, seatsTotal: 11 },
-  { id: '29', type: 'virtual', routeName: 'Jakarta → Cirebon', routeCode: 'JKT-CRB-03', departureTime: '22:00', hour: 22, seatsTotal: 8 },
-];
-
-function ScheduleChip({ item, onSelect }: { item: ScheduleItem; onSelect?: (item: ScheduleItem) => void }) {
-  if (item.type === 'exception') {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className="px-1.5 py-1 rounded text-[10px] leading-tight cursor-pointer border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 flex items-center gap-1"
-            data-testid={`chip-exception-${item.id}`}
-            onClick={() => onSelect?.(item)}
-          >
-            <Ban className="w-3 h-3 shrink-0" />
-            <span className="font-mono opacity-70">{item.departureTime}</span>
-            <span className="truncate font-medium">{item.routeCode}</span>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="right" className="max-w-[200px]">
-          <p className="font-semibold text-xs">{item.routeName}</p>
-          <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">Dibatalkan: {item.exceptionReason}</p>
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
+function ScheduleChip({ item, onSelect }: { item: CalendarItem; onSelect?: (item: CalendarItem) => void }) {
   if (item.type === 'virtual') {
     return (
       <Tooltip>
@@ -133,7 +91,7 @@ function ScheduleChip({ item, onSelect }: { item: ScheduleItem; onSelect?: (item
         <TooltipContent side="right" className="max-w-[200px]">
           <p className="font-semibold text-xs">{item.routeName}</p>
           <p className="text-xs text-muted-foreground mt-0.5">Jadwal virtual — {item.departureTime}</p>
-          <p className="text-xs text-muted-foreground">{item.seatsTotal} kursi tersedia</p>
+          {item.capacity && <p className="text-xs text-muted-foreground">{item.capacity} kursi tersedia</p>}
         </TooltipContent>
       </Tooltip>
     );
@@ -144,7 +102,7 @@ function ScheduleChip({ item, onSelect }: { item: ScheduleItem; onSelect?: (item
     on_progress: 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-300',
     arrived: 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300',
     closed: 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400',
-    cancelled: 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400',
+    canceled: 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400',
   };
   const colorClass = statusColors[item.status || 'scheduled'] || statusColors.scheduled;
 
@@ -160,10 +118,10 @@ function ScheduleChip({ item, onSelect }: { item: ScheduleItem; onSelect?: (item
             <span className="font-mono opacity-70">{item.departureTime}</span>
             <span className="truncate font-medium">{item.routeCode}</span>
           </div>
-          {item.seatsBooked !== undefined && (
+          {item.seatsBooked !== undefined && item.capacity && (
             <div className="flex items-center gap-0.5 mt-0.5 opacity-80">
               <Users className="w-2.5 h-2.5" />
-              <span>{item.seatsBooked}/{item.seatsTotal}</span>
+              <span>{item.seatsBooked}/{item.capacity}</span>
             </div>
           )}
         </div>
@@ -174,7 +132,7 @@ function ScheduleChip({ item, onSelect }: { item: ScheduleItem; onSelect?: (item
           <p>Berangkat: {item.departureTime}</p>
           {item.vehiclePlate && <p>Kendaraan: {item.vehiclePlate}</p>}
           {item.driverName && <p>Driver: {item.driverName}</p>}
-          {item.seatsBooked !== undefined && <p>Penumpang: {item.seatsBooked}/{item.seatsTotal}</p>}
+          {item.seatsBooked !== undefined && item.capacity && <p>Penumpang: {item.seatsBooked}/{item.capacity}</p>}
         </div>
       </TooltipContent>
     </Tooltip>
@@ -186,45 +144,19 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   on_progress: { label: 'Dalam Perjalanan', color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
   arrived: { label: 'Tiba', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' },
   closed: { label: 'Ditutup', color: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
-  cancelled: { label: 'Dibatalkan', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' },
+  canceled: { label: 'Dibatalkan', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' },
 };
 
-function ScheduleDetailDialog({ item, open, onClose }: { item: ScheduleItem | null; open: boolean; onClose: () => void }) {
+function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip, isMaterializing, isClosingTrip }: {
+  item: CalendarItem | null;
+  open: boolean;
+  onClose: () => void;
+  onMaterialize: (item: CalendarItem) => void;
+  onCloseTrip: (item: CalendarItem) => void;
+  isMaterializing: boolean;
+  isClosingTrip: boolean;
+}) {
   if (!item) return null;
-
-  if (item.type === 'exception') {
-    return (
-      <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Ban className="w-5 h-5 text-red-500" />
-              Jadwal Dibatalkan
-            </DialogTitle>
-            <DialogDescription>Detail pembatalan jadwal</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="p-3 rounded-lg border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className="w-4 h-4 text-red-500" />
-                <span className="text-sm font-medium text-red-700 dark:text-red-300">Alasan Pembatalan</span>
-              </div>
-              <p className="text-sm text-red-600 dark:text-red-400">{item.exceptionReason || '—'}</p>
-            </div>
-
-            <div className="space-y-3">
-              <DetailRow icon={MapPin} label="Rute" value={item.routeName} />
-              <DetailRow icon={Bus} label="Kode" value={item.routeCode} mono />
-              <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  }
 
   if (item.type === 'virtual') {
     return (
@@ -246,16 +178,20 @@ function ScheduleDetailDialog({ item, open, onClose }: { item: ScheduleItem | nu
               <DetailRow icon={MapPin} label="Rute" value={item.routeName} />
               <DetailRow icon={Bus} label="Kode" value={item.routeCode} mono />
               <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
-              <DetailRow icon={Users} label="Kapasitas" value={`${item.seatsTotal} kursi`} />
+              {item.capacity && <DetailRow icon={Users} label="Kapasitas" value={`${item.capacity} kursi`} />}
             </div>
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
-            <Button variant="destructive" size="sm" className="gap-1.5" data-testid="btn-cancel-schedule">
-              <Ban className="w-3.5 h-3.5" /> Batalkan Jadwal
-            </Button>
-            <Button size="sm" className="gap-1.5" data-testid="btn-materialize">
-              <CheckCircle className="w-3.5 h-3.5" /> Aktifkan Trip
+            <Button
+              size="sm"
+              className="gap-1.5"
+              data-testid="btn-materialize"
+              onClick={() => onMaterialize(item)}
+              disabled={isMaterializing}
+            >
+              {isMaterializing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+              Aktifkan Trip
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -264,8 +200,8 @@ function ScheduleDetailDialog({ item, open, onClose }: { item: ScheduleItem | nu
   }
 
   const statusInfo = STATUS_LABELS[item.status || 'scheduled'] || STATUS_LABELS.scheduled;
-  const occupancy = item.seatsBooked !== undefined && item.seatsTotal
-    ? Math.round((item.seatsBooked / item.seatsTotal) * 100)
+  const occupancy = item.seatsBooked !== undefined && item.capacity
+    ? Math.round((item.seatsBooked / item.capacity) * 100)
     : 0;
 
   return (
@@ -276,7 +212,9 @@ function ScheduleDetailDialog({ item, open, onClose }: { item: ScheduleItem | nu
             <Bus className="w-5 h-5 text-primary" />
             Detail Trip
           </DialogTitle>
-          <DialogDescription>Informasi trip yang sudah aktif</DialogDescription>
+          <DialogDescription>
+            {item.serviceDate ? formatDateLabel(item.serviceDate) : 'Informasi trip'}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -291,13 +229,13 @@ function ScheduleDetailDialog({ item, open, onClose }: { item: ScheduleItem | nu
             <DetailRow icon={Truck} label="Kendaraan" value={item.vehiclePlate || '—'} mono />
           </div>
 
-          {item.seatsBooked !== undefined && item.seatsTotal && (
+          {item.seatsBooked !== undefined && item.capacity && (
             <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5" /> Okupansi
                 </span>
-                <span className="text-sm font-semibold">{item.seatsBooked}/{item.seatsTotal} kursi</span>
+                <span className="text-sm font-semibold">{item.seatsBooked}/{item.capacity} kursi</span>
               </div>
               <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
                 <div
@@ -309,7 +247,7 @@ function ScheduleDetailDialog({ item, open, onClose }: { item: ScheduleItem | nu
                 />
               </div>
               <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>{item.seatsTotal - item.seatsBooked} kursi tersisa</span>
+                <span>{item.capacity - item.seatsBooked} kursi tersisa</span>
                 <span>{occupancy}% terisi</span>
               </div>
             </div>
@@ -318,13 +256,29 @@ function ScheduleDetailDialog({ item, open, onClose }: { item: ScheduleItem | nu
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
           {item.status === 'scheduled' && (
-            <Button variant="destructive" size="sm" className="gap-1.5" data-testid="btn-close-trip">
-              <X className="w-3.5 h-3.5" /> Tutup Trip
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-1.5"
+              data-testid="btn-close-trip"
+              onClick={() => onCloseTrip(item)}
+              disabled={isClosingTrip}
+            >
+              {isClosingTrip ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+              Tutup Trip
             </Button>
           )}
-          <Button size="sm" variant="outline" className="gap-1.5" data-testid="btn-view-manifest">
-            <ExternalLink className="w-3.5 h-3.5" /> Lihat Manifest
-          </Button>
+          {item.tripId && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              data-testid="btn-view-manifest"
+              onClick={() => window.open(`/manifest?tripId=${item.tripId}`, '_blank')}
+            >
+              <ExternalLink className="w-3.5 h-3.5" /> Lihat Manifest
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -377,20 +331,6 @@ function EmptyCellDialog({ cell, open, onClose }: { cell: EmptyCellInfo | null; 
           <Button
             variant="outline"
             className="w-full justify-start gap-3 h-auto py-3"
-            data-testid="btn-add-exception"
-          >
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400">
-              <Ban className="w-4 h-4" />
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-medium">Tambah Pengecualian</p>
-              <p className="text-xs text-muted-foreground">Batalkan jadwal reguler di tanggal ini</p>
-            </div>
-          </Button>
-
-          <Button
-            variant="outline"
-            className="w-full justify-start gap-3 h-auto py-3"
             data-testid="btn-add-extra-trip"
           >
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
@@ -414,12 +354,72 @@ export default function SchedulerPage() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
-  const [selectedItem, setSelectedItem] = useState<ScheduleItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null);
   const [emptyCell, setEmptyCell] = useState<EmptyCellInfo | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   const dates = useMemo(() => getMonthDates(year, month), [year, month]);
   const gridWidth = TIME_COL_W + dates.length * CELL_W;
+  const fromDate = dates[0];
+  const toDate = dates[dates.length - 1];
+
+  const { data: calendarItems = [], isLoading } = useQuery<CalendarItem[]>({
+    queryKey: ['/api/scheduler/calendar', fromDate, toDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/scheduler/calendar?from=${fromDate}&to=${toDate}`);
+      if (!res.ok) throw new Error('Failed to load schedule');
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  const itemsByDateHour = useMemo(() => {
+    const map = new Map<string, CalendarItem[]>();
+    for (const item of calendarItems) {
+      const key = `${item.serviceDate}-${item.hour}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(item);
+    }
+    return map;
+  }, [calendarItems]);
+
+  const getItemsForCell = useCallback((dateStr: string, hour: number): CalendarItem[] => {
+    return itemsByDateHour.get(`${dateStr}-${hour}`) || [];
+  }, [itemsByDateHour]);
+
+  const materializeMutation = useMutation({
+    mutationFn: async (item: CalendarItem) => {
+      const res = await apiRequest('POST', '/api/cso/materialize-trip', {
+        baseId: item.baseId,
+        serviceDate: item.serviceDate,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Trip diaktifkan', description: 'Jadwal virtual berhasil di-materialize menjadi trip aktif.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/scheduler/calendar'] });
+      setSelectedItem(null);
+    },
+    onError: (err: any) => {
+      toast({ title: 'Gagal mengaktifkan trip', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const closeTripMutation = useMutation({
+    mutationFn: async (item: CalendarItem) => {
+      const res = await apiRequest('POST', `/api/trips/${item.tripId}/close`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Trip ditutup', description: 'Trip berhasil ditutup.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/scheduler/calendar'] });
+      setSelectedItem(null);
+    },
+    onError: (err: any) => {
+      toast({ title: 'Gagal menutup trip', description: err.message, variant: 'destructive' });
+    },
+  });
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -446,11 +446,6 @@ export default function SchedulerPage() {
     const t = new Date();
     setYear(t.getFullYear());
     setMonth(t.getMonth());
-  };
-
-  const getItemsForCell = (dateStr: string, hour: number): ScheduleItem[] => {
-    if (dateStr !== todayStr()) return [];
-    return MOCK_DATA.filter(item => item.hour === hour);
   };
 
   return (
@@ -493,6 +488,12 @@ export default function SchedulerPage() {
             <div className="w-3 h-3 rounded border border-green-300 bg-green-50 dark:bg-green-950/50" />
             <span>Dalam Perjalanan</span>
           </div>
+          {isLoading && (
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground ml-auto">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>Memuat...</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -515,15 +516,16 @@ export default function SchedulerPage() {
                 <div
                   key={dateStr}
                   className={cn(
-                    "text-center py-1.5 border-r border-border/40 shrink-0",
-                    info.isToday && "bg-primary/5"
+                    "border-r border-b flex flex-col items-center justify-center shrink-0",
+                    info.isToday && "bg-blue-50 dark:bg-blue-950/30",
+                    !info.isToday && "bg-white dark:bg-gray-950"
                   )}
                   style={{ width: CELL_W, minWidth: CELL_W, height: 48 }}
-                  data-testid={`date-header-${dateStr}`}
+                  data-testid={`header-${dateStr}`}
                 >
                   <div className={cn(
-                    "text-[10px] uppercase tracking-wider",
-                    info.isSunday ? "text-red-500" : "text-muted-foreground"
+                    "text-[10px] font-medium uppercase",
+                    info.isToday ? "text-primary" : info.isSunday ? "text-red-500" : "text-muted-foreground"
                   )}>
                     {info.day}
                   </div>
@@ -569,11 +571,7 @@ export default function SchedulerPage() {
                     data-testid={`cell-${dateStr}-${hour}`}
                     onClick={() => {
                       if (items.length === 0) {
-                        const d = new Date(dateStr + 'T00:00:00');
-                        const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-                        const dateLabel = `${dayNames[d.getDay()]}, ${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
-                        setEmptyCell({ dateStr, hour, dateLabel });
+                        setEmptyCell({ dateStr, hour, dateLabel: formatDateLabel(dateStr) });
                       }
                     }}
                   >
@@ -600,6 +598,10 @@ export default function SchedulerPage() {
         item={selectedItem}
         open={!!selectedItem}
         onClose={() => setSelectedItem(null)}
+        onMaterialize={(item) => materializeMutation.mutate(item)}
+        onCloseTrip={(item) => closeTripMutation.mutate(item)}
+        isMaterializing={materializeMutation.isPending}
+        isClosingTrip={closeTripMutation.isPending}
       />
 
       <EmptyCellDialog

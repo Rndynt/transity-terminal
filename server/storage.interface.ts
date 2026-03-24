@@ -124,6 +124,7 @@ export interface IStorage {
   deleteTripBase(id: string): Promise<void>;
 
   getTrips(serviceDate?: string): Promise<TripWithDetails[]>;
+  getTripsForDateRange(fromDate: string, toDate: string): Promise<TripWithDetails[]>;
   getCsoAvailableTrips(serviceDate: string, outletId: string): Promise<CsoAvailableTrip[]>;
   getTripById(id: string): Promise<Trip | undefined>;
   createTrip(data: InsertTrip): Promise<Trip>;

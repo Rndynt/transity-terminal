@@ -1,0 +1,155 @@
+import { IStorage } from "../../storage.interface";
+import { TripBasesService } from "../tripBases/tripBases.service";
+import { TripBase, TripWithDetails } from "@shared/schema";
+import { ensureDefaultTimezone } from "../../utils/timezone";
+import { db } from "../../db";
+import { sql } from "drizzle-orm";
+
+export type CalendarItem = {
+  id: string;
+  type: 'trip' | 'virtual';
+  serviceDate: string;
+  departureTime: string;
+  hour: number;
+  routeName: string;
+  routeCode: string;
+  baseId?: string | null;
+  tripId?: string | null;
+  vehiclePlate?: string | null;
+  driverName?: string | null;
+  status?: string | null;
+  capacity: number | null;
+  seatsBooked?: number;
+};
+
+export class SchedulerService {
+  private tripBasesService: TripBasesService;
+
+  constructor(private storage: IStorage) {
+    this.tripBasesService = new TripBasesService(storage);
+  }
+
+  async getCalendar(fromDate: string, toDate: string): Promise<CalendarItem[]> {
+    const [realTrips, allBases] = await Promise.all([
+      this.storage.getTripsForDateRange(fromDate, toDate),
+      this.storage.getTripBases(),
+    ]);
+
+    const bookingCounts = await this.getBookingCountsForTrips(
+      realTrips.map(t => t.id)
+    );
+
+    const items: CalendarItem[] = [];
+
+    for (const trip of realTrips) {
+      const departHHMM = trip.originDepartHHMM || '00:00';
+      const [hStr] = departHHMM.split(':');
+      const hour = parseInt(hStr, 10) || 0;
+
+      items.push({
+        id: trip.id,
+        type: 'trip',
+        serviceDate: trip.serviceDate,
+        departureTime: departHHMM,
+        hour,
+        routeName: trip.patternName || '—',
+        routeCode: trip.patternCode || '—',
+        baseId: trip.baseId,
+        tripId: trip.id,
+        vehiclePlate: trip.vehiclePlate || null,
+        driverName: trip.driverName || null,
+        status: trip.status || 'scheduled',
+        capacity: trip.capacity,
+        seatsBooked: bookingCounts.get(trip.id) || 0,
+      });
+    }
+
+    const baseIdsWithTrips = new Map<string, Set<string>>();
+    for (const trip of realTrips) {
+      if (trip.baseId) {
+        if (!baseIdsWithTrips.has(trip.baseId)) {
+          baseIdsWithTrips.set(trip.baseId, new Set());
+        }
+        baseIdsWithTrips.get(trip.baseId)!.add(trip.serviceDate);
+      }
+    }
+
+    const from = new Date(fromDate + 'T00:00:00');
+    const to = new Date(toDate + 'T00:00:00');
+
+    for (const base of allBases) {
+      if (!base.active || base.deletedAt) continue;
+
+      const dateIter = new Date(from);
+      while (dateIter <= to) {
+        const dateStr = dateIter.toISOString().split('T')[0];
+
+        const alreadyHasTrip = baseIdsWithTrips.get(base.id)?.has(dateStr);
+        if (!alreadyHasTrip) {
+          const eligible = await this.tripBasesService.isBaseEligible(base, dateStr);
+          if (eligible) {
+            const departHHMM = this.getBaseDepartureTime(base);
+            const [hStr] = departHHMM.split(':');
+            const hour = parseInt(hStr, 10) || 0;
+
+            items.push({
+              id: `virtual-${base.id}-${dateStr}`,
+              type: 'virtual',
+              serviceDate: dateStr,
+              departureTime: departHHMM,
+              hour,
+              routeName: base.name || '—',
+              routeCode: base.code || '—',
+              baseId: base.id,
+              tripId: null,
+              vehiclePlate: null,
+              driverName: null,
+              status: null,
+              capacity: base.capacity || null,
+              seatsBooked: 0,
+            });
+          }
+        }
+
+        dateIter.setDate(dateIter.getDate() + 1);
+      }
+    }
+
+    items.sort((a, b) => {
+      if (a.serviceDate !== b.serviceDate) return a.serviceDate.localeCompare(b.serviceDate);
+      return a.hour - b.hour || a.departureTime.localeCompare(b.departureTime);
+    });
+
+    return items;
+  }
+
+  private getBaseDepartureTime(base: TripBase): string {
+    const stopTimes = base.defaultStopTimes as any[];
+    if (Array.isArray(stopTimes) && stopTimes.length > 0) {
+      const first = stopTimes.find((s: any) => s.stopSequence === 1) || stopTimes[0];
+      return first.departAt || first.arriveAt || '00:00';
+    }
+    return '00:00';
+  }
+
+  private async getBookingCountsForTrips(tripIds: string[]): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (tripIds.length === 0) return result;
+
+    const pgArray = `{${tripIds.join(',')}}`;
+    const rows = await db.execute(sql`
+      SELECT b.trip_id AS "tripId", COUNT(DISTINCT p.id)::int AS "count"
+      FROM bookings b
+      JOIN passengers p ON p.booking_id = b.id
+      WHERE b.trip_id = ANY(${pgArray}::uuid[])
+        AND b.status IN ('pending', 'paid', 'confirmed')
+        AND COALESCE(p.ticket_status, 'active') != 'canceled'
+      GROUP BY b.trip_id
+    `);
+
+    for (const row of rows.rows as any[]) {
+      result.set(row.tripId, row.count);
+    }
+    return result;
+  }
+}

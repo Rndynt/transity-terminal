@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { eq, and, or, desc, sql, inArray, isNull } from "drizzle-orm";
+import { eq, and, or, desc, sql, inArray, isNull, gte, lte } from "drizzle-orm";
 import { fromZonedHHMMToUtc } from "../utils/timezone";
 import { ManifestEntry, ManifestFull, ManifestCargoEntry } from "../storage.interface";
 import {
@@ -159,6 +159,45 @@ export class SchedulingRepository {
       return await query.where(and(eq(trips.serviceDate, serviceDate), isNull(trips.deletedAt))).orderBy(trips.serviceDate);
     }
     return await query.where(isNull(trips.deletedAt)).orderBy(desc(trips.serviceDate));
+  }
+
+  async getTripsForDateRange(fromDate: string, toDate: string): Promise<TripWithDetails[]> {
+    return await db.select({
+      id: trips.id,
+      patternId: trips.patternId,
+      serviceDate: trips.serviceDate,
+      vehicleId: trips.vehicleId,
+      layoutId: trips.layoutId,
+      capacity: trips.capacity,
+      status: trips.status,
+      channelFlags: trips.channelFlags,
+      baseId: trips.baseId,
+      driverId: trips.driverId,
+      originDepartHHMM: trips.originDepartHHMM,
+      createdAt: trips.createdAt,
+      patternName: tripPatterns.name,
+      patternCode: tripPatterns.code,
+      vehicleCode: vehicles.code,
+      vehiclePlate: vehicles.plate,
+      driverName: drivers.name,
+      driverCode: drivers.code,
+      scheduleTime: sql<string>`(
+        SELECT MIN(depart_at)
+        FROM ${tripStopTimes}
+        WHERE ${tripStopTimes.tripId} = ${trips.id}
+          AND ${tripStopTimes.deletedAt} IS NULL
+      )`.as('scheduleTime')
+    })
+    .from(trips)
+    .leftJoin(tripPatterns, eq(trips.patternId, tripPatterns.id))
+    .leftJoin(vehicles, eq(trips.vehicleId, vehicles.id))
+    .leftJoin(drivers, eq(trips.driverId, drivers.id))
+    .where(and(
+      gte(trips.serviceDate, fromDate),
+      lte(trips.serviceDate, toDate),
+      isNull(trips.deletedAt)
+    ))
+    .orderBy(trips.serviceDate);
   }
 
   async getCsoAvailableTrips(serviceDate: string, outletId: string, getOutletById: (id: string) => Promise<any>): Promise<CsoAvailableTrip[]> {

@@ -22,6 +22,7 @@ import { registerSpjRoutes } from "./modules/spj/spj.routes";
 import { registerReportsRoutes } from "./modules/reports/reports.routes";
 import { registerAdminRoutes } from "./modules/rbac/rbac.admin.routes";
 import { registerAppRoutes } from "./modules/app/app.routes";
+import { registerSchedulerRoutes } from "./modules/scheduler/scheduler.routes";
 
 export async function registerRoutes(app: FastifyInstance): Promise<FastifyInstance> {
   registerAuthRoutes(app);
@@ -66,6 +67,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
   registerSpjRoutes(app);
   registerReportsRoutes(app);
   registerAdminRoutes(app);
+  registerSchedulerRoutes(app, storage);
 
   app.post('/api/seed', { preHandler: [requireFlag('admin.flags.manage')] }, async (req: any, reply: any) => {
     if (process.env.NODE_ENV === 'production') {
