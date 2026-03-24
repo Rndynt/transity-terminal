@@ -19,6 +19,7 @@ const ManifestPage = lazy(() => import("@/pages/manifest/ManifestPage"));
 const AllBookingsPage = lazy(() => import("@/pages/bookings/AllBookingsPage"));
 const SpjPage = lazy(() => import("@/pages/spj/SpjPage"));
 const SchedulePage = lazy(() => import("@/pages/schedule/SchedulePage"));
+const SchedulerPage = lazy(() => import("@/pages/scheduler/SchedulerPage"));
 const RevenueReportPage = lazy(() => import("@/pages/reports/RevenueReportPage"));
 const SalesReportPage = lazy(() => import("@/pages/reports/SalesReportPage"));
 const TripProfitabilityPage = lazy(() => import("@/pages/reports/TripProfitabilityPage"));
@@ -94,6 +95,11 @@ function Router() {
                     <Route path="/schedule">
                       <RequireFlag flag="page.schedule">
                         <SchedulePage />
+                      </RequireFlag>
+                    </Route>
+                    <Route path="/scheduler">
+                      <RequireFlag flag="page.schedule">
+                        <SchedulerPage />
                       </RequireFlag>
                     </Route>
                     <Route path="/bookings">

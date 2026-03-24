@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   MapPin, Store, Truck, UserCheck, LayoutGrid, Route, Calendar, DollarSign,
-  Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText, BadgePercent, ClipboardList, CalendarDays, LogOut,
+  Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText, BadgePercent, ClipboardList, CalendarDays, CalendarRange, LogOut,
   BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard, ShieldCheck, Receipt
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -17,6 +17,7 @@ const NAV_SECTIONS = [
       { name: "Kargo", path: "/cargo", icon: Package, flag: "page.cargo" },
       { name: "All Bookings", path: "/bookings", icon: List, flag: "page.bookings" },
       { name: "Jadwal Harian", path: "/schedule", icon: CalendarDays, flag: "page.schedule" },
+      { name: "Penjadwalan", path: "/scheduler", icon: CalendarRange, flag: "page.schedule" },
       { name: "SPJ", path: "/spj", icon: ClipboardList, flag: "page.spj" },
       { name: "Manifest", path: "/manifest", icon: FileText, flag: "page.manifest" },
     ]
