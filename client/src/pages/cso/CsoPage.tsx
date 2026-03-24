@@ -187,7 +187,7 @@ export default function CsoPage() {
         id: csoTrip.tripId || '',
         patternId: '',
         vehicleId: '',
-        serviceDate: new Date().toISOString().split('T')[0],
+        serviceDate: selectedDate,
         capacity: csoTrip.capacity || 0,
         status: csoTrip.status as any,
         layoutId: null,
