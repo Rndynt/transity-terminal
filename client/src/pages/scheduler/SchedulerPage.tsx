@@ -74,6 +74,10 @@ type CalendarItem = {
   seatsBooked?: number;
 };
 
+function stripTimeFromCode(code: string): string {
+  return code.replace(/\/\d{2}:\d{2}(:\d{2})?$/, '');
+}
+
 function ScheduleChip({ item, onSelect }: { item: CalendarItem; onSelect?: (item: CalendarItem) => void }) {
   if (item.type === 'virtual') {
     return (
@@ -85,7 +89,7 @@ function ScheduleChip({ item, onSelect }: { item: CalendarItem; onSelect?: (item
             onClick={() => onSelect?.(item)}
           >
             <span className="font-mono opacity-60">{item.departureTime}</span>
-            <span className="truncate">{item.routeCode}</span>
+            <span className="truncate">{stripTimeFromCode(item.routeCode)}</span>
           </div>
         </TooltipTrigger>
         <TooltipContent side="right" className="max-w-[200px]">
@@ -116,7 +120,7 @@ function ScheduleChip({ item, onSelect }: { item: CalendarItem; onSelect?: (item
         >
           <div className="flex items-center gap-1">
             <span className="font-mono opacity-70">{item.departureTime}</span>
-            <span className="truncate font-medium">{item.routeCode}</span>
+            <span className="truncate font-medium">{stripTimeFromCode(item.routeCode)}</span>
           </div>
           {item.seatsBooked !== undefined && item.capacity && (
             <div className="flex items-center gap-0.5 mt-0.5 opacity-80">
