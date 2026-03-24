@@ -105,6 +105,7 @@ function ScheduleChip({ item, onSelect }: { item: ScheduleItem; onSelect?: (item
             onClick={() => onSelect?.(item)}
           >
             <Ban className="w-3 h-3 shrink-0" />
+            <span className="font-mono opacity-70">{item.departureTime}</span>
             <span className="truncate font-medium">{item.routeCode}</span>
           </div>
         </TooltipTrigger>
@@ -125,7 +126,7 @@ function ScheduleChip({ item, onSelect }: { item: ScheduleItem; onSelect?: (item
             data-testid={`chip-virtual-${item.id}`}
             onClick={() => onSelect?.(item)}
           >
-            <Clock className="w-3 h-3 shrink-0 opacity-60" />
+            <span className="font-mono opacity-60">{item.departureTime}</span>
             <span className="truncate">{item.routeCode}</span>
           </div>
         </TooltipTrigger>
@@ -157,6 +158,7 @@ function ScheduleChip({ item, onSelect }: { item: ScheduleItem; onSelect?: (item
         >
           <div className="flex items-center gap-1">
             <Bus className="w-3 h-3 shrink-0" />
+            <span className="font-mono opacity-70">{item.departureTime}</span>
             <span className="truncate font-medium">{item.routeCode}</span>
           </div>
           {item.seatsBooked !== undefined && (
