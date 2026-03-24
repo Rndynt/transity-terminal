@@ -431,12 +431,18 @@ export default function TripSelector({
       }
     };
 
+    const handleStopExceptionChanged = () => {
+      refetchTrips();
+    };
+
     const removeInventory = addEventListener('INVENTORY_UPDATED', handleInventoryUpdate);
     const removeHolds = addEventListener('HOLDS_RELEASED', handleInventoryUpdate);
+    const removeStopEx = addEventListener('STOP_EXCEPTION_CHANGED', handleStopExceptionChanged);
 
     return () => {
       removeInventory();
       removeHolds();
+      removeStopEx();
     };
   }, [addEventListener, refetchTrips]);
 

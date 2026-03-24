@@ -213,6 +213,11 @@ export class SchedulerService {
     return inserted;
   }
 
+  async getStopExceptionById(exceptionId: string) {
+    const [row] = await db.select().from(scheduleStopExceptions).where(eq(scheduleStopExceptions.id, exceptionId));
+    return row || null;
+  }
+
   async removeStopException(exceptionId: string) {
     await db.delete(scheduleStopExceptions).where(eq(scheduleStopExceptions.id, exceptionId));
   }

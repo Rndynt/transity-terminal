@@ -8,6 +8,7 @@ export interface WSEvents {
   HOLDS_RELEASED: { tripId: string; seatNos?: string[] };
   TRIP_MATERIALIZED: { baseId: string; serviceDate: string; tripId: string };
   INVENTORY_UPDATED: { tripId: string; seatNo: string; legIndexes?: number[] };
+  STOP_EXCEPTION_CHANGED: { baseId: string; serviceDate: string; stopId: string };
 }
 
 export type WSEventName = keyof WSEvents;

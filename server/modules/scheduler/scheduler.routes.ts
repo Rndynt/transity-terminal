@@ -3,6 +3,7 @@ import { IStorage } from "../../storage.interface";
 import { SchedulerService } from "./scheduler.service";
 import { z } from "zod";
 import { requireFlag } from "../rbac/rbac.middleware";
+import { webSocketService } from "../../realtime/ws";
 
 export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage) {
   const schedulerService = new SchedulerService(storage);
@@ -91,12 +92,25 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
       parsed.data.reason,
       user?.id || null,
     );
+    webSocketService.broadcast('STOP_EXCEPTION_CHANGED', {
+      baseId: parsed.data.baseId,
+      serviceDate: parsed.data.exceptionDate,
+      stopId: parsed.data.stopId,
+    });
     reply.code(201).send(exception);
   });
 
   app.delete('/api/scheduler/stop-exceptions/:id', { preHandler: [requireFlag('action.trip.close')] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
+    const exception = await schedulerService.getStopExceptionById(id);
     await schedulerService.removeStopException(id);
+    if (exception) {
+      webSocketService.broadcast('STOP_EXCEPTION_CHANGED', {
+        baseId: exception.baseId,
+        serviceDate: exception.exceptionDate,
+        stopId: exception.stopId,
+      });
+    }
     reply.send({ success: true });
   });
 }
