@@ -671,9 +671,9 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 function LegendMultiSeat() {
   return (
     <div className="flex items-center gap-1">
-      <div className="relative w-5 h-5 flex-shrink-0">
-        <div className="w-5 h-5 rounded bg-red-100 border border-red-200" />
-        <Users className="w-2.5 h-2.5 text-orange-500 absolute top-0.5 right-0.5" />
+      <div className="relative w-3 h-3 flex-shrink-0">
+        <div className="w-3 h-3 rounded bg-red-100 border border-red-200" />
+        <Users className="w-2 h-2 text-orange-500 absolute -top-0.5 -right-0.5" />
       </div>
       <span className="text-[10px] text-gray-500">Multi-Penumpang</span>
     </div>
