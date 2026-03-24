@@ -194,9 +194,17 @@ export default function RouteTimeline({
                     {isDest && <span className="px-1.5 py-px bg-rose-100 text-rose-700 rounded text-[9px] font-bold uppercase">Turun</span>}
                     {!isOrigin && !isDest && (
                       <div className="flex gap-1">
-                        {canBoard && !isLast && <span className="px-1 py-px bg-emerald-50 text-emerald-500 rounded text-[8px] font-medium border border-emerald-100">Pickup</span>}
-                        {canAlight && !isFirst && <span className="px-1 py-px bg-rose-50 text-rose-400 rounded text-[8px] font-medium border border-rose-100">Drop</span>}
-                        {!canBoard && !canAlight && <span className="px-1 py-px bg-gray-100 text-gray-400 rounded text-[8px] font-medium">Transit</span>}
+                        {stopTime.effectiveBoardingAllowed !== false && !isLast && (
+                          boardingClosed
+                            ? <span className="px-1 py-px bg-amber-50 text-amber-500 rounded text-[8px] font-medium border border-amber-200 line-through">Pickup</span>
+                            : <span className="px-1 py-px bg-emerald-50 text-emerald-500 rounded text-[8px] font-medium border border-emerald-100">Pickup</span>
+                        )}
+                        {stopTime.effectiveAlightingAllowed !== false && !isFirst && (
+                          alightingClosed
+                            ? <span className="px-1 py-px bg-amber-50 text-amber-500 rounded text-[8px] font-medium border border-amber-200 line-through">Drop</span>
+                            : <span className="px-1 py-px bg-rose-50 text-rose-400 rounded text-[8px] font-medium border border-rose-100">Drop</span>
+                        )}
+                        {stopTime.effectiveBoardingAllowed === false && stopTime.effectiveAlightingAllowed === false && <span className="px-1 py-px bg-gray-100 text-gray-400 rounded text-[8px] font-medium">Transit</span>}
                       </div>
                     )}
                   </div>
