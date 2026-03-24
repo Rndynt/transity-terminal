@@ -189,6 +189,16 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
   isAddingException: boolean;
   isRemovingException: boolean;
 }) {
+  const [showReasonInput, setShowReasonInput] = useState(false);
+  const [exceptionReason, setExceptionReason] = useState('');
+
+  useEffect(() => {
+    if (!open) {
+      setShowReasonInput(false);
+      setExceptionReason('');
+    }
+  }, [open]);
+
   if (!item) return null;
 
   if (item.type === 'exception') {
@@ -259,29 +269,61 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
               {item.capacity && <DetailRow icon={Users} label="Kapasitas" value={`${item.capacity} kursi`} />}
             </div>
           </div>
+          {showReasonInput && (
+            <div className="space-y-2 border border-red-200 dark:border-red-800 rounded-lg p-3 bg-red-50/50 dark:bg-red-950/30">
+              <label className="text-xs font-semibold text-red-700 dark:text-red-400">Alasan Pengecualian</label>
+              <textarea
+                value={exceptionReason}
+                onChange={(e) => setExceptionReason(e.target.value)}
+                placeholder="Contoh: Libur nasional, kendaraan maintenance, dsb."
+                className="w-full h-20 px-3 py-2 text-sm border border-red-200 dark:border-red-700 rounded-lg bg-white dark:bg-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-red-300 dark:focus:ring-red-700"
+                data-testid="input-exception-reason"
+                autoFocus
+              />
+            </div>
+          )}
+
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              className="gap-1.5"
-              data-testid="btn-add-exception"
-              onClick={() => onAddException(item)}
-              disabled={isAddingException}
-            >
-              {isAddingException ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
-              Tambah Pengecualian
+            <Button variant="outline" onClick={() => { if (showReasonInput) { setShowReasonInput(false); setExceptionReason(''); } else { onClose(); } }} data-testid="btn-close-detail">
+              {showReasonInput ? 'Batal' : 'Tutup'}
             </Button>
-            <Button
-              size="sm"
-              className="gap-1.5"
-              data-testid="btn-materialize"
-              onClick={() => onMaterialize(item)}
-              disabled={isMaterializing}
-            >
-              {isMaterializing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
-              Aktifkan Trip
-            </Button>
+            {showReasonInput ? (
+              <Button
+                size="sm"
+                variant="destructive"
+                className="gap-1.5"
+                data-testid="btn-confirm-exception"
+                onClick={() => onAddException(item, exceptionReason.trim() || undefined)}
+                disabled={isAddingException}
+              >
+                {isAddingException ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
+                Konfirmasi Pengecualian
+              </Button>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="gap-1.5"
+                  data-testid="btn-add-exception"
+                  onClick={() => setShowReasonInput(true)}
+                  disabled={isAddingException}
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  Tambah Pengecualian
+                </Button>
+                <Button
+                  size="sm"
+                  className="gap-1.5"
+                  data-testid="btn-materialize"
+                  onClick={() => onMaterialize(item)}
+                  disabled={isMaterializing}
+                >
+                  {isMaterializing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                  Aktifkan Trip
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
