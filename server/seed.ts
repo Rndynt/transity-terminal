@@ -480,35 +480,35 @@ export async function seedData() {
   // ════════════════════════════════════════════════════════════════
   console.log("\n[7/11] Creating price rules...");
 
-  // Harga referensi DayTrans (per leg):
-  //   JKT↔BDG Rute 1 (Premio 14) : Rp 95.000/leg   — 5 leg, range 75rb-150rb
-  //   JKT↔BDG Rute 2 (Commuter)  : Rp 80.000/leg   — 3 leg, lebih murah (economy)
-  //   JKT↔SMG (Premio 14)         : Rp 160.000/leg  — 4 leg, jarak jauh
-  //   SMG↔YGY (Commuter)          : Rp 80.000/leg   — 4 leg, jarak menengah
+  // Harga referensi DayTrans (flat per trip):
+  //   JKT↔BDG Rute 1 (Premio 14) : Rp 95.000
+  //   JKT↔BDG Rute 2 (Commuter)  : Rp 80.000
+  //   JKT↔SMG (Premio 14)         : Rp 160.000
+  //   SMG↔YGY (Commuter)          : Rp 80.000
 
   const priceRuleDefs = [
-    { patternId: pJktBdg01.id, basePricePerLeg: 95000,  currency: "IDR" },
-    { patternId: pBdgJkt01.id, basePricePerLeg: 95000,  currency: "IDR" },
-    { patternId: pJktBdg02.id, basePricePerLeg: 80000,  currency: "IDR" },
-    { patternId: pBdgJkt02.id, basePricePerLeg: 80000,  currency: "IDR" },
-    { patternId: pJktSmg01.id, basePricePerLeg: 160000, currency: "IDR" },
-    { patternId: pSmgJkt01.id, basePricePerLeg: 160000, currency: "IDR" },
-    { patternId: pSmgYgy01.id, basePricePerLeg: 80000,  currency: "IDR" },
-    { patternId: pYgySmg01.id, basePricePerLeg: 80000,  currency: "IDR" },
+    { patternId: pJktBdg01.id, price: 95000,  currency: "IDR" },
+    { patternId: pBdgJkt01.id, price: 95000,  currency: "IDR" },
+    { patternId: pJktBdg02.id, price: 80000,  currency: "IDR" },
+    { patternId: pBdgJkt02.id, price: 80000,  currency: "IDR" },
+    { patternId: pJktSmg01.id, price: 160000, currency: "IDR" },
+    { patternId: pSmgJkt01.id, price: 160000, currency: "IDR" },
+    { patternId: pSmgYgy01.id, price: 80000,  currency: "IDR" },
+    { patternId: pYgySmg01.id, price: 80000,  currency: "IDR" },
   ];
 
   for (const pr of priceRuleDefs) {
     await storage.createPriceRule({
       scope: "pattern", patternId: pr.patternId,
       tripId: null, legIndex: null,
-      rule: { basePricePerLeg: pr.basePricePerLeg, currency: pr.currency, multiplier: 1.0 },
+      rule: { basePricePerLeg: pr.price, currency: pr.currency, multiplier: 1.0, pricingMode: "flat" },
       validFrom: null, validTo: null, priority: 1,
     });
   }
 
   console.log("  ✓ 8 price rules");
-  console.log("    JKT↔BDG-01 Rp 95.000/leg (Premio) | JKT↔BDG-02 Rp 80.000/leg (Commuter)");
-  console.log("    JKT↔SMG    Rp 160.000/leg          | SMG↔YGY    Rp 80.000/leg");
+  console.log("    JKT↔BDG-01 Rp 95.000 flat (Premio) | JKT↔BDG-02 Rp 80.000 flat (Commuter)");
+  console.log("    JKT↔SMG    Rp 160.000 flat          | SMG↔YGY    Rp 80.000 flat");
 
   // ════════════════════════════════════════════════════════════════
   // 8. TRIP BASES (jadwal keberangkatan harian)
