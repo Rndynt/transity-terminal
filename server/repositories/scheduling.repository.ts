@@ -448,12 +448,18 @@ export class SchedulingRepository {
     
     if (outletTime?.departAt) {
       const departUtcTime = fromZonedHHMMToUtc(serviceDate, outletTime.departAt, "Asia/Jakarta");
-      departAtOutlet = departUtcTime.toISOString();
+      departAtOutlet = departUtcTime?.toISOString() ?? null;
     }
     
     if (finalTime?.arriveAt) {
       const arrivalUtcTime = fromZonedHHMMToUtc(serviceDate, finalTime.arriveAt, "Asia/Jakarta");
-      finalArrivalAt = arrivalUtcTime.toISOString();
+      if (arrivalUtcTime && departAtOutlet) {
+        const departMs = new Date(departAtOutlet).getTime();
+        if (arrivalUtcTime.getTime() <= departMs) {
+          arrivalUtcTime.setDate(arrivalUtcTime.getDate() + 1);
+        }
+      }
+      finalArrivalAt = arrivalUtcTime?.toISOString() ?? null;
     }
     
     return { departAtOutlet, finalArrivalAt };

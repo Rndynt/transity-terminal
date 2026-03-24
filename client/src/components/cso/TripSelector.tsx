@@ -543,8 +543,7 @@ export default function TripSelector({
     if (!trip.departAtAtOutlet || !trip.finalArrivalAt) return null;
     try {
       const start = new Date(trip.departAtAtOutlet).getTime();
-      let end = new Date(trip.finalArrivalAt).getTime();
-      if (end <= start) end += 24 * 60 * 60 * 1000;
+      const end = new Date(trip.finalArrivalAt).getTime();
       const totalMins = Math.round((end - start) / 60000);
       if (totalMins <= 0) return null;
       const h = Math.floor(totalMins / 60);
