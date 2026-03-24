@@ -157,7 +157,6 @@ function ScheduleChip({ item, onSelect }: { item: ScheduleItem; onSelect?: (item
           onClick={() => onSelect?.(item)}
         >
           <div className="flex items-center gap-1">
-            <Bus className="w-3 h-3 shrink-0" />
             <span className="font-mono opacity-70">{item.departureTime}</span>
             <span className="truncate font-medium">{item.routeCode}</span>
           </div>
