@@ -6,18 +6,78 @@ import { TripBasesService } from "./modules/tripBases/tripBases.service";
 import { seedRbac } from "./modules/rbac/rbac.seed";
 
 /**
- * SEED DATA - TransityTerminal
+ * ═══════════════════════════════════════════════════════════════════
+ * SEED DATA — Transity Shuttle
+ * ═══════════════════════════════════════════════════════════════════
  *
- * Rute:
- * 1. JKT -> CRB -> SMR -> YGY -> SLO -> SBY  (Jakarta - Surabaya)
- * 2. SBY -> SLO -> YGY -> SMR -> CRB -> JKT  (Surabaya - Jakarta)
- * 3. JKT -> BDG -> CRB -> SMR -> YGY          (Jakarta - Yogyakarta Eksekutif)
- * 4. YGY -> SMR -> CRB -> BDG -> JKT          (Yogyakarta - Jakarta Eksekutif)
- * 5. JKT -> BDG (Jakarta - Bandung Express)
- * 6. BDG -> JKT (Bandung - Jakarta Express)
+ * Data referensi: DayTrans (daytrans.co.id)
  *
- * Jadwal: 2-3 jadwal per rute per hari, APP channel enabled
- * Periode: 30 hari ke depan
+ * ─── KONVENSI PENAMAAN ─────────────────────────────────────────
+ *
+ *   STOP CODE    : {KOTA 3 huruf}-{AREA 3 huruf}
+ *                  JKT-ATR  → Jakarta Atrium Senen
+ *                  BDG-DPU  → Bandung Dipatiukur
+ *
+ *   OUTLET NAME  : {Kota} — {Nama Area}
+ *                  Jakarta — Atrium Senen
+ *                  Bandung — Dipatiukur
+ *
+ *   PATTERN CODE : {ASAL 3 huruf}-{TUJUAN 3 huruf}-{VARIAN 2 digit}
+ *                  JKT-BDG-01  → Jakarta→Bandung Rute 1
+ *                  SMG-YGY-01  → Semarang→Yogyakarta Rute 1
+ *
+ *   PATTERN NAME : {Kota Asal} → {Kota Tujuan} · {Deskripsi Singkat}
+ *                  Jakarta → Bandung · via Senen — Pasteur — Dipatiukur
+ *
+ *   SCHEDULE CODE: {PATTERN CODE}/{HH:MM}
+ *                  JKT-BDG-01/06:00  → Rute JKT-BDG-01 berangkat 06:00
+ *
+ *   SCHEDULE NAME: {Pattern Name} — {HH:MM}
+ *                  Jakarta → Bandung 01 — 06:00
+ *
+ *   VEHICLE CODE : {TIPE}-{NOMOR 2 digit}
+ *                  PR8-01   → Premio 8 unit 01
+ *                  PR14-03  → Premio 14 unit 03
+ *                  CM14-05  → Commuter 14 unit 05
+ *
+ * ─── KOTA & OUTLET ─────────────────────────────────────────────
+ *
+ *   Jakarta  (6 outlet) : Atrium Senen, Cempaka Putih, Tebet,
+ *                          Grogol, Kuningan, Jatiwaringin
+ *   Bandung  (4 outlet) : Dipatiukur, Pasteur, Cihampelas, Buah Batu
+ *   Semarang (2 outlet) : Karangayu, Majapahit
+ *   Yogyakarta (3 outlet): Gading, Jombor, Seturan
+ *
+ * ─── RUTE (8 patterns) ────────────────────────────────────────
+ *
+ *   JKT-BDG-01  Jakarta → Bandung   (Atrium→CemPut→Tebet → Pasteur→Cihampelas→Dipatiukur)
+ *   BDG-JKT-01  Bandung → Jakarta   (Dipatiukur→Cihampelas→Pasteur → Tebet→CemPut→Atrium)
+ *   JKT-BDG-02  Jakarta → Bandung   (Grogol→Kuningan → Pasteur→Buah Batu)
+ *   BDG-JKT-02  Bandung → Jakarta   (Buah Batu→Pasteur → Kuningan→Grogol)
+ *   JKT-SMG-01  Jakarta → Semarang  (CemPut→Tebet → Karangayu→Majapahit)
+ *   SMG-JKT-01  Semarang → Jakarta  (Karangayu→Majapahit → Tebet→CemPut)
+ *   SMG-YGY-01  Semarang → Yogya    (Karangayu→Majapahit → Jombor→Gading→Seturan)
+ *   YGY-SMG-01  Yogya → Semarang    (Seturan→Gading→Jombor → Majapahit→Karangayu)
+ *
+ * ─── ARMADA (3 tipe layout) ───────────────────────────────────
+ *
+ *   HiAce Premio 8 Seat   — 4 baris × 2 kolom (A-B), premium
+ *   HiAce Premio 14 Seat  — 5 baris × 3 kolom (A-B-C), row 1 hanya A-B
+ *   HiAce Commuter 14 Seat — 5 baris × 3 kolom (A-B-C), row 1 hanya A-B
+ *
+ * ─── JADWAL ───────────────────────────────────────────────────
+ *
+ *   JKT↔BDG : 06:00, 09:00, 12:00, 15:00, 18:00, 21:00
+ *   JKT↔SMG : 07:00, 13:00, 20:00
+ *   SMG↔YGY : 06:00, 10:00, 14:00, 18:00
+ *
+ * ─── HARGA (per leg, berdasarkan referensi DayTrans) ──────────
+ *
+ *   JKT↔BDG : Rp 90.000/leg  (range 75rb-150rb, rata-rata)
+ *   JKT↔SMG : Rp 160.000/leg (range 150rb-170rb)
+ *   SMG↔YGY : Rp 80.000/leg  (range 70rb-90rb)
+ *
+ * ═══════════════════════════════════════════════════════════════════
  */
 
 async function cleanDatabase() {
@@ -50,7 +110,6 @@ async function cleanDatabase() {
   console.log("[CLEANUP] Done.");
 }
 
-/** Generate service dates for the next N days */
 function nextNDays(n: number): string[] {
   const dates: string[] = [];
   const now = new Date();
@@ -63,380 +122,814 @@ function nextNDays(n: number): string[] {
 }
 
 export async function seedData() {
-  console.log("========================================");
-  console.log("  TRANSITYTERMINAL SEED DATA");
-  console.log("========================================");
+  console.log("═══════════════════════════════════════════");
+  console.log("  TRANSITY SHUTTLE — SEED DATA");
+  console.log("═══════════════════════════════════════════");
 
   await cleanDatabase();
 
   const currentYear = new Date().getFullYear();
   const validFrom = `${currentYear}-01-01`;
   const validTo = `${currentYear + 1}-12-31`;
-
-  // ============================================================
-  // 1. STOPS
-  // ============================================================
-  console.log("\n[1/10] Creating stops...");
-
-  const jakartaStop = await storage.createStop({
-    code: "JKT",
-    name: "Terminal Pulogadung",
-    city: "Jakarta",
-    lat: "-6.187",
-    lng: "106.900",
-    isOutlet: true,
-  });
-
-  const bandungStop = await storage.createStop({
-    code: "BDG",
-    name: "Terminal Leuwipanjang",
-    city: "Bandung",
-    lat: "-6.958",
-    lng: "107.572",
-    isOutlet: true,
-  });
-
-  const cirebonStop = await storage.createStop({
-    code: "CRB",
-    name: "Terminal Harjamukti",
-    city: "Cirebon",
-    lat: "-6.757",
-    lng: "108.556",
-    isOutlet: true,
-  });
-
-  const semarangStop = await storage.createStop({
-    code: "SMR",
-    name: "Terminal Terboyo",
-    city: "Semarang",
-    lat: "-6.987",
-    lng: "110.430",
-    isOutlet: true,
-  });
-
-  const yogyakartaStop = await storage.createStop({
-    code: "YGY",
-    name: "Terminal Giwangan",
-    city: "Yogyakarta",
-    lat: "-7.832",
-    lng: "110.384",
-    isOutlet: true,
-  });
-
-  const soloStop = await storage.createStop({
-    code: "SLO",
-    name: "Terminal Tirtonadi",
-    city: "Solo",
-    lat: "-7.550",
-    lng: "110.827",
-    isOutlet: true,
-  });
-
-  const surabayaStop = await storage.createStop({
-    code: "SBY",
-    name: "Terminal Bungurasih",
-    city: "Surabaya",
-    lat: "-7.369",
-    lng: "112.721",
-    isOutlet: true,
-  });
-
-  console.log("  ✓ JKT, BDG, CRB, SMR, YGY, SLO, SBY");
-
-  // ============================================================
-  // 2. OUTLETS
-  // ============================================================
-  console.log("\n[2/10] Creating outlets...");
-
-  await storage.createOutlet({ stopId: jakartaStop.id,   name: "Jakarta - Terminal Pulogadung",  address: "Jl. Bekasi Timur Raya, Jakarta Timur",     phone: "+62-21-4891234" });
-  await storage.createOutlet({ stopId: bandungStop.id,   name: "Bandung - Terminal Leuwipanjang", address: "Jl. Leuwipanjang No. 1, Bandung",          phone: "+62-22-5234567" });
-  await storage.createOutlet({ stopId: cirebonStop.id,   name: "Cirebon - Terminal Harjamukti",  address: "Jl. Brigjen Darsono, Cirebon",             phone: "+62-231-1234567" });
-  await storage.createOutlet({ stopId: semarangStop.id,  name: "Semarang - Terminal Terboyo",    address: "Jl. Kaligawe Raya, Semarang",              phone: "+62-24-6581234" });
-  await storage.createOutlet({ stopId: yogyakartaStop.id,name: "Yogyakarta - Terminal Giwangan", address: "Jl. Imogiri Timur, Yogyakarta",            phone: "+62-274-1234567" });
-  await storage.createOutlet({ stopId: soloStop.id,      name: "Solo - Terminal Tirtonadi",      address: "Jl. Ahmad Yani No. 1, Solo",               phone: "+62-271-1234567" });
-  await storage.createOutlet({ stopId: surabayaStop.id,  name: "Surabaya - Terminal Bungurasih", address: "Jl. Letjen Sutoyo, Surabaya",              phone: "+62-31-8491234" });
-
-  console.log("  ✓ 7 outlets");
-
-  // ============================================================
-  // 3. LAYOUTS
-  // ============================================================
-  console.log("\n[3/10] Creating layouts...");
-
-  // Ekonomi 2x2: 10 baris = 40 kursi
-  const seatCols = ['A', 'B', 'C', 'D'];
-  const ekonomiSeatMap = [];
-  for (let row = 1; row <= 10; row++) {
-    for (let col = 0; col < 4; col++) {
-      ekonomiSeatMap.push({ seat_no: `${row}${seatCols[col]}`, row, col: col + 1, class: "ekonomi" });
-    }
-  }
-
-  // Eksekutif 1+2: 8 baris = 24 kursi
-  const eksekutifSeatMap = [];
-  for (let row = 1; row <= 8; row++) {
-    eksekutifSeatMap.push({ seat_no: `${row}A`, row, col: 1, class: "eksekutif" });
-    eksekutifSeatMap.push({ seat_no: `${row}B`, row, col: 3, class: "eksekutif" });
-    eksekutifSeatMap.push({ seat_no: `${row}C`, row, col: 4, class: "eksekutif" });
-  }
-
-  const layoutEkonomi = await storage.createLayout({
-    name: "Bus Ekonomi 2×2 (40 kursi)",
-    rows: 10,
-    cols: 4,
-    seatMap: ekonomiSeatMap,
-  });
-
-  const layoutEksekutif = await storage.createLayout({
-    name: "Bus Eksekutif 1+2 (24 kursi)",
-    rows: 8,
-    cols: 4,
-    seatMap: eksekutifSeatMap,
-  });
-
-  console.log("  ✓ Layout Ekonomi 40 kursi, Eksekutif 24 kursi");
-
-  // ============================================================
-  // 4. VEHICLES
-  // ============================================================
-  console.log("\n[4/10] Creating vehicles...");
-
-  const busEk01 = await storage.createVehicle({ code: "BUS-EK-01", plate: "B 1001 AA", layoutId: layoutEkonomi.id,   capacity: 40, notes: "Bus Ekonomi AC" });
-  const busEk02 = await storage.createVehicle({ code: "BUS-EK-02", plate: "B 1002 BB", layoutId: layoutEkonomi.id,   capacity: 40, notes: "Bus Ekonomi AC" });
-  const busEk03 = await storage.createVehicle({ code: "BUS-EK-03", plate: "D 2001 CC", layoutId: layoutEkonomi.id,   capacity: 40, notes: "Bus Ekonomi AC" });
-  const busEk04 = await storage.createVehicle({ code: "BUS-EK-04", plate: "D 2002 DD", layoutId: layoutEkonomi.id,   capacity: 40, notes: "Bus Ekonomi AC" });
-  const busEx01 = await storage.createVehicle({ code: "BUS-EX-01", plate: "B 3001 EE", layoutId: layoutEksekutif.id, capacity: 24, notes: "Bus Eksekutif AC Premium" });
-  const busEx02 = await storage.createVehicle({ code: "BUS-EX-02", plate: "B 3002 FF", layoutId: layoutEksekutif.id, capacity: 24, notes: "Bus Eksekutif AC Premium" });
-
-  console.log("  ✓ 4 bus Ekonomi (40 kursi) + 2 bus Eksekutif (24 kursi)");
-
-  // ============================================================
-  // 5. TRIP PATTERNS
-  // ============================================================
-  console.log("\n[5/10] Creating trip patterns...");
-
   const channelAll = { CSO: true, WEB: true, APP: true, OTA: false };
 
-  const patternJktSby = await storage.createTripPattern({ code: "JKT-SBY", name: "Jakarta → Surabaya", note: "Via Cirebon, Semarang, Yogyakarta, Solo",  vehicleClass: "ekonomi",   defaultLayoutId: layoutEkonomi.id,   active: true, tags: ["intercity", "ekonomi"] });
-  const patternSbyJkt = await storage.createTripPattern({ code: "SBY-JKT", name: "Surabaya → Jakarta", note: "Via Solo, Yogyakarta, Semarang, Cirebon",  vehicleClass: "ekonomi",   defaultLayoutId: layoutEkonomi.id,   active: true, tags: ["intercity", "ekonomi"] });
-  const patternJktYgy = await storage.createTripPattern({ code: "JKT-YGY", name: "Jakarta → Yogyakarta", note: "Via Bandung, Cirebon, Semarang · Eksekutif", vehicleClass: "eksekutif", defaultLayoutId: layoutEksekutif.id, active: true, tags: ["intercity", "eksekutif"] });
-  const patternYgyJkt = await storage.createTripPattern({ code: "YGY-JKT", name: "Yogyakarta → Jakarta", note: "Via Semarang, Cirebon, Bandung · Eksekutif", vehicleClass: "eksekutif", defaultLayoutId: layoutEksekutif.id, active: true, tags: ["intercity", "eksekutif"] });
-  const patternJktBdg = await storage.createTripPattern({ code: "JKT-BDG", name: "Jakarta → Bandung",   note: "Ekspres",                                    vehicleClass: "ekonomi",   defaultLayoutId: layoutEkonomi.id,   active: true, tags: ["express", "ekonomi"] });
-  const patternBdgJkt = await storage.createTripPattern({ code: "BDG-JKT", name: "Bandung → Jakarta",   note: "Ekspres",                                    vehicleClass: "ekonomi",   defaultLayoutId: layoutEkonomi.id,   active: true, tags: ["express", "ekonomi"] });
+  // ════════════════════════════════════════════════════════════════
+  // 1. STOPS (15 outlet di 4 kota)
+  // ════════════════════════════════════════════════════════════════
+  console.log("\n[1/11] Creating stops...");
 
-  // Pattern Stops: JKT → SBY (seq 1-6)
-  await storage.createPatternStop({ patternId: patternJktSby.id, stopId: jakartaStop.id,    stopSequence: 1, dwellSeconds: 0,    boardingAllowed: true,  alightingAllowed: false });
-  await storage.createPatternStop({ patternId: patternJktSby.id, stopId: cirebonStop.id,    stopSequence: 2, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternJktSby.id, stopId: semarangStop.id,   stopSequence: 3, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternJktSby.id, stopId: yogyakartaStop.id, stopSequence: 4, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternJktSby.id, stopId: soloStop.id,       stopSequence: 5, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternJktSby.id, stopId: surabayaStop.id,   stopSequence: 6, dwellSeconds: 0,    boardingAllowed: false, alightingAllowed: true  });
+  // ── JAKARTA (6 outlet) ──
+  const jktAtrium = await storage.createStop({
+    code: "ATR", name: "Plaza Atrium Senen",
+    city: "Jakarta", lat: "-6.1745", lng: "106.8413", isOutlet: true,
+  });
+  const jktCemput = await storage.createStop({
+    code: "CPT", name: "Pool Cempaka Putih",
+    city: "Jakarta", lat: "-6.1753", lng: "106.8688", isOutlet: true,
+  });
+  const jktTebet = await storage.createStop({
+    code: "TBT", name: "SPBU MT Haryono Tebet",
+    city: "Jakarta", lat: "-6.2297", lng: "106.8547", isOutlet: true,
+  });
+  const jktGrogol = await storage.createStop({
+    code: "GRG", name: "SPBU Daan Mogot Grogol",
+    city: "Jakarta", lat: "-6.1582", lng: "106.7863", isOutlet: true,
+  });
+  const jktKuningan = await storage.createStop({
+    code: "KNN", name: "SPBU Rasuna Said Kuningan",
+    city: "Jakarta", lat: "-6.2275", lng: "106.8318", isOutlet: true,
+  });
+  const jktJatiwaringin = await storage.createStop({
+    code: "JTW", name: "Counter Jatiwaringin",
+    city: "Jakarta", lat: "-6.2789", lng: "106.9069", isOutlet: true,
+  });
 
-  // Pattern Stops: SBY → JKT (seq 1-6)
-  await storage.createPatternStop({ patternId: patternSbyJkt.id, stopId: surabayaStop.id,   stopSequence: 1, dwellSeconds: 0,    boardingAllowed: true,  alightingAllowed: false });
-  await storage.createPatternStop({ patternId: patternSbyJkt.id, stopId: soloStop.id,       stopSequence: 2, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternSbyJkt.id, stopId: yogyakartaStop.id, stopSequence: 3, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternSbyJkt.id, stopId: semarangStop.id,   stopSequence: 4, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternSbyJkt.id, stopId: cirebonStop.id,    stopSequence: 5, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternSbyJkt.id, stopId: jakartaStop.id,    stopSequence: 6, dwellSeconds: 0,    boardingAllowed: false, alightingAllowed: true  });
+  // ── BANDUNG (4 outlet) ──
+  const bdgDipatiukur = await storage.createStop({
+    code: "DPU", name: "Pool Dipatiukur",
+    city: "Bandung", lat: "-6.8935", lng: "107.6162", isOutlet: true,
+  });
+  const bdgPasteur = await storage.createStop({
+    code: "PST", name: "Pool Pasteur",
+    city: "Bandung", lat: "-6.8893", lng: "107.5896", isOutlet: true,
+  });
+  const bdgCihampelas = await storage.createStop({
+    code: "CHP", name: "Counter Cihampelas",
+    city: "Bandung", lat: "-6.8953", lng: "107.6031", isOutlet: true,
+  });
+  const bdgBuahBatu = await storage.createStop({
+    code: "BBT", name: "Counter Buah Batu",
+    city: "Bandung", lat: "-6.9523", lng: "107.6341", isOutlet: true,
+  });
 
-  // Pattern Stops: JKT → YGY (seq 1-5)
-  await storage.createPatternStop({ patternId: patternJktYgy.id, stopId: jakartaStop.id,    stopSequence: 1, dwellSeconds: 0,    boardingAllowed: true,  alightingAllowed: false });
-  await storage.createPatternStop({ patternId: patternJktYgy.id, stopId: bandungStop.id,    stopSequence: 2, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternJktYgy.id, stopId: cirebonStop.id,    stopSequence: 3, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternJktYgy.id, stopId: semarangStop.id,   stopSequence: 4, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternJktYgy.id, stopId: yogyakartaStop.id, stopSequence: 5, dwellSeconds: 0,    boardingAllowed: false, alightingAllowed: true  });
+  // ── SEMARANG (2 outlet) ──
+  const smgKarangayu = await storage.createStop({
+    code: "KAY", name: "Pool Karangayu",
+    city: "Semarang", lat: "-6.9698", lng: "110.3852", isOutlet: true,
+  });
+  const smgMajapahit = await storage.createStop({
+    code: "MJP", name: "Counter Majapahit",
+    city: "Semarang", lat: "-6.9933", lng: "110.4494", isOutlet: true,
+  });
 
-  // Pattern Stops: YGY → JKT (seq 1-5)
-  await storage.createPatternStop({ patternId: patternYgyJkt.id, stopId: yogyakartaStop.id, stopSequence: 1, dwellSeconds: 0,    boardingAllowed: true,  alightingAllowed: false });
-  await storage.createPatternStop({ patternId: patternYgyJkt.id, stopId: semarangStop.id,   stopSequence: 2, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternYgyJkt.id, stopId: cirebonStop.id,    stopSequence: 3, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternYgyJkt.id, stopId: bandungStop.id,    stopSequence: 4, dwellSeconds: 1800, boardingAllowed: true,  alightingAllowed: true  });
-  await storage.createPatternStop({ patternId: patternYgyJkt.id, stopId: jakartaStop.id,    stopSequence: 5, dwellSeconds: 0,    boardingAllowed: false, alightingAllowed: true  });
+  // ── YOGYAKARTA (3 outlet) ──
+  const ygyGading = await storage.createStop({
+    code: "GDG", name: "Pool Gading Mantrijeron",
+    city: "Yogyakarta", lat: "-7.8100", lng: "110.3630", isOutlet: true,
+  });
+  const ygyJombor = await storage.createStop({
+    code: "JBR", name: "Terminal Jombor",
+    city: "Yogyakarta", lat: "-7.7400", lng: "110.3610", isOutlet: true,
+  });
+  const ygySeturan = await storage.createStop({
+    code: "STR", name: "Counter Seturan",
+    city: "Yogyakarta", lat: "-7.7584", lng: "110.4099", isOutlet: true,
+  });
 
-  // Pattern Stops: JKT → BDG (seq 1-2)
-  await storage.createPatternStop({ patternId: patternJktBdg.id, stopId: jakartaStop.id, stopSequence: 1, dwellSeconds: 0, boardingAllowed: true,  alightingAllowed: false });
-  await storage.createPatternStop({ patternId: patternJktBdg.id, stopId: bandungStop.id, stopSequence: 2, dwellSeconds: 0, boardingAllowed: false, alightingAllowed: true  });
+  console.log("  ✓ 15 stops (Jakarta 6, Bandung 4, Semarang 2, Yogyakarta 3)");
 
-  // Pattern Stops: BDG → JKT (seq 1-2)
-  await storage.createPatternStop({ patternId: patternBdgJkt.id, stopId: bandungStop.id, stopSequence: 1, dwellSeconds: 0, boardingAllowed: true,  alightingAllowed: false });
-  await storage.createPatternStop({ patternId: patternBdgJkt.id, stopId: jakartaStop.id, stopSequence: 2, dwellSeconds: 0, boardingAllowed: false, alightingAllowed: true  });
+  // ════════════════════════════════════════════════════════════════
+  // 2. OUTLETS
+  // ════════════════════════════════════════════════════════════════
+  console.log("\n[2/11] Creating outlets...");
 
-  console.log("  ✓ 6 patterns + semua pattern stops");
+  const outletDefs = [
+    { stopId: jktAtrium.id,        name: "Plaza Atrium Senen",          address: "Plaza Atrium Lobby Utara, Jl. Senen Raya No. 135, Jakarta Pusat 10410",                   phone: "021-3424-6767" },
+    { stopId: jktCemput.id,        name: "Pool Cempaka Putih",         address: "Jl. Letjend Suprapto No. 58 (Seberang Kampus YARSI), Cempaka Putih, Jakarta Pusat",        phone: "021-3662-6767" },
+    { stopId: jktTebet.id,         name: "SPBU MT Haryono Tebet",      address: "SPBU Coco Pertamina Kav. 18, Jl. MT. Haryono, Tebet Barat, Jakarta Selatan 12810",         phone: "021-7080-6767" },
+    { stopId: jktGrogol.id,        name: "SPBU Daan Mogot Grogol",     address: "SPBU Pertamina COCO Daan Mogot, Jelambar, Grogol Petamburan, Jakarta Barat",               phone: "0815-804-6767" },
+    { stopId: jktKuningan.id,      name: "SPBU Rasuna Said Kuningan",  address: "SPBU COCO Pertamina, Jl. HR. Rasuna Said Kav. X2/02, Kuningan Timur, Jakarta Selatan",     phone: "0816-1799-6767" },
+    { stopId: jktJatiwaringin.id,  name: "Counter Jatiwaringin",       address: "Jl. Jatiwaringin Raya No. 7 (Seberang Pizza Hut), Jakarta Timur",                          phone: "0815-805-6767" },
+    { stopId: bdgDipatiukur.id,    name: "Pool Dipatiukur",            address: "Jl. Dipati Ukur No. 107, Lebakgede, Kec. Coblong, Kota Bandung 40132",                     phone: "022-7025-6767" },
+    { stopId: bdgPasteur.id,       name: "Pool Pasteur",               address: "Jl. Dr. Djunjunan No. 55B, Pajajaran, Kec. Cicendo, Kota Bandung 40173",                   phone: "0816-1780-6767" },
+    { stopId: bdgCihampelas.id,    name: "Counter Cihampelas",         address: "Jl. Cihampelas No. 210 (Depan SMU Pasundan 2), Bandung Wetan, Kota Bandung",               phone: "022-3114-0000" },
+    { stopId: bdgBuahBatu.id,      name: "Counter Buah Batu",          address: "Jl. Terusan Buah Batu No. 298, Kujangsari, Kec. Bandung Kidul, Kota Bandung 40287",        phone: "0815-8511-6767" },
+    { stopId: smgKarangayu.id,     name: "Pool Karangayu",             address: "Jl. Jend. Sudirman No. 251, Karangayu, Semarang Barat",                                    phone: "024-7604-192" },
+    { stopId: smgMajapahit.id,     name: "Counter Majapahit",          address: "Jl. Majapahit No. 318, Perum Singatara, Palebon, Pedurungan, Semarang",                    phone: "0815-7535-9942" },
+    { stopId: ygyGading.id,        name: "Pool Gading Mantrijeron",    address: "Jl. MT. Haryono No. 1, Suryodiningratan, Kec. Mantrijeron, Kota Yogyakarta",               phone: "0274-385-990" },
+    { stopId: ygyJombor.id,        name: "Terminal Jombor",            address: "Terminal Jombor, Jl. Magelang, Jombor Lor, Sendangadi, Mlati, Sleman",                     phone: "0274-868-767" },
+    { stopId: ygySeturan.id,       name: "Counter Seturan",            address: "Jl. Seturan Raya, Caturtunggal, Kec. Depok, Sleman, Yogyakarta",                           phone: "0274-487-6767" },
+  ];
 
-  // ============================================================
-  // 6. PRICE RULES
-  // ============================================================
-  console.log("\n[6/10] Creating price rules...");
+  for (const o of outletDefs) {
+    await storage.createOutlet(o);
+  }
 
-  await storage.createPriceRule({ scope: "pattern", patternId: patternJktSby.id, tripId: null, legIndex: null, rule: { basePricePerLeg: 85000,  currency: "IDR", multiplier: 1.0 }, validFrom: null, validTo: null, priority: 1 });
-  await storage.createPriceRule({ scope: "pattern", patternId: patternSbyJkt.id, tripId: null, legIndex: null, rule: { basePricePerLeg: 85000,  currency: "IDR", multiplier: 1.0 }, validFrom: null, validTo: null, priority: 1 });
-  await storage.createPriceRule({ scope: "pattern", patternId: patternJktYgy.id, tripId: null, legIndex: null, rule: { basePricePerLeg: 150000, currency: "IDR", multiplier: 1.0 }, validFrom: null, validTo: null, priority: 1 });
-  await storage.createPriceRule({ scope: "pattern", patternId: patternYgyJkt.id, tripId: null, legIndex: null, rule: { basePricePerLeg: 150000, currency: "IDR", multiplier: 1.0 }, validFrom: null, validTo: null, priority: 1 });
-  await storage.createPriceRule({ scope: "pattern", patternId: patternJktBdg.id, tripId: null, legIndex: null, rule: { basePricePerLeg: 65000,  currency: "IDR", multiplier: 1.0 }, validFrom: null, validTo: null, priority: 1 });
-  await storage.createPriceRule({ scope: "pattern", patternId: patternBdgJkt.id, tripId: null, legIndex: null, rule: { basePricePerLeg: 65000,  currency: "IDR", multiplier: 1.0 }, validFrom: null, validTo: null, priority: 1 });
+  console.log(`  ✓ ${outletDefs.length} outlets`);
 
-  console.log("  ✓ Price rules: JKT-SBY Rp85rb/leg, JKT-YGY Rp150rb/leg, JKT-BDG Rp65rb/leg");
+  // ════════════════════════════════════════════════════════════════
+  // 3. LAYOUTS (3 tipe armada HiAce)
+  // ════════════════════════════════════════════════════════════════
+  console.log("\n[3/11] Creating layouts...");
 
-  // ============================================================
-  // 7. TRIP BASES
-  // ============================================================
-  console.log("\n[7/10] Creating trip bases...");
+  // ── HiAce Premio 8 Seat ──
+  // Layout 1+1: 4 baris × 2 kolom (kursi kapten, sangat luas)
+  // Seat map:  1A 1B │ 2A 2B │ 3A 3B │ 4A 4B
+  const premio8Map = [];
+  for (let row = 1; row <= 4; row++) {
+    premio8Map.push({ seat_no: `${row}A`, row, col: 1, class: "premio" });
+    premio8Map.push({ seat_no: `${row}B`, row, col: 2, class: "premio" });
+  }
+
+  const layoutPremio8 = await storage.createLayout({
+    name: "HiAce Premio 8 Seat",
+    rows: 4,
+    cols: 2,
+    seatMap: premio8Map,
+  });
+
+  // ── HiAce Premio 14 Seat ──
+  // Layout 2+3: baris 1 = 2 kursi (A-B), baris 2-5 = 3 kursi (A-B-C)
+  // Total: 2 + (4×3) = 14 seat
+  const premio14Map = [];
+  premio14Map.push({ seat_no: "1A", row: 1, col: 1, class: "premio" });
+  premio14Map.push({ seat_no: "1B", row: 1, col: 3, class: "premio" });
+  for (let row = 2; row <= 5; row++) {
+    premio14Map.push({ seat_no: `${row}A`, row, col: 1, class: "premio" });
+    premio14Map.push({ seat_no: `${row}B`, row, col: 2, class: "premio" });
+    premio14Map.push({ seat_no: `${row}C`, row, col: 3, class: "premio" });
+  }
+
+  const layoutPremio14 = await storage.createLayout({
+    name: "HiAce Premio 14 Seat",
+    rows: 5,
+    cols: 3,
+    seatMap: premio14Map,
+  });
+
+  // ── HiAce Commuter 14 Seat ──
+  // Layout sama dengan Premio 14, tapi kelas ekonomi
+  const commuter14Map = [];
+  commuter14Map.push({ seat_no: "1A", row: 1, col: 1, class: "commuter" });
+  commuter14Map.push({ seat_no: "1B", row: 1, col: 3, class: "commuter" });
+  for (let row = 2; row <= 5; row++) {
+    commuter14Map.push({ seat_no: `${row}A`, row, col: 1, class: "commuter" });
+    commuter14Map.push({ seat_no: `${row}B`, row, col: 2, class: "commuter" });
+    commuter14Map.push({ seat_no: `${row}C`, row, col: 3, class: "commuter" });
+  }
+
+  const layoutCommuter14 = await storage.createLayout({
+    name: "HiAce Commuter 14 Seat",
+    rows: 5,
+    cols: 3,
+    seatMap: commuter14Map,
+  });
+
+  console.log("  ✓ 3 layouts: Premio 8 (4×2), Premio 14 (5×3), Commuter 14 (5×3)");
+
+  // ════════════════════════════════════════════════════════════════
+  // 4. VEHICLES (12 unit armada)
+  // ════════════════════════════════════════════════════════════════
+  console.log("\n[4/11] Creating vehicles...");
+
+  // Format kode: {TIPE}-{NN}
+  //   PR8  = Premio 8 Seat
+  //   PR14 = Premio 14 Seat
+  //   CM14 = Commuter 14 Seat
+  const vehicleDefs = [
+    { code: "PR8-01",  plate: "B 1281 TGH", layoutId: layoutPremio8.id,    capacity: 8,  notes: "HiAce Premio 8 Seat — Premium" },
+    { code: "PR8-02",  plate: "B 1282 TGH", layoutId: layoutPremio8.id,    capacity: 8,  notes: "HiAce Premio 8 Seat — Premium" },
+    { code: "PR14-01", plate: "B 1401 TGJ", layoutId: layoutPremio14.id,   capacity: 14, notes: "HiAce Premio 14 Seat — Standard" },
+    { code: "PR14-02", plate: "B 1402 TGJ", layoutId: layoutPremio14.id,   capacity: 14, notes: "HiAce Premio 14 Seat — Standard" },
+    { code: "PR14-03", plate: "D 1403 TGJ", layoutId: layoutPremio14.id,   capacity: 14, notes: "HiAce Premio 14 Seat — Standard" },
+    { code: "PR14-04", plate: "D 1404 TGJ", layoutId: layoutPremio14.id,   capacity: 14, notes: "HiAce Premio 14 Seat — Standard" },
+    { code: "CM14-01", plate: "B 1501 TGK", layoutId: layoutCommuter14.id, capacity: 14, notes: "HiAce Commuter 14 Seat — Economy" },
+    { code: "CM14-02", plate: "B 1502 TGK", layoutId: layoutCommuter14.id, capacity: 14, notes: "HiAce Commuter 14 Seat — Economy" },
+    { code: "CM14-03", plate: "D 1503 TGK", layoutId: layoutCommuter14.id, capacity: 14, notes: "HiAce Commuter 14 Seat — Economy" },
+    { code: "CM14-04", plate: "D 1504 TGK", layoutId: layoutCommuter14.id, capacity: 14, notes: "HiAce Commuter 14 Seat — Economy" },
+    { code: "CM14-05", plate: "H 1505 TGK", layoutId: layoutCommuter14.id, capacity: 14, notes: "HiAce Commuter 14 Seat — Economy" },
+    { code: "CM14-06", plate: "AB 1506 TGK", layoutId: layoutCommuter14.id,capacity: 14, notes: "HiAce Commuter 14 Seat — Economy" },
+  ];
+
+  const vehicles: Record<string, Awaited<ReturnType<typeof storage.createVehicle>>> = {};
+  for (const v of vehicleDefs) {
+    vehicles[v.code] = await storage.createVehicle(v);
+  }
+
+  console.log(`  ✓ ${vehicleDefs.length} vehicles (2 Premio 8, 4 Premio 14, 6 Commuter 14)`);
+
+  // ════════════════════════════════════════════════════════════════
+  // 5. TRIP PATTERNS (8 rute)
+  // ════════════════════════════════════════════════════════════════
+  console.log("\n[5/11] Creating trip patterns...");
+
+  // ── Jakarta ↔ Bandung Rute 1 ──
+  // Atrium → Cempaka Putih → Tebet → Pasteur → Cihampelas → Dipatiukur
+  const pJktBdg01 = await storage.createTripPattern({
+    code: "JKT-BDG-01",
+    name: "Jakarta → Bandung · via Senen — Pasteur — Dipatiukur",
+    note: "Rute utama via Atrium Senen, Cempaka Putih, Tebet ke Pasteur, Cihampelas, Dipatiukur",
+    vehicleClass: "premio-14", defaultLayoutId: layoutPremio14.id,
+    active: true, tags: ["shuttle", "jkt-bdg", "premio"],
+  });
+
+  const pBdgJkt01 = await storage.createTripPattern({
+    code: "BDG-JKT-01",
+    name: "Bandung → Jakarta · via Dipatiukur — Pasteur — Senen",
+    note: "Rute utama via Dipatiukur, Cihampelas, Pasteur ke Tebet, Cempaka Putih, Atrium Senen",
+    vehicleClass: "premio-14", defaultLayoutId: layoutPremio14.id,
+    active: true, tags: ["shuttle", "bdg-jkt", "premio"],
+  });
+
+  // ── Jakarta ↔ Bandung Rute 2 ──
+  // Grogol → Kuningan → Pasteur → Buah Batu
+  const pJktBdg02 = await storage.createTripPattern({
+    code: "JKT-BDG-02",
+    name: "Jakarta → Bandung · via Grogol — Pasteur — Buah Batu",
+    note: "Rute via Grogol, Kuningan ke Pasteur, Buah Batu",
+    vehicleClass: "commuter-14", defaultLayoutId: layoutCommuter14.id,
+    active: true, tags: ["shuttle", "jkt-bdg", "commuter"],
+  });
+
+  const pBdgJkt02 = await storage.createTripPattern({
+    code: "BDG-JKT-02",
+    name: "Bandung → Jakarta · via Buah Batu — Pasteur — Grogol",
+    note: "Rute via Buah Batu, Pasteur ke Kuningan, Grogol",
+    vehicleClass: "commuter-14", defaultLayoutId: layoutCommuter14.id,
+    active: true, tags: ["shuttle", "bdg-jkt", "commuter"],
+  });
+
+  // ── Jakarta ↔ Semarang ──
+  // Cempaka Putih → Tebet → Jatiwaringin → Karangayu → Majapahit
+  const pJktSmg01 = await storage.createTripPattern({
+    code: "JKT-SMG-01",
+    name: "Jakarta → Semarang · via Tebet — Karangayu",
+    note: "Rute antar kota Jakarta-Semarang via Cempaka Putih, Tebet, Jatiwaringin",
+    vehicleClass: "premio-14", defaultLayoutId: layoutPremio14.id,
+    active: true, tags: ["shuttle", "jkt-smg", "intercity", "premio"],
+  });
+
+  const pSmgJkt01 = await storage.createTripPattern({
+    code: "SMG-JKT-01",
+    name: "Semarang → Jakarta · via Karangayu — Tebet",
+    note: "Rute antar kota Semarang-Jakarta via Majapahit, Karangayu",
+    vehicleClass: "premio-14", defaultLayoutId: layoutPremio14.id,
+    active: true, tags: ["shuttle", "smg-jkt", "intercity", "premio"],
+  });
+
+  // ── Semarang ↔ Yogyakarta ──
+  // Karangayu → Majapahit → Jombor → Gading → Seturan
+  const pSmgYgy01 = await storage.createTripPattern({
+    code: "SMG-YGY-01",
+    name: "Semarang → Yogyakarta · via Karangayu — Gading",
+    note: "Rute Semarang-Yogyakarta via Karangayu, Majapahit ke Jombor, Gading, Seturan",
+    vehicleClass: "commuter-14", defaultLayoutId: layoutCommuter14.id,
+    active: true, tags: ["shuttle", "smg-ygy", "commuter"],
+  });
+
+  const pYgySmg01 = await storage.createTripPattern({
+    code: "YGY-SMG-01",
+    name: "Yogyakarta → Semarang · via Gading — Karangayu",
+    note: "Rute Yogyakarta-Semarang via Seturan, Gading, Jombor ke Majapahit, Karangayu",
+    vehicleClass: "commuter-14", defaultLayoutId: layoutCommuter14.id,
+    active: true, tags: ["shuttle", "ygy-smg", "commuter"],
+  });
+
+  console.log("  ✓ 8 patterns (JKT↔BDG ×2, JKT↔SMG ×1, SMG↔YGY ×1)");
+
+  // ════════════════════════════════════════════════════════════════
+  // 6. PATTERN STOPS (urutan pemberhentian tiap rute)
+  // ════════════════════════════════════════════════════════════════
+  console.log("\n[6/11] Creating pattern stops...");
+
+  // Dwell = waktu berhenti di outlet (detik).
+  // Titik asal: dwell 0 (langsung berangkat). Titik transit: dwell 300 (5 menit pickup).
+  // Titik akhir: dwell 0 (turun saja).
+  const D = 300; // 5 menit dwell di titik transit
+
+  // ── JKT-BDG-01: Atrium → CemPut → Tebet → Pasteur → Cihampelas → Dipatiukur ──
+  await storage.createPatternStop({ patternId: pJktBdg01.id, stopId: jktAtrium.id,      stopSequence: 1, dwellSeconds: 0, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pJktBdg01.id, stopId: jktCemput.id,      stopSequence: 2, dwellSeconds: D, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pJktBdg01.id, stopId: jktTebet.id,       stopSequence: 3, dwellSeconds: D, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pJktBdg01.id, stopId: bdgPasteur.id,     stopSequence: 4, dwellSeconds: D, boardingAllowed: false, alightingAllowed: true  });
+  await storage.createPatternStop({ patternId: pJktBdg01.id, stopId: bdgCihampelas.id,  stopSequence: 5, dwellSeconds: D, boardingAllowed: false, alightingAllowed: true  });
+  await storage.createPatternStop({ patternId: pJktBdg01.id, stopId: bdgDipatiukur.id,  stopSequence: 6, dwellSeconds: 0, boardingAllowed: false, alightingAllowed: true  });
+
+  // ── BDG-JKT-01: Dipatiukur → Cihampelas → Pasteur → Tebet → CemPut → Atrium ──
+  await storage.createPatternStop({ patternId: pBdgJkt01.id, stopId: bdgDipatiukur.id,  stopSequence: 1, dwellSeconds: 0, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pBdgJkt01.id, stopId: bdgCihampelas.id,  stopSequence: 2, dwellSeconds: D, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pBdgJkt01.id, stopId: bdgPasteur.id,     stopSequence: 3, dwellSeconds: D, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pBdgJkt01.id, stopId: jktTebet.id,       stopSequence: 4, dwellSeconds: D, boardingAllowed: false, alightingAllowed: true  });
+  await storage.createPatternStop({ patternId: pBdgJkt01.id, stopId: jktCemput.id,      stopSequence: 5, dwellSeconds: D, boardingAllowed: false, alightingAllowed: true  });
+  await storage.createPatternStop({ patternId: pBdgJkt01.id, stopId: jktAtrium.id,      stopSequence: 6, dwellSeconds: 0, boardingAllowed: false, alightingAllowed: true  });
+
+  // ── JKT-BDG-02: Grogol → Kuningan → Pasteur → Buah Batu ──
+  await storage.createPatternStop({ patternId: pJktBdg02.id, stopId: jktGrogol.id,      stopSequence: 1, dwellSeconds: 0, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pJktBdg02.id, stopId: jktKuningan.id,    stopSequence: 2, dwellSeconds: D, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pJktBdg02.id, stopId: bdgPasteur.id,     stopSequence: 3, dwellSeconds: D, boardingAllowed: false, alightingAllowed: true  });
+  await storage.createPatternStop({ patternId: pJktBdg02.id, stopId: bdgBuahBatu.id,    stopSequence: 4, dwellSeconds: 0, boardingAllowed: false, alightingAllowed: true  });
+
+  // ── BDG-JKT-02: Buah Batu → Pasteur → Kuningan → Grogol ──
+  await storage.createPatternStop({ patternId: pBdgJkt02.id, stopId: bdgBuahBatu.id,    stopSequence: 1, dwellSeconds: 0, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pBdgJkt02.id, stopId: bdgPasteur.id,     stopSequence: 2, dwellSeconds: D, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pBdgJkt02.id, stopId: jktKuningan.id,    stopSequence: 3, dwellSeconds: D, boardingAllowed: false, alightingAllowed: true  });
+  await storage.createPatternStop({ patternId: pBdgJkt02.id, stopId: jktGrogol.id,      stopSequence: 4, dwellSeconds: 0, boardingAllowed: false, alightingAllowed: true  });
+
+  // ── JKT-SMG-01: CemPut → Tebet → Jatiwaringin → Karangayu → Majapahit ──
+  await storage.createPatternStop({ patternId: pJktSmg01.id, stopId: jktCemput.id,      stopSequence: 1, dwellSeconds: 0, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pJktSmg01.id, stopId: jktTebet.id,       stopSequence: 2, dwellSeconds: D, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pJktSmg01.id, stopId: jktJatiwaringin.id,stopSequence: 3, dwellSeconds: D, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pJktSmg01.id, stopId: smgKarangayu.id,   stopSequence: 4, dwellSeconds: D, boardingAllowed: false, alightingAllowed: true  });
+  await storage.createPatternStop({ patternId: pJktSmg01.id, stopId: smgMajapahit.id,   stopSequence: 5, dwellSeconds: 0, boardingAllowed: false, alightingAllowed: true  });
+
+  // ── SMG-JKT-01: Karangayu → Majapahit → Jatiwaringin → Tebet → CemPut ──
+  await storage.createPatternStop({ patternId: pSmgJkt01.id, stopId: smgKarangayu.id,   stopSequence: 1, dwellSeconds: 0, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pSmgJkt01.id, stopId: smgMajapahit.id,   stopSequence: 2, dwellSeconds: D, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pSmgJkt01.id, stopId: jktJatiwaringin.id,stopSequence: 3, dwellSeconds: D, boardingAllowed: false, alightingAllowed: true  });
+  await storage.createPatternStop({ patternId: pSmgJkt01.id, stopId: jktTebet.id,       stopSequence: 4, dwellSeconds: D, boardingAllowed: false, alightingAllowed: true  });
+  await storage.createPatternStop({ patternId: pSmgJkt01.id, stopId: jktCemput.id,      stopSequence: 5, dwellSeconds: 0, boardingAllowed: false, alightingAllowed: true  });
+
+  // ── SMG-YGY-01: Karangayu → Majapahit → Jombor → Gading → Seturan ──
+  await storage.createPatternStop({ patternId: pSmgYgy01.id, stopId: smgKarangayu.id,   stopSequence: 1, dwellSeconds: 0, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pSmgYgy01.id, stopId: smgMajapahit.id,   stopSequence: 2, dwellSeconds: D, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pSmgYgy01.id, stopId: ygyJombor.id,      stopSequence: 3, dwellSeconds: D, boardingAllowed: false, alightingAllowed: true  });
+  await storage.createPatternStop({ patternId: pSmgYgy01.id, stopId: ygyGading.id,      stopSequence: 4, dwellSeconds: D, boardingAllowed: false, alightingAllowed: true  });
+  await storage.createPatternStop({ patternId: pSmgYgy01.id, stopId: ygySeturan.id,     stopSequence: 5, dwellSeconds: 0, boardingAllowed: false, alightingAllowed: true  });
+
+  // ── YGY-SMG-01: Seturan → Gading → Jombor → Majapahit → Karangayu ──
+  await storage.createPatternStop({ patternId: pYgySmg01.id, stopId: ygySeturan.id,     stopSequence: 1, dwellSeconds: 0, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pYgySmg01.id, stopId: ygyGading.id,      stopSequence: 2, dwellSeconds: D, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pYgySmg01.id, stopId: ygyJombor.id,      stopSequence: 3, dwellSeconds: D, boardingAllowed: true,  alightingAllowed: false });
+  await storage.createPatternStop({ patternId: pYgySmg01.id, stopId: smgMajapahit.id,   stopSequence: 4, dwellSeconds: D, boardingAllowed: false, alightingAllowed: true  });
+  await storage.createPatternStop({ patternId: pYgySmg01.id, stopId: smgKarangayu.id,   stopSequence: 5, dwellSeconds: 0, boardingAllowed: false, alightingAllowed: true  });
+
+  console.log("  ✓ Pattern stops untuk 8 rute");
+
+  // ════════════════════════════════════════════════════════════════
+  // 7. PRICE RULES (harga per leg berdasarkan referensi DayTrans)
+  // ════════════════════════════════════════════════════════════════
+  console.log("\n[7/11] Creating price rules...");
+
+  // Harga referensi DayTrans (per leg):
+  //   JKT↔BDG Rute 1 (Premio 14) : Rp 95.000/leg   — 5 leg, range 75rb-150rb
+  //   JKT↔BDG Rute 2 (Commuter)  : Rp 80.000/leg   — 3 leg, lebih murah (economy)
+  //   JKT↔SMG (Premio 14)         : Rp 160.000/leg  — 4 leg, jarak jauh
+  //   SMG↔YGY (Commuter)          : Rp 80.000/leg   — 4 leg, jarak menengah
+
+  const priceRuleDefs = [
+    { patternId: pJktBdg01.id, basePricePerLeg: 95000,  currency: "IDR" },
+    { patternId: pBdgJkt01.id, basePricePerLeg: 95000,  currency: "IDR" },
+    { patternId: pJktBdg02.id, basePricePerLeg: 80000,  currency: "IDR" },
+    { patternId: pBdgJkt02.id, basePricePerLeg: 80000,  currency: "IDR" },
+    { patternId: pJktSmg01.id, basePricePerLeg: 160000, currency: "IDR" },
+    { patternId: pSmgJkt01.id, basePricePerLeg: 160000, currency: "IDR" },
+    { patternId: pSmgYgy01.id, basePricePerLeg: 80000,  currency: "IDR" },
+    { patternId: pYgySmg01.id, basePricePerLeg: 80000,  currency: "IDR" },
+  ];
+
+  for (const pr of priceRuleDefs) {
+    await storage.createPriceRule({
+      scope: "pattern", patternId: pr.patternId,
+      tripId: null, legIndex: null,
+      rule: { basePricePerLeg: pr.basePricePerLeg, currency: pr.currency, multiplier: 1.0 },
+      validFrom: null, validTo: null, priority: 1,
+    });
+  }
+
+  console.log("  ✓ 8 price rules");
+  console.log("    JKT↔BDG-01 Rp 95.000/leg (Premio) | JKT↔BDG-02 Rp 80.000/leg (Commuter)");
+  console.log("    JKT↔SMG    Rp 160.000/leg          | SMG↔YGY    Rp 80.000/leg");
+
+  // ════════════════════════════════════════════════════════════════
+  // 8. TRIP BASES (jadwal keberangkatan harian)
+  // ════════════════════════════════════════════════════════════════
+  console.log("\n[8/11] Creating trip bases...");
+
+  // Waktu format HH:MM. arriveAt null = titik awal. departAt null = titik akhir.
+  // Durasi antar titik Jakarta-Bandung: ~20-30 menit (dalam kota) + ~2.5 jam tol
 
   const tripBaseDefs = [
-    // JKT → SBY: pagi 08:00 dan malam 20:00
+    // ──────────────────────────────────────────────────────
+    // JKT-BDG-01: Atrium → CemPut → Tebet → Pasteur → Cihampelas → Dipatiukur
+    // Durasi total ~3.5 jam. Dalam kota JKT ~40 menit. Tol ~2 jam. Dalam kota BDG ~30 menit.
+    // ──────────────────────────────────────────────────────
     {
-      patternId: patternJktSby.id, code: "JKT-SBY-0800", name: "Jakarta→Surabaya 08:00 Pagi",
-      vehicleId: busEk01.id, layoutId: layoutEkonomi.id, capacity: 40,
+      patternId: pJktBdg01.id, code: "JKT-BDG-01/06:00", name: "Jakarta → Bandung 01 — 06:00",
+      vehicleCode: "PR14-01", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "06:00" },
+        { stopSequence: 2, arriveAt: "06:15", departAt: "06:20" },
+        { stopSequence: 3, arriveAt: "06:40", departAt: "06:45" },
+        { stopSequence: 4, arriveAt: "09:00", departAt: "09:05" },
+        { stopSequence: 5, arriveAt: "09:20", departAt: "09:25" },
+        { stopSequence: 6, arriveAt: "09:35", departAt: null    },
+      ],
+    },
+    {
+      patternId: pJktBdg01.id, code: "JKT-BDG-01/09:00", name: "Jakarta → Bandung 01 — 09:00",
+      vehicleCode: "PR14-02", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "09:00" },
+        { stopSequence: 2, arriveAt: "09:15", departAt: "09:20" },
+        { stopSequence: 3, arriveAt: "09:40", departAt: "09:45" },
+        { stopSequence: 4, arriveAt: "12:00", departAt: "12:05" },
+        { stopSequence: 5, arriveAt: "12:20", departAt: "12:25" },
+        { stopSequence: 6, arriveAt: "12:35", departAt: null    },
+      ],
+    },
+    {
+      patternId: pJktBdg01.id, code: "JKT-BDG-01/12:00", name: "Jakarta → Bandung 01 — 12:00",
+      vehicleCode: "PR14-01", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "12:00" },
+        { stopSequence: 2, arriveAt: "12:15", departAt: "12:20" },
+        { stopSequence: 3, arriveAt: "12:40", departAt: "12:45" },
+        { stopSequence: 4, arriveAt: "15:15", departAt: "15:20" },
+        { stopSequence: 5, arriveAt: "15:35", departAt: "15:40" },
+        { stopSequence: 6, arriveAt: "15:50", departAt: null    },
+      ],
+    },
+    {
+      patternId: pJktBdg01.id, code: "JKT-BDG-01/15:00", name: "Jakarta → Bandung 01 — 15:00",
+      vehicleCode: "PR14-02", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "15:00" },
+        { stopSequence: 2, arriveAt: "15:15", departAt: "15:20" },
+        { stopSequence: 3, arriveAt: "15:40", departAt: "15:45" },
+        { stopSequence: 4, arriveAt: "18:15", departAt: "18:20" },
+        { stopSequence: 5, arriveAt: "18:35", departAt: "18:40" },
+        { stopSequence: 6, arriveAt: "18:50", departAt: null    },
+      ],
+    },
+    {
+      patternId: pJktBdg01.id, code: "JKT-BDG-01/18:00", name: "Jakarta → Bandung 01 — 18:00",
+      vehicleCode: "PR14-01", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "18:00" },
+        { stopSequence: 2, arriveAt: "18:15", departAt: "18:20" },
+        { stopSequence: 3, arriveAt: "18:40", departAt: "18:45" },
+        { stopSequence: 4, arriveAt: "21:00", departAt: "21:05" },
+        { stopSequence: 5, arriveAt: "21:20", departAt: "21:25" },
+        { stopSequence: 6, arriveAt: "21:35", departAt: null    },
+      ],
+    },
+    {
+      patternId: pJktBdg01.id, code: "JKT-BDG-01/21:00", name: "Jakarta → Bandung 01 — 21:00",
+      vehicleCode: "PR14-02", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "21:00" },
+        { stopSequence: 2, arriveAt: "21:15", departAt: "21:20" },
+        { stopSequence: 3, arriveAt: "21:40", departAt: "21:45" },
+        { stopSequence: 4, arriveAt: "23:45", departAt: "23:50" },
+        { stopSequence: 5, arriveAt: "00:05", departAt: "00:10" },
+        { stopSequence: 6, arriveAt: "00:20", departAt: null    },
+      ],
+    },
+
+    // ──────────────────────────────────────────────────────
+    // BDG-JKT-01: Dipatiukur → Cihampelas → Pasteur → Tebet → CemPut → Atrium
+    // ──────────────────────────────────────────────────────
+    {
+      patternId: pBdgJkt01.id, code: "BDG-JKT-01/05:00", name: "Bandung → Jakarta 01 — 05:00",
+      vehicleCode: "PR14-03", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "05:00" },
+        { stopSequence: 2, arriveAt: "05:10", departAt: "05:15" },
+        { stopSequence: 3, arriveAt: "05:25", departAt: "05:30" },
+        { stopSequence: 4, arriveAt: "07:45", departAt: "07:50" },
+        { stopSequence: 5, arriveAt: "08:10", departAt: "08:15" },
+        { stopSequence: 6, arriveAt: "08:30", departAt: null    },
+      ],
+    },
+    {
+      patternId: pBdgJkt01.id, code: "BDG-JKT-01/08:00", name: "Bandung → Jakarta 01 — 08:00",
+      vehicleCode: "PR14-04", layoutId: layoutPremio14.id, capacity: 14,
       defaultStopTimes: [
         { stopSequence: 1, arriveAt: null,    departAt: "08:00" },
-        { stopSequence: 2, arriveAt: "12:00", departAt: "12:30" },
-        { stopSequence: 3, arriveAt: "16:00", departAt: "16:30" },
-        { stopSequence: 4, arriveAt: "19:30", departAt: "20:00" },
-        { stopSequence: 5, arriveAt: "21:00", departAt: "21:30" },
+        { stopSequence: 2, arriveAt: "08:10", departAt: "08:15" },
+        { stopSequence: 3, arriveAt: "08:25", departAt: "08:30" },
+        { stopSequence: 4, arriveAt: "11:00", departAt: "11:05" },
+        { stopSequence: 5, arriveAt: "11:25", departAt: "11:30" },
+        { stopSequence: 6, arriveAt: "11:45", departAt: null    },
+      ],
+    },
+    {
+      patternId: pBdgJkt01.id, code: "BDG-JKT-01/12:00", name: "Bandung → Jakarta 01 — 12:00",
+      vehicleCode: "PR14-03", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "12:00" },
+        { stopSequence: 2, arriveAt: "12:10", departAt: "12:15" },
+        { stopSequence: 3, arriveAt: "12:25", departAt: "12:30" },
+        { stopSequence: 4, arriveAt: "15:00", departAt: "15:05" },
+        { stopSequence: 5, arriveAt: "15:25", departAt: "15:30" },
+        { stopSequence: 6, arriveAt: "15:45", departAt: null    },
+      ],
+    },
+    {
+      patternId: pBdgJkt01.id, code: "BDG-JKT-01/15:00", name: "Bandung → Jakarta 01 — 15:00",
+      vehicleCode: "PR14-04", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "15:00" },
+        { stopSequence: 2, arriveAt: "15:10", departAt: "15:15" },
+        { stopSequence: 3, arriveAt: "15:25", departAt: "15:30" },
+        { stopSequence: 4, arriveAt: "18:00", departAt: "18:05" },
+        { stopSequence: 5, arriveAt: "18:25", departAt: "18:30" },
+        { stopSequence: 6, arriveAt: "18:45", departAt: null    },
+      ],
+    },
+    {
+      patternId: pBdgJkt01.id, code: "BDG-JKT-01/18:00", name: "Bandung → Jakarta 01 — 18:00",
+      vehicleCode: "PR14-03", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "18:00" },
+        { stopSequence: 2, arriveAt: "18:10", departAt: "18:15" },
+        { stopSequence: 3, arriveAt: "18:25", departAt: "18:30" },
+        { stopSequence: 4, arriveAt: "21:00", departAt: "21:05" },
+        { stopSequence: 5, arriveAt: "21:25", departAt: "21:30" },
+        { stopSequence: 6, arriveAt: "21:45", departAt: null    },
+      ],
+    },
+    {
+      patternId: pBdgJkt01.id, code: "BDG-JKT-01/21:00", name: "Bandung → Jakarta 01 — 21:00",
+      vehicleCode: "PR14-04", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "21:00" },
+        { stopSequence: 2, arriveAt: "21:10", departAt: "21:15" },
+        { stopSequence: 3, arriveAt: "21:25", departAt: "21:30" },
+        { stopSequence: 4, arriveAt: "23:45", departAt: "23:50" },
+        { stopSequence: 5, arriveAt: "00:10", departAt: "00:15" },
         { stopSequence: 6, arriveAt: "00:30", departAt: null    },
       ],
     },
+
+    // ──────────────────────────────────────────────────────
+    // JKT-BDG-02: Grogol → Kuningan → Pasteur → Buah Batu
+    // Durasi total ~3 jam. Grogol→Kuningan ~30 menit. Tol ~2 jam. Pasteur→BuahBatu ~20 menit.
+    // ──────────────────────────────────────────────────────
     {
-      patternId: patternJktSby.id, code: "JKT-SBY-2000", name: "Jakarta→Surabaya 20:00 Malam",
-      vehicleId: busEk02.id, layoutId: layoutEkonomi.id, capacity: 40,
-      defaultStopTimes: [
-        { stopSequence: 1, arriveAt: null,    departAt: "20:00" },
-        { stopSequence: 2, arriveAt: "00:00", departAt: "00:30" },
-        { stopSequence: 3, arriveAt: "04:00", departAt: "04:30" },
-        { stopSequence: 4, arriveAt: "07:30", departAt: "08:00" },
-        { stopSequence: 5, arriveAt: "09:00", departAt: "09:30" },
-        { stopSequence: 6, arriveAt: "12:30", departAt: null    },
-      ],
-    },
-    // SBY → JKT: pagi 07:00 dan malam 19:00
-    {
-      patternId: patternSbyJkt.id, code: "SBY-JKT-0700", name: "Surabaya→Jakarta 07:00 Pagi",
-      vehicleId: busEk03.id, layoutId: layoutEkonomi.id, capacity: 40,
+      patternId: pJktBdg02.id, code: "JKT-BDG-02/07:00", name: "Jakarta → Bandung 02 — 07:00",
+      vehicleCode: "CM14-01", layoutId: layoutCommuter14.id, capacity: 14,
       defaultStopTimes: [
         { stopSequence: 1, arriveAt: null,    departAt: "07:00" },
-        { stopSequence: 2, arriveAt: "10:00", departAt: "10:30" },
-        { stopSequence: 3, arriveAt: "11:30", departAt: "12:00" },
-        { stopSequence: 4, arriveAt: "15:30", departAt: "16:00" },
-        { stopSequence: 5, arriveAt: "19:30", departAt: "20:00" },
-        { stopSequence: 6, arriveAt: "00:00", departAt: null    },
+        { stopSequence: 2, arriveAt: "07:30", departAt: "07:35" },
+        { stopSequence: 3, arriveAt: "09:45", departAt: "09:50" },
+        { stopSequence: 4, arriveAt: "10:10", departAt: null    },
       ],
     },
     {
-      patternId: patternSbyJkt.id, code: "SBY-JKT-1900", name: "Surabaya→Jakarta 19:00 Malam",
-      vehicleId: busEk04.id, layoutId: layoutEkonomi.id, capacity: 40,
+      patternId: pJktBdg02.id, code: "JKT-BDG-02/11:00", name: "Jakarta → Bandung 02 — 11:00",
+      vehicleCode: "CM14-02", layoutId: layoutCommuter14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "11:00" },
+        { stopSequence: 2, arriveAt: "11:30", departAt: "11:35" },
+        { stopSequence: 3, arriveAt: "13:45", departAt: "13:50" },
+        { stopSequence: 4, arriveAt: "14:10", departAt: null    },
+      ],
+    },
+    {
+      patternId: pJktBdg02.id, code: "JKT-BDG-02/15:00", name: "Jakarta → Bandung 02 — 15:00",
+      vehicleCode: "CM14-01", layoutId: layoutCommuter14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "15:00" },
+        { stopSequence: 2, arriveAt: "15:30", departAt: "15:35" },
+        { stopSequence: 3, arriveAt: "17:45", departAt: "17:50" },
+        { stopSequence: 4, arriveAt: "18:10", departAt: null    },
+      ],
+    },
+    {
+      patternId: pJktBdg02.id, code: "JKT-BDG-02/19:00", name: "Jakarta → Bandung 02 — 19:00",
+      vehicleCode: "CM14-02", layoutId: layoutCommuter14.id, capacity: 14,
       defaultStopTimes: [
         { stopSequence: 1, arriveAt: null,    departAt: "19:00" },
-        { stopSequence: 2, arriveAt: "22:00", departAt: "22:30" },
-        { stopSequence: 3, arriveAt: "23:30", departAt: "00:00" },
-        { stopSequence: 4, arriveAt: "03:30", departAt: "04:00" },
-        { stopSequence: 5, arriveAt: "07:30", departAt: "08:00" },
-        { stopSequence: 6, arriveAt: "12:00", departAt: null    },
+        { stopSequence: 2, arriveAt: "19:30", departAt: "19:35" },
+        { stopSequence: 3, arriveAt: "21:45", departAt: "21:50" },
+        { stopSequence: 4, arriveAt: "22:10", departAt: null    },
       ],
     },
-    // JKT → YGY: siang 09:00 dan malam 21:00
+
+    // ──────────────────────────────────────────────────────
+    // BDG-JKT-02: Buah Batu → Pasteur → Kuningan → Grogol
+    // ──────────────────────────────────────────────────────
     {
-      patternId: patternJktYgy.id, code: "JKT-YGY-0900", name: "Jakarta→Yogyakarta 09:00 Eksekutif",
-      vehicleId: busEx01.id, layoutId: layoutEksekutif.id, capacity: 24,
+      patternId: pBdgJkt02.id, code: "BDG-JKT-02/06:00", name: "Bandung → Jakarta 02 — 06:00",
+      vehicleCode: "CM14-03", layoutId: layoutCommuter14.id, capacity: 14,
       defaultStopTimes: [
-        { stopSequence: 1, arriveAt: null,    departAt: "09:00" },
-        { stopSequence: 2, arriveAt: "13:00", departAt: "13:30" },
-        { stopSequence: 3, arriveAt: "16:30", departAt: "17:00" },
-        { stopSequence: 4, arriveAt: "21:00", departAt: "21:30" },
-        { stopSequence: 5, arriveAt: "00:30", departAt: null    },
+        { stopSequence: 1, arriveAt: null,    departAt: "06:00" },
+        { stopSequence: 2, arriveAt: "06:20", departAt: "06:25" },
+        { stopSequence: 3, arriveAt: "08:35", departAt: "08:40" },
+        { stopSequence: 4, arriveAt: "09:10", departAt: null    },
       ],
     },
     {
-      patternId: patternJktYgy.id, code: "JKT-YGY-2100", name: "Jakarta→Yogyakarta 21:00 Eksekutif",
-      vehicleId: busEx02.id, layoutId: layoutEksekutif.id, capacity: 24,
+      patternId: pBdgJkt02.id, code: "BDG-JKT-02/10:00", name: "Bandung → Jakarta 02 — 10:00",
+      vehicleCode: "CM14-04", layoutId: layoutCommuter14.id, capacity: 14,
       defaultStopTimes: [
-        { stopSequence: 1, arriveAt: null,    departAt: "21:00" },
-        { stopSequence: 2, arriveAt: "01:00", departAt: "01:30" },
-        { stopSequence: 3, arriveAt: "04:30", departAt: "05:00" },
-        { stopSequence: 4, arriveAt: "09:00", departAt: "09:30" },
-        { stopSequence: 5, arriveAt: "12:30", departAt: null    },
+        { stopSequence: 1, arriveAt: null,    departAt: "10:00" },
+        { stopSequence: 2, arriveAt: "10:20", departAt: "10:25" },
+        { stopSequence: 3, arriveAt: "12:35", departAt: "12:40" },
+        { stopSequence: 4, arriveAt: "13:10", departAt: null    },
       ],
     },
-    // YGY → JKT: pagi 08:00 dan malam 20:00
     {
-      patternId: patternYgyJkt.id, code: "YGY-JKT-0800", name: "Yogyakarta→Jakarta 08:00 Eksekutif",
-      vehicleId: busEx01.id, layoutId: layoutEksekutif.id, capacity: 24,
+      patternId: pBdgJkt02.id, code: "BDG-JKT-02/14:00", name: "Bandung → Jakarta 02 — 14:00",
+      vehicleCode: "CM14-03", layoutId: layoutCommuter14.id, capacity: 14,
       defaultStopTimes: [
-        { stopSequence: 1, arriveAt: null,    departAt: "08:00" },
-        { stopSequence: 2, arriveAt: "11:00", departAt: "11:30" },
-        { stopSequence: 3, arriveAt: "15:00", departAt: "15:30" },
-        { stopSequence: 4, arriveAt: "18:30", departAt: "19:00" },
-        { stopSequence: 5, arriveAt: "23:00", departAt: null    },
+        { stopSequence: 1, arriveAt: null,    departAt: "14:00" },
+        { stopSequence: 2, arriveAt: "14:20", departAt: "14:25" },
+        { stopSequence: 3, arriveAt: "16:35", departAt: "16:40" },
+        { stopSequence: 4, arriveAt: "17:10", departAt: null    },
       ],
     },
     {
-      patternId: patternYgyJkt.id, code: "YGY-JKT-2000", name: "Yogyakarta→Jakarta 20:00 Eksekutif",
-      vehicleId: busEx02.id, layoutId: layoutEksekutif.id, capacity: 24,
+      patternId: pBdgJkt02.id, code: "BDG-JKT-02/18:00", name: "Bandung → Jakarta 02 — 18:00",
+      vehicleCode: "CM14-04", layoutId: layoutCommuter14.id, capacity: 14,
       defaultStopTimes: [
-        { stopSequence: 1, arriveAt: null,    departAt: "20:00" },
-        { stopSequence: 2, arriveAt: "23:00", departAt: "23:30" },
-        { stopSequence: 3, arriveAt: "03:00", departAt: "03:30" },
-        { stopSequence: 4, arriveAt: "06:30", departAt: "07:00" },
-        { stopSequence: 5, arriveAt: "11:00", departAt: null    },
+        { stopSequence: 1, arriveAt: null,    departAt: "18:00" },
+        { stopSequence: 2, arriveAt: "18:20", departAt: "18:25" },
+        { stopSequence: 3, arriveAt: "20:35", departAt: "20:40" },
+        { stopSequence: 4, arriveAt: "21:10", departAt: null    },
       ],
     },
-    // JKT → BDG: pagi 07:00, siang 13:00, sore 16:00
+
+    // ──────────────────────────────────────────────────────
+    // JKT-SMG-01: CemPut → Tebet → Jatiwaringin → Karangayu → Majapahit
+    // Durasi total ~6 jam. Dalam kota JKT ~50 menit. Tol ~5 jam. Dalam kota SMG ~20 menit.
+    // ──────────────────────────────────────────────────────
     {
-      patternId: patternJktBdg.id, code: "JKT-BDG-0700", name: "Jakarta→Bandung 07:00",
-      vehicleId: busEk01.id, layoutId: layoutEkonomi.id, capacity: 40,
+      patternId: pJktSmg01.id, code: "JKT-SMG-01/07:00", name: "Jakarta → Semarang 01 — 07:00",
+      vehicleCode: "PR14-01", layoutId: layoutPremio14.id, capacity: 14,
       defaultStopTimes: [
         { stopSequence: 1, arriveAt: null,    departAt: "07:00" },
-        { stopSequence: 2, arriveAt: "11:00", departAt: null    },
+        { stopSequence: 2, arriveAt: "07:20", departAt: "07:25" },
+        { stopSequence: 3, arriveAt: "07:50", departAt: "07:55" },
+        { stopSequence: 4, arriveAt: "13:00", departAt: "13:05" },
+        { stopSequence: 5, arriveAt: "13:25", departAt: null    },
       ],
     },
     {
-      patternId: patternJktBdg.id, code: "JKT-BDG-1300", name: "Jakarta→Bandung 13:00",
-      vehicleId: busEk02.id, layoutId: layoutEkonomi.id, capacity: 40,
+      patternId: pJktSmg01.id, code: "JKT-SMG-01/13:00", name: "Jakarta → Semarang 01 — 13:00",
+      vehicleCode: "PR14-02", layoutId: layoutPremio14.id, capacity: 14,
       defaultStopTimes: [
         { stopSequence: 1, arriveAt: null,    departAt: "13:00" },
-        { stopSequence: 2, arriveAt: "17:00", departAt: null    },
+        { stopSequence: 2, arriveAt: "13:20", departAt: "13:25" },
+        { stopSequence: 3, arriveAt: "13:50", departAt: "13:55" },
+        { stopSequence: 4, arriveAt: "19:00", departAt: "19:05" },
+        { stopSequence: 5, arriveAt: "19:25", departAt: null    },
       ],
     },
-    // BDG → JKT: pagi 07:00, siang 12:00, sore 17:00
     {
-      patternId: patternBdgJkt.id, code: "BDG-JKT-0700", name: "Bandung→Jakarta 07:00",
-      vehicleId: busEk03.id, layoutId: layoutEkonomi.id, capacity: 40,
+      patternId: pJktSmg01.id, code: "JKT-SMG-01/20:00", name: "Jakarta → Semarang 01 — 20:00",
+      vehicleCode: "PR14-01", layoutId: layoutPremio14.id, capacity: 14,
       defaultStopTimes: [
-        { stopSequence: 1, arriveAt: null,    departAt: "07:00" },
-        { stopSequence: 2, arriveAt: "11:00", departAt: null    },
+        { stopSequence: 1, arriveAt: null,    departAt: "20:00" },
+        { stopSequence: 2, arriveAt: "20:20", departAt: "20:25" },
+        { stopSequence: 3, arriveAt: "20:50", departAt: "20:55" },
+        { stopSequence: 4, arriveAt: "02:00", departAt: "02:05" },
+        { stopSequence: 5, arriveAt: "02:25", departAt: null    },
+      ],
+    },
+
+    // ──────────────────────────────────────────────────────
+    // SMG-JKT-01: Karangayu → Majapahit → Jatiwaringin → Tebet → CemPut
+    // ──────────────────────────────────────────────────────
+    {
+      patternId: pSmgJkt01.id, code: "SMG-JKT-01/06:00", name: "Semarang → Jakarta 01 — 06:00",
+      vehicleCode: "PR14-03", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "06:00" },
+        { stopSequence: 2, arriveAt: "06:20", departAt: "06:25" },
+        { stopSequence: 3, arriveAt: "11:30", departAt: "11:35" },
+        { stopSequence: 4, arriveAt: "12:00", departAt: "12:05" },
+        { stopSequence: 5, arriveAt: "12:25", departAt: null    },
       ],
     },
     {
-      patternId: patternBdgJkt.id, code: "BDG-JKT-1700", name: "Bandung→Jakarta 17:00",
-      vehicleId: busEk04.id, layoutId: layoutEkonomi.id, capacity: 40,
+      patternId: pSmgJkt01.id, code: "SMG-JKT-01/14:00", name: "Semarang → Jakarta 01 — 14:00",
+      vehicleCode: "PR14-04", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "14:00" },
+        { stopSequence: 2, arriveAt: "14:20", departAt: "14:25" },
+        { stopSequence: 3, arriveAt: "19:30", departAt: "19:35" },
+        { stopSequence: 4, arriveAt: "20:00", departAt: "20:05" },
+        { stopSequence: 5, arriveAt: "20:25", departAt: null    },
+      ],
+    },
+    {
+      patternId: pSmgJkt01.id, code: "SMG-JKT-01/21:00", name: "Semarang → Jakarta 01 — 21:00",
+      vehicleCode: "PR14-03", layoutId: layoutPremio14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "21:00" },
+        { stopSequence: 2, arriveAt: "21:20", departAt: "21:25" },
+        { stopSequence: 3, arriveAt: "02:30", departAt: "02:35" },
+        { stopSequence: 4, arriveAt: "03:00", departAt: "03:05" },
+        { stopSequence: 5, arriveAt: "03:25", departAt: null    },
+      ],
+    },
+
+    // ──────────────────────────────────────────────────────
+    // SMG-YGY-01: Karangayu → Majapahit → Jombor → Gading → Seturan
+    // Durasi total ~3.5 jam. Dalam kota SMG ~20 menit. Jalan ~2.5 jam. Dalam kota YGY ~30 menit.
+    // ──────────────────────────────────────────────────────
+    {
+      patternId: pSmgYgy01.id, code: "SMG-YGY-01/06:00", name: "Semarang → Yogyakarta 01 — 06:00",
+      vehicleCode: "CM14-05", layoutId: layoutCommuter14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "06:00" },
+        { stopSequence: 2, arriveAt: "06:20", departAt: "06:25" },
+        { stopSequence: 3, arriveAt: "09:00", departAt: "09:05" },
+        { stopSequence: 4, arriveAt: "09:25", departAt: "09:30" },
+        { stopSequence: 5, arriveAt: "09:45", departAt: null    },
+      ],
+    },
+    {
+      patternId: pSmgYgy01.id, code: "SMG-YGY-01/10:00", name: "Semarang → Yogyakarta 01 — 10:00",
+      vehicleCode: "CM14-06", layoutId: layoutCommuter14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "10:00" },
+        { stopSequence: 2, arriveAt: "10:20", departAt: "10:25" },
+        { stopSequence: 3, arriveAt: "13:00", departAt: "13:05" },
+        { stopSequence: 4, arriveAt: "13:25", departAt: "13:30" },
+        { stopSequence: 5, arriveAt: "13:45", departAt: null    },
+      ],
+    },
+    {
+      patternId: pSmgYgy01.id, code: "SMG-YGY-01/14:00", name: "Semarang → Yogyakarta 01 — 14:00",
+      vehicleCode: "CM14-05", layoutId: layoutCommuter14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "14:00" },
+        { stopSequence: 2, arriveAt: "14:20", departAt: "14:25" },
+        { stopSequence: 3, arriveAt: "17:00", departAt: "17:05" },
+        { stopSequence: 4, arriveAt: "17:25", departAt: "17:30" },
+        { stopSequence: 5, arriveAt: "17:45", departAt: null    },
+      ],
+    },
+    {
+      patternId: pSmgYgy01.id, code: "SMG-YGY-01/18:00", name: "Semarang → Yogyakarta 01 — 18:00",
+      vehicleCode: "CM14-06", layoutId: layoutCommuter14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "18:00" },
+        { stopSequence: 2, arriveAt: "18:20", departAt: "18:25" },
+        { stopSequence: 3, arriveAt: "21:00", departAt: "21:05" },
+        { stopSequence: 4, arriveAt: "21:25", departAt: "21:30" },
+        { stopSequence: 5, arriveAt: "21:45", departAt: null    },
+      ],
+    },
+
+    // ──────────────────────────────────────────────────────
+    // YGY-SMG-01: Seturan → Gading → Jombor → Majapahit → Karangayu
+    // ──────────────────────────────────────────────────────
+    {
+      patternId: pYgySmg01.id, code: "YGY-SMG-01/05:00", name: "Yogyakarta → Semarang 01 — 05:00",
+      vehicleCode: "CM14-05", layoutId: layoutCommuter14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "05:00" },
+        { stopSequence: 2, arriveAt: "05:15", departAt: "05:20" },
+        { stopSequence: 3, arriveAt: "05:35", departAt: "05:40" },
+        { stopSequence: 4, arriveAt: "08:20", departAt: "08:25" },
+        { stopSequence: 5, arriveAt: "08:45", departAt: null    },
+      ],
+    },
+    {
+      patternId: pYgySmg01.id, code: "YGY-SMG-01/09:00", name: "Yogyakarta → Semarang 01 — 09:00",
+      vehicleCode: "CM14-06", layoutId: layoutCommuter14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "09:00" },
+        { stopSequence: 2, arriveAt: "09:15", departAt: "09:20" },
+        { stopSequence: 3, arriveAt: "09:35", departAt: "09:40" },
+        { stopSequence: 4, arriveAt: "12:20", departAt: "12:25" },
+        { stopSequence: 5, arriveAt: "12:45", departAt: null    },
+      ],
+    },
+    {
+      patternId: pYgySmg01.id, code: "YGY-SMG-01/13:00", name: "Yogyakarta → Semarang 01 — 13:00",
+      vehicleCode: "CM14-05", layoutId: layoutCommuter14.id, capacity: 14,
+      defaultStopTimes: [
+        { stopSequence: 1, arriveAt: null,    departAt: "13:00" },
+        { stopSequence: 2, arriveAt: "13:15", departAt: "13:20" },
+        { stopSequence: 3, arriveAt: "13:35", departAt: "13:40" },
+        { stopSequence: 4, arriveAt: "16:20", departAt: "16:25" },
+        { stopSequence: 5, arriveAt: "16:45", departAt: null    },
+      ],
+    },
+    {
+      patternId: pYgySmg01.id, code: "YGY-SMG-01/17:00", name: "Yogyakarta → Semarang 01 — 17:00",
+      vehicleCode: "CM14-06", layoutId: layoutCommuter14.id, capacity: 14,
       defaultStopTimes: [
         { stopSequence: 1, arriveAt: null,    departAt: "17:00" },
-        { stopSequence: 2, arriveAt: "21:00", departAt: null    },
-      ],
-    },
-    // SBY → JKT: malam 21:00 (tiba siang 12:00 esok hari)
-    {
-      patternId: patternSbyJkt.id, code: "SBY-JKT-2100", name: "Surabaya→Jakarta 21:00 Malam",
-      vehicleId: busEk01.id, layoutId: layoutEkonomi.id, capacity: 40,
-      defaultStopTimes: [
-        { stopSequence: 1, arriveAt: null,    departAt: "21:00" },
-        { stopSequence: 2, arriveAt: "23:00", departAt: "23:30" },
-        { stopSequence: 3, arriveAt: "00:30", departAt: "01:00" },
-        { stopSequence: 4, arriveAt: "04:30", departAt: "05:00" },
-        { stopSequence: 5, arriveAt: "08:30", departAt: "09:00" },
-        { stopSequence: 6, arriveAt: "12:00", departAt: null    },
-      ],
-    },
-    // YGY → JKT: malam 21:00 Eksekutif (tiba siang 11:30 esok hari)
-    {
-      patternId: patternYgyJkt.id, code: "YGY-JKT-2100", name: "Yogyakarta→Jakarta 21:00 Eksekutif",
-      vehicleId: busEx01.id, layoutId: layoutEksekutif.id, capacity: 24,
-      defaultStopTimes: [
-        { stopSequence: 1, arriveAt: null,    departAt: "21:00" },
-        { stopSequence: 2, arriveAt: "23:30", departAt: "00:00" },
-        { stopSequence: 3, arriveAt: "03:30", departAt: "04:00" },
-        { stopSequence: 4, arriveAt: "07:30", departAt: "08:00" },
-        { stopSequence: 5, arriveAt: "11:30", departAt: null    },
+        { stopSequence: 2, arriveAt: "17:15", departAt: "17:20" },
+        { stopSequence: 3, arriveAt: "17:35", departAt: "17:40" },
+        { stopSequence: 4, arriveAt: "20:20", departAt: "20:25" },
+        { stopSequence: 5, arriveAt: "20:45", departAt: null    },
       ],
     },
   ];
@@ -452,7 +945,7 @@ export async function seedData() {
       mon: true, tue: true, wed: true, thu: true, fri: true, sat: true, sun: true,
       validFrom, validTo,
       defaultLayoutId: def.layoutId,
-      defaultVehicleId: def.vehicleId,
+      defaultVehicleId: vehicles[def.vehicleCode].id,
       capacity: def.capacity,
       channelFlags: channelAll,
       defaultStopTimes: def.defaultStopTimes,
@@ -461,26 +954,30 @@ export async function seedData() {
   }
 
   console.log(`  ✓ ${createdBases.length} trip bases`);
+  console.log("    JKT↔BDG-01: 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 (×2 arah = 12)");
+  console.log("    JKT↔BDG-02: 07:00, 11:00, 15:00, 19:00 / 06:00, 10:00, 14:00, 18:00 (8)");
+  console.log("    JKT↔SMG:    07:00, 13:00, 20:00 / 06:00, 14:00, 21:00 (6)");
+  console.log("    SMG↔YGY:    06:00, 10:00, 14:00, 18:00 / 05:00, 09:00, 13:00, 17:00 (8)");
 
-  // ============================================================
-  // 8. CARGO TYPES
-  // ============================================================
-  console.log("\n[8/10] Creating cargo types...");
+  // ════════════════════════════════════════════════════════════════
+  // 9. CARGO TYPES
+  // ════════════════════════════════════════════════════════════════
+  console.log("\n[9/11] Creating cargo types...");
 
-  const ctDokumen    = await storage.createCargoType({ code: "DOK",      name: "Dokumen",             description: "Surat, berkas, dan dokumen penting.",          maxWeightKg: "1.00",  isActive: true });
-  const ctPaketMini  = await storage.createCargoType({ code: "PKT-MINI", name: "Paket Mini",          description: "Aksesoris, kosmetik, barang kecil.",            maxWeightKg: "2.00",  isActive: true });
-  const ctPaketKecil = await storage.createCargoType({ code: "PKT-S",    name: "Paket Kecil",         description: "Pakaian, buku, barang ringan.",                 maxWeightKg: "5.00",  isActive: true });
-  const ctPaketSedang= await storage.createCargoType({ code: "PKT-M",    name: "Paket Sedang",        description: "Sepatu, tas, barang rumah tangga kecil.",       maxWeightKg: "10.00", isActive: true });
-  const ctPaketBesar = await storage.createCargoType({ code: "PKT-L",    name: "Paket Besar",         description: "Peralatan rumah tangga, barang bervolume.",     maxWeightKg: "20.00", isActive: true });
+  const ctDokumen    = await storage.createCargoType({ code: "DOK",      name: "Dokumen",             description: "Surat, berkas, dan dokumen penting.",             maxWeightKg: "1.00",  isActive: true });
+  const ctPaketMini  = await storage.createCargoType({ code: "PKT-MINI", name: "Paket Mini",          description: "Aksesoris, kosmetik, barang kecil.",              maxWeightKg: "2.00",  isActive: true });
+  const ctPaketKecil = await storage.createCargoType({ code: "PKT-S",    name: "Paket Kecil",         description: "Pakaian, buku, barang ringan.",                   maxWeightKg: "5.00",  isActive: true });
+  const ctPaketSedang= await storage.createCargoType({ code: "PKT-M",    name: "Paket Sedang",        description: "Sepatu, tas, barang rumah tangga kecil.",         maxWeightKg: "10.00", isActive: true });
+  const ctPaketBesar = await storage.createCargoType({ code: "PKT-L",    name: "Paket Besar",         description: "Peralatan rumah tangga, barang bervolume.",       maxWeightKg: "20.00", isActive: true });
   const ctElektronik = await storage.createCargoType({ code: "ELEK",     name: "Elektronik",          description: "Handphone, laptop, elektronik. Penanganan hati.",maxWeightKg: "10.00", isActive: true });
-  const ctMakanan    = await storage.createCargoType({ code: "MKNN",     name: "Makanan & Minuman",   description: "Makanan, minuman, oleh-oleh. Prioritas cepat.", maxWeightKg: "5.00",  isActive: true });
+  const ctMakanan    = await storage.createCargoType({ code: "MKNN",     name: "Makanan & Minuman",   description: "Makanan, minuman, oleh-oleh. Prioritas cepat.",   maxWeightKg: "5.00",  isActive: true });
 
   console.log("  ✓ 7 jenis kargo: DOK, PKT-MINI, PKT-S, PKT-M, PKT-L, ELEK, MKNN");
 
-  // ============================================================
-  // 9. CARGO RATES
-  // ============================================================
-  console.log("\n[9/10] Creating cargo rates...");
+  // ════════════════════════════════════════════════════════════════
+  // 10. CARGO RATES
+  // ════════════════════════════════════════════════════════════════
+  console.log("\n[10/11] Creating cargo rates...");
 
   const globalRates = [
     { type: ctDokumen,     pricePerKg: "15000", minCharge: "10000" },
@@ -493,15 +990,19 @@ export async function seedData() {
   ];
 
   for (const r of globalRates) {
-    await storage.createCargoRate({ cargoTypeId: r.type.id, scope: "global", scopeRefId: null, originStopId: null, destinationStopId: null, pricePerKg: r.pricePerKg, pricePerLeg: "0", minCharge: r.minCharge, isActive: true });
+    await storage.createCargoRate({
+      cargoTypeId: r.type.id, scope: "global", scopeRefId: null,
+      originStopId: null, destinationStopId: null,
+      pricePerKg: r.pricePerKg, pricePerLeg: "0", minCharge: r.minCharge, isActive: true,
+    });
   }
 
   console.log("  ✓ 7 tarif global kargo");
 
-  // ============================================================
-  // 10. MATERIALIZE TRIPS (next 30 days)
-  // ============================================================
-  console.log("\n[10/10] Materializing trips for next 30 days...");
+  // ════════════════════════════════════════════════════════════════
+  // 11. MATERIALIZE TRIPS (30 hari ke depan)
+  // ════════════════════════════════════════════════════════════════
+  console.log("\n[11/11] Materializing trips for next 30 days...");
 
   const tripBasesService = new TripBasesService(storage);
   const serviceDates = nextNDays(30);
@@ -515,7 +1016,6 @@ export async function seedData() {
         await tripBasesService.ensureMaterializedTrip(base.id, serviceDate);
         tripCount++;
       } catch (err: unknown) {
-        // 'base-not-eligible' means day-of-week filter, skip silently
         if (err instanceof Error && err.message !== 'base-not-eligible') {
           console.warn(`  ! Failed to materialize ${base.code} on ${serviceDate}:`, err.message);
           errorCount++;
@@ -527,27 +1027,29 @@ export async function seedData() {
 
   console.log(`  ✓ ${tripCount} trips dibuat (${errorCount} error)`);
 
-  // ============================================================
+  // ════════════════════════════════════════════════════════════════
   // SUMMARY
-  // ============================================================
-  const stopCount    = await db.execute(sql`SELECT COUNT(*) as c FROM stops`);
-  const tripCountDB  = await db.execute(sql`SELECT COUNT(*) as c FROM trips`);
-  const invCount     = await db.execute(sql`SELECT COUNT(*) as c FROM seat_inventory`);
-  const cityList     = await db.execute(sql`SELECT DISTINCT city FROM stops ORDER BY city`);
+  // ════════════════════════════════════════════════════════════════
+  const stopCount   = await db.execute(sql`SELECT COUNT(*) as c FROM stops`);
+  const tripCountDB = await db.execute(sql`SELECT COUNT(*) as c FROM trips`);
+  const invCount    = await db.execute(sql`SELECT COUNT(*) as c FROM seat_inventory`);
+  const cityList    = await db.execute(sql`SELECT DISTINCT city FROM stops ORDER BY city`);
 
-  console.log("\n========================================");
+  console.log("\n═══════════════════════════════════════════");
   console.log("  SEED SELESAI");
-  console.log("========================================");
-  console.log(`  Stops       : ${(stopCount.rows[0] as any).c} (${(cityList.rows as any[]).map((r: any) => r.city).join(', ')})`);
-  console.log(`  Trips       : ${(tripCountDB.rows[0] as any).c} (${serviceDates.length} hari × ${createdBases.length} jadwal)`);
+  console.log("═══════════════════════════════════════════");
+  console.log(`  Kota        : ${(cityList.rows as any[]).map((r: any) => r.city).join(', ')}`);
+  console.log(`  Stops       : ${(stopCount.rows[0] as any).c}`);
+  console.log(`  Patterns    : 8 (JKT↔BDG ×2, JKT↔SMG ×1, SMG↔YGY ×1)`);
+  console.log(`  Trip Bases  : ${createdBases.length}`);
+  console.log(`  Trips       : ${(tripCountDB.rows[0] as any).c} (${serviceDates.length} hari)`);
   console.log(`  Seat Inv    : ${(invCount.rows[0] as any).c} baris`);
-  console.log(`  Kargo Types : 7 | Patterns: 6 | Bases: ${createdBases.length}`);
-  console.log("========================================\n");
+  console.log(`  Kargo Types : 7`);
+  console.log("═══════════════════════════════════════════\n");
 
   await seedRbac();
 }
 
-// Run seeder if executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   seedData().catch(console.error).finally(() => process.exit(0));
 }

@@ -644,6 +644,26 @@ export default function TripPatternsManager() {
             ),
           },
           {
+            key: 'stops', header: 'Titik Halte',
+            render: (p) => {
+              const ps = (p as any).patternStops as Array<{ stopSequence: number; stop: { name: string; code: string; city: string } | null; boardingAllowed: boolean; alightingAllowed: boolean }> | undefined;
+              if (!ps || ps.length === 0) return <span className="text-muted-foreground text-xs italic">Belum diatur</span>;
+              const sorted = [...ps].sort((a, b) => a.stopSequence - b.stopSequence);
+              return (
+                <div className="flex flex-wrap items-center gap-1">
+                  {sorted.map((s, i) => (
+                    <span key={i} className="flex items-center gap-0.5">
+                      {i > 0 && <span className="text-muted-foreground mx-0.5">→</span>}
+                      <span className="text-xs font-medium" title={`${s.stop?.name || '?'} (${s.stop?.city || ''})`}>
+                        {s.stop?.name || '?'}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              );
+            },
+          },
+          {
             key: 'class', header: 'Kelas', hideOnMobile: true,
             className: 'text-muted-foreground',
             render: (p) => p.vehicleClass || '—',

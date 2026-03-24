@@ -12,7 +12,13 @@ export class TripPatternsController {
 
   async getAll(req: FastifyRequest, reply: FastifyReply) {
     const patterns = await this.tripPatternsService.getAllTripPatterns();
-    reply.send(patterns);
+    const patternsWithStops = await Promise.all(
+      patterns.map(async (p) => {
+        const patternStops = await this.tripPatternsService.getPatternStops(p.id);
+        return { ...p, patternStops };
+      })
+    );
+    reply.send(patternsWithStops);
   }
 
   async getById(req: FastifyRequest, reply: FastifyReply) {

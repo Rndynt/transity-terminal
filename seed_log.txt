@@ -1,0 +1,56 @@
+═══════════════════════════════════════════
+  TRANSITY SHUTTLE — SEED DATA
+═══════════════════════════════════════════
+
+[CLEANUP] Clearing all existing data...
+(node:3656) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[CLEANUP] Done.
+
+[1/11] Creating stops...
+  ✓ 15 stops (Jakarta 6, Bandung 4, Semarang 2, Yogyakarta 3)
+
+[2/11] Creating outlets...
+  ✓ 15 outlets
+
+[3/11] Creating layouts...
+  ✓ 3 layouts: Premio 8 (4×2), Premio 14 (5×3), Commuter 14 (5×3)
+
+[4/11] Creating vehicles...
+  ✓ 12 vehicles (2 Premio 8, 4 Premio 14, 6 Commuter 14)
+
+[5/11] Creating trip patterns...
+  ✓ 8 patterns (JKT↔BDG ×2, JKT↔SMG ×1, SMG↔YGY ×1)
+
+[6/11] Creating pattern stops...
+  ✓ Pattern stops untuk 8 rute
+
+[7/11] Creating price rules...
+  ✓ 8 price rules
+    JKT↔BDG-01 Rp 95.000/leg (Premio) | JKT↔BDG-02 Rp 80.000/leg (Commuter)
+    JKT↔SMG    Rp 160.000/leg          | SMG↔YGY    Rp 80.000/leg
+
+[8/11] Creating trip bases...
+  ✓ 34 trip bases
+    JKT↔BDG-01: 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 (×2 arah = 12)
+    JKT↔BDG-02: 07:00, 11:00, 15:00, 19:00 / 06:00, 10:00, 14:00, 18:00 (8)
+    JKT↔SMG:    07:00, 13:00, 20:00 / 06:00, 14:00, 21:00 (6)
+    SMG↔YGY:    06:00, 10:00, 14:00, 18:00 / 05:00, 09:00, 13:00, 17:00 (8)
+
+[9/11] Creating cargo types...
+  ✓ 7 jenis kargo: DOK, PKT-MINI, PKT-S, PKT-M, PKT-L, ELEK, MKNN
+
+[10/11] Creating cargo rates...
+  ✓ 7 tarif global kargo
+
+[11/11] Materializing trips for next 30 days...
+  ✓ JKT-BDG-01/06:00: trips materialized
+  ✓ JKT-BDG-01/09:00: trips materialized
+  ✓ JKT-BDG-01/12:00: trips materialized

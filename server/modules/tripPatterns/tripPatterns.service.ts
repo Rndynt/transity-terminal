@@ -30,6 +30,10 @@ export class TripPatternsService {
     await this.storage.deleteTripPattern(id);
   }
 
+  async getPatternStops(patternId: string) {
+    return await this.storage.getPatternStops(patternId);
+  }
+
   async getActiveTripsForPattern(patternId: string): Promise<number> {
     return await this.storage.getActiveTripsForPattern(patternId);
   }
