@@ -2,6 +2,7 @@ import { ReactNode, useState, useEffect } from "react";
 import Sidebar from "./Sidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Menu } from "lucide-react";
+import { LayoutContext } from "./LayoutContext";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -38,39 +39,43 @@ export default function AppLayout({ children }: AppLayoutProps) {
     return () => { document.body.style.overflow = 'unset'; };
   }, [sidebarOpen, isMobile]);
 
+  const openSidebar = () => setSidebarOpen(true);
+
   return (
-    <div className="flex h-screen bg-gray-50 font-['Inter',sans-serif]">
-      {isMobile && sidebarOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      <Sidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        isMobile={isMobile}
-        isCollapsed={isCollapsed}
-        onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
-      />
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {isMobile && (
-          <div className="h-10 bg-white border-b border-gray-200 flex items-center px-3 flex-shrink-0 lg:hidden">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors mr-2"
-              aria-label="Open sidebar"
-              data-testid="open-sidebar"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <span className="text-sm font-semibold text-gray-800">Transity</span>
-          </div>
+    <LayoutContext.Provider value={{ openSidebar, isMobile }}>
+      <div className="flex h-screen bg-gray-50 font-['Inter',sans-serif]">
+        {isMobile && sidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
         )}
-        {children}
+
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          isMobile={isMobile}
+          isCollapsed={isCollapsed}
+          onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
+        />
+
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {isMobile && (
+            <div className="h-10 bg-white border-b border-gray-200 flex items-center px-3 flex-shrink-0 lg:hidden cso-hide-default-header">
+              <button
+                onClick={openSidebar}
+                className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors mr-2"
+                aria-label="Open sidebar"
+                data-testid="open-sidebar"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <span className="text-sm font-semibold text-gray-800">Transity</span>
+            </div>
+          )}
+          {children}
+        </div>
       </div>
-    </div>
+    </LayoutContext.Provider>
   );
 }

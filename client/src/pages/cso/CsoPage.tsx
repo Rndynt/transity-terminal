@@ -19,10 +19,11 @@ import BatchRescheduleDialog from '@/components/cso/BatchRescheduleDialog';
 import { useBookingFlow } from '@/hooks/useBookingFlow';
 import { useSeatHold } from '@/hooks/useSeatHold';
 import ModeTimer from '@/components/cso/ModeTimer';
+import { useLayout } from '@/components/layout/LayoutContext';
 import {
   ChevronRight, ChevronLeft, Loader2, MapPin,
   Armchair, ArrowRight, Ticket, Package, Clock,
-  FileText, Lock, CalendarClock, User, X
+  FileText, Lock, CalendarClock, User, X, Menu
 } from 'lucide-react';
 import type { Stop, Outlet, CsoAvailableTrip, CargoShipmentWithStops } from '@/types';
 
@@ -47,6 +48,7 @@ const formatTime = (isoString: string | null | undefined): string => {
 };
 
 export default function CsoPage() {
+  const { openSidebar, isMobile } = useLayout();
   const { outletId: scopedOutletId, can } = usePermissions();
   const { toast } = useToast();
   const searchString = useSearch();
@@ -319,11 +321,28 @@ export default function CsoPage() {
   const sortedSeats = [...selectedSeats].sort();
   const nowDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'numeric', year: 'numeric', timeZone: 'Asia/Jakarta' });
 
+  useEffect(() => {
+    if (!isMobile) return;
+    const el = document.querySelector('.cso-hide-default-header') as HTMLElement | null;
+    if (el) el.style.display = 'none';
+    return () => { if (el) el.style.display = ''; };
+  }, [isMobile]);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="cso-page">
       <div className="bg-white border-b border-gray-200 flex-shrink-0">
         <div className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12">
           <div className="flex items-center gap-1.5 min-w-0">
+            {isMobile && (
+              <button
+                onClick={openSidebar}
+                className="p-1 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors flex-shrink-0 mr-0.5"
+                aria-label="Open sidebar"
+                data-testid="cso-open-sidebar"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+            )}
             <Ticket className="w-4 h-4 text-blue-600 flex-shrink-0" />
             <span className="text-sm font-bold text-gray-800 truncate hidden sm:inline">CSO Booking Terminal</span>
             <span className="text-sm font-bold text-gray-800 sm:hidden">CSO</span>
