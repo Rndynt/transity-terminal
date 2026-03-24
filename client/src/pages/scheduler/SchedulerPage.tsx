@@ -179,6 +179,100 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   canceled: { label: 'Dibatalkan', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' },
 };
 
+type PatternStopInfo = {
+  id: string;
+  stopSequence: number;
+  boardingAllowed: boolean;
+  alightingAllowed: boolean;
+  stop: { id: string; name: string; code: string } | null;
+};
+
+function RouteStopsTimeline({ patternId }: { patternId: string }) {
+  const { data: stops, isLoading } = useQuery<PatternStopInfo[]>({
+    queryKey: ['/api/trip-patterns', patternId, 'stops'],
+    queryFn: async () => {
+      const res = await fetch(`/api/trip-patterns/${patternId}/stops`);
+      if (!res.ok) throw new Error('Failed to load stops');
+      return res.json();
+    },
+    enabled: !!patternId,
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        <span>Memuat titik rute...</span>
+      </div>
+    );
+  }
+
+  if (!stops || stops.length === 0) return null;
+
+  const sorted = [...stops].sort((a, b) => a.stopSequence - b.stopSequence);
+  const pickupStops = sorted.filter(s => s.boardingAllowed);
+  const dropoffStops = sorted.filter(s => s.alightingAllowed);
+
+  const origin = sorted[0];
+  const destination = sorted[sorted.length - 1];
+  const viaStops = sorted.slice(1, -1);
+
+  return (
+    <div className="p-3 rounded-lg border bg-muted/20 space-y-3">
+      <div className="flex items-center gap-2">
+        <MapPin className="w-3.5 h-3.5 text-primary" />
+        <span className="text-xs font-semibold">Titik Rute</span>
+      </div>
+
+      <div className="relative ml-1.5">
+        {sorted.map((stop, idx) => {
+          const isFirst = idx === 0;
+          const isLast = idx === sorted.length - 1;
+          const isPickup = stop.boardingAllowed;
+          const isDropoff = stop.alightingAllowed;
+
+          return (
+            <div key={stop.id} className="flex items-start gap-3 relative" data-testid={`route-stop-${stop.stop?.code}`}>
+              {idx < sorted.length - 1 && (
+                <div className="absolute left-[5px] top-[14px] w-px h-[calc(100%)] bg-border" />
+              )}
+              <div className={cn(
+                "w-[11px] h-[11px] rounded-full border-2 shrink-0 mt-0.5 z-10",
+                isFirst ? "border-green-500 bg-green-100 dark:bg-green-900" :
+                isLast ? "border-red-500 bg-red-100 dark:bg-red-900" :
+                isPickup ? "border-blue-400 bg-blue-50 dark:bg-blue-950" :
+                "border-orange-400 bg-orange-50 dark:bg-orange-950"
+              )} />
+              <div className={cn("pb-3 min-w-0", isLast && "pb-0")}>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium">{stop.stop?.name || '—'}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground">({stop.stop?.code})</span>
+                </div>
+                <div className="flex items-center gap-1 mt-0.5">
+                  {isPickup && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400 font-medium">NAIK</span>
+                  )}
+                  {isDropoff && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-400 font-medium">TURUN</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {viaStops.length > 0 && (
+        <div className="text-[10px] text-muted-foreground border-t pt-2 mt-1">
+          <span className="font-medium">Via: </span>
+          {viaStops.map(s => s.stop?.name || s.stop?.code).join(' → ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip, onAddException, onRemoveException, isMaterializing, isClosingTrip, isAddingException, isRemovingException }: {
   item: CalendarItem | null;
   open: boolean;
@@ -229,6 +323,8 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
               <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
               <DetailRow icon={CalendarRange} label="Tanggal" value={formatDateLabel(item.serviceDate)} />
             </div>
+
+            {item.patternId && <RouteStopsTimeline patternId={item.patternId} />}
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
@@ -271,6 +367,8 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
               <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
               {item.capacity && <DetailRow icon={Users} label="Kapasitas" value={`${item.capacity} kursi`} />}
             </div>
+
+            {item.patternId && <RouteStopsTimeline patternId={item.patternId} />}
           </div>
           {showReasonInput && (
             <div className="space-y-2 border border-red-200 dark:border-red-800 rounded-lg p-3 bg-red-50/50 dark:bg-red-950/30">
@@ -362,6 +460,8 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
             <DetailRow icon={User} label="Driver" value={item.driverName || '—'} />
             <DetailRow icon={Truck} label="Kendaraan" value={item.vehiclePlate || '—'} mono />
           </div>
+
+          {item.patternId && <RouteStopsTimeline patternId={item.patternId} />}
 
           {item.seatsBooked !== undefined && item.capacity && (
             <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
