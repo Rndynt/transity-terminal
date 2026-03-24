@@ -452,32 +452,37 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="border-b px-6 py-4 shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={onBack} data-testid="btn-back-spj">
-              <ArrowLeft className="w-4 h-4 mr-1" /> Kembali
+      <div className="border-b px-4 md:px-6 py-3 shrink-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Button variant="ghost" size="sm" onClick={onBack} data-testid="btn-back-spj" className="shrink-0 px-2">
+              <ArrowLeft className="w-4 h-4" />
             </Button>
-            <div className="h-6 w-px bg-border" />
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold font-mono" data-testid="spj-detail-number">{spjData.spjNumber}</h2>
+                <h2 className="text-sm md:text-lg font-semibold font-mono truncate" data-testid="spj-detail-number">{spjData.spjNumber}</h2>
                 <SpjStatusBadge status={spjData.status || 'draft'} />
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button size="sm" variant="outline" onClick={() => window.print()} className="gap-1 print:hidden" data-testid="btn-print-spj">
+              <Printer className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Cetak</span>
+            </Button>
             {isDraft && (
               <CanAccess flag="action.spj.issue">
                 <Button size="sm" onClick={() => issueMutation.mutate()} disabled={issueMutation.isPending} data-testid="btn-issue-spj">
-                  <CheckCircle className="w-4 h-4 mr-1" /> Terbitkan
+                  <CheckCircle className="w-4 h-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Terbitkan</span>
                 </Button>
               </CanAccess>
             )}
             {(isIssued || spjData.status === 'on_trip') && (
               <CanAccess flag="action.spj.settle">
                 <Button size="sm" variant="default" onClick={() => setShowSettleConfirm(true)} disabled={settleMutation.isPending} data-testid="btn-settle-spj">
-                  <Wallet className="w-4 h-4 mr-1" /> Selesaikan
+                  <Wallet className="w-4 h-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Selesaikan</span>
                 </Button>
               </CanAccess>
             )}
@@ -709,18 +714,6 @@ function SpjDetail({ id, onBack }: { id: string; onBack: () => void }) {
 
       <ThermalSpj spjData={spjData} costLines={costLines} totalEstimated={totalEstimated} totalActual={totalActual} totalAdvance={totalAdvance} settlement={settlement} />
 
-      <div className="px-6 py-3 border-t shrink-0 bg-background flex items-center justify-between print:hidden">
-        <Button
-          size="sm"
-          variant="default"
-          onClick={() => window.print()}
-          className="gap-1.5"
-          data-testid="btn-print-spj"
-        >
-          <Printer className="w-3.5 h-3.5" />
-          Cetak SPJ
-        </Button>
-      </div>
 
       <Dialog open={showAddLine} onOpenChange={setShowAddLine}>
         <DialogContent className="max-w-md">
