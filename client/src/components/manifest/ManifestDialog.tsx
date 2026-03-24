@@ -49,69 +49,68 @@ function formatDateShort(dateStr: string) {
 // ── Thermal layout (visible only when printing) ──────────────────────────────
 function ThermalManifest({ manifest }: { manifest: any }) {
   const h = manifest.header;
-  const line = '--------------------------------';
-  const doubleLine = '================================';
+  const line = '————————————————————————————————————————————————';
+  const doubleLine = '================================================';
 
   return (
-    <div id="thermal-manifest" className="hidden print:block font-mono text-[8pt] leading-tight whitespace-pre-wrap">
-      <div className="text-center font-bold text-[10pt]">MANIFEST PERJALANAN</div>
-      <div className="text-center">{doubleLine}</div>
-      <div>No : {h.manifestNumber}</div>
-      <div>Tgl: {formatDateShort(h.serviceDate)}{h.departureTime ? ` | Jam: ${h.departureTime}` : ''}</div>
+    <div id="thermal-manifest" className="hidden print:block font-mono text-[11pt] leading-relaxed whitespace-pre-wrap">
+      <div className="text-center font-bold text-[14pt]">MANIFEST PERJALANAN</div>
+      <div className="text-center font-bold text-[11pt]">TRANSITY SHUTTLE</div>
+      <div>{doubleLine}</div>
+      <div>No Manifest : {h.manifestNumber}</div>
+      <div>Tanggal     : {formatDateShort(h.serviceDate)}</div>
+      {h.departureTime && <div>Jam Berangkat: {h.departureTime}</div>}
       <div>{line}</div>
-      <div>Rute  : {h.originStop} → {h.destinationStop}</div>
-      <div>Pola  : {h.routeName}</div>
-      <div>Plat  : {h.vehiclePlate} ({h.vehicleType})</div>
-      <div>Driver: {h.driverName || '-'}</div>
-      {h.driverLicense && <div>SIM   : {h.driverLicense}</div>}
-      <div>{line}</div>
+      <div>Rute   : {h.originStop} → {h.destinationStop}</div>
+      <div>Pola   : {h.routeName}</div>
+      <div>Plat   : {h.vehiclePlate} ({h.vehicleType})</div>
+      <div>Driver : {h.driverName || '-'}</div>
+      {h.driverLicense && <div>SIM    : {h.driverLicense}</div>}
+      <div>{doubleLine}</div>
 
-      {/* Section A — Penumpang */}
       <div className="font-bold">A. DAFTAR PENUMPANG ({manifest.summary.totalPassengers} orang)</div>
       <div>{line}</div>
       {manifest.passengers.length === 0 ? (
         <div>  (Tidak ada penumpang)</div>
       ) : (
         manifest.passengers.map((p: any, i: number) => (
-          <div key={p.ticketNumber || i}>
-            <div>{String(i + 1).padStart(2, ' ')}. {p.passengerName}</div>
-            <div>    Kursi: {p.seatNo || '-'} | {p.originStopName || '-'} → {p.destinationStopName || '-'}</div>
-            {p.ticketNumber && <div>    Tiket: {p.ticketNumber}</div>}
-            {p.phone && <div>    HP   : {p.phone}</div>}
+          <div key={p.ticketNumber || i} style={{ marginBottom: '4pt' }}>
+            <div>{String(i + 1).padStart(2, ' ')}. {p.passengerName} — Kursi {p.seatNo || '-'}</div>
+            <div>   {p.originStopName || '-'} → {p.destinationStopName || '-'}</div>
+            {p.ticketNumber && <div>   Tiket: {p.ticketNumber}</div>}
+            {p.phone && <div>   HP: {p.phone}</div>}
           </div>
         ))
       )}
       <div>{line}</div>
 
-      {/* Section B — Kargo */}
       {manifest.cargo.length > 0 && (
         <>
           <div className="font-bold">B. DAFTAR KARGO ({manifest.summary.totalCargoItems} kiriman)</div>
           <div>{line}</div>
           {manifest.cargo.map((c: any, i: number) => (
-            <div key={c.waybillNumber || i}>
+            <div key={c.waybillNumber || i} style={{ marginBottom: '4pt' }}>
               <div>{String(i + 1).padStart(2, ' ')}. {c.waybillNumber}</div>
-              <div>    {c.senderName} → {c.recipientName}</div>
-              <div>    {c.itemDescription}{c.quantity > 1 ? ` (${c.quantity}x)` : ''} | {c.weightKg ? parseFloat(c.weightKg).toFixed(1) + ' kg' : '-'}</div>
+              <div>   {c.senderName} → {c.recipientName}</div>
+              <div>   {c.itemDescription}{c.quantity > 1 ? ` (${c.quantity}x)` : ''} | {c.weightKg ? parseFloat(c.weightKg).toFixed(1) + ' kg' : '-'}</div>
             </div>
           ))}
           <div>{line}</div>
         </>
       )}
 
-      {/* Summary */}
+      <div>{doubleLine}</div>
+      <div className="font-bold">REKAP:</div>
       <div>Penumpang : {manifest.summary.totalPassengers} orang</div>
       {manifest.summary.totalCargoItems > 0 && (
         <div>Kargo     : {manifest.summary.totalCargoItems} kiriman ({manifest.summary.totalCargoWeight} kg)</div>
       )}
-      <div>{line}</div>
+      <div>{doubleLine}</div>
 
-      {/* Print info */}
-      <div className="text-center">Dicetak: {formatDateTime(new Date().toISOString())}</div>
+      <div style={{ marginTop: '8pt' }}>Dicetak: {formatDateTime(new Date().toISOString())}</div>
       {h.firstPrintedAt && (
-        <div className="text-center">Pertama: {formatDateTime(h.firstPrintedAt)}</div>
+        <div>Cetak pertama: {formatDateTime(h.firstPrintedAt)}</div>
       )}
-      <div className="text-center">{doubleLine}</div>
     </div>
   );
 }
