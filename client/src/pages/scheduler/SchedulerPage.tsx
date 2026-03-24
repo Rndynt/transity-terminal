@@ -430,6 +430,20 @@ function EmptyCellDialog({ cell, open, onClose }: { cell: EmptyCellInfo | null; 
               <p className="text-xs text-muted-foreground">Tambah trip di luar jadwal reguler</p>
             </div>
           </Button>
+
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-3 h-auto py-3"
+            data-testid="btn-add-exception-empty"
+          >
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400">
+              <Ban className="w-4 h-4" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-medium">Tambah Pengecualian</p>
+              <p className="text-xs text-muted-foreground">Tandai jadwal tidak beroperasi pada tanggal ini</p>
+            </div>
+          </Button>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} data-testid="btn-close-empty-cell">Batal</Button>
