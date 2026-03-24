@@ -64,13 +64,34 @@ type ScheduleItem = {
 
 const MOCK_DATA: ScheduleItem[] = [
   { id: '1', type: 'trip', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-01', departureTime: '06:00', hour: 6, vehiclePlate: 'B 1401 TGJ', driverName: 'Rahmat', status: 'scheduled', seatsBooked: 3, seatsTotal: 11 },
-  { id: '2', type: 'virtual', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-02', departureTime: '09:00', hour: 9, seatsTotal: 11 },
+  { id: '2', type: 'trip', routeName: 'Jakarta → Cirebon', routeCode: 'JKT-CRB-01', departureTime: '06:30', hour: 6, vehiclePlate: 'B 1188 XYZ', driverName: 'Yanto', status: 'scheduled', seatsBooked: 7, seatsTotal: 8 },
   { id: '3', type: 'trip', routeName: 'Semarang → Jakarta', routeCode: 'SMG-JKT-01', departureTime: '07:00', hour: 7, vehiclePlate: 'B 1523 KJH', driverName: 'Agus', status: 'on_progress', seatsBooked: 8, seatsTotal: 11 },
-  { id: '4', type: 'virtual', routeName: 'Semarang → Yogyakarta', routeCode: 'SMG-YGY-01', departureTime: '10:00', hour: 10, seatsTotal: 8 },
-  { id: '5', type: 'exception', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-03', departureTime: '14:00', hour: 14, exceptionReason: 'Kendaraan rusak' },
-  { id: '6', type: 'trip', routeName: 'Semarang → Jakarta', routeCode: 'SMG-JKT-02', departureTime: '15:00', hour: 15, vehiclePlate: 'B 7812 PQR', driverName: 'Budi', status: 'scheduled', seatsBooked: 0, seatsTotal: 11 },
-  { id: '7', type: 'virtual', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-04', departureTime: '19:00', hour: 19, seatsTotal: 11 },
-  { id: '8', type: 'trip', routeName: 'Semarang → Yogyakarta', routeCode: 'SMG-YGY-02', departureTime: '20:00', hour: 20, vehiclePlate: 'AB 1234 CD', driverName: 'Dani', status: 'scheduled', seatsBooked: 5, seatsTotal: 8 },
+  { id: '4', type: 'virtual', routeName: 'Semarang → Yogyakarta', routeCode: 'SMG-YGY-01', departureTime: '07:15', hour: 7, seatsTotal: 8 },
+  { id: '5', type: 'trip', routeName: 'Jakarta → Bandung', routeCode: 'JKT-BDG-01', departureTime: '08:00', hour: 8, vehiclePlate: 'D 2233 AB', driverName: 'Hendra', status: 'on_progress', seatsBooked: 10, seatsTotal: 11 },
+  { id: '6', type: 'virtual', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-02', departureTime: '09:00', hour: 9, seatsTotal: 11 },
+  { id: '7', type: 'trip', routeName: 'Bandung → Jakarta', routeCode: 'BDG-JKT-01', departureTime: '09:30', hour: 9, vehiclePlate: 'D 3344 CD', driverName: 'Eko', status: 'scheduled', seatsBooked: 4, seatsTotal: 11 },
+  { id: '8', type: 'virtual', routeName: 'Semarang → Yogyakarta', routeCode: 'SMG-YGY-02', departureTime: '10:00', hour: 10, seatsTotal: 8 },
+  { id: '9', type: 'trip', routeName: 'Cirebon → Jakarta', routeCode: 'CRB-JKT-01', departureTime: '10:30', hour: 10, vehiclePlate: 'E 5566 GH', driverName: 'Firman', status: 'scheduled', seatsBooked: 2, seatsTotal: 8 },
+  { id: '10', type: 'trip', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-03', departureTime: '12:00', hour: 12, vehiclePlate: 'B 7788 JK', driverName: 'Gilang', status: 'scheduled', seatsBooked: 6, seatsTotal: 11 },
+  { id: '11', type: 'virtual', routeName: 'Semarang → Jakarta', routeCode: 'SMG-JKT-02', departureTime: '12:15', hour: 12, seatsTotal: 11 },
+  { id: '12', type: 'trip', routeName: 'Yogyakarta → Semarang', routeCode: 'YGY-SMG-01', departureTime: '12:45', hour: 12, vehiclePlate: 'AB 9900 LM', driverName: 'Irfan', status: 'on_progress', seatsBooked: 5, seatsTotal: 8 },
+  { id: '13', type: 'trip', routeName: 'Jakarta → Cirebon', routeCode: 'JKT-CRB-02', departureTime: '13:00', hour: 13, vehiclePlate: 'B 1122 NP', driverName: 'Joko', status: 'scheduled', seatsBooked: 9, seatsTotal: 11 },
+  { id: '14', type: 'virtual', routeName: 'Bandung → Semarang', routeCode: 'BDG-SMG-01', departureTime: '13:10', hour: 13, seatsTotal: 11 },
+  { id: '15', type: 'trip', routeName: 'Semarang → Yogyakarta', routeCode: 'SMG-YGY-03', departureTime: '13:40', hour: 13, vehiclePlate: 'H 3344 QR', driverName: 'Kurnia', status: 'scheduled', seatsBooked: 1, seatsTotal: 8 },
+  { id: '16', type: 'exception', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-04', departureTime: '14:00', hour: 14, exceptionReason: 'Kendaraan rusak' },
+  { id: '17', type: 'trip', routeName: 'Cirebon → Semarang', routeCode: 'CRB-SMG-01', departureTime: '14:30', hour: 14, vehiclePlate: 'E 5566 ST', driverName: 'Lukman', status: 'scheduled', seatsBooked: 3, seatsTotal: 8 },
+  { id: '18', type: 'trip', routeName: 'Semarang → Jakarta', routeCode: 'SMG-JKT-03', departureTime: '15:00', hour: 15, vehiclePlate: 'B 7812 PQR', driverName: 'Budi', status: 'scheduled', seatsBooked: 0, seatsTotal: 11 },
+  { id: '19', type: 'virtual', routeName: 'Jakarta → Bandung', routeCode: 'JKT-BDG-02', departureTime: '15:30', hour: 15, seatsTotal: 11 },
+  { id: '20', type: 'trip', routeName: 'Bandung → Cirebon', routeCode: 'BDG-CRB-01', departureTime: '16:00', hour: 16, vehiclePlate: 'D 8899 UV', driverName: 'Mulyadi', status: 'scheduled', seatsBooked: 6, seatsTotal: 8 },
+  { id: '21', type: 'exception', routeName: 'Yogyakarta → Jakarta', routeCode: 'YGY-JKT-01', departureTime: '16:15', hour: 16, exceptionReason: 'Driver tidak tersedia' },
+  { id: '22', type: 'trip', routeName: 'Jakarta → Yogyakarta', routeCode: 'JKT-YGY-01', departureTime: '17:00', hour: 17, vehiclePlate: 'B 2233 WX', driverName: 'Nanda', status: 'scheduled', seatsBooked: 11, seatsTotal: 11 },
+  { id: '23', type: 'virtual', routeName: 'Semarang → Cirebon', routeCode: 'SMG-CRB-01', departureTime: '17:30', hour: 17, seatsTotal: 8 },
+  { id: '24', type: 'trip', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-05', departureTime: '18:00', hour: 18, vehiclePlate: 'B 4455 YZ', driverName: 'Oscar', status: 'scheduled', seatsBooked: 2, seatsTotal: 11 },
+  { id: '25', type: 'virtual', routeName: 'Jakarta → Semarang', routeCode: 'JKT-SMG-06', departureTime: '19:00', hour: 19, seatsTotal: 11 },
+  { id: '26', type: 'trip', routeName: 'Semarang → Yogyakarta', routeCode: 'SMG-YGY-04', departureTime: '20:00', hour: 20, vehiclePlate: 'AB 1234 CD', driverName: 'Dani', status: 'scheduled', seatsBooked: 5, seatsTotal: 8 },
+  { id: '27', type: 'trip', routeName: 'Yogyakarta → Semarang', routeCode: 'YGY-SMG-02', departureTime: '20:30', hour: 20, vehiclePlate: 'AB 6677 EF', driverName: 'Prima', status: 'on_progress', seatsBooked: 7, seatsTotal: 8 },
+  { id: '28', type: 'trip', routeName: 'Semarang → Jakarta', routeCode: 'SMG-JKT-04', departureTime: '21:00', hour: 21, vehiclePlate: 'H 8899 GH', driverName: 'Rizky', status: 'scheduled', seatsBooked: 4, seatsTotal: 11 },
+  { id: '29', type: 'virtual', routeName: 'Jakarta → Cirebon', routeCode: 'JKT-CRB-03', departureTime: '22:00', hour: 22, seatsTotal: 8 },
 ];
 
 function ScheduleChip({ item, onSelect }: { item: ScheduleItem; onSelect?: (item: ScheduleItem) => void }) {
@@ -321,11 +342,79 @@ function DetailRow({ icon: Icon, label, value, mono }: { icon: any; label: strin
   );
 }
 
+type EmptyCellInfo = { dateStr: string; hour: number; dateLabel: string };
+
+function EmptyCellDialog({ cell, open, onClose }: { cell: EmptyCellInfo | null; open: boolean; onClose: () => void }) {
+  if (!cell) return null;
+  const hourStr = String(cell.hour).padStart(2, '0') + ':00';
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus className="w-5 h-5 text-primary" />
+            Tambah Jadwal
+          </DialogTitle>
+          <DialogDescription>{cell.dateLabel} — {hourStr}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 pt-2">
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-3 h-auto py-3"
+            data-testid="btn-add-trip"
+          >
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
+              <Bus className="w-4 h-4" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-medium">Buat Trip Baru</p>
+              <p className="text-xs text-muted-foreground">Buat trip aktif dengan assign driver & kendaraan</p>
+            </div>
+          </Button>
+
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-3 h-auto py-3"
+            data-testid="btn-add-exception"
+          >
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400">
+              <Ban className="w-4 h-4" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-medium">Tambah Pengecualian</p>
+              <p className="text-xs text-muted-foreground">Batalkan jadwal reguler di tanggal ini</p>
+            </div>
+          </Button>
+
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-3 h-auto py-3"
+            data-testid="btn-add-extra-trip"
+          >
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
+              <Plus className="w-4 h-4" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-medium">Trip Tambahan</p>
+              <p className="text-xs text-muted-foreground">Tambah trip di luar jadwal reguler</p>
+            </div>
+          </Button>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} data-testid="btn-close-empty-cell">Batal</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function SchedulerPage() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [selectedItem, setSelectedItem] = useState<ScheduleItem | null>(null);
+  const [emptyCell, setEmptyCell] = useState<EmptyCellInfo | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const dates = useMemo(() => getMonthDates(year, month), [year, month]);
@@ -453,7 +542,7 @@ export default function SchedulerPage() {
             <div
               key={hour}
               className="flex"
-              style={{ height: CELL_H }}
+              style={{ minHeight: CELL_H }}
               data-hour={hour}
             >
               <div
@@ -477,6 +566,15 @@ export default function SchedulerPage() {
                     )}
                     style={{ width: CELL_W, minWidth: CELL_W }}
                     data-testid={`cell-${dateStr}-${hour}`}
+                    onClick={() => {
+                      if (items.length === 0) {
+                        const d = new Date(dateStr + 'T00:00:00');
+                        const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+                        const dateLabel = `${dayNames[d.getDay()]}, ${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+                        setEmptyCell({ dateStr, hour, dateLabel });
+                      }
+                    }}
                   >
                     {items.length > 0 ? (
                       <div className="p-0.5 space-y-0.5">
@@ -485,7 +583,7 @@ export default function SchedulerPage() {
                         ))}
                       </div>
                     ) : (
-                      <div className="h-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="h-full min-h-[56px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                         <Plus className="w-3.5 h-3.5 text-muted-foreground" />
                       </div>
                     )}
@@ -501,6 +599,12 @@ export default function SchedulerPage() {
         item={selectedItem}
         open={!!selectedItem}
         onClose={() => setSelectedItem(null)}
+      />
+
+      <EmptyCellDialog
+        cell={emptyCell}
+        open={!!emptyCell}
+        onClose={() => setEmptyCell(null)}
       />
     </div>
   );
