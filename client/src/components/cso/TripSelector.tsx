@@ -780,7 +780,8 @@ export default function TripSelector({
                       const isPastVirtual = isPast && trip.isVirtual;
                       const noPrice = !trip.hasPriceRule;
                       const isClosed = trip.status === 'closed';
-                      const isDisabled = (isClosed && !canViewClosed) || trip.status === 'canceled' || isPastVirtual || noPrice;
+                      const isStopClosed = trip.outletStopClosed === true;
+                      const isDisabled = (isClosed && !canViewClosed) || trip.status === 'canceled' || isPastVirtual || noPrice || isStopClosed;
                       const isMaterializing = materializingBaseId === trip.baseId;
                       const seatCount = trip.availableSeats ?? trip.capacity ?? 0;
                       const totalSeats = trip.capacity ?? 40;
@@ -822,6 +823,11 @@ export default function TripSelector({
                               {noPrice && (
                                 <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-red-100 text-red-700 rounded-md text-[10px] font-semibold" title="Belum ada aturan harga. Tambahkan di menu Aturan Harga.">
                                   <AlertTriangle className="w-3 h-3" />Belum Ada Harga
+                                </span>
+                              )}
+                              {isStopClosed && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-md text-[10px] font-semibold" title={trip.outletStopClosedReason || 'Titik naik ditutup operasional'}>
+                                  <Lock className="w-3 h-3" />Titik Ditutup
                                 </span>
                               )}
                               {isPast && trip.isVirtual ? (

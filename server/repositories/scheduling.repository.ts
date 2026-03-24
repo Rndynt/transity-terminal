@@ -5,7 +5,7 @@ import { ManifestEntry, ManifestFull, ManifestCargoEntry } from "../storage.inte
 import {
   tripPatterns, patternStops, tripBases, trips, tripStopTimes, tripLegs,
   seatInventory, seatHolds, priceRules, stops, vehicles, drivers, bookings, passengers,
-  cargoShipments, scheduleExceptions,
+  cargoShipments, scheduleExceptions, scheduleStopExceptions,
   type TripPattern, type InsertTripPattern,
   type PatternStop, type InsertPatternStop, type Stop,
   type TripBase, type InsertTripBase,
@@ -220,6 +220,25 @@ export class SchedulingRepository {
     );
     
     const allTrips = [...realTrips, ...filteredVirtualTrips];
+
+    const baseIds = [...new Set(allTrips.filter(t => t.baseId).map(t => t.baseId!))];
+    if (baseIds.length > 0) {
+      const stopExceptions = await db.select()
+        .from(scheduleStopExceptions)
+        .where(and(
+          inArray(scheduleStopExceptions.baseId, baseIds),
+          eq(scheduleStopExceptions.exceptionDate, serviceDate),
+          eq(scheduleStopExceptions.stopId, outlet.stopId),
+          eq(scheduleStopExceptions.disableBoarding, true),
+        ));
+      const closedBaseMap = new Map(stopExceptions.map(e => [e.baseId, e.reason]));
+      for (const trip of allTrips) {
+        if (trip.baseId && closedBaseMap.has(trip.baseId)) {
+          trip.outletStopClosed = true;
+          trip.outletStopClosedReason = closedBaseMap.get(trip.baseId) || null;
+        }
+      }
+    }
     
     return allTrips.sort((a, b) => {
       if (!a.departAtAtOutlet && !b.departAtAtOutlet) return 0;

@@ -134,6 +134,8 @@ export type CsoAvailableTrip = {
   outletStopSequence: number;
   availableSeats?: number;
   hasPriceRule: boolean;
+  outletStopClosed?: boolean;
+  outletStopClosedReason?: string | null;
 };
 
 export const scheduleExceptions = pgTable("schedule_exceptions", {
