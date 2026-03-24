@@ -241,11 +241,11 @@ export default function SchedulerPage() {
         <div style={{ width: gridWidth, minHeight: HOURS.length * CELL_H + 48 }} className="relative">
 
           <div
-            className="sticky top-0 z-30 flex bg-background border-b"
+            className="sticky top-0 z-30 flex bg-white dark:bg-gray-950 border-b"
             style={{ width: gridWidth }}
           >
             <div
-              className="sticky left-0 z-40 bg-muted/30 border-r border-b flex items-center justify-center"
+              className="sticky left-0 z-40 bg-white dark:bg-gray-950 border-r border-b flex items-center justify-center"
               style={{ width: TIME_COL_W, minWidth: TIME_COL_W, height: 48 }}
             >
               <Clock className="w-3.5 h-3.5 text-muted-foreground" />
@@ -288,7 +288,7 @@ export default function SchedulerPage() {
               data-hour={hour}
             >
               <div
-                className="sticky left-0 z-20 bg-muted/20 border-r border-b border-border/40 flex items-start justify-end pr-2 pt-1 shrink-0"
+                className="sticky left-0 z-20 bg-white dark:bg-gray-950 border-r border-b border-border/40 flex items-start justify-end pr-2 pt-1 shrink-0"
                 style={{ width: TIME_COL_W, minWidth: TIME_COL_W }}
               >
                 <span className="text-[11px] font-mono text-muted-foreground tabular-nums">
