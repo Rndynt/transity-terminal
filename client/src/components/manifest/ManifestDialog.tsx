@@ -6,7 +6,6 @@ import { Separator } from '@/components/ui/separator';
 import { manifestApi } from '@/lib/api';
 import { Printer, X, Bus, User, Clock, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
 import { TicketStatusBadge } from '@/components/shared/StatusBadges';
-import { fmtCurrency } from '@/lib/constants';
 
 interface ManifestDialogProps {
   tripId: string | null;
@@ -105,11 +104,6 @@ function ThermalManifest({ manifest }: { manifest: any }) {
       {manifest.summary.totalCargoItems > 0 && (
         <div>Kargo     : {manifest.summary.totalCargoItems} kiriman ({manifest.summary.totalCargoWeight} kg)</div>
       )}
-      <div>Pend. Tiket: {fmtCurrency(manifest.summary.totalTicketRevenue)}</div>
-      {manifest.summary.totalCargoRevenue > 0 && (
-        <div>Pend. Kargo: {fmtCurrency(manifest.summary.totalCargoRevenue)}</div>
-      )}
-      <div>TOTAL      : {fmtCurrency(manifest.summary.totalRevenue)}</div>
       <div>{line}</div>
 
       {/* Print info */}
@@ -293,7 +287,6 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
                           <th className="text-left px-3 py-2 font-medium text-muted-foreground">Turun Di</th>
                           <th className="text-left px-3 py-2 font-medium text-muted-foreground">No. HP</th>
                           <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
-                          <th className="text-right px-3 py-2 font-medium text-muted-foreground">Tarif</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -307,7 +300,6 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
                             <td className="px-3 py-2">{p.destinationStopName || '—'}</td>
                             <td className="px-3 py-2 text-muted-foreground">{p.phone || '—'}</td>
                             <td className="px-3 py-2"><TicketStatusBadge status={p.ticketStatus} /></td>
-                            <td className="px-3 py-2 text-right">{fmtCurrency(p.fareAmount)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -341,7 +333,6 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
                           <th className="text-left px-3 py-2 font-medium text-muted-foreground">Asal</th>
                           <th className="text-left px-3 py-2 font-medium text-muted-foreground">Tujuan</th>
                           <th className="text-right px-3 py-2 font-medium text-muted-foreground">Berat (kg)</th>
-                          <th className="text-right px-3 py-2 font-medium text-muted-foreground">Tarif</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -355,7 +346,6 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
                             <td className="px-3 py-2">{c.originStopName || '—'}</td>
                             <td className="px-3 py-2">{c.destinationStopName || '—'}</td>
                             <td className="px-3 py-2 text-right">{c.weightKg ? parseFloat(c.weightKg).toFixed(1) : '—'}</td>
-                            <td className="px-3 py-2 text-right">{fmtCurrency(c.totalAmount)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -367,7 +357,7 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
               {/* ─── SUMMARY ─── */}
               <div>
                 <Separator className="mb-4" />
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div className="bg-muted/40 border rounded-lg p-3 text-center">
                     <div className="text-xs text-muted-foreground mb-1">Total Penumpang</div>
                     <div className="text-2xl font-bold">{manifest.summary.totalPassengers}</div>
@@ -377,13 +367,6 @@ export default function ManifestDialog({ tripId, open, onOpenChange }: ManifestD
                     <div className="text-xs text-muted-foreground mb-1">Total Kargo</div>
                     <div className="text-2xl font-bold">{manifest.summary.totalCargoItems}</div>
                     <div className="text-xs text-muted-foreground">{manifest.summary.totalCargoWeight > 0 ? `${manifest.summary.totalCargoWeight} kg` : 'kiriman'}</div>
-                  </div>
-                  <div className="bg-muted/40 border rounded-lg p-3 text-center col-span-2 md:col-span-1">
-                    <div className="text-xs text-muted-foreground mb-1">Total Pendapatan</div>
-                    <div className="text-lg font-bold">{fmtCurrency(manifest.summary.totalRevenue)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      Tiket: {fmtCurrency(manifest.summary.totalTicketRevenue)} &bull; Kargo: {fmtCurrency(manifest.summary.totalCargoRevenue)}
-                    </div>
                   </div>
                 </div>
               </div>
