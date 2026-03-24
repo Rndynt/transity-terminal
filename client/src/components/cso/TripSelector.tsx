@@ -554,10 +554,17 @@ export default function TripSelector({
     } catch { return null; }
   };
 
-  const shortenRoutePath = (path: string): string => {
+  const getOriginDestination = (path: string): string => {
     const parts = path.split(' → ');
-    if (parts.length <= 3) return path;
-    return `${parts[0]} → ... → ${parts[parts.length - 1]}`;
+    if (parts.length <= 2) return path;
+    return `${parts[0]} → ${parts[parts.length - 1]}`;
+  };
+
+  const getViaStops = (path: string): string | null => {
+    const parts = path.split(' → ');
+    if (parts.length <= 2) return null;
+    const via = parts.slice(1, -1);
+    return `via ${via.join(' → ')}`;
   };
 
   const filteredTrips = useMemo(() => {
@@ -744,12 +751,15 @@ export default function TripSelector({
                       {group.trips.length} jadwal
                     </span>
                   </div>
-                  <p
-                    className="text-xs text-gray-600 font-medium mt-0.5"
-                    title={group.path}
-                  >
-                    {shortenRoutePath(group.path)}
+                  <p className="text-xs text-gray-600 font-medium mt-0.5">
+                    {getOriginDestination(group.path)}
                   </p>
+                  {getViaStops(group.path) && (
+                    <p className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1">
+                      <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
+                      {getViaStops(group.path)}
+                    </p>
+                  )}
                 </div>
                 <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ${collapsedRoutes.has(group.key) ? '-rotate-90' : ''}`} />
               </button>
