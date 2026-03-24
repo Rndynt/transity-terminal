@@ -1,9 +1,12 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
-  CalendarRange, ChevronLeft, ChevronRight, Plus, Bus,
-  Clock, Users, Ban
+  CalendarRange, ChevronLeft, ChevronRight, Plus, Bus, Truck,
+  Clock, Users, Ban, MapPin, User, AlertTriangle, ArrowRight,
+  CheckCircle, X, Pencil, ExternalLink
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -70,7 +73,7 @@ const MOCK_DATA: ScheduleItem[] = [
   { id: '8', type: 'trip', routeName: 'Semarang → Yogyakarta', routeCode: 'SMG-YGY-02', departureTime: '20:00', hour: 20, vehiclePlate: 'AB 1234 CD', driverName: 'Dani', status: 'scheduled', seatsBooked: 5, seatsTotal: 8 },
 ];
 
-function ScheduleChip({ item }: { item: ScheduleItem }) {
+function ScheduleChip({ item, onSelect }: { item: ScheduleItem; onSelect?: (item: ScheduleItem) => void }) {
   if (item.type === 'exception') {
     return (
       <Tooltip>
@@ -78,6 +81,7 @@ function ScheduleChip({ item }: { item: ScheduleItem }) {
           <div
             className="px-1.5 py-1 rounded text-[10px] leading-tight cursor-pointer border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 flex items-center gap-1"
             data-testid={`chip-exception-${item.id}`}
+            onClick={() => onSelect?.(item)}
           >
             <Ban className="w-3 h-3 shrink-0" />
             <span className="truncate font-medium">{item.routeCode}</span>
@@ -98,6 +102,7 @@ function ScheduleChip({ item }: { item: ScheduleItem }) {
           <div
             className="px-1.5 py-1 rounded text-[10px] leading-tight cursor-pointer border border-dashed border-muted-foreground/30 bg-muted/30 text-muted-foreground flex items-center gap-1 hover:border-primary/40 hover:bg-primary/5 transition-colors"
             data-testid={`chip-virtual-${item.id}`}
+            onClick={() => onSelect?.(item)}
           >
             <Clock className="w-3 h-3 shrink-0 opacity-60" />
             <span className="truncate">{item.routeCode}</span>
@@ -127,6 +132,7 @@ function ScheduleChip({ item }: { item: ScheduleItem }) {
         <div
           className={cn("px-1.5 py-1 rounded text-[10px] leading-tight cursor-pointer border transition-shadow hover:shadow-sm", colorClass)}
           data-testid={`chip-trip-${item.id}`}
+          onClick={() => onSelect?.(item)}
         >
           <div className="flex items-center gap-1">
             <Bus className="w-3 h-3 shrink-0" />
@@ -153,10 +159,173 @@ function ScheduleChip({ item }: { item: ScheduleItem }) {
   );
 }
 
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  scheduled: { label: 'Terjadwal', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' },
+  on_progress: { label: 'Dalam Perjalanan', color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
+  arrived: { label: 'Tiba', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' },
+  closed: { label: 'Ditutup', color: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
+  cancelled: { label: 'Dibatalkan', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' },
+};
+
+function ScheduleDetailDialog({ item, open, onClose }: { item: ScheduleItem | null; open: boolean; onClose: () => void }) {
+  if (!item) return null;
+
+  if (item.type === 'exception') {
+    return (
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Ban className="w-5 h-5 text-red-500" />
+              Jadwal Dibatalkan
+            </DialogTitle>
+            <DialogDescription>Detail pembatalan jadwal</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 rounded-lg border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-4 h-4 text-red-500" />
+                <span className="text-sm font-medium text-red-700 dark:text-red-300">Alasan Pembatalan</span>
+              </div>
+              <p className="text-sm text-red-600 dark:text-red-400">{item.exceptionReason || '—'}</p>
+            </div>
+
+            <div className="space-y-3">
+              <DetailRow icon={MapPin} label="Rute" value={item.routeName} />
+              <DetailRow icon={Bus} label="Kode" value={item.routeCode} mono />
+              <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  if (item.type === 'virtual') {
+    return (
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-muted-foreground" />
+              Jadwal Virtual
+            </DialogTitle>
+            <DialogDescription>Jadwal ini belum di-materialize menjadi trip</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20">
+              <p className="text-xs text-muted-foreground">Jadwal virtual akan otomatis aktif saat ada booking pertama, atau bisa di-materialize manual.</p>
+            </div>
+
+            <div className="space-y-3">
+              <DetailRow icon={MapPin} label="Rute" value={item.routeName} />
+              <DetailRow icon={Bus} label="Kode" value={item.routeCode} mono />
+              <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
+              <DetailRow icon={Users} label="Kapasitas" value={`${item.seatsTotal} kursi`} />
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
+            <Button variant="destructive" size="sm" className="gap-1.5" data-testid="btn-cancel-schedule">
+              <Ban className="w-3.5 h-3.5" /> Batalkan Jadwal
+            </Button>
+            <Button size="sm" className="gap-1.5" data-testid="btn-materialize">
+              <CheckCircle className="w-3.5 h-3.5" /> Aktifkan Trip
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  const statusInfo = STATUS_LABELS[item.status || 'scheduled'] || STATUS_LABELS.scheduled;
+  const occupancy = item.seatsBooked !== undefined && item.seatsTotal
+    ? Math.round((item.seatsBooked / item.seatsTotal) * 100)
+    : 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Bus className="w-5 h-5 text-primary" />
+            Detail Trip
+          </DialogTitle>
+          <DialogDescription>Informasi trip yang sudah aktif</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-mono font-semibold">{item.routeCode}</span>
+            <Badge className={cn("text-xs", statusInfo.color)}>{statusInfo.label}</Badge>
+          </div>
+
+          <div className="space-y-3">
+            <DetailRow icon={MapPin} label="Rute" value={item.routeName} />
+            <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
+            <DetailRow icon={User} label="Driver" value={item.driverName || '—'} />
+            <DetailRow icon={Truck} label="Kendaraan" value={item.vehiclePlate || '—'} mono />
+          </div>
+
+          {item.seatsBooked !== undefined && item.seatsTotal && (
+            <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5" /> Okupansi
+                </span>
+                <span className="text-sm font-semibold">{item.seatsBooked}/{item.seatsTotal} kursi</span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    occupancy >= 80 ? "bg-green-500" : occupancy >= 50 ? "bg-blue-500" : occupancy > 0 ? "bg-amber-500" : "bg-gray-300"
+                  )}
+                  style={{ width: `${occupancy}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>{item.seatsTotal - item.seatsBooked} kursi tersisa</span>
+                <span>{occupancy}% terisi</span>
+              </div>
+            </div>
+          )}
+        </div>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
+          {item.status === 'scheduled' && (
+            <Button variant="destructive" size="sm" className="gap-1.5" data-testid="btn-close-trip">
+              <X className="w-3.5 h-3.5" /> Tutup Trip
+            </Button>
+          )}
+          <Button size="sm" variant="outline" className="gap-1.5" data-testid="btn-view-manifest">
+            <ExternalLink className="w-3.5 h-3.5" /> Lihat Manifest
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailRow({ icon: Icon, label, value, mono }: { icon: any; label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center gap-3">
+      <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
+      <div className="min-w-0">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
+        <p className={cn("text-sm font-medium truncate", mono && "font-mono")}>{value}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function SchedulerPage() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
+  const [selectedItem, setSelectedItem] = useState<ScheduleItem | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const dates = useMemo(() => getMonthDates(year, month), [year, month]);
@@ -312,7 +481,7 @@ export default function SchedulerPage() {
                     {items.length > 0 ? (
                       <div className="p-0.5 space-y-0.5">
                         {items.map(item => (
-                          <ScheduleChip key={item.id} item={item} />
+                          <ScheduleChip key={item.id} item={item} onSelect={setSelectedItem} />
                         ))}
                       </div>
                     ) : (
@@ -327,6 +496,12 @@ export default function SchedulerPage() {
           ))}
         </div>
       </div>
+
+      <ScheduleDetailDialog
+        item={selectedItem}
+        open={!!selectedItem}
+        onClose={() => setSelectedItem(null)}
+      />
     </div>
   );
 }
