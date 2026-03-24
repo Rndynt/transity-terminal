@@ -186,15 +186,29 @@ export default function TripPatternsManager() {
   const handleManageStops = (pattern: TripPattern) => {
     setSelectedPatternForStops(pattern);
     setIsStopsDialogOpen(true);
-    tripPatternsApi.getStops(pattern.id).then(stops => {
-      setPatternStops(stops.map(stop => ({
-        stopId: stop.stopId,
-        stopSequence: stop.stopSequence,
-        dwellSeconds: stop.dwellSeconds || 0,
-        boardingAllowed: stop.boardingAllowed,
-        alightingAllowed: stop.alightingAllowed
-      })));
-    });
+
+    const inlineStops = (pattern as any).patternStops as Array<any> | undefined;
+    if (inlineStops && inlineStops.length > 0) {
+      setPatternStops(inlineStops
+        .sort((a: any, b: any) => a.stopSequence - b.stopSequence)
+        .map((stop: any) => ({
+          stopId: stop.stopId,
+          stopSequence: stop.stopSequence,
+          dwellSeconds: stop.dwellSeconds || 0,
+          boardingAllowed: stop.boardingAllowed,
+          alightingAllowed: stop.alightingAllowed
+        })));
+    } else {
+      tripPatternsApi.getStops(pattern.id).then(stops => {
+        setPatternStops(stops.map(stop => ({
+          stopId: stop.stopId,
+          stopSequence: stop.stopSequence,
+          dwellSeconds: stop.dwellSeconds || 0,
+          boardingAllowed: stop.boardingAllowed,
+          alightingAllowed: stop.alightingAllowed
+        })));
+      });
+    }
   };
 
   const addPatternStop = () => {
