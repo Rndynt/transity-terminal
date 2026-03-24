@@ -5,7 +5,7 @@ import { ManifestEntry, ManifestFull, ManifestCargoEntry } from "../storage.inte
 import {
   tripPatterns, patternStops, tripBases, trips, tripStopTimes, tripLegs,
   seatInventory, seatHolds, priceRules, stops, vehicles, drivers, bookings, passengers,
-  cargoShipments,
+  cargoShipments, scheduleExceptions,
   type TripPattern, type InsertTripPattern,
   type PatternStop, type InsertPatternStop, type Stop,
   type TripBase, type InsertTripBase,
@@ -373,10 +373,17 @@ export class SchedulingRepository {
   private async getVirtualTripsForCso(serviceDate: string, outletStopId: string): Promise<CsoAvailableTrip[]> {
     const eligibleBases = await this.getEligibleTripBases(serviceDate);
     if (eligibleBases.length === 0) return [];
+
+    const exceptions = await db.select({ baseId: scheduleExceptions.baseId })
+      .from(scheduleExceptions)
+      .where(eq(scheduleExceptions.exceptionDate, serviceDate));
+    const exceptedBaseIds = new Set(exceptions.map(e => e.baseId));
+    const filteredBases = eligibleBases.filter(b => !exceptedBaseIds.has(b.id));
+    if (filteredBases.length === 0) return [];
     
     const allPriceRules = await this.getPriceRules();
     
-    const uniquePatternIds = [...new Set(eligibleBases.map(b => b.patternId))];
+    const uniquePatternIds = [...new Set(filteredBases.map(b => b.patternId))];
     
     const [allPatterns, allPatternStopsRows, patternPathRows] = await Promise.all([
       db.select().from(tripPatterns).where(inArray(tripPatterns.id, uniquePatternIds)),
@@ -409,7 +416,7 @@ export class SchedulingRepository {
     
     const virtualTrips: CsoAvailableTrip[] = [];
     
-    for (const base of eligibleBases) {
+    for (const base of filteredBases) {
       try {
         const pattern = patternsMap.get(base.patternId);
         if (!pattern) continue;
