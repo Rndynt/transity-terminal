@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { EmptyState } from '@/components/ui/empty-state';
 import ManifestDialog from '@/components/manifest/ManifestDialog';
 import {
-  CalendarDays, ChevronLeft, ChevronRight, Search, Bus, Clock, Users, MapPin,
+  CalendarDays, ChevronLeft, ChevronRight, Search, Bus, Clock, Users,
   User, FileText, ClipboardList, AlertCircle, CheckCircle
 } from 'lucide-react';
 import type { TripWithDetails, TripPattern, Driver, SpjWithDetails } from '@/types';
@@ -246,88 +246,83 @@ export default function SchedulePage() {
                   className="border hover:shadow-sm transition-shadow"
                   data-testid={`schedule-trip-${trip.id}`}
                 >
-                  <CardContent className="p-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-start gap-3 min-w-0 flex-1">
-                        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                          <MapPin className="w-4 h-4 text-primary" />
+                  <CardContent className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-sm leading-tight">{patternName}</span>
+                          {patternCode && (
+                            <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{patternCode}</span>
+                          )}
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="font-semibold text-sm">{patternName}</span>
-                            {patternCode && (
-                              <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{patternCode}</span>
-                            )}
-                            <TripStatusBadge status={trip.status ?? 'scheduled'} />
-                          </div>
 
-                          <div className="flex items-center gap-4 flex-wrap text-xs text-muted-foreground">
-                            {departTime && (
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                <span className="font-semibold tabular-nums text-foreground">{departTime}</span>
-                              </span>
-                            )}
-                            {vehicleCode && (
-                              <span className="flex items-center gap-1">
-                                <Bus className="w-3 h-3" />
-                                {vehicleCode} · {vehiclePlate}
-                              </span>
-                            )}
+                        <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                          <TripStatusBadge status={trip.status ?? 'scheduled'} />
+                          {departTime && (
                             <span className="flex items-center gap-1">
-                              <Users className="w-3 h-3" />
-                              {trip.capacity} kursi
+                              <Clock className="w-3 h-3" />
+                              <span className="font-semibold tabular-nums text-foreground">{departTime}</span>
                             </span>
-                          </div>
+                          )}
+                          {vehicleCode && (
+                            <span className="flex items-center gap-1">
+                              <Bus className="w-3 h-3" />
+                              {vehicleCode} · {vehiclePlate}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <Users className="w-3 h-3" />
+                            {trip.capacity} kursi
+                          </span>
+                        </div>
 
-                          <div className="mt-2 flex items-center gap-3 flex-wrap">
-                            {hasDriver ? (
-                              <button
-                                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors cursor-pointer"
-                                onClick={() => openDriverDialog(trip)}
-                                data-testid={`btn-driver-${trip.id}`}
-                              >
-                                <User className="w-3 h-3" />
-                                <span className="font-medium">{driverName}</span>
-                              </button>
-                            ) : (
-                              <button
-                                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
-                                onClick={() => openDriverDialog(trip)}
-                                data-testid={`btn-driver-${trip.id}`}
-                              >
-                                <AlertCircle className="w-3 h-3" />
-                                <span className="font-medium">Assign Driver</span>
-                              </button>
-                            )}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {hasDriver ? (
+                            <button
+                              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors cursor-pointer"
+                              onClick={() => openDriverDialog(trip)}
+                              data-testid={`btn-driver-${trip.id}`}
+                            >
+                              <User className="w-3 h-3" />
+                              <span className="font-medium">{driverName}</span>
+                            </button>
+                          ) : (
+                            <button
+                              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
+                              onClick={() => openDriverDialog(trip)}
+                              data-testid={`btn-driver-${trip.id}`}
+                            >
+                              <AlertCircle className="w-3 h-3" />
+                              <span className="font-medium">Assign Driver</span>
+                            </button>
+                          )}
 
-                            {existingSpj ? (
-                              <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
-                                <CheckCircle className="w-3 h-3" />
-                                SPJ: {existingSpj.spjNumber}
-                              </span>
-                            ) : (
-                              <CanAccess flag="action.spj.create">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs gap-1"
-                                  onClick={() => createSpjMutation.mutate(trip.id)}
-                                  disabled={createSpjMutation.isPending || !hasDriver}
-                                  data-testid={`btn-create-spj-${trip.id}`}
-                                >
-                                  <ClipboardList className="w-3 h-3" />
-                                  Buat SPJ
-                                </Button>
-                              </CanAccess>
-                            )}
-                          </div>
+                          {existingSpj ? (
+                            <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                              <CheckCircle className="w-3 h-3" />
+                              SPJ: {existingSpj.spjNumber}
+                            </span>
+                          ) : (
+                            <CanAccess flag="action.spj.create">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                onClick={() => createSpjMutation.mutate(trip.id)}
+                                disabled={createSpjMutation.isPending || !hasDriver}
+                                data-testid={`btn-create-spj-${trip.id}`}
+                              >
+                                <ClipboardList className="w-3 h-3" />
+                                Buat SPJ
+                              </Button>
+                            </CanAccess>
+                          )}
                         </div>
                       </div>
 
                       <Button
                         size="sm"
-                        className="shrink-0 gap-1.5 self-start"
+                        className="shrink-0 gap-1.5"
                         onClick={() => setManifestTripId(trip.id)}
                         data-testid={`btn-manifest-${trip.id}`}
                       >
@@ -365,7 +360,7 @@ export default function SchedulePage() {
             <div className="space-y-4">
               <div className="p-3 rounded-lg bg-muted/30 border space-y-1">
                 <div className="flex items-center gap-2 text-sm">
-                  <MapPin className="w-3.5 h-3.5 text-primary" />
+                  <Bus className="w-3.5 h-3.5 text-primary" />
                   <span className="font-medium">{getPatternName(driverDialogTrip.patternId)}</span>
                 </div>
                 <div className="flex gap-3 text-xs text-muted-foreground pl-5">
