@@ -407,7 +407,7 @@ export default function SchedulerPage() {
       </div>
 
       <div className="flex-1 overflow-auto relative" ref={scrollRef}>
-        <div style={{ width: gridWidth, minHeight: HOURS.length * CELL_H + 48 }} className="relative">
+        <div style={{ width: gridWidth, minHeight: HOURS.length * CELL_H + 48 + 120 }} className="relative">
 
           <div
             className="sticky top-0 z-30 flex bg-white dark:bg-gray-950 border-b"
