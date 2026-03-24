@@ -22,6 +22,11 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
     reply.send(items);
   });
 
+  app.get('/api/scheduler/pattern-stop-map', async (_req: FastifyRequest, reply: FastifyReply) => {
+    const map = await schedulerService.getPatternStopMap();
+    reply.send(map);
+  });
+
   app.post('/api/scheduler/exceptions', { preHandler: [requireFlag('action.trip.close')] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const schema = z.object({
       baseId: z.string().uuid(),

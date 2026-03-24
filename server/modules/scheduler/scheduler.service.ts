@@ -3,9 +3,8 @@ import { TripBasesService } from "../tripBases/tripBases.service";
 import { TripBase, TripWithDetails } from "@shared/schema";
 import { ensureDefaultTimezone } from "../../utils/timezone";
 import { db } from "../../db";
-import { sql } from "drizzle-orm";
-import { scheduleExceptions } from "@shared/schema/scheduling";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { sql, inArray, and, eq, gte, lte, isNull } from "drizzle-orm";
+import { scheduleExceptions, patternStops } from "@shared/schema/scheduling";
 
 export type CalendarItem = {
   id: string;
@@ -24,6 +23,7 @@ export type CalendarItem = {
   seatsBooked?: number;
   exceptionId?: string | null;
   exceptionReason?: string | null;
+  patternId?: string | null;
 };
 
 export class SchedulerService {
@@ -71,6 +71,7 @@ export class SchedulerService {
         status: trip.status || 'scheduled',
         capacity: trip.capacity,
         seatsBooked: bookingCounts.get(trip.id) || 0,
+        patternId: trip.patternId || null,
       });
     }
 
@@ -123,6 +124,7 @@ export class SchedulerService {
                 seatsBooked: 0,
                 exceptionId: exception.id,
                 exceptionReason: exception.reason,
+                patternId: base.patternId || null,
               });
             } else {
               items.push({
@@ -140,6 +142,7 @@ export class SchedulerService {
                 status: null,
                 capacity: base.capacity || null,
                 seatsBooked: 0,
+                patternId: base.patternId || null,
               });
             }
           }
@@ -155,6 +158,22 @@ export class SchedulerService {
     });
 
     return items;
+  }
+
+  async getPatternStopMap(): Promise<Record<string, string[]>> {
+    const rows = await db.select({
+      patternId: patternStops.patternId,
+      stopId: patternStops.stopId,
+    })
+    .from(patternStops)
+    .where(isNull(patternStops.deletedAt));
+
+    const map: Record<string, string[]> = {};
+    for (const row of rows) {
+      if (!map[row.patternId]) map[row.patternId] = [];
+      map[row.patternId].push(row.stopId);
+    }
+    return map;
   }
 
   async addException(baseId: string, exceptionDate: string, reason?: string, createdBy?: string) {

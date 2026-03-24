@@ -4,14 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   CalendarRange, ChevronLeft, ChevronRight, Plus, Bus, Truck,
   Clock, Users, Ban, MapPin, User, AlertTriangle,
-  CheckCircle, X, ExternalLink, Loader2
+  CheckCircle, X, ExternalLink, Loader2, Building2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { outletsApi } from '@/lib/api';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const TIME_COL_W = 56;
@@ -74,6 +76,7 @@ type CalendarItem = {
   seatsBooked?: number;
   exceptionId?: string | null;
   exceptionReason?: string | null;
+  patternId?: string | null;
 };
 
 function stripTimeFromCode(code: string): string {
@@ -501,6 +504,7 @@ export default function SchedulerPage() {
   const [month, setMonth] = useState(today.getMonth());
   const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null);
   const [emptyCell, setEmptyCell] = useState<EmptyCellInfo | null>(null);
+  const [selectedOutletId, setSelectedOutletId] = useState<string>('all');
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -508,6 +512,22 @@ export default function SchedulerPage() {
   const gridWidth = TIME_COL_W + dates.length * CELL_W;
   const fromDate = dates[0];
   const toDate = dates[dates.length - 1];
+
+  const { data: outlets = [] } = useQuery<{ id: string; name: string; stopId: string }[]>({
+    queryKey: ['/api/outlets'],
+    queryFn: () => outletsApi.getAll(),
+    staleTime: 60_000,
+  });
+
+  const { data: patternStopMap = {} } = useQuery<Record<string, string[]>>({
+    queryKey: ['/api/scheduler/pattern-stop-map'],
+    queryFn: async () => {
+      const res = await fetch('/api/scheduler/pattern-stop-map');
+      if (!res.ok) throw new Error('Failed to load pattern stops');
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
 
   const { data: calendarItems = [], isLoading } = useQuery<CalendarItem[]>({
     queryKey: ['/api/scheduler/calendar', fromDate, toDate],
@@ -519,15 +539,26 @@ export default function SchedulerPage() {
     staleTime: 30_000,
   });
 
+  const filteredItems = useMemo(() => {
+    if (selectedOutletId === 'all') return calendarItems;
+    const outlet = outlets.find(o => o.id === selectedOutletId);
+    if (!outlet) return calendarItems;
+    return calendarItems.filter(item => {
+      if (!item.patternId) return false;
+      const stopIds = patternStopMap[item.patternId];
+      return stopIds?.includes(outlet.stopId);
+    });
+  }, [calendarItems, selectedOutletId, outlets, patternStopMap]);
+
   const itemsByDateHour = useMemo(() => {
     const map = new Map<string, CalendarItem[]>();
-    for (const item of calendarItems) {
+    for (const item of filteredItems) {
       const key = `${item.serviceDate}-${item.hour}`;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(item);
     }
     return map;
-  }, [calendarItems]);
+  }, [filteredItems]);
 
   const getItemsForCell = useCallback((dateStr: string, hour: number): CalendarItem[] => {
     return itemsByDateHour.get(`${dateStr}-${hour}`) || [];
@@ -636,6 +667,18 @@ export default function SchedulerPage() {
             <h1 className="text-lg font-semibold">Penjadwalan</h1>
           </div>
           <div className="flex items-center gap-2">
+            <Select value={selectedOutletId} onValueChange={setSelectedOutletId}>
+              <SelectTrigger className="h-8 w-[180px] text-xs" data-testid="select-outlet-filter">
+                <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground shrink-0" />
+                <SelectValue placeholder="Semua Outlet" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Outlet</SelectItem>
+                {outlets.map(o => (
+                  <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <div className="flex items-center border rounded-lg overflow-hidden">
               <Button variant="ghost" size="sm" className="rounded-none h-8 px-2" onClick={prevMonth} data-testid="btn-prev-month">
                 <ChevronLeft className="w-4 h-4" />
