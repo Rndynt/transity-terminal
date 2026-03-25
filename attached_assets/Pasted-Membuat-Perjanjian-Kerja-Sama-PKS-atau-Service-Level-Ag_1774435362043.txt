@@ -1,0 +1,43 @@
+Membuat Perjanjian Kerja Sama (PKS) atau Service Level Agreement (SLA) untuk pemakaian sistem/software perusahaan membutuhkan kombinasi klausul hukum yang kuat (untuk mitigasi risiko) dan klausul bisnis yang jelas (untuk operasional). PKS ini memastikan kepastian hukum, hak dan kewajiban, serta penyelesaian sengketa. 
+hvbi law office
+hvbi law office
+ +1
+Berikut adalah panduan membuat PKS pemakaian sistem:
+1. Anatomi & Struktur PKS Pemakaian Sistem
+PKS harus memuat komponen penting berikut untuk menjamin aspek hukum dan bisnis: 
+Universitas Sains dan Teknologi Komputer
+Universitas Sains dan Teknologi Komputer
+ +2
+Identitas Para Pihak: PT A (Pemilik Sistem) dan PT B (Pengguna), mencantumkan nama perwakilan resmi.
+Ruang Lingkup (Objek Kerjasama): Jelaskan sistem apa yang digunakan (nama aplikasi/modul), apakah lisensi SaaS (Software as a Service), lisensi on-premise, atau maintenance.
+Hak dan Kewajiban Pihak Pertama (Penyedia): Menyediakan sistem, dukungan teknis, update, dan keamanan data.
+Hak dan Kewajiban Pihak Kedua (Pengguna): Membayar biaya, menjaga kerahasiaan username/password, dan mematuhi batasan penggunaan (tidak membajak/memodifikasi).
+Biaya & Ketentuan Pembayaran: Nominal, metode pembayaran, pajak (PPN/PPh), dan denda keterlambatan pembayaran.
+Jangka Waktu & Perpanjangan: Kapan sistem mulai digunakan dan kapan kontrak berakhir.
+Kerahasiaan Data (Non-Disclosure Agreement/NDA): Pihak penyedia dilarang menyalahgunakan data pengguna yang tersimpan di sistem.
+Keamanan Data & Data Ownership: Menegaskan bahwa data tetap milik pengguna (PT B), dan prosedur jika terjadi kebocoran data.
+Tingkat Layanan (Service Level Agreement/SLA): Garansi uptime sistem (misal 99.9%), waktu respon perbaikan, dan penalti jika sistem down.
+Penyelesaian Sengketa: Melalui musyawarah, dan jika gagal, melalui arbitrase atau pengadilan negeri. 
+Practical Law
+Practical Law
+ +6
+2. Poin Penting Aspek Hukum (Anak Hukum)
+Pembatasan Tanggung Jawab (Limitation of Liability): Pihak penyedia biasanya membatasi ganti rugi maksimal sebesar biaya yang dibayarkan pengguna dalam jangka waktu tertentu, terutama untuk kerugian tidak langsung.
+Hak Kekayaan Intelektual (HAKI): Tegaskan bahwa kode program, logo, dan desain sistem adalah hak milik penyedia. Pengguna hanya diberi hak guna (lisensi).
+Force Majeure: Kondisi di luar kendali (bencana alam, serangan siber masif) yang membebaskan pihak dari kewajiban sementara.
+Pemutusan Perjanjian (Termination): Mengatur kondisi yang membolehkan salah satu pihak memutus kontrak (misal: gagal bayar, sistem tidak aktif). 
+Icertis
+Icertis
+ +4
+3. Poin Penting Aspek Bisnis
+Metode Implementasi: Apakah ada biaya implementasi awal (onboarding fee)?
+Pelatihan & Dukungan: Apakah termasuk pelatihan staf dan support 24/7?
+Skalabilitas: Prosedur jika perusahaan menambah pengguna (user) atau modul sistem.
+Keluar dari Sistem (Exit Strategy): Bagaimana prosedur migrasi data keluar dari sistem jika kontrak berakhir. 
+LexisNexis
+LexisNexis
+4. Tahapan Penyusunan PKS
+Drafting: Menyiapkan draft, pastikan menggunakan materai yang cukup.
+Negosiasi: Membahas SLA, penalti, dan harga.
+Review Hukum (Legal Review): Memastikan semua klausul sesuai peraturan perundang-undangan (misal UU ITE dan UU Perlindungan Data Pribadi).
+Penandatanganan: Ditandatangani oleh perwakilan sah (Direksi/kuasa direksi). 
