@@ -87,9 +87,16 @@ export const cargoShipmentsRelations = relations(cargoShipments, ({ one }) => ({
   cargoType: one(cargoTypes, { fields: [cargoShipments.cargoTypeId], references: [cargoTypes.id] })
 }));
 
+const numericCoerce = z.union([z.string(), z.number().transform(String)]);
 export const insertCargoShipmentSchema = createInsertSchema(cargoShipments)
   .omit({ id: true, createdAt: true })
   .extend({
+    weightKg: numericCoerce.optional().nullable(),
+    lengthCm: numericCoerce.optional().nullable(),
+    widthCm: numericCoerce.optional().nullable(),
+    heightCm: numericCoerce.optional().nullable(),
+    declaredValue: numericCoerce.optional().nullable(),
+    totalAmount: numericCoerce,
     paidAt: z.union([z.date(), z.string().transform(s => new Date(s))]).optional().nullable()
   });
 export type CargoShipment = typeof cargoShipments.$inferSelect;
