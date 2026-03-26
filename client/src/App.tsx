@@ -15,6 +15,7 @@ const LoginPage = lazy(() => import("@/pages/auth/LoginPage"));
 const CsoPage = lazy(() => import("@/pages/cso/CsoPage"));
 const MastersPage = lazy(() => import("@/pages/masters/MastersPage"));
 const CargoListPage = lazy(() => import("@/pages/cargo/CargoListPage"));
+const CargoTerminalPage = lazy(() => import("@/pages/cargo/CargoTerminalPage"));
 const ManifestPage = lazy(() => import("@/pages/manifest/ManifestPage"));
 const AllBookingsPage = lazy(() => import("@/pages/bookings/AllBookingsPage"));
 const SpjPage = lazy(() => import("@/pages/spj/SpjPage"));
@@ -80,6 +81,11 @@ function Router() {
                     <Route path="/cso">
                       <RequireFlag flag="page.cso">
                         <CsoPage />
+                      </RequireFlag>
+                    </Route>
+                    <Route path="/cargo-terminal">
+                      <RequireFlag flag="page.cargo">
+                        <CargoTerminalPage />
                       </RequireFlag>
                     </Route>
                     <Route path="/cargo">

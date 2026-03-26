@@ -4,7 +4,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   MapPin, Store, Truck, UserCheck, LayoutGrid, Route, Calendar, DollarSign,
   Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText, BadgePercent, ClipboardList, CalendarDays, CalendarRange, LogOut,
-  BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard, ShieldCheck, Receipt
+  BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard, ShieldCheck, Receipt, Send
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { usePermissions } from "@/lib/permissions";
@@ -14,7 +14,8 @@ const NAV_SECTIONS = [
     title: "OPERASIONAL",
     items: [
       { name: "Reservasi", path: "/cso", icon: Ticket, flag: "page.cso" },
-      { name: "Kargo", path: "/cargo", icon: Package, flag: "page.cargo" },
+      { name: "Kargo", path: "/cargo-terminal", icon: Send, flag: "page.cargo" },
+      { name: "All Kargo", path: "/cargo", icon: Package, flag: "page.cargo" },
       { name: "All Bookings", path: "/bookings", icon: List, flag: "page.bookings" },
       { name: "Jadwal Harian", path: "/schedule", icon: CalendarDays, flag: "page.schedule" },
       { name: "Penjadwalan", path: "/scheduler", icon: CalendarRange, flag: "page.schedule" },

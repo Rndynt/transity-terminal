@@ -166,7 +166,7 @@ export function SearchableSelect({
               grouped.map(({ group, items }, gi) => (
                 <div key={gi}>
                   {group && (
-                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/30 border-b border-border/50 sticky top-0">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-background border-b border-border/50 sticky top-0 z-10">
                       {group}
                     </div>
                   )}
