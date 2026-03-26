@@ -98,6 +98,10 @@ export class CargoService {
       }
     }
 
+    if (data.paymentMethod && !data.paidAt) {
+      data = { ...data, paidAt: new Date() };
+    }
+
     const maxRetries = 20;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const waybillNumber = this.generateWaybillNumber();
