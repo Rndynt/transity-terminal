@@ -95,17 +95,17 @@ function OutletSearchSelect({ value, outlets, stops, placeholder, onChange, test
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`w-full h-10 bg-white border rounded-xl px-3 flex items-center gap-2 text-sm transition-all ${
+        className={`w-full h-9 bg-white border rounded-xl px-3 flex items-center gap-2 text-sm transition-all ${
           open ? 'border-blue-400 ring-2 ring-blue-100 shadow-sm' : 'border-gray-200 hover:border-gray-300'
         }`}
         data-testid={testId}
       >
-        <Store className="w-4 h-4 text-gray-400 flex-shrink-0" />
-        <span className={`flex-1 text-left truncate ${selectedOutlet ? 'text-gray-800' : 'text-gray-400'}`}>
+        <Store className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+        <span className={`flex-1 text-left truncate text-xs ${selectedOutlet ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>
           {selectedOutlet ? selectedOutlet.name : placeholder}
         </span>
         {selectedOutlet && (
-          <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">
+          <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
             {getCity(selectedOutlet)}
           </span>
         )}
@@ -238,13 +238,13 @@ function CustomDatePicker({ value, onChange, testId }: {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`w-full h-10 bg-white border rounded-xl px-3 flex items-center gap-2 text-sm transition-all ${
+        className={`w-full h-9 bg-white border rounded-xl px-3 flex items-center gap-2 text-sm transition-all ${
           open ? 'border-blue-400 ring-2 ring-blue-100 shadow-sm' : 'border-gray-200 hover:border-gray-300'
         }`}
         data-testid={testId}
       >
-        <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
-        <span className="flex-1 text-left text-gray-800 truncate">{formatDisplayDate(value)}</span>
+        <Calendar className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+        <span className="flex-1 text-left text-gray-800 truncate text-xs font-medium">{formatDisplayDate(value)}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
@@ -636,95 +636,102 @@ export default function TripSelector({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
-          Pilih Jadwal
-          {tripsFetching && !tripsLoading && (
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-          )}
-        </h3>
-        <span className="text-[10px] text-gray-400">{filteredTrips.length} jadwal</span>
-      </div>
-
-      <div className="space-y-2.5">
-        <div className="space-y-1">
-          <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-            <Store className="w-3 h-3" /> Outlet
-            {lockedOutletId && <Lock className="w-3 h-3 text-orange-400 ml-1" />}
-          </label>
-          {lockedOutletId ? (
-            <div className="h-10 px-3 flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 text-sm text-gray-700">
-              <Lock className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
-              <span className="truncate">{selectedOutlet?.name || '...'}</span>
-            </div>
-          ) : (
-            <OutletSearchSelect
-              value={selectedOutlet?.id || ''}
-              outlets={outlets}
-              stops={stops}
-              placeholder="Pilih outlet..."
-              onChange={(val) => {
-                const outlet = outlets.find(o => o.id === val);
-                if (outlet) onOutletSelect(outlet);
-              }}
-              testId="select-outlet"
-            />
-          )}
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-            <Calendar className="w-3 h-3" /> Tanggal
-          </label>
+      <div className="border border-gray-200 rounded-xl p-3 bg-white space-y-3">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                const d = new Date(selectedDate + 'T00:00:00');
-                d.setDate(d.getDate() - 1);
-                setSelectedDate(formatDateStr(d));
-              }}
-              className="flex-shrink-0 w-8 h-10 flex items-center justify-center border border-gray-200 rounded-xl text-gray-400 hover:text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all"
-              data-testid="btn-prev-date"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <div className="flex-1 min-w-0">
-              <CustomDatePicker
-                value={selectedDate}
-                onChange={setSelectedDate}
-                testId="input-date"
+            <Route className="w-3.5 h-3.5 text-blue-600" />
+            <span className="text-xs font-semibold text-gray-700">Pilih Jadwal</span>
+            {tripsFetching && !tripsLoading && (
+              <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+            )}
+          </div>
+          <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-md font-medium">{filteredTrips.length} jadwal</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block flex items-center gap-1">
+              <Store className="w-3 h-3" /> Outlet
+              {lockedOutletId && <Lock className="w-3 h-3 text-orange-400 ml-0.5" />}
+            </label>
+            {lockedOutletId ? (
+              <div className="h-9 px-3 flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 text-sm text-gray-700">
+                <Lock className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
+                <span className="truncate text-xs">{selectedOutlet?.name || '...'}</span>
+              </div>
+            ) : (
+              <OutletSearchSelect
+                value={selectedOutlet?.id || ''}
+                outlets={outlets}
+                stops={stops}
+                placeholder="Pilih outlet..."
+                onChange={(val) => {
+                  const outlet = outlets.find(o => o.id === val);
+                  if (outlet) onOutletSelect(outlet);
+                }}
+                testId="select-outlet"
               />
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const d = new Date(selectedDate + 'T00:00:00');
-                d.setDate(d.getDate() + 1);
-                setSelectedDate(formatDateStr(d));
-              }}
-              className="flex-shrink-0 w-8 h-10 flex items-center justify-center border border-gray-200 rounded-xl text-gray-400 hover:text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all"
-              data-testid="btn-next-date"
-            >
-              <ChevronRightIcon className="w-4 h-4" />
-            </button>
+            )}
+            {selectedOutlet && (
+              <div className="mt-1 text-[10px] text-gray-400 truncate">
+                {stops.find(s => s.id === selectedOutlet.stopId)?.city || ''}
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-1">
-            {getDatePresets().map(preset => (
+          <div>
+            <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block flex items-center gap-1">
+              <Calendar className="w-3 h-3" /> Tanggal
+            </label>
+            <div className="flex items-center gap-1">
               <button
-                key={preset.label}
                 type="button"
-                onClick={() => setSelectedDate(preset.date)}
-                className={`flex-1 px-2 py-1.5 text-[11px] font-medium rounded-lg border transition-all whitespace-nowrap ${
-                  selectedDate === preset.date
-                    ? 'bg-blue-50 border-blue-300 text-blue-700'
-                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50'
-                }`}
-                data-testid={`btn-date-preset-${preset.label.toLowerCase().replace(/\s+/g, '-')}`}
+                onClick={() => {
+                  const d = new Date(selectedDate + 'T00:00:00');
+                  d.setDate(d.getDate() - 1);
+                  setSelectedDate(formatDateStr(d));
+                }}
+                className="flex-shrink-0 w-7 h-9 flex items-center justify-center border border-gray-200 rounded-lg text-gray-400 hover:text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all"
+                data-testid="btn-prev-date"
               >
-                {preset.label}
+                <ChevronLeft className="w-3.5 h-3.5" />
               </button>
-            ))}
+              <div className="flex-1 min-w-0">
+                <CustomDatePicker
+                  value={selectedDate}
+                  onChange={setSelectedDate}
+                  testId="input-date"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(selectedDate + 'T00:00:00');
+                  d.setDate(d.getDate() + 1);
+                  setSelectedDate(formatDateStr(d));
+                }}
+                className="flex-shrink-0 w-7 h-9 flex items-center justify-center border border-gray-200 rounded-lg text-gray-400 hover:text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all"
+                data-testid="btn-next-date"
+              >
+                <ChevronRightIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
+        </div>
+        <div className="flex items-center gap-1">
+          {getDatePresets().map(preset => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => setSelectedDate(preset.date)}
+              className={`flex-1 px-2 py-1.5 text-[11px] font-medium rounded-lg border transition-all whitespace-nowrap ${
+                selectedDate === preset.date
+                  ? 'bg-blue-50 border-blue-300 text-blue-700'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+              data-testid={`btn-date-preset-${preset.label.toLowerCase().replace(/\s+/g, '-')}`}
+            >
+              {preset.label}
+            </button>
+          ))}
         </div>
       </div>
 
