@@ -790,13 +790,14 @@ export default function CargoTerminalPage() {
 
               </div>
 
-              <div className="border-t border-gray-200 bg-white px-3 md:px-4 py-2.5 flex-shrink-0 space-y-2">
+              <div className="border-t border-gray-200 bg-white px-3 md:px-4 py-2.5 flex-shrink-0">
                 <button
                   onClick={() => {
                     setTariffCache({});
                     setSelectedTripKey('');
                     setSelectedTripDate('');
                     setTripsSearched(true);
+                    setStep(2);
                     setTimeout(() => { refetchAllTrips(); }, 50);
                   }}
                   disabled={!canProceedStep1}
@@ -806,38 +807,24 @@ export default function CargoTerminalPage() {
                   <Search className="w-4 h-4" />
                   Cari Jadwal
                 </button>
-
-                {selectedTrip && (
-                  <div className="border border-amber-300 rounded-xl p-3 bg-amber-50">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-xs min-w-0">
-                        <div className="flex items-center gap-1.5 text-gray-700 font-medium">
-                          <Clock className="w-3 h-3 text-amber-500" />
-                          <span className="font-bold">{formatTime(selectedTrip.departAtOrigin)}</span>
-                          <ArrowRight className="w-3 h-3 text-gray-300" />
-                          <span className="font-bold">{formatTime(selectedTrip.arriveAtDestination)}</span>
-                        </div>
-                        <p className="text-[10px] text-gray-500 mt-0.5">{selectedTrip.patternCode} — {formatDateLabel(selectedTrip.date)}</p>
-                        {selectedTrip.tariff?.found && (
-                          <div className="text-sm font-black text-amber-700 font-mono mt-1">{fmtCurrency(selectedTrip.tariff.calculatedAmount)}</div>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => setStep(3)}
-                        className="h-9 px-5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm flex-shrink-0"
-                        data-testid="btn-proceed-payment"
-                      >
-                        Lanjut Pembayaran
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
-            <div className={`${!showTripsPanel ? 'hidden lg:flex' : 'flex'} flex-1 flex-col overflow-y-auto bg-gray-50/50`}>
-              <div className="p-3 md:p-4 space-y-3 flex-1">
+            <div className={`${step === 2 ? 'flex' : 'hidden lg:flex'} ${!showTripsPanel ? 'lg:flex' : ''} flex-1 flex-col bg-gray-50/50`}>
+              {step === 2 && (
+                <div className="border-b border-gray-200 bg-white px-3 py-2 flex items-center gap-2 lg:hidden flex-shrink-0">
+                  <button
+                    onClick={() => setStep(1)}
+                    className="h-8 px-3 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                    data-testid="btn-back-to-form"
+                  >
+                    <ArrowRight className="w-3 h-3 rotate-180" />
+                    Kembali
+                  </button>
+                  <span className="text-xs text-gray-400">Pilih jadwal pengiriman</span>
+                </div>
+              )}
+              <div className="p-3 md:p-4 space-y-3 flex-1 overflow-y-auto">
                 {!showTripsPanel && (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <Package className="w-10 h-10 text-gray-200 mb-3" />
@@ -938,7 +925,7 @@ export default function CargoTerminalPage() {
               </div>
 
               {showTripsPanel && selectedTrip && (
-                <div className="border-t border-gray-200 bg-white px-3 md:px-4 py-2.5 flex items-center justify-between flex-shrink-0 lg:hidden">
+                <div className="border-t border-gray-200 bg-white px-3 md:px-4 py-2.5 flex items-center justify-between flex-shrink-0">
                   <div className="flex items-center gap-3 text-xs min-w-0">
                     <div className="flex items-center gap-1.5">
                       <Clock className="w-3 h-3 text-amber-500" />
@@ -953,7 +940,7 @@ export default function CargoTerminalPage() {
                   <button
                     onClick={() => setStep(3)}
                     className="h-9 px-5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
-                    data-testid="btn-next-step-mobile"
+                    data-testid="btn-proceed-payment"
                   >
                     Lanjut Pembayaran
                     <ArrowRight className="w-3.5 h-3.5" />
