@@ -791,7 +791,23 @@ export default function CargoTerminalPage() {
               </div>
 
               <div className="border-t border-gray-200 bg-white px-3 md:px-4 py-2.5 flex-shrink-0 space-y-2">
-                {selectedTrip ? (
+                <button
+                  onClick={() => {
+                    setTariffCache({});
+                    setSelectedTripKey('');
+                    setSelectedTripDate('');
+                    setTripsSearched(true);
+                    setTimeout(() => { refetchAllTrips(); }, 50);
+                  }}
+                  disabled={!canProceedStep1}
+                  className="w-full h-10 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  data-testid="btn-search-trips"
+                >
+                  <Search className="w-4 h-4" />
+                  Cari Jadwal
+                </button>
+
+                {selectedTrip && (
                   <div className="border border-amber-300 rounded-xl p-3 bg-amber-50">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs min-w-0">
@@ -816,22 +832,6 @@ export default function CargoTerminalPage() {
                       </button>
                     </div>
                   </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setTariffCache({});
-                      setSelectedTripKey('');
-                      setSelectedTripDate('');
-                      setTripsSearched(true);
-                      setTimeout(() => { refetchAllTrips(); }, 50);
-                    }}
-                    disabled={!canProceedStep1}
-                    className="w-full h-10 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                    data-testid="btn-search-trips"
-                  >
-                    <Search className="w-4 h-4" />
-                    Cari Jadwal
-                  </button>
                 )}
               </div>
             </div>
