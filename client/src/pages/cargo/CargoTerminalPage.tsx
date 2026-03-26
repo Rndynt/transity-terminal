@@ -232,25 +232,25 @@ export default function CargoTerminalPage() {
   const dates3 = useMemo(() => [getDateStr(0), getDateStr(1), getDateStr(2)], []);
 
   const originStopId = originStop?.id;
-  const tripsEnabled = !!originStopId && !!destinationStopId && !!cargoTypeId && itemDescription.trim().length >= 2;
+  const [tripsSearched, setTripsSearched] = useState(false);
   const { data: rawTripsDay0 = [], isLoading: loadingDay0, refetch: refetchDay0 } = useQuery<CargoAvailableTrip[]>({
     queryKey: ['/api/cargo/available-trips', dates3[0], originStopId, destinationStopId],
     queryFn: () => cargoApi.getAvailableTrips(dates3[0], originStopId!, destinationStopId),
-    enabled: tripsEnabled,
+    enabled: tripsSearched && !!originStopId && !!destinationStopId,
     staleTime: 0,
     refetchOnMount: 'always',
   });
   const { data: rawTripsDay1 = [], isLoading: loadingDay1, refetch: refetchDay1 } = useQuery<CargoAvailableTrip[]>({
     queryKey: ['/api/cargo/available-trips', dates3[1], originStopId, destinationStopId],
     queryFn: () => cargoApi.getAvailableTrips(dates3[1], originStopId!, destinationStopId),
-    enabled: tripsEnabled,
+    enabled: tripsSearched && !!originStopId && !!destinationStopId,
     staleTime: 0,
     refetchOnMount: 'always',
   });
   const { data: rawTripsDay2 = [], isLoading: loadingDay2, refetch: refetchDay2 } = useQuery<CargoAvailableTrip[]>({
     queryKey: ['/api/cargo/available-trips', dates3[2], originStopId, destinationStopId],
     queryFn: () => cargoApi.getAvailableTrips(dates3[2], originStopId!, destinationStopId),
-    enabled: tripsEnabled,
+    enabled: tripsSearched && !!originStopId && !!destinationStopId,
     staleTime: 0,
     refetchOnMount: 'always',
   });
@@ -398,10 +398,10 @@ export default function CargoTerminalPage() {
     setTariffCache(prev => ({ ...prev, [key]: result }));
   }, [cargoTypeId, originStopId, destinationStopId, weightKg]);
 
-  const showTripsPanel = !!(cargoTypeId && originStopId && destinationStopId && itemDescription.trim().length >= 2);
+  const showTripsPanel = tripsSearched;
 
   useEffect(() => {
-    if (!showTripsPanel && step !== 2) return;
+    if (!tripsSearched) return;
     if (!cargoTypeId || !originStopId || !destinationStopId) return;
     const allTrips = [...tripsDay0, ...tripsDay1, ...tripsDay2];
     for (const t of allTrips) {
@@ -486,6 +486,7 @@ export default function CargoTerminalPage() {
     setSelectedTripDate('');
     setPaymentMethod('');
     setCreatedShipment(null);
+    setTripsSearched(false);
     setTariffCache({});
   };
 
@@ -591,6 +592,9 @@ export default function CargoTerminalPage() {
                       onChange={(id) => {
                         setSelectedOutletId(id);
                         setDestinationStopId('');
+                        setTripsSearched(false);
+                        setSelectedTripKey('');
+                        setSelectedTripDate('');
                       }}
                     />
                     {originStop && (
@@ -606,7 +610,12 @@ export default function CargoTerminalPage() {
                       options={destinationOptions}
                       placeholder="Pilih kota tujuan..."
                       searchPlaceholder="Cari kota/halte..."
-                      onChange={setDestinationStopId}
+                      onChange={(id) => {
+                        setDestinationStopId(id);
+                        setTripsSearched(false);
+                        setSelectedTripKey('');
+                        setSelectedTripDate('');
+                      }}
                       data-testid="select-cargo-destination"
                     />
                     {destinationStop && (
@@ -779,20 +788,26 @@ export default function CargoTerminalPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end lg:hidden">
+              <div className="flex justify-end">
                 <button
-                  onClick={() => { setTariffCache({}); setStep(2); }}
+                  onClick={() => {
+                    setTariffCache({});
+                    setSelectedTripKey('');
+                    setSelectedTripDate('');
+                    setTripsSearched(true);
+                    setTimeout(() => { refetchAllTrips(); }, 50);
+                  }}
                   disabled={!canProceedStep1}
                   className="h-9 px-5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                  data-testid="btn-next-step-1"
+                  data-testid="btn-search-trips"
                 >
+                  <Search className="w-4 h-4" />
                   Cari Jadwal
-                  <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
 
               {selectedTrip && (
-                <div className="hidden lg:block border border-amber-200 rounded-xl p-3 bg-amber-50/50">
+                <div className="border border-amber-200 rounded-xl p-3 bg-amber-50/50">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-xs min-w-0">
                       <div className="flex items-center gap-1.5 text-gray-700 font-medium">
@@ -808,9 +823,8 @@ export default function CargoTerminalPage() {
                     </div>
                     <button
                       onClick={() => setStep(3)}
-                      disabled={!canProceedStep1}
-                      className="h-9 px-5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
-                      data-testid="btn-desktop-proceed"
+                      className="h-9 px-5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm flex-shrink-0"
+                      data-testid="btn-proceed-payment"
                     >
                       Lanjut Pembayaran
                       <ArrowRight className="w-3.5 h-3.5" />
@@ -818,52 +832,27 @@ export default function CargoTerminalPage() {
                   </div>
                 </div>
               )}
-
-              {!selectedTrip && showTripsPanel && !tripsLoading && groupedTrips.length > 0 && (
-                <div className="hidden lg:flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-600">
-                  <ArrowRight className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>Pilih jadwal di panel kanan untuk melanjutkan</span>
-                </div>
-              )}
-
-              {!selectedTrip && showTripsPanel && !tripsLoading && groupedTrips.length === 0 && (
-                <div className="hidden lg:flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>Tidak ada trip tersedia untuk rute ini. Coba ubah tujuan pengiriman.</span>
-                </div>
-              )}
             </div>
             </div>
 
-            <div className={`${step === 1 ? 'hidden lg:flex' : 'flex'} flex-1 flex-col overflow-y-auto bg-gray-50/50`}>
+            <div className={`${!showTripsPanel ? 'hidden lg:flex' : 'flex'} flex-1 flex-col overflow-y-auto bg-gray-50/50`}>
               <div className="p-3 md:p-4 space-y-3 flex-1">
-                {step === 2 && (
-                  <div className="bg-white border border-gray-200 rounded-xl p-2.5 lg:hidden">
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-600">
-                      <span><span className="text-gray-400">Barang:</span> <span className="font-medium">{itemDescription}</span></span>
-                      <span><span className="text-gray-400">Jumlah:</span> <span className="font-medium">{quantity} koli</span></span>
-                      {weightKg && <span><span className="text-gray-400">Berat:</span> <span className="font-medium">{weightKg} kg</span></span>}
-                      <span><span className="text-gray-400">Pengirim:</span> <span className="font-medium">{senderName}</span></span>
-                    </div>
-                  </div>
-                )}
-
-                {!showTripsPanel && step === 1 && (
+                {!showTripsPanel && (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <Package className="w-10 h-10 text-gray-200 mb-3" />
-                    <p className="text-sm text-gray-400 font-medium">Isi data kiriman terlebih dahulu</p>
-                    <p className="text-[11px] text-gray-300 mt-1">Pilih outlet, tujuan, dan isi detail barang</p>
+                    <p className="text-sm text-gray-400 font-medium">Klik "Cari Jadwal" untuk melihat trip</p>
+                    <p className="text-[11px] text-gray-300 mt-1">Isi data kiriman terlebih dahulu, lalu cari jadwal</p>
                   </div>
                 )}
 
-                {(showTripsPanel || step === 2) && tripsLoading && (
+                {showTripsPanel && tripsLoading && (
                   <div className="flex flex-col items-center py-12">
                     <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
                     <p className="text-xs text-gray-400 mt-2">Mencari jadwal 3 hari ke depan...</p>
                   </div>
                 )}
 
-                {(showTripsPanel || step === 2) && !tripsLoading && groupedTrips.length === 0 && (
+                {showTripsPanel && !tripsLoading && groupedTrips.length === 0 && (
                   <div className="flex flex-col items-center py-12 text-center">
                     <AlertCircle className="w-8 h-8 text-gray-300 mb-2" />
                     <p className="text-sm text-gray-500 font-medium">Tidak ada jadwal tersedia</p>
@@ -871,7 +860,7 @@ export default function CargoTerminalPage() {
                   </div>
                 )}
 
-                {(showTripsPanel || step === 2) && !tripsLoading && groupedTrips.map(group => (
+                {showTripsPanel && !tripsLoading && groupedTrips.map(group => (
                   <div key={group.date} data-testid={`trip-group-${group.date}`}>
                     <div className="flex items-center gap-2 mb-2">
                       <Calendar className="w-3.5 h-3.5 text-amber-600" />
@@ -946,8 +935,8 @@ export default function CargoTerminalPage() {
                 ))}
               </div>
 
-              {(showTripsPanel || step === 2) && selectedTrip && (
-                <div className="border-t border-gray-200 bg-white px-3 md:px-4 py-2.5 flex items-center justify-between flex-shrink-0">
+              {showTripsPanel && selectedTrip && (
+                <div className="border-t border-gray-200 bg-white px-3 md:px-4 py-2.5 flex items-center justify-between flex-shrink-0 lg:hidden">
                   <div className="flex items-center gap-3 text-xs min-w-0">
                     <div className="flex items-center gap-1.5">
                       <Clock className="w-3 h-3 text-amber-500" />
@@ -961,24 +950,11 @@ export default function CargoTerminalPage() {
                   </div>
                   <button
                     onClick={() => setStep(3)}
-                    disabled={!canProceedStep1}
-                    className="h-9 px-5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                    data-testid="btn-next-step-2"
+                    className="h-9 px-5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+                    data-testid="btn-next-step-mobile"
                   >
                     Lanjut Pembayaran
                     <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-
-              {step === 2 && (
-                <div className="border-t border-gray-200 bg-white px-3 py-2 lg:hidden flex-shrink-0">
-                  <button
-                    onClick={() => setStep(1)}
-                    className="h-9 px-4 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors"
-                    data-testid="btn-back-step2"
-                  >
-                    Kembali
                   </button>
                 </div>
               )}
