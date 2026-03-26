@@ -2,7 +2,7 @@ import { IStorage } from "../../storage.interface";
 import { Trip, SeatInventory } from "@shared/schema";
 import { db } from "../../db";
 import { seatInventory, seatHolds } from "@shared/schema";
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, sql, notInArray } from "drizzle-orm";
 
 export class SeatInventoryService {
   constructor(private storage: IStorage) {}
@@ -14,10 +14,10 @@ export class SeatInventoryService {
   async precomputeInventory(trip: Trip): Promise<void> {
     const vehicle = await this.storage.getVehicleById(trip.vehicleId);
     const resolvedLayoutId = trip.layoutId ?? vehicle?.layoutId ?? null;
-    const [layout, legs, activeBookings] = await Promise.all([
+    const [layout, legs, relevantBookings] = await Promise.all([
       resolvedLayoutId ? this.storage.getLayoutById(resolvedLayoutId) : Promise.resolve(null),
       this.storage.getTripLegs(trip.id),
-      this.storage.getBookings(trip.id)
+      this.storage.getActiveBookingsForTrip(trip.id)
     ]);
     
     if (!layout) {
@@ -29,8 +29,6 @@ export class SeatInventoryService {
     }
 
     const bookedKeys = new Set<string>();
-    const activeStatuses = new Set(['paid', 'confirmed', 'checked_in', 'pending']);
-    const relevantBookings = activeBookings.filter(b => activeStatuses.has(b.status));
     
     if (relevantBookings.length > 0) {
       const allPassengers = await this.storage.getPassengersByBookingIds(
@@ -92,9 +90,32 @@ export class SeatInventoryService {
         }
       }
 
-      await tx.delete(seatInventory).where(eq(seatInventory.tripId, trip.id));
       if (inventoryEntries.length > 0) {
-        await tx.insert(seatInventory).values(inventoryEntries);
+        const BATCH_SIZE = 500;
+        for (let i = 0; i < inventoryEntries.length; i += BATCH_SIZE) {
+          const batch = inventoryEntries.slice(i, i + BATCH_SIZE);
+          await tx.insert(seatInventory).values(batch)
+            .onConflictDoUpdate({
+              target: [seatInventory.tripId, seatInventory.seatNo, seatInventory.legIndex],
+              set: {
+                booked: sql`excluded.booked`,
+                holdRef: sql`excluded.hold_ref`
+              }
+            });
+        }
+
+        const validKeys = inventoryEntries.map(e => `${e.seatNo}:${e.legIndex}`);
+        await tx.delete(seatInventory).where(
+          and(
+            eq(seatInventory.tripId, trip.id),
+            notInArray(
+              sql`(${seatInventory.seatNo} || ':' || ${seatInventory.legIndex})`,
+              validKeys
+            )
+          )
+        );
+      } else {
+        await tx.delete(seatInventory).where(eq(seatInventory.tripId, trip.id));
       }
     });
   }

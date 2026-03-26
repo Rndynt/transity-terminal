@@ -172,13 +172,26 @@ export default function SeatMap({
     return () => unsubscribeFromTrip(trip.id);
   }, [isConnected, trip.id, subscribeToTrip, unsubscribeFromTrip]);
 
+  const debouncedRefetchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedRefetch = useCallback(() => {
+    if (debouncedRefetchRef.current) clearTimeout(debouncedRefetchRef.current);
+    debouncedRefetchRef.current = setTimeout(() => {
+      refetchRef.current?.();
+      debouncedRefetchRef.current = null;
+    }, 150);
+  }, []);
+
+  useEffect(() => {
+    return () => { if (debouncedRefetchRef.current) clearTimeout(debouncedRefetchRef.current); };
+  }, []);
+
   useEffect(() => {
     if (!isConnected) return;
-    const unsubInventory = addEventListener('INVENTORY_UPDATED', (data) => { if (data.tripId === trip.id) refetch(); });
-    const unsubStatus = addEventListener('TRIP_STATUS_CHANGED', (data) => { if (data.tripId === trip.id) refetch(); });
-    const unsubHolds = addEventListener('HOLDS_RELEASED', (data) => { if (data.tripId === trip.id) refetch(); });
+    const unsubInventory = addEventListener('INVENTORY_UPDATED', (data) => { if (data.tripId === trip.id) debouncedRefetch(); });
+    const unsubStatus = addEventListener('TRIP_STATUS_CHANGED', (data) => { if (data.tripId === trip.id) debouncedRefetch(); });
+    const unsubHolds = addEventListener('HOLDS_RELEASED', (data) => { if (data.tripId === trip.id) debouncedRefetch(); });
     return () => { unsubInventory(); unsubStatus(); unsubHolds(); };
-  }, [isConnected, trip.id, addEventListener, refetch]);
+  }, [isConnected, trip.id, addEventListener, debouncedRefetch]);
 
   const handlePrecompute = async () => {
     setPrecomputing(true);
