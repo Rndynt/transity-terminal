@@ -3,7 +3,7 @@ import { usePermissions } from '@/lib/permissions';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Receipt, Ticket, Package, TrendingDown, Percent, Calculator } from 'lucide-react';
+import { Receipt, Ticket, Package, TrendingDown, Percent, Calculator, RotateCcw, BadgePercent } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 import ReportFilters, { type ReportFilterValues, type DateModeOption } from '@/components/reports/ReportFilters';
 import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
@@ -26,7 +26,14 @@ function buildQuery(f: ReportFilterValues) {
 }
 
 function fmtPct(v: number) {
-  return `${(v * 100).toFixed(1)}%`;
+  return `${(v * 100).toFixed(2)}%`;
+}
+
+function fmtTierRange(min: number, tiers: any[], idx: number) {
+  const next = idx > 0 ? tiers[idx - 1] : null;
+  if (min === 0) return `Hingga ${fmtCurrency(tiers.length > 1 ? tiers[tiers.length - 2]?.min || 200_000_000 : 200_000_000)}`;
+  if (!next) return `> ${fmtCurrency(min)}`;
+  return `${fmtCurrency(min)} — ${fmtCurrency(next.min)}`;
 }
 
 export default function CommercialFeeReportPage() {
@@ -63,43 +70,55 @@ export default function CommercialFeeReportPage() {
   return (
     <ReportPageLayout
       title="Laporan Commercial Fee"
-      description="Rekap commercial fee berdasarkan transaksi tiket dan kargo. Sesuai ketentuan PKS."
+      description="Rekap commercial fee berdasarkan transaksi tiket dan kargo. Tarif progresif sesuai PKS."
       icon={Receipt}
       isLoading={isLoading}
       filterBar={<ReportFilters value={filters} onChange={setFilters} lockedOutletId={scopedOutletId ?? undefined} dateModeOptions={DATE_MODES} />}
     >
       <SummaryCardsGrid items={[
         { label: 'Total Transaksi (Gross)', value: fmtCurrency(summary?.total_gross || 0), icon: Calculator, iconBg: 'bg-blue-100', iconColor: 'text-blue-600' },
-        { label: 'Commercial Fee (3%)', value: fmtCurrency(summary?.fee_before_discount || 0), icon: Receipt, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
-        { label: 'Diskon Volume', value: summary?.volume_discount_pct > 0 ? `-${fmtCurrency(summary?.discount_amount || 0)} (${fmtPct(summary?.volume_discount_pct)})` : 'Tidak ada', icon: TrendingDown, iconBg: 'bg-green-100', iconColor: 'text-green-600' },
+        { label: `Commercial Fee (${fmtPct(summary?.fee_rate || 0.03)})`, value: fmtCurrency(summary?.fee_amount || 0), icon: Receipt, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', subtitle: summary?.tier_label || '' },
+        { label: 'Kredit Refund', value: summary?.refund_credit > 0 ? `-${fmtCurrency(summary?.refund_fee_credit || 0)}` : 'Tidak ada', icon: RotateCcw, iconBg: 'bg-green-100', iconColor: 'text-green-600' },
         { label: 'Total Tagihan + PPN', value: fmtCurrency(summary?.total_charge || 0), icon: Percent, iconBg: 'bg-red-100', iconColor: 'text-red-600' },
       ]} />
 
       <Card>
         <CardContent className="pt-4">
-          <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-5 gap-3 text-sm">
             <div className="bg-blue-50 rounded-lg p-3">
               <div className="flex items-center gap-1.5 text-blue-700 font-medium mb-1">
                 <Ticket className="w-3.5 h-3.5" /> Tiket
               </div>
-              <p className="text-lg font-bold text-blue-900">{fmtCurrency(summary?.ticket_gross || 0)}</p>
+              <p className="text-lg font-bold text-blue-900" data-testid="text-ticket-gross">{fmtCurrency(summary?.ticket_gross || 0)}</p>
               <p className="text-xs text-blue-600">{summary?.total_bookings || 0} booking</p>
             </div>
             <div className="bg-purple-50 rounded-lg p-3">
               <div className="flex items-center gap-1.5 text-purple-700 font-medium mb-1">
                 <Package className="w-3.5 h-3.5" /> Kargo
               </div>
-              <p className="text-lg font-bold text-purple-900">{fmtCurrency(summary?.cargo_gross || 0)}</p>
+              <p className="text-lg font-bold text-purple-900" data-testid="text-cargo-gross">{fmtCurrency(summary?.cargo_gross || 0)}</p>
               <p className="text-xs text-purple-600">{summary?.total_shipments || 0} shipment</p>
             </div>
+            <div className="bg-indigo-50 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 text-indigo-700 font-medium mb-1">
+                <BadgePercent className="w-3.5 h-3.5" /> Tier & Tarif
+              </div>
+              <p className="text-lg font-bold text-indigo-900" data-testid="text-tier">{summary?.tier_label || 'Tier 1'}</p>
+              <p className="text-xs text-indigo-600">Tarif: {fmtPct(summary?.fee_rate || 0.03)}</p>
+            </div>
             <div className="bg-amber-50 rounded-lg p-3">
-              <div className="text-amber-700 font-medium mb-1 text-xs">Fee Setelah Diskon</div>
-              <p className="text-lg font-bold text-amber-900">{fmtCurrency(summary?.fee_after_discount || 0)}</p>
-              <p className="text-xs text-amber-600">Rate efektif: {fmtPct((summary?.fee_rate || 0.03) * (1 - (summary?.volume_discount_pct || 0)))}</p>
+              <div className="text-amber-700 font-medium mb-1 text-xs">Fee Setelah Kredit</div>
+              <p className="text-lg font-bold text-amber-900" data-testid="text-fee-after-credit">{fmtCurrency(summary?.fee_after_credit || 0)}</p>
+              <p className="text-xs text-amber-600">
+                {summary?.refund_credit > 0
+                  ? `Kredit refund: -${fmtCurrency(summary?.refund_fee_credit || 0)}`
+                  : `Rate: ${fmtPct(summary?.fee_rate || 0.03)}`
+                }
+              </p>
             </div>
             <div className="bg-red-50 rounded-lg p-3">
               <div className="text-red-700 font-medium mb-1 text-xs">PPN (11%)</div>
-              <p className="text-lg font-bold text-red-900">{fmtCurrency(summary?.ppn_amount || 0)}</p>
+              <p className="text-lg font-bold text-red-900" data-testid="text-ppn">{fmtCurrency(summary?.ppn_amount || 0)}</p>
               <p className="text-xs text-red-600">Total: {fmtCurrency(summary?.total_charge || 0)}</p>
             </div>
           </div>
@@ -142,7 +161,7 @@ export default function CommercialFeeReportPage() {
                   <XAxis dataKey="date" fontSize={11} className="text-muted-foreground" />
                   <YAxis fontSize={11} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} className="text-muted-foreground" />
                   <Tooltip formatter={(v: number) => fmtCurrency(v)} labelFormatter={(l) => `Tanggal: ${l}`} />
-                  <Line type="monotone" dataKey="fee" stroke="#f59e0b" strokeWidth={2} name="Fee (3%)" dot={false} />
+                  <Line type="monotone" dataKey="fee" stroke="#f59e0b" strokeWidth={2} name={`Fee (${fmtPct(summary?.fee_rate || 0.03)})`} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -244,28 +263,35 @@ export default function CommercialFeeReportPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">Skema Diskon Volume (per PKS)</CardTitle>
+          <CardTitle className="text-sm font-semibold">Skema Tarif Progresif (per PKS)</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="text-xs">Tier</TableHead>
                 <TableHead className="text-xs">Volume Transaksi Bulanan</TableHead>
-                <TableHead className="text-xs text-right">Diskon Fee</TableHead>
-                <TableHead className="text-xs text-right">Rate Efektif</TableHead>
+                <TableHead className="text-xs text-right">Tarif Fee</TableHead>
                 <TableHead className="text-xs text-center">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {volumeTiers.slice().reverse().map((t: any, i: number) => {
-                const isActive = summary && summary.volume_discount_pct === t.discount;
+                const isActive = summary && summary.fee_rate === t.rate;
                 return (
-                  <TableRow key={i} className={isActive ? 'bg-amber-50' : ''}>
+                  <TableRow key={i} className={isActive ? 'bg-amber-50' : ''} data-testid={`tier-row-${i}`}>
+                    <TableCell className="text-sm font-medium">{t.label}</TableCell>
                     <TableCell className="text-sm">
-                      {t.min === 0 ? '< Rp 100.000.000' : `≥ ${fmtCurrency(t.min)}`}
+                      {t.min === 0
+                        ? `Hingga ${fmtCurrency(200_000_000)}`
+                        : t.min >= 1_000_000_000
+                        ? `> ${fmtCurrency(t.min)}`
+                        : `${fmtCurrency(t.min)} — ${fmtCurrency(
+                            t.min === 200_000_000 ? 500_000_000 : 1_000_000_000
+                          )}`
+                      }
                     </TableCell>
-                    <TableCell className="text-sm text-right">{t.discount > 0 ? fmtPct(t.discount) : '-'}</TableCell>
-                    <TableCell className="text-sm text-right font-medium">{fmtPct(t.effective_rate)}</TableCell>
+                    <TableCell className="text-sm text-right font-medium">{fmtPct(t.rate)}</TableCell>
                     <TableCell className="text-sm text-center">
                       {isActive && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-200 text-amber-800">Aktif</span>}
                     </TableCell>
@@ -274,6 +300,9 @@ export default function CommercialFeeReportPage() {
               })}
             </TableBody>
           </Table>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Tarif diterapkan secara keseluruhan (flat rate) berdasarkan total volume transaksi bulan tersebut, bukan bertingkat per tier. Belum termasuk PPN 11%.
+          </p>
         </CardContent>
       </Card>
     </ReportPageLayout>

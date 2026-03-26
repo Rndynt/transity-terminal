@@ -47,28 +47,28 @@ export class ReportsService {
   }
 
   async getCommercialFeeReport(f: ReportFilters) {
-    const FEE_RATE = 0.03;
     const PPN_RATE = 0.11;
 
     const VOLUME_TIERS = [
-      { min: 1_000_000_000, discount: 0.15 },
-      { min: 500_000_000, discount: 0.10 },
-      { min: 100_000_000, discount: 0.05 },
-      { min: 0, discount: 0 },
+      { min: 1_000_000_000, rate: 0.0225, label: 'Tier 4' },
+      { min: 500_000_000, rate: 0.025, label: 'Tier 3' },
+      { min: 200_000_000, rate: 0.0275, label: 'Tier 2' },
+      { min: 0, rate: 0.03, label: 'Tier 1' },
     ];
 
     const data = await this.repo.getCommercialFeeData(f);
 
     const ticketGross = Number(data.ticketSummary?.gross_amount || 0);
     const cargoGross = Number(data.cargoSummary?.gross_amount || 0);
+    const refundCredit = Number(data.refundCredit?.refund_amount || 0);
     const totalGross = ticketGross + cargoGross;
 
     const tier = VOLUME_TIERS.find(t => totalGross >= t.min) || VOLUME_TIERS[VOLUME_TIERS.length - 1];
-    const feeBeforeDiscount = totalGross * FEE_RATE;
-    const discountAmount = feeBeforeDiscount * tier.discount;
-    const feeAfterDiscount = feeBeforeDiscount - discountAmount;
-    const ppnAmount = feeAfterDiscount * PPN_RATE;
-    const totalCharge = feeAfterDiscount + ppnAmount;
+    const feeRate = tier.rate;
+    const feeAmount = totalGross * feeRate;
+    const feeAfterCredit = Math.max(0, feeAmount - (refundCredit * feeRate));
+    const ppnAmount = feeAfterCredit * PPN_RATE;
+    const totalCharge = feeAfterCredit + ppnAmount;
 
     const dailyMap = new Map<string, { ticket: number; cargo: number }>();
     for (const row of data.ticketDaily as any[]) {
@@ -88,7 +88,7 @@ export class ReportsService {
         ticket_gross: vals.ticket,
         cargo_gross: vals.cargo,
         total_gross: vals.ticket + vals.cargo,
-        fee: (vals.ticket + vals.cargo) * FEE_RATE,
+        fee: (vals.ticket + vals.cargo) * feeRate,
       }));
 
     return {
@@ -98,11 +98,12 @@ export class ReportsService {
         total_gross: totalGross,
         total_bookings: Number(data.ticketSummary?.total_bookings || 0),
         total_shipments: Number(data.cargoSummary?.total_shipments || 0),
-        fee_rate: FEE_RATE,
-        fee_before_discount: feeBeforeDiscount,
-        volume_discount_pct: tier.discount,
-        discount_amount: discountAmount,
-        fee_after_discount: feeAfterDiscount,
+        fee_rate: feeRate,
+        tier_label: tier.label,
+        fee_amount: feeAmount,
+        refund_credit: refundCredit,
+        refund_fee_credit: refundCredit * feeRate,
+        fee_after_credit: feeAfterCredit,
         ppn_rate: PPN_RATE,
         ppn_amount: ppnAmount,
         total_charge: totalCharge,
@@ -111,24 +112,24 @@ export class ReportsService {
       ticketByRoute: (data.ticketByRoute as any[]).map(r => ({
         ...r,
         gross_amount: Number(r.gross_amount),
-        fee: Number(r.gross_amount) * FEE_RATE,
+        fee: Number(r.gross_amount) * feeRate,
       })),
       cargoByRoute: (data.cargoByRoute as any[]).map(r => ({
         ...r,
         gross_amount: Number(r.gross_amount),
-        fee: Number(r.gross_amount) * FEE_RATE,
+        fee: Number(r.gross_amount) * feeRate,
       })),
       ticketByOutlet: (data.ticketByOutlet as any[]).map(r => ({
         ...r,
         gross_amount: Number(r.gross_amount),
-        fee: Number(r.gross_amount) * FEE_RATE,
+        fee: Number(r.gross_amount) * feeRate,
       })),
       recentTickets: data.recentTickets,
       recentCargo: data.recentCargo,
       volumeTiers: VOLUME_TIERS.map(t => ({
         min: t.min,
-        discount: t.discount,
-        effective_rate: FEE_RATE * (1 - t.discount),
+        rate: t.rate,
+        label: t.label,
       })),
     };
   }

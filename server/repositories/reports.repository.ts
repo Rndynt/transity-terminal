@@ -838,7 +838,15 @@ export class ReportsRepository {
     if (f.patternId) cargoConds.push(sql`t.pattern_id = ${f.patternId}`);
     const cargoWhere = joinConditions(cargoConds);
 
-    const [ticketSummary, cargoSummary, ticketDaily, cargoDaily, ticketByRoute, cargoByRoute, ticketByOutlet, recentTickets, recentCargo] = await Promise.all([
+    const refundConds: SQL[] = [];
+    if (f.dateFrom) refundConds.push(sql`b.created_at >= ${f.dateFrom}::date`);
+    if (f.dateTo) refundConds.push(sql`b.created_at <= (${f.dateTo}::date + interval '1 day')`);
+    if (f.outletId) refundConds.push(sql`b.outlet_id = ${f.outletId}`);
+    if (f.patternId) refundConds.push(sql`t.pattern_id = ${f.patternId}`);
+    refundConds.push(sql`b.status = 'refunded'`);
+    const refundWhere = joinConditions(refundConds.length > 0 ? refundConds : [sql`1=1`]);
+
+    const [ticketSummary, cargoSummary, refundCredit, ticketDaily, cargoDaily, ticketByRoute, cargoByRoute, ticketByOutlet, recentTickets, recentCargo] = await Promise.all([
       db.execute(sql`
         SELECT
           COALESCE(SUM(b.total_amount::numeric), 0) as gross_amount,
@@ -854,6 +862,14 @@ export class ReportsRepository {
         FROM cargo_shipments cs
         INNER JOIN trips t ON cs.trip_id = t.id
         WHERE ${cargoWhere}
+      `),
+      db.execute(sql`
+        SELECT
+          COALESCE(SUM(b.total_amount::numeric), 0) as refund_amount,
+          COUNT(*)::int as refund_count
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${refundWhere}
       `),
       (() => {
         const mode = f.dateMode || 'departure';
@@ -985,6 +1001,7 @@ export class ReportsRepository {
     return {
       ticketSummary: ticketSummary.rows[0],
       cargoSummary: cargoSummary.rows[0],
+      refundCredit: refundCredit.rows[0],
       ticketDaily: ticketDaily.rows,
       cargoDaily: cargoDaily.rows,
       ticketByRoute: ticketByRoute.rows,
