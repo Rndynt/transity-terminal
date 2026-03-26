@@ -5,6 +5,7 @@ import { SeatInventoryService } from "../seatInventory/seatInventory.service";
 import { format, parseISO } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { fromZonedHHMMToUtc, getDayInTZ, formatTimeInTZ, ensureDefaultTimezone, normalizeTimeFormat } from "../../utils/timezone";
+import { webSocketService } from "../../realtime/ws";
 
 export class TripBasesService {
   private tripLegsService: TripLegsService;
@@ -286,8 +287,9 @@ export class TripBasesService {
       // Derive trip legs
       await this.tripLegsService.deriveLegsFromTrip(trip);
       
-      // Precompute seat inventory
       await this.seatInventoryService.precomputeInventory(trip);
+
+      webSocketService.emitTripMaterialized(baseId, serviceDate, trip.id);
 
       return trip.id;
     } catch (error) {
@@ -318,13 +320,13 @@ export class TripBasesService {
       throw new Error(`Trip with id ${tripId} not found`);
     }
 
-    // Update trip status to closed
     const updatedTrip = await this.storage.updateTrip(tripId, { status: 'closed' });
-    
-    // Release/expire all holds for this trip
     await this.storage.releaseHoldsForTrip(tripId);
-    
-    // TODO: Publish realtime event for trip status change
+
+    webSocketService.emitTripStatusChanged(tripId, 'closed', {
+      baseId: trip.baseId || undefined,
+      serviceDate: trip.serviceDate || undefined,
+    });
     
     return updatedTrip;
   }

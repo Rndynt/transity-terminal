@@ -154,6 +154,7 @@ export interface IStorage {
   deletePriceRule(id: string): Promise<void>;
 
   getBookings(tripId?: string): Promise<Booking[]>;
+  getActiveBookingsForTrip(tripId: string): Promise<Booking[]>;
   getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }>;
   getBookingById(id: string): Promise<Booking | undefined>;
   getBookingByCode(bookingCode: string): Promise<Booking | undefined>;

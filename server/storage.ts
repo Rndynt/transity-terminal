@@ -114,6 +114,7 @@ export class DatabaseStorage implements IStorage {
 
   // Booking
   getBookings(tripId?: string): Promise<Booking[]> { return this.booking.getBookings(tripId); }
+  getActiveBookingsForTrip(tripId: string): Promise<Booking[]> { return this.booking.getActiveBookingsForTrip(tripId); }
   getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }> { return this.booking.getBookingsPaginated(options); }
   getBookingById(id: string): Promise<Booking | undefined> { return this.booking.getBookingById(id); }
   createBooking(data: InsertBooking): Promise<Booking> { return this.booking.createBooking(data); }

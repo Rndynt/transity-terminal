@@ -4,6 +4,7 @@ import { TripBasesService } from "./tripBases.service";
 import { IStorage } from "../../storage.interface";
 import { requireFlag, requireAnyFlag } from "../rbac/rbac.middleware";
 import { RescheduleService } from "../bookings/reschedule.service";
+import { webSocketService } from "../../realtime/ws";
 
 export function registerTripBasesRoutes(app: FastifyInstance, storage: IStorage) {
   const service = new TripBasesService(storage);
@@ -60,6 +61,8 @@ export function registerTripBasesRoutes(app: FastifyInstance, storage: IStorage)
       );
 
       const trip = await service.closeTrip(id);
+
+      webSocketService.emitToTrip(body.newTripId, 'INVENTORY_UPDATED', { tripId: body.newTripId, seatNo: '*' });
 
       reply.send({
         ok: true,

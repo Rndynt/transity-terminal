@@ -56,7 +56,8 @@ export const passengers = pgTable("passengers", {
   fareAmount:     numeric("fare_amount", { precision: 12, scale: 2 }).notNull(),
   fareBreakdown:  jsonb("fare_breakdown")
 }, (table) => ({
-  idxPassengersBookingId: sql`CREATE INDEX IF NOT EXISTS idx_passengers_booking_id ON ${table} (booking_id)`
+  idxPassengersBookingId: sql`CREATE INDEX IF NOT EXISTS idx_passengers_booking_id ON ${table} (booking_id)`,
+  idxPassengersBookingSeat: sql`CREATE INDEX IF NOT EXISTS idx_passengers_booking_seat ON ${table} (booking_id, seat_no)`
 }));
 
 export const insertPassengerSchema = createInsertSchema(passengers).omit({ id: true });

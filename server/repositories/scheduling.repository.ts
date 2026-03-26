@@ -400,9 +400,21 @@ export class SchedulingRepository {
     const filteredBases = eligibleBases.filter(b => !exceptedBaseIds.has(b.id));
     if (filteredBases.length === 0) return [];
     
-    const allPriceRules = await this.getPriceRules();
-    
     const uniquePatternIds = [...new Set(filteredBases.map(b => b.patternId))];
+
+    const patternPriceRuleSet = new Set<string>();
+    if (uniquePatternIds.length > 0) {
+      const prRows = await db.select({ patternId: priceRules.patternId })
+        .from(priceRules)
+        .where(and(
+          isNull(priceRules.deletedAt),
+          isNull(priceRules.tripId),
+          inArray(priceRules.patternId, uniquePatternIds)
+        ));
+      for (const r of prRows) {
+        if (r.patternId) patternPriceRuleSet.add(r.patternId);
+      }
+    }
     
     const [allPatterns, allPatternStopsRows, patternPathRows] = await Promise.all([
       db.select().from(tripPatterns).where(inArray(tripPatterns.id, uniquePatternIds)),
@@ -454,9 +466,7 @@ export class SchedulingRepository {
         
         const patternPath = patternPathMap.get(base.patternId) || '';
         
-        const hasPriceRule = allPriceRules.some(r =>
-          (r.patternId === base.patternId && !r.tripId)
-        );
+        const hasPriceRule = patternPriceRuleSet.has(base.patternId);
 
         virtualTrips.push({
           baseId: base.id,

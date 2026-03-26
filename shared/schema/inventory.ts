@@ -14,7 +14,8 @@ export const seatInventory = pgTable("seat_inventory", {
   holdRef:  text("hold_ref")
 }, (table) => ({
   idxSeatInvTripSeat: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_trip_seat ON ${table} (trip_id, seat_no)`,
-  idxSeatInvTripId: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_trip_id ON ${table} (trip_id)`
+  idxSeatInvTripId: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_trip_id ON ${table} (trip_id)`,
+  idxSeatInvTripLeg: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_trip_leg ON ${table} (trip_id, leg_index)`
 }));
 
 export const insertSeatInventorySchema = createInsertSchema(seatInventory).omit({ id: true });

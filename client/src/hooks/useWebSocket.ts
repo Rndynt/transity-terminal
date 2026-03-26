@@ -92,7 +92,8 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
       'TRIP_CANCELED', 
       'HOLDS_RELEASED',
       'TRIP_MATERIALIZED',
-      'INVENTORY_UPDATED'
+      'INVENTORY_UPDATED',
+      'STOP_EXCEPTION_CHANGED'
     ];
 
     eventNames.forEach(eventName => {

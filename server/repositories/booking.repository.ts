@@ -17,6 +17,15 @@ export class BookingRepository {
     return await query.orderBy(desc(bookings.createdAt));
   }
 
+  async getActiveBookingsForTrip(tripId: string): Promise<Booking[]> {
+    return await db.select().from(bookings)
+      .where(and(
+        eq(bookings.tripId, tripId),
+        inArray(bookings.status, ['paid', 'pending', 'confirmed', 'checked_in'])
+      ))
+      .orderBy(desc(bookings.createdAt));
+  }
+
   async getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }> {
     const { tripId, outletId, page, pageSize } = options;
     const conditions = [];

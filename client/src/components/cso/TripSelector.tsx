@@ -381,47 +381,66 @@ export default function TripSelector({
     placeholderData: keepPreviousData,
   });
 
-  // WebSocket: subscribe to each real (non-virtual) tripId in the list
-  // and refetch the list whenever inventory changes on any of them
-  const { subscribeToTrip, unsubscribeFromTrip, addEventListener } = useWebSocket();
+  const {
+    subscribeToTrip, unsubscribeFromTrip,
+    subscribeToBase, unsubscribeFromBase,
+    subscribeToCso, unsubscribeFromCso,
+    addEventListener
+  } = useWebSocket();
 
   const subscribedTripIdsRef = useRef<Set<string>>(new Set());
+  const subscribedBaseIdsRef = useRef<Set<string>>(new Set());
+  const subscribedCsoRef = useRef<string | null>(null);
 
   useEffect(() => {
     const realTripIds = (trips as CsoAvailableTrip[])
       .filter(t => !t.isVirtual && t.tripId)
       .map(t => t.tripId as string);
+    const baseIds = [...new Set((trips as CsoAvailableTrip[]).filter(t => t.baseId).map(t => t.baseId as string))];
 
-    const prev = subscribedTripIdsRef.current;
-    const next = new Set(realTripIds);
-
-    // Unsubscribe from removed trips
-    for (const id of Array.from(prev)) {
-      if (!next.has(id)) {
-        unsubscribeFromTrip(id);
-        prev.delete(id);
-      }
+    const prevTrips = subscribedTripIdsRef.current;
+    const nextTrips = new Set(realTripIds);
+    for (const id of Array.from(prevTrips)) {
+      if (!nextTrips.has(id)) { unsubscribeFromTrip(id); prevTrips.delete(id); }
     }
-    // Subscribe to new trips
-    for (const id of Array.from(next)) {
-      if (!prev.has(id)) {
-        subscribeToTrip(id);
-        prev.add(id);
-      }
+    for (const id of Array.from(nextTrips)) {
+      if (!prevTrips.has(id)) { subscribeToTrip(id); prevTrips.add(id); }
     }
-  }, [trips, subscribeToTrip, unsubscribeFromTrip]);
 
-  // Unsubscribe from all trips when outlet or date changes
+    const prevBases = subscribedBaseIdsRef.current;
+    const nextBases = new Set(baseIds);
+    for (const id of Array.from(prevBases)) {
+      if (!nextBases.has(id)) { unsubscribeFromBase(id); prevBases.delete(id); }
+    }
+    for (const id of Array.from(nextBases)) {
+      if (!prevBases.has(id)) { subscribeToBase(id); prevBases.add(id); }
+    }
+  }, [trips, subscribeToTrip, unsubscribeFromTrip, subscribeToBase, unsubscribeFromBase]);
+
   useEffect(() => {
+    const outletId = selectedOutlet?.id;
+    if (subscribedCsoRef.current) {
+      const [prevOutlet, prevDate] = subscribedCsoRef.current.split('|');
+      unsubscribeFromCso(prevOutlet, prevDate);
+      subscribedCsoRef.current = null;
+    }
+    if (outletId && selectedDate) {
+      subscribeToCso(outletId, selectedDate);
+      subscribedCsoRef.current = `${outletId}|${selectedDate}`;
+    }
     return () => {
-      for (const id of Array.from(subscribedTripIdsRef.current)) {
-        unsubscribeFromTrip(id);
+      if (subscribedCsoRef.current) {
+        const [o, d] = subscribedCsoRef.current.split('|');
+        unsubscribeFromCso(o, d);
+        subscribedCsoRef.current = null;
       }
+      for (const id of Array.from(subscribedTripIdsRef.current)) unsubscribeFromTrip(id);
       subscribedTripIdsRef.current.clear();
+      for (const id of Array.from(subscribedBaseIdsRef.current)) unsubscribeFromBase(id);
+      subscribedBaseIdsRef.current.clear();
     };
-  }, [selectedOutlet?.id, selectedDate, unsubscribeFromTrip]);
+  }, [selectedOutlet?.id, selectedDate, subscribeToCso, unsubscribeFromCso, unsubscribeFromTrip, unsubscribeFromBase]);
 
-  // Listen to inventory events and refetch the trip list
   useEffect(() => {
     const currentTripIds = subscribedTripIdsRef.current;
 
@@ -435,14 +454,26 @@ export default function TripSelector({
       refetchTrips();
     };
 
+    const handleTripMaterialized = () => {
+      refetchTrips();
+    };
+
+    const handleTripStatusChanged = () => {
+      refetchTrips();
+    };
+
     const removeInventory = addEventListener('INVENTORY_UPDATED', handleInventoryUpdate);
     const removeHolds = addEventListener('HOLDS_RELEASED', handleInventoryUpdate);
     const removeStopEx = addEventListener('STOP_EXCEPTION_CHANGED', handleStopExceptionChanged);
+    const removeMat = addEventListener('TRIP_MATERIALIZED', handleTripMaterialized);
+    const removeStatus = addEventListener('TRIP_STATUS_CHANGED', handleTripStatusChanged);
 
     return () => {
       removeInventory();
       removeHolds();
       removeStopEx();
+      removeMat();
+      removeStatus();
     };
   }, [addEventListener, refetchTrips]);
 
