@@ -4,7 +4,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   MapPin, Store, Truck, UserCheck, LayoutGrid, Route, Calendar, DollarSign,
   Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText, BadgePercent, ClipboardList, CalendarDays, CalendarRange, LogOut,
-  BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard, ShieldCheck, Receipt, Send
+  BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard, ShieldCheck, Receipt, PackagePlus, PackageSearch, Boxes, Weight
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { usePermissions } from "@/lib/permissions";
@@ -14,8 +14,8 @@ const NAV_SECTIONS = [
     title: "OPERASIONAL",
     items: [
       { name: "Reservasi", path: "/cso", icon: Ticket, flag: "page.cso" },
-      { name: "Kargo", path: "/cargo-terminal", icon: Send, flag: "page.cargo" },
-      { name: "All Kargo", path: "/cargo", icon: Package, flag: "page.cargo" },
+      { name: "Kargo", path: "/cargo-terminal", icon: PackagePlus, flag: "page.cargo" },
+      { name: "All Kargo", path: "/cargo", icon: PackageSearch, flag: "page.cargo" },
       { name: "All Bookings", path: "/bookings", icon: List, flag: "page.bookings" },
       { name: "Jadwal Harian", path: "/schedule", icon: CalendarDays, flag: "page.schedule" },
       { name: "Penjadwalan", path: "/scheduler", icon: CalendarRange, flag: "page.schedule" },
@@ -31,7 +31,7 @@ const NAV_SECTIONS = [
       { name: "Laba Rugi Trip", path: "/reports/trip-profitability", icon: TrendingUp, flag: "report.trip_profitability" },
       { name: "Load Factor", path: "/reports/load-factor", icon: Users, flag: "report.load_factor" },
       { name: "Pembatalan", path: "/reports/cancellations", icon: AlertTriangle, flag: "report.cancellations" },
-      { name: "Kargo", path: "/reports/cargo", icon: Package, flag: "report.cargo" },
+      { name: "Kargo", path: "/reports/cargo", icon: Boxes, flag: "report.cargo" },
       { name: "Pembayaran", path: "/reports/payments", icon: CreditCard, flag: "report.payments" },
       { name: "Commercial Fee", path: "/reports/commercial-fee", icon: Receipt, flag: "report.commercial_fee" },
     ]
@@ -48,8 +48,8 @@ const NAV_SECTIONS = [
       { name: "Trips", path: "/masters?tab=trips", icon: Calendar, flag: "master.trips" },
       { name: "Price Rules", path: "/masters?tab=pricing", icon: DollarSign, flag: "master.price_rules" },
       { name: "Promo & Voucher", path: "/masters?tab=promos", icon: BadgePercent, flag: "master.promos" },
-      { name: "Jenis Kargo", path: "/masters?tab=cargo-types", icon: Tag, flag: "master.cargo_types" },
-      { name: "Tarif Kargo", path: "/masters?tab=cargo-rates", icon: Package, flag: "master.cargo_rates" },
+      { name: "Jenis Kargo", path: "/masters?tab=cargo-types", icon: Boxes, flag: "master.cargo_types" },
+      { name: "Tarif Kargo", path: "/masters?tab=cargo-rates", icon: Weight, flag: "master.cargo_rates" },
       { name: "Biaya Perjalanan", path: "/masters?tab=cost-templates", icon: Wallet, flag: "master.cost_templates" },
     ]
   },
