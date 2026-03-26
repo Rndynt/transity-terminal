@@ -14,7 +14,8 @@ import {
   type TripLeg, type InsertTripLeg,
   type SeatInventory, type InsertSeatInventory,
   type PriceRule, type InsertPriceRule,
-  type CsoAvailableTrip
+  type CsoAvailableTrip,
+  type CargoAvailableTrip
 } from "@shared/schema";
 
 export class SchedulingRepository {
@@ -942,5 +943,275 @@ export class SchedulingRepository {
         inArray(bookings.status, ['pending', 'paid', 'confirmed'])
       ));
     return result?.count || 0;
+  }
+
+  async getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]> {
+    const [realTrips, virtualTrips] = await Promise.all([
+      this.getRealTripsForCargo(serviceDate, originStopId, destinationStopId),
+      this.getVirtualTripsForCargo(serviceDate, originStopId, destinationStopId)
+    ]);
+
+    const baseIdsWithRealTrips = new Set(
+      realTrips.filter(t => t.baseId).map(t => t.baseId!)
+    );
+    const filteredVirtualTrips = virtualTrips.filter(
+      t => !baseIdsWithRealTrips.has(t.baseId!)
+    );
+
+    const allTrips = [...realTrips, ...filteredVirtualTrips];
+
+    let filtered = allTrips;
+    const baseIds = [...new Set(allTrips.filter(t => t.baseId).map(t => t.baseId!))];
+    if (baseIds.length > 0) {
+      const exceptions = await db.select({ baseId: scheduleExceptions.baseId })
+        .from(scheduleExceptions)
+        .where(and(
+          inArray(scheduleExceptions.baseId, baseIds),
+          eq(scheduleExceptions.exceptionDate, serviceDate),
+        ));
+      const exceptedBaseIds = new Set(exceptions.map(e => e.baseId));
+      filtered = allTrips.filter(t => !t.baseId || !exceptedBaseIds.has(t.baseId));
+    }
+
+    return filtered.sort((a, b) => {
+      if (!a.departAtOrigin && !b.departAtOrigin) return 0;
+      if (!a.departAtOrigin) return 1;
+      if (!b.departAtOrigin) return -1;
+      return new Date(a.departAtOrigin).getTime() - new Date(b.departAtOrigin).getTime();
+    });
+  }
+
+  private async getRealTripsForCargo(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]> {
+    const result = await db.execute(sql`
+      SELECT
+        t.id AS trip_id,
+        t.base_id,
+        t.pattern_id,
+        t.vehicle_id,
+        t.status,
+        tp.code AS pattern_code,
+        v.code AS vehicle_code,
+        v.plate AS vehicle_plate
+      FROM trips t
+      JOIN trip_patterns tp ON tp.id = t.pattern_id
+      LEFT JOIN vehicles v ON v.id = t.vehicle_id
+      WHERE t.service_date = ${serviceDate}
+        AND t.deleted_at IS NULL
+        AND t.status NOT IN ('canceled')
+    `);
+
+    if ((result.rows as any[]).length === 0) return [];
+
+    const tripRows = result.rows as any[];
+    const uniquePatternIds = [...new Set(tripRows.map(r => r.pattern_id as string))];
+    const uniqueBaseIds = [...new Set(tripRows.filter(r => r.base_id).map(r => r.base_id as string))];
+    const tripIds = tripRows.map(r => r.trip_id as string);
+
+    const [patternStopsRows, patternPathRows, basesRows, tstRows] = await Promise.all([
+      db.query.patternStops.findMany({
+        where: and(inArray(patternStops.patternId, uniquePatternIds), isNull(patternStops.deletedAt)),
+        orderBy: patternStops.stopSequence,
+      }),
+      db.execute(sql`
+        SELECT ps.pattern_id, STRING_AGG(s.name, ' → ' ORDER BY ps.stop_sequence) AS path
+        FROM ${patternStops} ps
+        JOIN ${stops} s ON ps.stop_id = s.id
+        WHERE ps.pattern_id IN ${sql`(${sql.join(uniquePatternIds.map(id => sql`${id}`), sql`, `)})`}
+          AND ps.deleted_at IS NULL
+        GROUP BY ps.pattern_id
+      `),
+      uniqueBaseIds.length > 0
+        ? db.select().from(tripBases).where(inArray(tripBases.id, uniqueBaseIds))
+        : Promise.resolve([]),
+      db.execute(sql`
+        SELECT tst.trip_id, tst.stop_id, tst.stop_sequence,
+               tst.depart_at, tst.arrive_at
+        FROM trip_stop_times tst
+        WHERE tst.trip_id IN ${sql`(${sql.join(tripIds.map(id => sql`${id}`), sql`, `)})`}
+          AND tst.deleted_at IS NULL
+        ORDER BY tst.trip_id, tst.stop_sequence
+      `)
+    ]);
+
+    const patternStopsByPattern = new Map<string, typeof patternStopsRows>();
+    for (const ps of patternStopsRows) {
+      const list = patternStopsByPattern.get(ps.patternId) || [];
+      list.push(ps);
+      patternStopsByPattern.set(ps.patternId, list);
+    }
+    const patternPathMap = new Map<string, string>();
+    for (const row of patternPathRows.rows as any[]) {
+      patternPathMap.set(row.pattern_id, row.path || '');
+    }
+    const basesMap = new Map((basesRows as any[]).map(b => [b.id, b]));
+
+    const tstByTrip = new Map<string, any[]>();
+    for (const row of tstRows.rows as any[]) {
+      const list = tstByTrip.get(row.trip_id) || [];
+      list.push(row);
+      tstByTrip.set(row.trip_id, list);
+    }
+
+    const trips: CargoAvailableTrip[] = [];
+
+    for (const row of tripRows) {
+      const psForPattern = patternStopsByPattern.get(row.pattern_id) || [];
+      const originPs = psForPattern.find(ps => ps.stopId === originStopId);
+      const destPs = psForPattern.find(ps => ps.stopId === destinationStopId);
+      if (!originPs || !destPs) continue;
+      if (originPs.stopSequence >= destPs.stopSequence) continue;
+
+      let departAtOrigin: string | null = null;
+      let arriveAtDestination: string | null = null;
+
+      const tripStops = tstByTrip.get(row.trip_id);
+      if (tripStops && tripStops.length > 0) {
+        const originTst = tripStops.find((ts: any) => ts.stop_id === originStopId);
+        const destTst = tripStops.find((ts: any) => ts.stop_id === destinationStopId);
+        if (originTst) departAtOrigin = originTst.depart_at || originTst.arrive_at || null;
+        if (destTst) arriveAtDestination = destTst.arrive_at || destTst.depart_at || null;
+      }
+
+      if (!departAtOrigin && row.base_id) {
+        const base = basesMap.get(row.base_id);
+        if (base) {
+          const defaultStopTimes = base.defaultStopTimes as any[];
+          const originTime = defaultStopTimes?.find((st: any) => st.stopSequence === originPs.stopSequence);
+          const destTime = defaultStopTimes?.find((st: any) => st.stopSequence === destPs.stopSequence);
+          if (originTime?.departAt) {
+            const utc = fromZonedHHMMToUtc(serviceDate, originTime.departAt, "Asia/Jakarta");
+            departAtOrigin = utc?.toISOString() ?? null;
+          }
+          if (destTime?.arriveAt) {
+            const utc = fromZonedHHMMToUtc(serviceDate, destTime.arriveAt, "Asia/Jakarta");
+            if (utc && departAtOrigin) {
+              if (utc.getTime() <= new Date(departAtOrigin).getTime()) {
+                utc.setDate(utc.getDate() + 1);
+              }
+            }
+            arriveAtDestination = utc?.toISOString() ?? null;
+          }
+        }
+      }
+
+      trips.push({
+        tripId: row.trip_id,
+        baseId: row.base_id || undefined,
+        isVirtual: false,
+        patternCode: row.pattern_code,
+        patternPath: patternPathMap.get(row.pattern_id) || 'Unknown Route',
+        vehicle: row.vehicle_code && row.vehicle_plate ? {
+          code: row.vehicle_code,
+          plate: row.vehicle_plate
+        } : null,
+        status: (row.status || 'scheduled') as any,
+        departAtOrigin,
+        arriveAtDestination,
+        originStopSequence: originPs.stopSequence,
+        destinationStopSequence: destPs.stopSequence,
+        legCount: destPs.stopSequence - originPs.stopSequence,
+      });
+    }
+
+    return trips;
+  }
+
+  private async getVirtualTripsForCargo(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]> {
+    const eligibleBases = await this.getEligibleTripBases(serviceDate);
+    if (eligibleBases.length === 0) return [];
+
+    const exceptions = await db.select({ baseId: scheduleExceptions.baseId })
+      .from(scheduleExceptions)
+      .where(eq(scheduleExceptions.exceptionDate, serviceDate));
+    const exceptedBaseIds = new Set(exceptions.map(e => e.baseId));
+    const filteredBases = eligibleBases.filter(b => !exceptedBaseIds.has(b.id));
+    if (filteredBases.length === 0) return [];
+
+    const uniquePatternIds = [...new Set(filteredBases.map(b => b.patternId))];
+
+    const [allPatterns, allPatternStopsRows, patternPathRows] = await Promise.all([
+      db.select().from(tripPatterns).where(inArray(tripPatterns.id, uniquePatternIds)),
+      db.query.patternStops.findMany({
+        where: and(inArray(patternStops.patternId, uniquePatternIds), isNull(patternStops.deletedAt)),
+        orderBy: patternStops.stopSequence,
+        with: { stop: true }
+      }),
+      db.execute(sql`
+        SELECT ps.pattern_id, STRING_AGG(s.name, ' → ' ORDER BY ps.stop_sequence) as pattern_path
+        FROM ${patternStops} ps
+        JOIN ${stops} s ON ps.stop_id = s.id
+        WHERE ps.pattern_id IN ${sql`(${sql.join(uniquePatternIds.map(id => sql`${id}`), sql`, `)})`}
+          AND ps.deleted_at IS NULL
+        GROUP BY ps.pattern_id
+      `)
+    ]);
+
+    const patternsMap = new Map(allPatterns.map(p => [p.id, p]));
+    const patternStopsMap = new Map<string, typeof allPatternStopsRows>();
+    for (const ps of allPatternStopsRows) {
+      const list = patternStopsMap.get(ps.patternId) || [];
+      list.push(ps);
+      patternStopsMap.set(ps.patternId, list);
+    }
+    const patternPathMap = new Map<string, string>();
+    for (const row of patternPathRows.rows as any[]) {
+      patternPathMap.set(row.pattern_id, row.pattern_path || '');
+    }
+
+    const virtualTrips: CargoAvailableTrip[] = [];
+
+    for (const base of filteredBases) {
+      try {
+        const pattern = patternsMap.get(base.patternId);
+        if (!pattern) continue;
+
+        const stopsForBase = patternStopsMap.get(base.patternId) || [];
+        const originPs = stopsForBase.find(ps => ps.stopId === originStopId);
+        const destPs = stopsForBase.find(ps => ps.stopId === destinationStopId);
+
+        if (!originPs || !destPs) continue;
+        if (originPs.stopSequence >= destPs.stopSequence) continue;
+
+        const defaultStopTimes = base.defaultStopTimes as any[];
+        const originTime = defaultStopTimes?.find((st: any) => st.stopSequence === originPs.stopSequence);
+        const destTime = defaultStopTimes?.find((st: any) => st.stopSequence === destPs.stopSequence);
+
+        let departAtOrigin: string | null = null;
+        let arriveAtDestination: string | null = null;
+
+        if (originTime?.departAt) {
+          const utc = fromZonedHHMMToUtc(serviceDate, originTime.departAt, "Asia/Jakarta");
+          departAtOrigin = utc?.toISOString() ?? null;
+        }
+        if (destTime?.arriveAt) {
+          const utc = fromZonedHHMMToUtc(serviceDate, destTime.arriveAt, "Asia/Jakarta");
+          if (utc && departAtOrigin) {
+            if (utc.getTime() <= new Date(departAtOrigin).getTime()) {
+              utc.setDate(utc.getDate() + 1);
+            }
+          }
+          arriveAtDestination = utc?.toISOString() ?? null;
+        }
+
+        virtualTrips.push({
+          baseId: base.id,
+          isVirtual: true,
+          patternCode: pattern.code,
+          patternPath: patternPathMap.get(base.patternId) || '',
+          vehicle: null,
+          status: 'scheduled',
+          departAtOrigin,
+          arriveAtDestination,
+          originStopSequence: originPs.stopSequence,
+          destinationStopSequence: destPs.stopSequence,
+          legCount: destPs.stopSequence - originPs.stopSequence,
+        });
+      } catch (error) {
+        console.warn(`Skipping virtual cargo trip for base ${base.id}:`, error);
+        continue;
+      }
+    }
+
+    return virtualTrips;
   }
 }

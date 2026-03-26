@@ -11,7 +11,7 @@ import type {
   InsertCargoType, InsertCargoRate,
   TripCostTemplate, InsertTripCostTemplate,
   TripCostItem, InsertTripCostItem,
-  CsoAvailableTrip,
+  CsoAvailableTrip, CargoAvailableTrip,
   Promotion, InsertPromotion,
   Voucher, InsertVoucher
 } from "@shared/schema";
@@ -126,6 +126,7 @@ export interface IStorage {
   getTrips(serviceDate?: string): Promise<TripWithDetails[]>;
   getTripsForDateRange(fromDate: string, toDate: string): Promise<TripWithDetails[]>;
   getCsoAvailableTrips(serviceDate: string, outletId: string): Promise<CsoAvailableTrip[]>;
+  getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]>;
   getTripById(id: string): Promise<Trip | undefined>;
   createTrip(data: InsertTrip): Promise<Trip>;
   updateTrip(id: string, data: Partial<InsertTrip>): Promise<Trip>;

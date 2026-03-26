@@ -1,5 +1,5 @@
 import { IStorage } from "../../storage.interface";
-import { InsertCargoShipment, CargoShipment, cargoStatusEnum } from "@shared/schema";
+import { InsertCargoShipment, CargoShipment, CargoAvailableTrip, cargoStatusEnum } from "@shared/schema";
 
 const VALID_STATUSES = cargoStatusEnum.enumValues;
 type CargoStatus = typeof VALID_STATUSES[number];
@@ -62,6 +62,10 @@ export class CargoService {
     const calculatedAmount = Math.max(calculated, minCharge);
 
     return { pricePerKg, pricePerLeg, minCharge, legCount, calculatedAmount };
+  }
+
+  async getAvailableTrips(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]> {
+    return this.storage.getCargoAvailableTrips(serviceDate, originStopId, destinationStopId);
   }
 
   async getAllShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]> {

@@ -42,7 +42,7 @@ Pages interact with components, which utilize hooks, API clients, and React Quer
 
 ### Feature Specifications
 - **CSO Booking Terminal**: Interactive seat map with real-time updates, multi-phase booking flow, unseat/reschedule/cancel functionalities, promo code support.
-- **Cargo Management**: Tracks cargo types, rates, and shipments; generates waybills; calculates tariffs.
+- **Cargo Management**: Tracks cargo types, rates, and shipments; generates waybills; calculates tariffs. Cargo Terminal uses own `/api/cargo/available-trips` endpoint (origin+destination stop-based) with pattern_stops fallback for trip_stop_times, filters virtual trips (only real/materialized shown), and listens to WebSocket events for real-time schedule updates.
 - **Daily Schedule**: Displays all trips for a given date, allows inline driver assignment, and provides access to manifests and SPJ creation.
 - **SPJ (Surat Perintah Jalan)**: Manages trip manifests with auto-populated cost lines from templates and a Draft → Issued → Settled workflow.
 - **Reports**: Eight types of analytical reports (Revenue, Sales, Trip Profitability, Load Factor, Cancellations, Cargo, Payments, Commercial Fee), relying on snapshot data for historical accuracy.

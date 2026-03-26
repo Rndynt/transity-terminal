@@ -18,6 +18,7 @@ export function registerCargoRoutes(app: FastifyInstance, storage: IStorage) {
   app.put('/api/cargo-rates/:id', { preHandler: [requireFlag('master.cargo_rates')] }, async (req, reply) => cargoController.updateCargoRate(req, reply));
   app.delete('/api/cargo-rates/:id', { preHandler: [requireFlag('master.cargo_rates')] }, async (req, reply) => cargoController.deleteCargoRate(req, reply));
 
+  app.get('/api/cargo/available-trips', async (req, reply) => cargoController.getAvailableTrips(req, reply));
   app.get('/api/cargo/quote-tariff', async (req, reply) => cargoController.quoteTariff(req, reply));
 
   app.get('/api/cargo', { preHandler: [requireOutletScope()] }, async (req, reply) => cargoController.getAll(req, reply));

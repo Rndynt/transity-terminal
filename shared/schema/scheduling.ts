@@ -138,6 +138,21 @@ export type CsoAvailableTrip = {
   outletStopClosedReason?: string | null;
 };
 
+export type CargoAvailableTrip = {
+  tripId?: string;
+  baseId?: string;
+  isVirtual: boolean;
+  patternCode: string;
+  patternPath: string;
+  vehicle: { code?: string; plate?: string } | null;
+  status: "scheduled" | "canceled" | "closed" | "draft" | "unknown";
+  departAtOrigin: string | null;
+  arriveAtDestination: string | null;
+  originStopSequence: number;
+  destinationStopSequence: number;
+  legCount: number;
+};
+
 export const scheduleExceptions = pgTable("schedule_exceptions", {
   id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   baseId:      uuid("base_id").notNull().references(() => tripBases.id),

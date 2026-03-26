@@ -331,6 +331,10 @@ export const cargoApi = {
     const params = new URLSearchParams({ cargoTypeId, originStopId, destinationStopId, weightKg: String(weightKg) });
     if (tripId) params.set('tripId', tripId);
     return fetch(`/api/cargo/quote-tariff?${params}`).then(res => res.json());
+  },
+  getAvailableTrips: (date: string, originStopId: string, destinationStopId: string) => {
+    const params = new URLSearchParams({ date, originStopId, destinationStopId });
+    return fetch(`/api/cargo/available-trips?${params}`).then(res => res.json());
   }
 };
 

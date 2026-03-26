@@ -79,6 +79,15 @@ export class CargoController {
     }
   }
 
+  async getAvailableTrips(req: FastifyRequest, reply: FastifyReply) {
+    const { date, originStopId, destinationStopId } = req.query as any;
+    if (!date || !originStopId || !destinationStopId) {
+      return reply.code(400).send({ error: 'date, originStopId, destinationStopId are required' });
+    }
+    const trips = await this.cargoService.getAvailableTrips(date, originStopId, destinationStopId);
+    reply.send(trips);
+  }
+
   async quoteTariff(req: FastifyRequest, reply: FastifyReply) {
     const { cargoTypeId, originStopId, destinationStopId, weightKg, tripId } = req.query;
     if (!cargoTypeId || !originStopId || !destinationStopId || !weightKg) {

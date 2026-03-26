@@ -13,7 +13,7 @@ import type {
   Booking, InsertBooking, Passenger, InsertPassenger,
   Payment, InsertPayment, PrintJob, InsertPrintJob,
   CargoShipment, InsertCargoShipment, CargoType, InsertCargoType,
-  CargoRate, InsertCargoRate, CsoAvailableTrip,
+  CargoRate, InsertCargoRate, CsoAvailableTrip, CargoAvailableTrip,
   TripCostTemplate, InsertTripCostTemplate, TripCostItem, InsertTripCostItem,
   Promotion, InsertPromotion, Voucher, InsertVoucher
 } from "@shared/schema";
@@ -77,6 +77,9 @@ export class DatabaseStorage implements IStorage {
   getTripsForDateRange(fromDate: string, toDate: string): Promise<TripWithDetails[]> { return this.scheduling.getTripsForDateRange(fromDate, toDate); }
   getCsoAvailableTrips(serviceDate: string, outletId: string): Promise<CsoAvailableTrip[]> {
     return this.scheduling.getCsoAvailableTrips(serviceDate, outletId, (id) => this.network.getOutletById(id));
+  }
+  getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]> {
+    return this.scheduling.getCargoAvailableTrips(serviceDate, originStopId, destinationStopId);
   }
   getTripById(id: string): Promise<Trip | undefined> { return this.scheduling.getTripById(id); }
   createTrip(data: InsertTrip): Promise<Trip> { return this.scheduling.createTrip(data); }
