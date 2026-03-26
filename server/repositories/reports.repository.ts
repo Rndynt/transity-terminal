@@ -834,7 +834,7 @@ export class ReportsRepository {
 
     const cargoDateConds = cargoDateConditions(f, 'cs', 't');
     const cargoConds: SQL[] = [...cargoDateConds, sql`cs.status NOT IN ${EXCLUDE_CARGO_SQL}`, sql`cs.paid_at IS NOT NULL`];
-    if (f.outletId) cargoConds.push(sql`cs.origin_outlet_id = ${f.outletId}`);
+    if (f.outletId) cargoConds.push(sql`cs.outlet_id = ${f.outletId}`);
     if (f.patternId) cargoConds.push(sql`t.pattern_id = ${f.patternId}`);
     const cargoWhere = joinConditions(cargoConds);
 
