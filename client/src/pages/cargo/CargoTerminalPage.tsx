@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Package, MapPin, Search, ArrowRight, Weight, Hash, Ruler, ShieldCheck,
-  User, Phone, Banknote, QrCode, Wallet, Building2,
+  User, Banknote, QrCode, Wallet, Building2,
   Loader2, Bus, Clock, Calendar, ChevronRight, Truck, Route,
   CheckCircle2, AlertCircle, RotateCcw, Printer, Copy
 } from 'lucide-react';
@@ -617,52 +617,54 @@ export default function CargoTerminalPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="border border-amber-200 rounded-xl p-3 md:p-4 bg-amber-50/50">
-                  <div className="flex items-center gap-1.5 mb-3">
-                    <User className="w-4 h-4 text-amber-600" />
-                    <h3 className="text-sm font-bold text-gray-700">Pengirim</h3>
+                <div className="border border-amber-200 rounded-xl p-3 bg-amber-50/50">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <User className="w-3.5 h-3.5 text-amber-600" />
+                    <span className="text-xs font-semibold text-gray-700">Pengirim</span>
                   </div>
-                  <div className="space-y-2">
-                    <input
-                      value={senderName}
-                      onChange={e => setSenderName(e.target.value)}
-                      placeholder="Nama pengirim *"
-                      className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
-                      data-testid="input-sender-name"
-                    />
-                    <div className="relative">
-                      <Phone className="w-3 h-3 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <div className="flex gap-2">
+                    <div className="flex-[2]">
+                      <input
+                        value={senderName}
+                        onChange={e => setSenderName(e.target.value)}
+                        placeholder="Nama pengirim *"
+                        className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
+                        data-testid="input-sender-name"
+                      />
+                    </div>
+                    <div className="flex-1">
                       <input
                         value={senderPhone}
                         onChange={e => setSenderPhone(e.target.value)}
-                        placeholder="Telepon pengirim *"
-                        className="w-full h-9 pl-8 pr-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
+                        placeholder="Telepon *"
+                        className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
                         data-testid="input-sender-phone"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="border border-blue-200 rounded-xl p-3 md:p-4 bg-blue-50/50">
-                  <div className="flex items-center gap-1.5 mb-3">
-                    <User className="w-4 h-4 text-blue-600" />
-                    <h3 className="text-sm font-bold text-gray-700">Penerima</h3>
+                <div className="border border-blue-200 rounded-xl p-3 bg-blue-50/50">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <User className="w-3.5 h-3.5 text-blue-600" />
+                    <span className="text-xs font-semibold text-gray-700">Penerima</span>
                   </div>
-                  <div className="space-y-2">
-                    <input
-                      value={recipientName}
-                      onChange={e => setRecipientName(e.target.value)}
-                      placeholder="Nama penerima *"
-                      className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
-                      data-testid="input-recipient-name"
-                    />
-                    <div className="relative">
-                      <Phone className="w-3 h-3 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <div className="flex gap-2">
+                    <div className="flex-[2]">
+                      <input
+                        value={recipientName}
+                        onChange={e => setRecipientName(e.target.value)}
+                        placeholder="Nama penerima *"
+                        className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+                        data-testid="input-recipient-name"
+                      />
+                    </div>
+                    <div className="flex-1">
                       <input
                         value={recipientPhone}
                         onChange={e => setRecipientPhone(e.target.value)}
-                        placeholder="Telepon penerima *"
-                        className="w-full h-9 pl-8 pr-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+                        placeholder="Telepon *"
+                        className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
                         data-testid="input-recipient-phone"
                       />
                     </div>
@@ -670,12 +672,12 @@ export default function CargoTerminalPage() {
                 </div>
               </div>
 
-              <div className="border border-gray-200 rounded-xl p-3 md:p-4 bg-white">
-                <div className="flex items-center gap-1.5 mb-3">
-                  <Package className="w-4 h-4 text-gray-600" />
-                  <h3 className="text-sm font-bold text-gray-700">Detail Barang</h3>
+              <div className="border border-gray-200 rounded-xl p-3 bg-gray-50">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Package className="w-3.5 h-3.5 text-gray-600" />
+                  <span className="text-xs font-semibold text-gray-700">Detail Barang</span>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {activeCargoTypes.length > 0 && (
                     <div>
                       <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Jenis Kargo *</label>
@@ -689,91 +691,86 @@ export default function CargoTerminalPage() {
                       />
                     </div>
                   )}
-                  <div>
-                    <input
-                      value={itemDescription}
-                      onChange={e => setItemDescription(e.target.value)}
-                      placeholder="Deskripsi barang *"
-                      className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
-                      data-testid="input-item-description"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    <div className="relative">
-                      <Hash className="w-3 h-3 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    value={itemDescription}
+                    onChange={e => setItemDescription(e.target.value)}
+                    placeholder="Deskripsi barang *"
+                    className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
+                    data-testid="input-item-description"
+                  />
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Hash className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         type="number"
                         min="1"
                         value={quantity}
                         onChange={e => setQuantity(e.target.value)}
-                        placeholder="Jumlah"
-                        className="w-full h-9 pl-8 pr-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
+                        placeholder="Jml"
+                        className="w-full h-8 pl-7 pr-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
                         data-testid="input-quantity"
                       />
                     </div>
-                    <div className="relative">
-                      <Weight className="w-3 h-3 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <div className="relative flex-1">
+                      <Weight className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         type="number"
                         step="0.1"
                         value={weightKg}
                         onChange={e => setWeightKg(e.target.value)}
                         placeholder="Berat (kg)"
-                        className="w-full h-9 pl-8 pr-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
+                        className="w-full h-8 pl-7 pr-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
                         data-testid="input-weight"
                       />
                     </div>
-                    <div className="relative">
-                      <Ruler className="w-3 h-3 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <div className="relative flex-1">
+                      <Ruler className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         type="number"
                         step="0.1"
                         value={lengthCm}
                         onChange={e => setLengthCm(e.target.value)}
                         placeholder="P (cm)"
-                        className="w-full h-9 pl-8 pr-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
+                        className="w-full h-8 pl-7 pr-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
                         data-testid="input-length"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={widthCm}
-                        onChange={e => setWidthCm(e.target.value)}
-                        placeholder="L (cm)"
-                        className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
-                        data-testid="input-width"
-                      />
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={heightCm}
-                        onChange={e => setHeightCm(e.target.value)}
-                        placeholder="T (cm)"
-                        className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
-                        data-testid="input-height"
-                      />
-                    </div>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={widthCm}
+                      onChange={e => setWidthCm(e.target.value)}
+                      placeholder="L (cm)"
+                      className="w-16 h-8 px-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
+                      data-testid="input-width"
+                    />
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={heightCm}
+                      onChange={e => setHeightCm(e.target.value)}
+                      placeholder="T (cm)"
+                      className="w-16 h-8 px-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
+                      data-testid="input-height"
+                    />
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <div className="relative">
-                      <ShieldCheck className="w-3 h-3 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <ShieldCheck className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         type="number"
                         value={declaredValue}
                         onChange={e => setDeclaredValue(e.target.value)}
                         placeholder="Nilai barang (Rp, opsional)"
-                        className="w-full h-9 pl-8 pr-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
+                        className="w-full h-8 pl-7 pr-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
                         data-testid="input-declared-value"
                       />
                     </div>
-                    <textarea
+                    <input
                       value={notes}
                       onChange={e => setNotes(e.target.value)}
                       placeholder="Catatan (opsional)"
-                      rows={1}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300 resize-none"
+                      className="flex-1 h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
                       data-testid="input-notes"
                     />
                   </div>
