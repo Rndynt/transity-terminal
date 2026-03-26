@@ -575,8 +575,8 @@ export default function CargoTerminalPage() {
       <div className="flex-1 overflow-hidden flex flex-col">
         {(step === 1 || step === 2) && (
           <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
-            <div className={`${step === 2 ? 'hidden lg:block' : ''} lg:w-[420px] xl:w-[460px] lg:border-r lg:border-gray-200 overflow-y-auto flex-shrink-0`}>
-              <div className="p-3 md:p-4 space-y-3">
+            <div className={`${step === 2 ? 'hidden lg:flex' : 'flex'} lg:w-[420px] xl:w-[460px] lg:border-r lg:border-gray-200 flex-col flex-shrink-0`}>
+              <div className="p-3 md:p-4 space-y-3 overflow-y-auto flex-1">
               <div className="border border-gray-200 rounded-xl p-3 bg-white">
                 <div className="flex items-center gap-1.5 mb-2">
                   <MapPin className="w-3.5 h-3.5 text-amber-600" />
@@ -788,51 +788,52 @@ export default function CargoTerminalPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end">
-                <button
-                  onClick={() => {
-                    setTariffCache({});
-                    setSelectedTripKey('');
-                    setSelectedTripDate('');
-                    setTripsSearched(true);
-                    setTimeout(() => { refetchAllTrips(); }, 50);
-                  }}
-                  disabled={!canProceedStep1}
-                  className="h-9 px-5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                  data-testid="btn-search-trips"
-                >
-                  <Search className="w-4 h-4" />
-                  Cari Jadwal
-                </button>
               </div>
 
-              {selectedTrip && (
-                <div className="border border-amber-200 rounded-xl p-3 bg-amber-50/50">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs min-w-0">
-                      <div className="flex items-center gap-1.5 text-gray-700 font-medium">
-                        <Clock className="w-3 h-3 text-amber-500" />
-                        <span className="font-bold">{formatTime(selectedTrip.departAtOrigin)}</span>
-                        <ArrowRight className="w-3 h-3 text-gray-300" />
-                        <span className="font-bold">{formatTime(selectedTrip.arriveAtDestination)}</span>
+              <div className="border-t border-gray-200 bg-white px-3 md:px-4 py-2.5 flex-shrink-0 space-y-2">
+                {selectedTrip ? (
+                  <div className="border border-amber-300 rounded-xl p-3 bg-amber-50">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs min-w-0">
+                        <div className="flex items-center gap-1.5 text-gray-700 font-medium">
+                          <Clock className="w-3 h-3 text-amber-500" />
+                          <span className="font-bold">{formatTime(selectedTrip.departAtOrigin)}</span>
+                          <ArrowRight className="w-3 h-3 text-gray-300" />
+                          <span className="font-bold">{formatTime(selectedTrip.arriveAtDestination)}</span>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-0.5">{selectedTrip.patternCode} — {formatDateLabel(selectedTrip.date)}</p>
+                        {selectedTrip.tariff?.found && (
+                          <div className="text-sm font-black text-amber-700 font-mono mt-1">{fmtCurrency(selectedTrip.tariff.calculatedAmount)}</div>
+                        )}
                       </div>
-                      <p className="text-[10px] text-gray-500 mt-0.5">{selectedTrip.patternCode} — {formatDateLabel(selectedTrip.date)}</p>
-                      {selectedTrip.tariff?.found && (
-                        <div className="text-sm font-black text-amber-700 font-mono mt-1">{fmtCurrency(selectedTrip.tariff.calculatedAmount)}</div>
-                      )}
+                      <button
+                        onClick={() => setStep(3)}
+                        className="h-9 px-5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm flex-shrink-0"
+                        data-testid="btn-proceed-payment"
+                      >
+                        Lanjut Pembayaran
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => setStep(3)}
-                      className="h-9 px-5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm flex-shrink-0"
-                      data-testid="btn-proceed-payment"
-                    >
-                      Lanjut Pembayaran
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
                   </div>
-                </div>
-              )}
-            </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setTariffCache({});
+                      setSelectedTripKey('');
+                      setSelectedTripDate('');
+                      setTripsSearched(true);
+                      setTimeout(() => { refetchAllTrips(); }, 50);
+                    }}
+                    disabled={!canProceedStep1}
+                    className="w-full h-10 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                    data-testid="btn-search-trips"
+                  >
+                    <Search className="w-4 h-4" />
+                    Cari Jadwal
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className={`${!showTripsPanel ? 'hidden lg:flex' : 'flex'} flex-1 flex-col overflow-y-auto bg-gray-50/50`}>
@@ -873,13 +874,14 @@ export default function CargoTerminalPage() {
                     <div className="space-y-2 mb-4" data-testid="trip-list">
                       {group.trips.map((trip, idx) => {
                         const tripKey = `${trip.tripId || trip.baseId}-${trip.date}`;
-                        const isSelected = selectedTripKey === trip.tripId && selectedTripDate === trip.date;
+                        const tripIdentifier = trip.tripId || trip.baseId;
+                        const isSelected = selectedTripKey === tripIdentifier && selectedTripDate === trip.date;
                         const tariff = trip.tariff;
                         return (
                           <button
                             key={tripKey + idx}
                             onClick={() => {
-                              setSelectedTripKey(trip.tripId ?? '');
+                              setSelectedTripKey(tripIdentifier ?? '');
                               setSelectedTripDate(trip.date);
                             }}
                             className={`w-full text-left border rounded-xl p-3 transition-all ${
