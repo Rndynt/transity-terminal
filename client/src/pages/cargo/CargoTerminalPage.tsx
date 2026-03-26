@@ -232,24 +232,25 @@ export default function CargoTerminalPage() {
   const dates3 = useMemo(() => [getDateStr(0), getDateStr(1), getDateStr(2)], []);
 
   const originStopId = originStop?.id;
+  const tripsEnabled = !!originStopId && !!destinationStopId && !!cargoTypeId && itemDescription.trim().length >= 2;
   const { data: rawTripsDay0 = [], isLoading: loadingDay0, refetch: refetchDay0 } = useQuery<CargoAvailableTrip[]>({
     queryKey: ['/api/cargo/available-trips', dates3[0], originStopId, destinationStopId],
     queryFn: () => cargoApi.getAvailableTrips(dates3[0], originStopId!, destinationStopId),
-    enabled: step === 2 && !!originStopId && !!destinationStopId,
+    enabled: tripsEnabled,
     staleTime: 0,
     refetchOnMount: 'always',
   });
   const { data: rawTripsDay1 = [], isLoading: loadingDay1, refetch: refetchDay1 } = useQuery<CargoAvailableTrip[]>({
     queryKey: ['/api/cargo/available-trips', dates3[1], originStopId, destinationStopId],
     queryFn: () => cargoApi.getAvailableTrips(dates3[1], originStopId!, destinationStopId),
-    enabled: step === 2 && !!originStopId && !!destinationStopId,
+    enabled: tripsEnabled,
     staleTime: 0,
     refetchOnMount: 'always',
   });
   const { data: rawTripsDay2 = [], isLoading: loadingDay2, refetch: refetchDay2 } = useQuery<CargoAvailableTrip[]>({
     queryKey: ['/api/cargo/available-trips', dates3[2], originStopId, destinationStopId],
     queryFn: () => cargoApi.getAvailableTrips(dates3[2], originStopId!, destinationStopId),
-    enabled: step === 2 && !!originStopId && !!destinationStopId,
+    enabled: tripsEnabled,
     staleTime: 0,
     refetchOnMount: 'always',
   });
@@ -818,10 +819,17 @@ export default function CargoTerminalPage() {
                 </div>
               )}
 
-              {!selectedTrip && showTripsPanel && (
+              {!selectedTrip && showTripsPanel && !tripsLoading && groupedTrips.length > 0 && (
                 <div className="hidden lg:flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-600">
-                  <Search className="w-3.5 h-3.5 flex-shrink-0" />
+                  <ArrowRight className="w-3.5 h-3.5 flex-shrink-0" />
                   <span>Pilih jadwal di panel kanan untuk melanjutkan</span>
+                </div>
+              )}
+
+              {!selectedTrip && showTripsPanel && !tripsLoading && groupedTrips.length === 0 && (
+                <div className="hidden lg:flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>Tidak ada trip tersedia untuk rute ini. Coba ubah tujuan pengiriman.</span>
                 </div>
               )}
             </div>
