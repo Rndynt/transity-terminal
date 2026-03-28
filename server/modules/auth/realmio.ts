@@ -14,10 +14,14 @@ const AUTHCORE_BASE_URL = process.env.AUTHCORE_BASE_URL || "";
 const AUTHCORE_TENANT_ID = process.env.AUTHCORE_TENANT_ID || "transity";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const DEV_BYPASS_AUTH =
-  !IS_PRODUCTION && (process.env.DEV_BYPASS_AUTH === "true" || !AUTHCORE_BASE_URL);
+  process.env.DEV_BYPASS_AUTH === "true" || (!IS_PRODUCTION && !AUTHCORE_BASE_URL);
 
-if (IS_PRODUCTION && !AUTHCORE_BASE_URL) {
+if (IS_PRODUCTION && !AUTHCORE_BASE_URL && !DEV_BYPASS_AUTH) {
   console.error("FATAL: AUTHCORE_BASE_URL is required in production. Auth will reject all requests.");
+}
+
+if (DEV_BYPASS_AUTH) {
+  console.log("[AUTH] Bypass auth enabled — all requests use dev user");
 }
 
 const DEV_USER: RealmioUser = {
