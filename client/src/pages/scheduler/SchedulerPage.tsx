@@ -150,10 +150,24 @@ function ScheduleChip({ item, onSelect }: { item: CalendarItem; onSelect?: (item
             <span className="font-mono opacity-70">{item.departureTime}</span>
             <span className="truncate font-medium">{stripTimeFromCode(item.routeCode)}</span>
           </div>
-          {item.seatsBooked !== undefined && item.capacity && (
-            <div className="flex items-center gap-0.5 mt-0.5 opacity-80">
-              <Users className="w-2.5 h-2.5" />
-              <span>{item.seatsBooked}/{item.capacity}</span>
+          <div className="flex items-center gap-2 mt-0.5 opacity-80 flex-wrap">
+            {item.seatsBooked !== undefined && item.capacity && (
+              <span className="flex items-center gap-0.5">
+                <Users className="w-2.5 h-2.5" />
+                {item.seatsBooked}/{item.capacity}
+              </span>
+            )}
+            {item.vehiclePlate && (
+              <span className="flex items-center gap-0.5 truncate">
+                <Truck className="w-2.5 h-2.5 shrink-0" />
+                {item.vehiclePlate}
+              </span>
+            )}
+          </div>
+          {item.driverName && (
+            <div className="flex items-center gap-0.5 mt-0.5 opacity-70 truncate">
+              <User className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate">{item.driverName}</span>
             </div>
           )}
         </div>
