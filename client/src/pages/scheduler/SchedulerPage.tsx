@@ -211,6 +211,7 @@ type StopExceptionData = {
 
 function RouteStopsTimeline({ patternId, baseId, serviceDate }: { patternId: string; baseId?: string; serviceDate?: string }) {
   const { toast } = useToast();
+  const [stopsExpanded, setStopsExpanded] = useState(false);
   const [toggleReasonStop, setToggleReasonStop] = useState<{ stopId: string; field: 'boarding' | 'alighting'; stopName: string } | null>(null);
   const [toggleReason, setToggleReason] = useState('');
 
@@ -317,8 +318,6 @@ function RouteStopsTimeline({ patternId, baseId, serviceDate }: { patternId: str
   const origin = sorted[0];
   const destination = sorted[sorted.length - 1];
   const viaStops = sorted.slice(1, -1);
-
-  const [stopsExpanded, setStopsExpanded] = useState(false);
 
   return (
     <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
