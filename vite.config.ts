@@ -1,26 +1,27 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
 const isReplit = process.env.REPL_ID !== undefined;
 
-const replitPlugins = isReplit
-  ? [
-      import("@replit/vite-plugin-runtime-error-modal").then((m) => m.default()),
-      ...(process.env.NODE_ENV !== "production"
-        ? [
-            import("@replit/vite-plugin-cartographer").then((m) => m.cartographer()),
-            import("@replit/vite-plugin-dev-banner").then((m) => m.devBanner()),
-          ]
-        : []),
-    ]
-  : [];
+const replitDevPlugins: Promise<Plugin>[] =
+  isReplit
+    ? [
+        import("@replit/vite-plugin-runtime-error-modal").then((m) =>
+          m.default(),
+        ),
+        import("@replit/vite-plugin-cartographer").then((m) =>
+          m.cartographer(),
+        ),
+        import("@replit/vite-plugin-dev-banner").then((m) => m.devBanner()),
+      ]
+    : [];
+
+const resolved = await Promise.all(replitDevPlugins);
+const serveOnly = resolved.map((p) => ({ ...p, apply: "serve" as const }));
 
 export default defineConfig({
-  plugins: [
-    react(),
-    ...(await Promise.all(replitPlugins)),
-  ],
+  plugins: [react(), ...serveOnly],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
