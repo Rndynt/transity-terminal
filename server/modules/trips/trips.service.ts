@@ -59,15 +59,45 @@ export class TripsService {
     const hasStructuralChange = changedFields.some(f => !safeFields.has(f));
     
     if (hasStructuralChange) {
-      const hasBookings = await this.storage.tripHasBookings(id);
-      if (hasBookings) {
-        throw new Error("Cannot modify trip structure (vehicle, layout, pattern) when bookings exist");
+      if (data.vehicleId && data.vehicleId !== trip.vehicleId && !data.layoutId && !data.patternId) {
+        const newVehicle = await this.storage.getVehicleById(data.vehicleId);
+        const currentVehicle = trip.vehicleId ? await this.storage.getVehicleById(trip.vehicleId) : null;
+        if (newVehicle && currentVehicle && newVehicle.layoutId === currentVehicle.layoutId) {
+          const onlyVehicleAndSafe = changedFields.every(f => f === 'vehicleId' || safeFields.has(f));
+          if (onlyVehicleAndSafe) {
+            (data as any).snapVehiclePlate = newVehicle.plate;
+          } else {
+            const hasBookings = await this.storage.tripHasBookings(id);
+            if (hasBookings) {
+              throw new Error("Tidak bisa mengubah struktur trip (layout, pola) jika sudah ada booking aktif");
+            }
+            (data as any).snapVehiclePlate = newVehicle.plate;
+          }
+        } else {
+          const hasBookings = await this.storage.tripHasBookings(id);
+          if (hasBookings) {
+            throw new Error("Tidak bisa mengganti kendaraan dengan layout berbeda jika sudah ada booking aktif. Gunakan kendaraan dengan layout yang sama.");
+          }
+          if (newVehicle) {
+            (data as any).snapVehiclePlate = newVehicle.plate;
+            (data as any).layoutId = newVehicle.layoutId;
+            (data as any).capacity = newVehicle.capacity;
+          }
+        }
+      } else {
+        const hasBookings = await this.storage.tripHasBookings(id);
+        if (hasBookings) {
+          throw new Error("Tidak bisa mengubah struktur trip (kendaraan, layout, pola) jika sudah ada booking aktif");
+        }
       }
     }
 
     if (data.driverId && data.driverId !== trip.driverId) {
       const driver = await this.storage.getDriverById(data.driverId);
       (data as any).snapDriverName = driver?.name || null;
+    }
+    if (data.driverId === null) {
+      (data as any).snapDriverName = null;
     }
     
     return await this.storage.updateTrip(id, data);

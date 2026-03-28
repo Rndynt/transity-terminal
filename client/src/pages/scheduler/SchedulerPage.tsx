@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   CalendarRange, ChevronLeft, ChevronRight, Plus, Bus, Truck,
   Clock, Users, Ban, MapPin, User, AlertTriangle,
-  CheckCircle, X, ExternalLink, Loader2, Building2
+  CheckCircle, X, ExternalLink, Loader2, Building2, Pencil, Check
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -69,7 +69,9 @@ type CalendarItem = {
   routeCode: string;
   baseId?: string | null;
   tripId?: string | null;
+  vehicleId?: string | null;
   vehiclePlate?: string | null;
+  driverId?: string | null;
   driverName?: string | null;
   status?: string | null;
   capacity: number | null;
@@ -467,6 +469,176 @@ function RouteStopsTimeline({ patternId, baseId, serviceDate }: { patternId: str
   );
 }
 
+type DriverOption = { id: string; name: string; code: string };
+type VehicleOption = { id: string; plate: string; code: string };
+
+function AssignmentEditor({ item, onAssigned }: { item: CalendarItem; onAssigned: (updates: Partial<CalendarItem>) => void }) {
+  const { toast } = useToast();
+  const [editingField, setEditingField] = useState<'driver' | 'vehicle' | null>(null);
+  const [selectedDriverId, setSelectedDriverId] = useState<string>(item.driverId || '');
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(item.vehicleId || '');
+
+  const { data: drivers = [] } = useQuery<DriverOption[]>({
+    queryKey: ['/api/drivers'],
+    enabled: editingField === 'driver',
+    staleTime: 30_000,
+  });
+
+  const { data: vehicles = [] } = useQuery<VehicleOption[]>({
+    queryKey: ['/api/vehicles'],
+    enabled: editingField === 'vehicle',
+    staleTime: 30_000,
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: async (body: { driverId?: string | null; vehicleId?: string | null }) => {
+      const res = await apiRequest('PATCH', `/api/scheduler/trips/${item.tripId}/assign`, body);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      onAssigned({
+        driverId: data.driverId,
+        driverName: data.driverName,
+        vehicleId: data.vehicleId,
+        vehiclePlate: data.vehiclePlate,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/scheduler/calendar'] });
+      toast({ title: editingField === 'driver' ? 'Driver berhasil diubah' : 'Kendaraan berhasil diubah' });
+      setEditingField(null);
+    },
+    onError: (err: any) => {
+      toast({ title: err?.message || 'Gagal mengubah assignment', variant: 'destructive' });
+    },
+  });
+
+  const handleSaveDriver = () => {
+    const driverId = selectedDriverId === '__none__' ? null : (selectedDriverId || null);
+    assignMutation.mutate({ driverId });
+  };
+
+  const handleSaveVehicle = () => {
+    const vehicleId = selectedVehicleId === '__none__' ? null : (selectedVehicleId || null);
+    assignMutation.mutate({ vehicleId });
+  };
+
+  const canEdit = item.status === 'scheduled' || item.status === 'en_route';
+
+  return (
+    <div className="space-y-3">
+      <DetailRow icon={MapPin} label="Rute" value={item.routeName} />
+      <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
+
+      <div className="flex items-center gap-3">
+        <User className="w-4 h-4 text-muted-foreground shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Driver</p>
+          {editingField === 'driver' ? (
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <Select value={selectedDriverId} onValueChange={setSelectedDriverId}>
+                <SelectTrigger className="h-8 text-xs flex-1" data-testid="select-driver">
+                  <SelectValue placeholder="Pilih driver..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Tidak ada —</SelectItem>
+                  {drivers.map(d => (
+                    <SelectItem key={d.id} value={d.id}>{d.name} ({d.code})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                onClick={handleSaveDriver}
+                disabled={assignMutation.isPending}
+                data-testid="btn-save-driver"
+              >
+                {assignMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={() => { setEditingField(null); setSelectedDriverId(item.driverId || ''); }}
+                data-testid="btn-cancel-driver"
+              >
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium truncate">{item.driverName || '—'}</p>
+              {canEdit && (
+                <button
+                  onClick={() => { setEditingField('driver'); setSelectedDriverId(item.driverId || ''); }}
+                  className="text-muted-foreground hover:text-primary transition-colors p-0.5"
+                  data-testid="btn-edit-driver"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Truck className="w-4 h-4 text-muted-foreground shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Kendaraan</p>
+          {editingField === 'vehicle' ? (
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                <SelectTrigger className="h-8 text-xs flex-1" data-testid="select-vehicle">
+                  <SelectValue placeholder="Pilih kendaraan..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Tidak ada —</SelectItem>
+                  {vehicles.map(v => (
+                    <SelectItem key={v.id} value={v.id}>{v.plate} ({v.code})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                onClick={handleSaveVehicle}
+                disabled={assignMutation.isPending}
+                data-testid="btn-save-vehicle"
+              >
+                {assignMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={() => { setEditingField(null); setSelectedVehicleId(item.vehicleId || ''); }}
+                data-testid="btn-cancel-vehicle"
+              >
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium font-mono truncate">{item.vehiclePlate || '—'}</p>
+              {canEdit && (
+                <button
+                  onClick={() => { setEditingField('vehicle'); setSelectedVehicleId(item.vehicleId || ''); }}
+                  className="text-muted-foreground hover:text-primary transition-colors p-0.5"
+                  data-testid="btn-edit-vehicle"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip, onAddException, onRemoveException, isMaterializing, isClosingTrip, isAddingException, isRemovingException }: {
   item: CalendarItem | null;
   open: boolean;
@@ -482,17 +654,24 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
 }) {
   const [showReasonInput, setShowReasonInput] = useState(false);
   const [exceptionReason, setExceptionReason] = useState('');
+  const [localItem, setLocalItem] = useState<CalendarItem | null>(null);
 
   useEffect(() => {
+    if (open && item) {
+      setLocalItem({ ...item });
+    }
     if (!open) {
       setShowReasonInput(false);
       setExceptionReason('');
+      setLocalItem(null);
     }
-  }, [open]);
+  }, [open, item]);
 
-  if (!item) return null;
+  const displayItem = localItem || item;
 
-  if (item.type === 'exception') {
+  if (!displayItem) return null;
+
+  if (displayItem.type === 'exception') {
     return (
       <Dialog open={open} onOpenChange={onClose}>
         <DialogContent className="max-w-sm max-h-[85vh] flex flex-col">
@@ -506,19 +685,19 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
           <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-1">
             <div className="p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/30">
               <p className="text-xs text-red-600 dark:text-red-400">Jadwal ini dikecualikan dan tidak akan muncul sebagai virtual trip pada tanggal ini.</p>
-              {item.exceptionReason && (
-                <p className="text-xs text-muted-foreground mt-1.5">Alasan: {item.exceptionReason}</p>
+              {displayItem.exceptionReason && (
+                <p className="text-xs text-muted-foreground mt-1.5">Alasan: {displayItem.exceptionReason}</p>
               )}
             </div>
 
             <div className="space-y-3">
-              <DetailRow icon={MapPin} label="Rute" value={item.routeName} />
-              <DetailRow icon={Bus} label="Kode" value={stripTimeFromCode(item.routeCode)} mono />
-              <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
-              <DetailRow icon={CalendarRange} label="Tanggal" value={formatDateLabel(item.serviceDate)} />
+              <DetailRow icon={MapPin} label="Rute" value={displayItem.routeName} />
+              <DetailRow icon={Bus} label="Kode" value={stripTimeFromCode(displayItem.routeCode)} mono />
+              <DetailRow icon={Clock} label="Jam Berangkat" value={displayItem.departureTime} />
+              <DetailRow icon={CalendarRange} label="Tanggal" value={formatDateLabel(displayItem.serviceDate)} />
             </div>
 
-            {item.patternId && <RouteStopsTimeline patternId={item.patternId} baseId={item.baseId || undefined} serviceDate={item.serviceDate} />}
+            {displayItem.patternId && <RouteStopsTimeline patternId={displayItem.patternId} baseId={displayItem.baseId || undefined} serviceDate={displayItem.serviceDate} />}
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2 shrink-0">
             <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
@@ -527,7 +706,7 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
               variant="outline"
               className="gap-1.5 text-green-600 border-green-200 hover:bg-green-50 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-950/30"
               data-testid="btn-remove-exception"
-              onClick={() => onRemoveException(item)}
+              onClick={() => onRemoveException(displayItem)}
               disabled={isRemovingException}
             >
               {isRemovingException ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
@@ -539,7 +718,7 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
     );
   }
 
-  if (item.type === 'virtual') {
+  if (displayItem.type === 'virtual') {
     return (
       <Dialog open={open} onOpenChange={onClose}>
         <DialogContent className="max-w-sm max-h-[85vh] flex flex-col">
@@ -556,13 +735,13 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
             </div>
 
             <div className="space-y-3">
-              <DetailRow icon={MapPin} label="Rute" value={item.routeName} />
-              <DetailRow icon={Bus} label="Kode" value={stripTimeFromCode(item.routeCode)} mono />
-              <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
-              {item.capacity && <DetailRow icon={Users} label="Kapasitas" value={`${item.capacity} kursi`} />}
+              <DetailRow icon={MapPin} label="Rute" value={displayItem.routeName} />
+              <DetailRow icon={Bus} label="Kode" value={stripTimeFromCode(displayItem.routeCode)} mono />
+              <DetailRow icon={Clock} label="Jam Berangkat" value={displayItem.departureTime} />
+              {displayItem.capacity && <DetailRow icon={Users} label="Kapasitas" value={`${displayItem.capacity} kursi`} />}
             </div>
 
-            {item.patternId && <RouteStopsTimeline patternId={item.patternId} baseId={item.baseId || undefined} serviceDate={item.serviceDate} />}
+            {displayItem.patternId && <RouteStopsTimeline patternId={displayItem.patternId} baseId={displayItem.baseId || undefined} serviceDate={displayItem.serviceDate} />}
           </div>
           {showReasonInput && (
             <div className="space-y-2 border border-red-200 dark:border-red-800 rounded-lg p-3 bg-red-50/50 dark:bg-red-950/30">
@@ -588,7 +767,7 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
                 variant="destructive"
                 className="gap-1.5"
                 data-testid="btn-confirm-exception"
-                onClick={() => onAddException(item, exceptionReason.trim() || undefined)}
+                onClick={() => onAddException(displayItem, exceptionReason.trim() || undefined)}
                 disabled={isAddingException}
               >
                 {isAddingException ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
@@ -611,7 +790,7 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
                   size="sm"
                   className="gap-1.5"
                   data-testid="btn-materialize"
-                  onClick={() => onMaterialize(item)}
+                  onClick={() => onMaterialize(displayItem)}
                   disabled={isMaterializing}
                 >
                   {isMaterializing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
@@ -625,9 +804,13 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
     );
   }
 
-  const statusInfo = STATUS_LABELS[item.status || 'scheduled'] || STATUS_LABELS.scheduled;
-  const occupancy = item.seatsBooked !== undefined && item.capacity
-    ? Math.round((item.seatsBooked / item.capacity) * 100)
+  const handleAssigned = (updates: Partial<CalendarItem>) => {
+    setLocalItem(prev => prev ? { ...prev, ...updates } : prev);
+  };
+
+  const statusInfo = STATUS_LABELS[displayItem.status || 'scheduled'] || STATUS_LABELS.scheduled;
+  const occupancy = displayItem.seatsBooked !== undefined && displayItem.capacity
+    ? Math.round((displayItem.seatsBooked / displayItem.capacity) * 100)
     : 0;
 
   return (
@@ -639,31 +822,26 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
             Detail Trip
           </DialogTitle>
           <DialogDescription>
-            {item.serviceDate ? formatDateLabel(item.serviceDate) : 'Informasi trip'}
+            {displayItem.serviceDate ? formatDateLabel(displayItem.serviceDate) : 'Informasi trip'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-1">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-mono font-semibold">{item.routeCode}</span>
+            <span className="text-sm font-mono font-semibold">{displayItem.routeCode}</span>
             <Badge className={cn("text-xs", statusInfo.color)}>{statusInfo.label}</Badge>
           </div>
 
-          <div className="space-y-3">
-            <DetailRow icon={MapPin} label="Rute" value={item.routeName} />
-            <DetailRow icon={Clock} label="Jam Berangkat" value={item.departureTime} />
-            <DetailRow icon={User} label="Driver" value={item.driverName || '—'} />
-            <DetailRow icon={Truck} label="Kendaraan" value={item.vehiclePlate || '—'} mono />
-          </div>
+          <AssignmentEditor item={displayItem} onAssigned={handleAssigned} />
 
-          {item.patternId && <RouteStopsTimeline patternId={item.patternId} baseId={item.baseId || undefined} serviceDate={item.serviceDate} />}
+          {displayItem.patternId && <RouteStopsTimeline patternId={displayItem.patternId} baseId={displayItem.baseId || undefined} serviceDate={displayItem.serviceDate} />}
 
-          {item.seatsBooked !== undefined && item.capacity && (
+          {displayItem.seatsBooked !== undefined && displayItem.capacity && (
             <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5" /> Okupansi
                 </span>
-                <span className="text-sm font-semibold">{item.seatsBooked}/{item.capacity} kursi</span>
+                <span className="text-sm font-semibold">{displayItem.seatsBooked}/{displayItem.capacity} kursi</span>
               </div>
               <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
                 <div
@@ -675,7 +853,7 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
                 />
               </div>
               <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>{item.capacity - item.seatsBooked} kursi tersisa</span>
+                <span>{displayItem.capacity - displayItem.seatsBooked} kursi tersisa</span>
                 <span>{occupancy}% terisi</span>
               </div>
             </div>
@@ -683,26 +861,26 @@ function ScheduleDetailDialog({ item, open, onClose, onMaterialize, onCloseTrip,
         </div>
         <DialogFooter className="flex-col sm:flex-row gap-2 shrink-0">
           <Button variant="outline" onClick={onClose} data-testid="btn-close-detail">Tutup</Button>
-          {item.status === 'scheduled' && (
+          {displayItem.status === 'scheduled' && (
             <Button
               variant="destructive"
               size="sm"
               className="gap-1.5"
               data-testid="btn-close-trip"
-              onClick={() => onCloseTrip(item)}
+              onClick={() => onCloseTrip(displayItem)}
               disabled={isClosingTrip}
             >
               {isClosingTrip ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
               Tutup Trip
             </Button>
           )}
-          {item.tripId && (
+          {displayItem.tripId && (
             <Button
               size="sm"
               variant="outline"
               className="gap-1.5"
               data-testid="btn-view-manifest"
-              onClick={() => window.open(`/manifest?tripId=${item.tripId}`, '_blank')}
+              onClick={() => window.open(`/manifest?tripId=${displayItem.tripId}`, '_blank')}
             >
               <ExternalLink className="w-3.5 h-3.5" /> Lihat Manifest
             </Button>

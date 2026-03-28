@@ -17,7 +17,9 @@ export type CalendarItem = {
   routeCode: string;
   baseId?: string | null;
   tripId?: string | null;
+  vehicleId?: string | null;
   vehiclePlate?: string | null;
+  driverId?: string | null;
   driverName?: string | null;
   status?: string | null;
   capacity: number | null;
@@ -67,7 +69,9 @@ export class SchedulerService {
         routeCode: trip.patternCode || '—',
         baseId: trip.baseId,
         tripId: trip.id,
+        vehicleId: trip.vehicleId || null,
         vehiclePlate: trip.vehiclePlate || null,
+        driverId: trip.driverId || null,
         driverName: trip.driverName || null,
         status: trip.status || 'scheduled',
         capacity: trip.capacity,

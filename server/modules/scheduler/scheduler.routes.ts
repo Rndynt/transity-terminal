@@ -1,12 +1,14 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { IStorage } from "../../storage.interface";
 import { SchedulerService } from "./scheduler.service";
+import { TripsService } from "../trips/trips.service";
 import { z } from "zod";
 import { requireFlag } from "../rbac/rbac.middleware";
 import { webSocketService } from "../../realtime/ws";
 
 export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage) {
   const schedulerService = new SchedulerService(storage);
+  const tripsService = new TripsService(storage);
 
   app.get('/api/scheduler/calendar', async (req: FastifyRequest, reply: FastifyReply) => {
     const schema = z.object({
@@ -112,5 +114,41 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
       });
     }
     reply.send({ success: true });
+  });
+
+  app.patch('/api/scheduler/trips/:id/assign', { preHandler: [requireFlag('action.trip.close')] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const schema = z.object({
+      driverId: z.string().uuid().nullable().optional(),
+      vehicleId: z.string().uuid().nullable().optional(),
+    }).refine(d => d.driverId !== undefined || d.vehicleId !== undefined, {
+      message: 'At least one of driverId or vehicleId must be provided',
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ message: 'Invalid request', errors: parsed.error.flatten() });
+    }
+
+    try {
+      const updateData: Record<string, any> = {};
+      if (parsed.data.driverId !== undefined) updateData.driverId = parsed.data.driverId;
+      if (parsed.data.vehicleId !== undefined) updateData.vehicleId = parsed.data.vehicleId;
+
+      const updated = await tripsService.updateTrip(id, updateData);
+
+      const driver = updated.driverId ? await storage.getDriverById(updated.driverId) : null;
+      const vehicle = updated.vehicleId ? await storage.getVehicleById(updated.vehicleId) : null;
+
+      reply.send({
+        tripId: updated.id,
+        driverId: updated.driverId,
+        driverName: driver?.name || updated.snapDriverName || null,
+        vehicleId: updated.vehicleId,
+        vehiclePlate: vehicle?.plate || updated.snapVehiclePlate || null,
+      });
+    } catch (err: any) {
+      return reply.code(400).send({ message: err.message || 'Failed to update assignment' });
+    }
   });
 }
