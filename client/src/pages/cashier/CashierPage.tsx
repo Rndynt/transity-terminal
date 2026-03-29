@@ -321,26 +321,28 @@ export default function CashierPage() {
                           );
                         })}
                       </div>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Kode Booking</TableHead>
-                            <TableHead>Metode</TableHead>
-                            <TableHead className="text-right">Jumlah</TableHead>
-                            <TableHead>Waktu</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {activeSummary!.transactions.map(tx => (
-                            <TableRow key={tx.id}>
-                              <TableCell className="font-mono text-sm">{tx.booking_code || '—'}</TableCell>
-                              <TableCell className="capitalize">{tx.method}</TableCell>
-                              <TableCell className="text-right">{fmtCurrency(tx.amount)}</TableCell>
-                              <TableCell>{fmtDate(tx.created_at)}</TableCell>
+                      <div className="max-h-[40vh] overflow-auto border-t">
+                        <Table>
+                          <TableHeader className="sticky top-0 bg-background z-10">
+                            <TableRow>
+                              <TableHead>Kode Booking</TableHead>
+                              <TableHead>Metode</TableHead>
+                              <TableHead className="text-right">Jumlah</TableHead>
+                              <TableHead>Waktu</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {activeSummary!.transactions.map(tx => (
+                              <TableRow key={tx.id}>
+                                <TableCell className="font-mono text-sm">{tx.booking_code || '—'}</TableCell>
+                                <TableCell className="capitalize">{tx.method}</TableCell>
+                                <TableCell className="text-right">{fmtCurrency(tx.amount)}</TableCell>
+                                <TableCell>{fmtDate(tx.created_at)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </CardContent>
                   </Card>
                 ) : (
@@ -603,26 +605,28 @@ export default function CashierPage() {
               {sessionDetail.transactions.length > 0 && (
                 <div className="space-y-2">
                   <h3 className="font-semibold text-sm">Transaksi ({sessionDetail.transactions.length})</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Kode Booking</TableHead>
-                        <TableHead>Metode</TableHead>
-                        <TableHead className="text-right">Jumlah</TableHead>
-                        <TableHead>Waktu</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sessionDetail.transactions.map(tx => (
-                        <TableRow key={tx.id}>
-                          <TableCell className="font-mono text-sm">{tx.booking_code || '—'}</TableCell>
-                          <TableCell className="capitalize">{tx.method}</TableCell>
-                          <TableCell className="text-right">{fmtCurrency(tx.amount)}</TableCell>
-                          <TableCell>{fmtDate(tx.created_at)}</TableCell>
+                  <div className="max-h-[35vh] overflow-auto rounded-md border">
+                    <Table>
+                      <TableHeader className="sticky top-0 bg-background z-10">
+                        <TableRow>
+                          <TableHead>Kode Booking</TableHead>
+                          <TableHead>Metode</TableHead>
+                          <TableHead className="text-right">Jumlah</TableHead>
+                          <TableHead>Waktu</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {sessionDetail.transactions.map(tx => (
+                          <TableRow key={tx.id}>
+                            <TableCell className="font-mono text-sm">{tx.booking_code || '—'}</TableCell>
+                            <TableCell className="capitalize">{tx.method}</TableCell>
+                            <TableCell className="text-right">{fmtCurrency(tx.amount)}</TableCell>
+                            <TableCell>{fmtDate(tx.created_at)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               )}
 
