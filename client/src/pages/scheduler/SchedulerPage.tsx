@@ -1186,7 +1186,6 @@ export default function SchedulerPage() {
             </div>
           )}
         </div>
-        </div>
       </div>
 
       <div className="flex-1 overflow-auto relative" ref={scrollRef}>
