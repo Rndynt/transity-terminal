@@ -65,6 +65,10 @@ const FEATURE_FLAGS = [
   { id: "page.refunds",     name: "Halaman Refund",        description: "Akses halaman manajemen refund",         category: "page" },
   { id: "page.customers",   name: "Halaman Pelanggan",     description: "Akses halaman CRM pelanggan",            category: "page" },
 
+  { id: "action.refund.create",  name: "Buat Refund",      description: "Ajukan permintaan refund baru",           category: "action" },
+  { id: "action.refund.approve", name: "Approve Refund",   description: "Setujui atau tolak permintaan refund",    category: "action" },
+  { id: "action.refund.process", name: "Proses Refund",    description: "Proses pengembalian dana refund",         category: "action" },
+
   { id: "admin.staff.manage", name: "Kelola Staff",         description: "Tambah/edit/hapus staff dan assign role & outlet", category: "admin" },
   { id: "admin.flags.manage", name: "Kelola Feature Flags", description: "Toggle feature flags per role",                    category: "admin" },
 ];
@@ -123,8 +127,12 @@ const DEFAULT_MATRIX: Record<string, FlagMatrix> = {
 
   "page.dashboard":   { owner: true, finance: true,  manager: true,  spv_operations: true,  operations: false, spv_cso: true,  cso: false },
   "page.cashier":     { owner: true, finance: true,  manager: true,  spv_operations: true,  operations: false, spv_cso: true,  cso: true  },
-  "page.refunds":     { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
+  "page.refunds":     { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: true,  cso: true  },
   "page.customers":   { owner: true, finance: false, manager: true,  spv_operations: false, operations: false, spv_cso: true,  cso: true  },
+
+  "action.refund.create":  { owner: true, finance: false, manager: true,  spv_operations: false, operations: false, spv_cso: true,  cso: true  },
+  "action.refund.approve": { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
+  "action.refund.process": { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
 
   "admin.staff.manage": { owner: true, finance: false, manager: false, spv_operations: false, operations: false, spv_cso: false, cso: false },
   "admin.flags.manage": { owner: true, finance: false, manager: false, spv_operations: false, operations: false, spv_cso: false, cso: false },

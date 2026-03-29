@@ -52,7 +52,7 @@ Pages interact with components, which utilize hooks, API clients, and React Quer
 ### Authentication and Authorization
 - **Staff/Admin**: Integrated with Realmio external authentication via a proxy.
 - **Mobile App**: Uses internal JWT for authentication.
-- **RBAC + ABAC + Feature Flags**: A granular permission system with 7 roles and 33+ permission flags across 5 categories (page, report, master, action, admin). This controls access at both backend (middleware) and frontend levels.
+- **RBAC + ABAC + Feature Flags**: A granular permission system with 7 roles and 36+ permission flags across 5 categories (page, report, master, action, admin). This controls access at both backend (middleware) and frontend levels. Refund permissions: `action.refund.create` (owner/manager/spv_cso/cso), `action.refund.approve` (owner/finance/manager), `action.refund.process` (owner/finance/manager).
 
 ## External Dependencies
 - **PostgreSQL (via Neon)**: Primary database for all application data.
@@ -81,7 +81,7 @@ The system uses Socket.io with room-based subscriptions for efficient event targ
 The following modules were added with Controller-Service-Routes pattern:
 - **Dashboard** (`/dashboard`): Operational summary — trips, bookings, revenue, cargo, load factor, alerts, recent bookings. Flag: `page.dashboard`.
 - **Cashier** (`/cashier`): Open/close/approve daily cash sessions with settlement breakdown. Flag: `page.cashier`.
-- **Refunds** (`/refunds`): Create/approve/process/reject refund requests. Flag: `page.refunds`.
+- **Refunds** (`/refunds`): Create/approve/process/reject refund requests with booking code search autocomplete. Supports URL pre-fill (`?bookingId=&bookingCode=`). CSO can create refunds; manager/finance approve/process. Flags: `page.refunds`, `action.refund.create`, `action.refund.approve`, `action.refund.process`. Booking search endpoint: `GET /api/bookings/search?q=CODE`.
 - **Customers** (`/customers`): CRM — customer profiles with tags (regular/vip/frequent/blacklist), booking history. Flag: `page.customers`.
 - **Maintenance** (`/api/maintenance/*`): Vehicle maintenance records and alerts. Embedded in MastersPage vehicle detail.
 - **Notifications**: Bell icon in header with real-time unread count, mark read/all, delete.

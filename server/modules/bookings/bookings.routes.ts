@@ -4,10 +4,11 @@ import { IStorage } from "../../storage.interface";
 import { requireFlag, requireOutletScope } from "../rbac/rbac.middleware";
 import { webSocketService } from "../../realtime/ws";
 import { db } from "../../db";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql, ilike } from "drizzle-orm";
 import {
   bookingHistory, passengers as passengersTable, seatInventory, bookings as bookingsTable
 } from "@shared/schema";
+import { trips } from "@shared/schema";
 
 export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) {
   const bookingsController = new BookingsController(storage);
@@ -20,6 +21,77 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
     const booking = await storage.getBookingByCode((req.params as any).code.toUpperCase());
     if (!booking) return reply.code(404).send({ message: 'Booking tidak ditemukan' });
     reply.send(booking);
+  });
+  app.get('/api/bookings/search', async (req, reply) => {
+    const q = ((req.query as any).q || '').toUpperCase().trim();
+    if (!q || q.length < 3) return reply.send([]);
+
+    const bookingRows = await db
+      .select({
+        id: bookingsTable.id,
+        bookingCode: bookingsTable.bookingCode,
+        status: bookingsTable.status,
+        totalAmount: bookingsTable.totalAmount,
+        channel: bookingsTable.channel,
+        snapOriginStopName: bookingsTable.snapOriginStopName,
+        snapDestinationStopName: bookingsTable.snapDestinationStopName,
+        snapDepartureHHMM: bookingsTable.snapDepartureHHMM,
+        serviceDate: trips.serviceDate,
+        createdAt: bookingsTable.createdAt,
+      })
+      .from(bookingsTable)
+      .leftJoin(trips, eq(bookingsTable.tripId, trips.id))
+      .where(ilike(bookingsTable.bookingCode, `%${q}%`))
+      .orderBy(bookingsTable.createdAt)
+      .limit(10);
+
+    if (bookingRows.length === 0) return reply.send([]);
+
+    const bookingIds = bookingRows.map(b => b.id);
+    const paxRows = await db
+      .select({
+        bookingId: passengersTable.bookingId,
+        id: passengersTable.id,
+        fullName: passengersTable.fullName,
+        seatNo: passengersTable.seatNo,
+        phone: passengersTable.phone,
+        ticketStatus: passengersTable.ticketStatus,
+        fareAmount: passengersTable.fareAmount,
+      })
+      .from(passengersTable)
+      .where(inArray(passengersTable.bookingId, bookingIds));
+
+    const paxMap = new Map<string, typeof paxRows>();
+    for (const p of paxRows) {
+      const list = paxMap.get(p.bookingId) || [];
+      list.push(p);
+      paxMap.set(p.bookingId, list);
+    }
+
+    reply.send(bookingRows.map(b => {
+      const passengers = paxMap.get(b.id) || [];
+      return {
+        id: b.id,
+        bookingCode: b.bookingCode,
+        status: b.status,
+        totalAmount: b.totalAmount,
+        channel: b.channel,
+        originStop: b.snapOriginStopName,
+        destinationStop: b.snapDestinationStopName,
+        departureTime: b.snapDepartureHHMM,
+        serviceDate: b.serviceDate,
+        customerName: passengers[0]?.fullName || null,
+        customerPhone: passengers[0]?.phone || null,
+        passengers: passengers.map(p => ({
+          id: p.id,
+          fullName: p.fullName,
+          seatNo: p.seatNo,
+          phone: p.phone,
+          ticketStatus: p.ticketStatus,
+          fareAmount: p.fareAmount,
+        })),
+      };
+    }));
   });
   app.get('/api/bookings/:id', async (req, reply) => bookingsController.getById(req, reply));
   app.post('/api/bookings', { preHandler: [requireFlag('action.booking.create')] }, async (req, reply) => bookingsController.create(req, reply));

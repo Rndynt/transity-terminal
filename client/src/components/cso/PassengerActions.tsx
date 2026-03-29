@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { UserMinus, CalendarClock, Ban, Loader2, Armchair } from 'lucide-react';
+import { UserMinus, CalendarClock, Ban, Loader2, Armchair, RotateCcw } from 'lucide-react';
 import { passengersApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -56,6 +57,7 @@ export default function PassengerActions({
   const [showRescheduleReason, setShowRescheduleReason] = useState(false);
   const [rescheduleReason, setRescheduleReason] = useState('');
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const unseatMutation = useMutation({
     mutationFn: ({ passengerId, reason }: { passengerId: string; reason: string }) =>
@@ -271,6 +273,24 @@ export default function PassengerActions({
             Reschedule
           </Button>
         )}
+      </CanAccess>
+      <CanAccess flag="action.refund.create">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs gap-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50 border-purple-200"
+          onClick={() => {
+            const params = new URLSearchParams({
+              bookingId: p.bookingId,
+              bookingCode: p.bookingCode,
+            });
+            navigate(`/refunds?${params.toString()}`);
+          }}
+          data-testid={`btn-refund-${p.id}`}
+        >
+          <RotateCcw className="w-3 h-3" />
+          Refund
+        </Button>
       </CanAccess>
       <CanAccess flag="action.booking.cancel">
         <Button

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -6,10 +6,14 @@ import { fmtCurrency, fmtDate, REFUND_STATUS_MAP, type RefundStatus } from '@/li
 import { refundsApi } from '@/lib/api';
 import PageHeader from '@/components/layout/PageHeader';
 import { usePageTitle } from '@/components/layout/LayoutContext';
+import { CanAccess } from '@/components/rbac/CanAccess';
 import {
   RotateCcw, Search, X, Loader2, Eye, Check, XCircle,
-  ArrowRight, Plus, CreditCard, Building2
+  ArrowRight, Plus, CreditCard, Building2, Ticket,
+  MapPin, Clock, Calendar, Users, Armchair
 } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +28,30 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
+
+interface BookingPassenger {
+  id: string;
+  fullName: string;
+  seatNo: string;
+  phone: string | null;
+  ticketStatus: string;
+  fareAmount: string;
+}
+
+interface BookingSearchResult {
+  id: string;
+  bookingCode: string;
+  status: string;
+  totalAmount: string;
+  channel: string | null;
+  originStop: string | null;
+  destinationStop: string | null;
+  departureTime: string | null;
+  serviceDate: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  passengers: BookingPassenger[];
+}
 
 interface RefundRow {
   id: string;
@@ -75,6 +103,13 @@ export default function RefundsPage() {
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectNotes, setRejectNotes] = useState('');
 
+  const [bookingSearch, setBookingSearch] = useState('');
+  const [bookingResults, setBookingResults] = useState<BookingSearchResult[]>([]);
+  const [searchingBooking, setSearchingBooking] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<BookingSearchResult | null>(null);
+  const [showBookingDropdown, setShowBookingDropdown] = useState(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [form, setForm] = useState({
     bookingId: '',
     passengerId: '',
@@ -87,6 +122,65 @@ export default function RefundsPage() {
     bankName: '',
     notes: '',
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const bid = params.get('bookingId');
+    const bcode = params.get('bookingCode');
+    if (bid && bcode) {
+      const fetchAndOpen = async () => {
+        try {
+          const res = await fetch(`/api/bookings/search?q=${encodeURIComponent(bcode)}`);
+          if (res.ok) {
+            const results: BookingSearchResult[] = await res.json();
+            const match = results.find(r => r.id === bid) || results[0];
+            if (match) {
+              setSelectedBooking(match);
+              setBookingSearch(match.bookingCode);
+              const amt = String(match.totalAmount || '0');
+              setForm(f => ({ ...f, bookingId: match.id, originalAmount: amt, refundAmount: amt }));
+              setCreateOpen(true);
+              window.history.replaceState({}, '', window.location.pathname);
+              return;
+            }
+          }
+        } catch {}
+        setSelectedBooking({
+          id: bid, bookingCode: bcode, status: '', totalAmount: '0',
+          channel: null, originStop: null, destinationStop: null,
+          departureTime: null, serviceDate: null,
+          customerName: null, customerPhone: null, passengers: [],
+        });
+        setBookingSearch(bcode);
+        setForm(f => ({ ...f, bookingId: bid, originalAmount: '0', refundAmount: '0' }));
+        setCreateOpen(true);
+        window.history.replaceState({}, '', window.location.pathname);
+      };
+      fetchAndOpen();
+    }
+  }, []);
+
+  const doBookingSearch = useCallback((q: string) => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (q.length < 3) { setBookingResults([]); setSearchingBooking(false); return; }
+    setSearchingBooking(true);
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/bookings/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        setBookingResults(data);
+      } catch { setBookingResults([]); }
+      setSearchingBooking(false);
+    }, 300);
+  }, []);
+
+  const handleBookingSelect = (b: BookingSearchResult) => {
+    setSelectedBooking(b);
+    setBookingSearch(b.bookingCode);
+    setShowBookingDropdown(false);
+    const amt = String(b.totalAmount || '0');
+    setForm(f => ({ ...f, bookingId: b.id, originalAmount: amt, refundAmount: amt }));
+  };
 
   const { data: refundsList, isLoading } = useQuery<RefundRow[]>({
     queryKey: ['/api/refunds'],
@@ -173,6 +267,10 @@ export default function RefundsPage() {
       bookingId: '', passengerId: '', originalAmount: '', refundAmount: '',
       adminFee: '0', reason: '', refundMethod: 'cash', bankAccount: '', bankName: '', notes: '',
     });
+    setBookingSearch('');
+    setSelectedBooking(null);
+    setBookingResults([]);
+    setShowBookingDropdown(false);
   };
 
   const filtered = (refundsList || []).filter(r => {
@@ -208,9 +306,11 @@ export default function RefundsPage() {
               </button>
             )}
           </div>
-          <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="button-create-refund">
-            <Plus className="w-4 h-4 mr-1" /> Buat Refund
-          </Button>
+          <CanAccess flag="action.refund.create">
+            <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="button-create-refund">
+              <Plus className="w-4 h-4 mr-1" /> Buat Refund
+            </Button>
+          </CanAccess>
         </div>
         <div className="flex gap-1.5 overflow-x-auto">
           {STATUS_PILLS.map(p => (
@@ -281,7 +381,7 @@ export default function RefundsPage() {
                                 <Eye className="w-4 h-4" />
                               </Button>
                               {r.status === 'pending' && (
-                                <>
+                                <CanAccess flag="action.refund.approve">
                                   <Button
                                     size="icon"
                                     variant="ghost"
@@ -299,18 +399,20 @@ export default function RefundsPage() {
                                   >
                                     <XCircle className="w-4 h-4 text-red-600" />
                                   </Button>
-                                </>
+                                </CanAccess>
                               )}
                               {r.status === 'approved' && (
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => processMutation.mutate(r.id)}
-                                  disabled={processMutation.isPending}
-                                  data-testid={`button-process-${r.id}`}
-                                >
-                                  <ArrowRight className="w-4 h-4 text-blue-600" />
-                                </Button>
+                                <CanAccess flag="action.refund.process">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => processMutation.mutate(r.id)}
+                                    disabled={processMutation.isPending}
+                                    data-testid={`button-process-${r.id}`}
+                                  >
+                                    <ArrowRight className="w-4 h-4 text-blue-600" />
+                                  </Button>
+                                </CanAccess>
                               )}
                             </div>
                           </td>
@@ -325,34 +427,151 @@ export default function RefundsPage() {
         )}
       </div>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={o => { setCreateOpen(o); if (!o) resetForm(); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Buat Refund Baru</DialogTitle>
-            <DialogDescription>Isi data refund untuk booking yang akan di-refund.</DialogDescription>
+            <DialogDescription>Cari kode booking lalu isi detail refund.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
-            <div>
-              <Label>Booking ID</Label>
-              <Input
-                value={form.bookingId}
-                onChange={e => setForm(f => ({ ...f, bookingId: e.target.value }))}
-                placeholder="UUID booking"
-                data-testid="input-booking-id"
-              />
+            <div className="relative">
+              <Label>Kode Booking</Label>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Input
+                  value={bookingSearch}
+                  onChange={e => {
+                    const v = e.target.value.toUpperCase();
+                    setBookingSearch(v);
+                    setShowBookingDropdown(true);
+                    if (selectedBooking && v !== selectedBooking.bookingCode) {
+                      setSelectedBooking(null);
+                      setForm(f => ({ ...f, bookingId: '', originalAmount: '', refundAmount: '' }));
+                    }
+                    doBookingSearch(v);
+                  }}
+                  onFocus={() => bookingResults.length > 0 && setShowBookingDropdown(true)}
+                  placeholder="Ketik kode booking, min 3 huruf..."
+                  className="pl-9"
+                  data-testid="input-booking-search"
+                />
+                {searchingBooking && <Loader2 className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-gray-400" />}
+                {bookingSearch && !searchingBooking && (
+                  <button onClick={() => { setBookingSearch(''); setSelectedBooking(null); setBookingResults([]); setForm(f => ({ ...f, bookingId: '', originalAmount: '', refundAmount: '' })); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              {showBookingDropdown && bookingResults.length > 0 && !selectedBooking && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                  {bookingResults.map(b => (
+                    <button
+                      key={b.id}
+                      onClick={() => handleBookingSelect(b)}
+                      className="w-full px-3 py-2.5 text-left hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0"
+                      data-testid={`booking-result-${b.bookingCode}`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-mono font-medium text-sm text-gray-800">{b.bookingCode}</span>
+                        <span className="text-emerald-600 font-semibold text-sm">{fmtCurrency(parseFloat(b.totalAmount || '0'))}</span>
+                      </div>
+                      {(b.originStop || b.serviceDate) && (
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          {b.originStop && b.destinationStop && (
+                            <span className="flex items-center gap-0.5">
+                              <MapPin className="w-3 h-3" />
+                              {b.originStop} → {b.destinationStop}
+                            </span>
+                          )}
+                          {b.serviceDate && (
+                            <span className="flex items-center gap-0.5">
+                              <Calendar className="w-3 h-3" />
+                              {format(parseISO(b.serviceDate), 'dd MMM yyyy', { locale: idLocale })}
+                            </span>
+                          )}
+                          {b.departureTime && (
+                            <span className="flex items-center gap-0.5">
+                              <Clock className="w-3 h-3" />
+                              {b.departureTime}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {b.passengers.length > 0 && (
+                        <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+                          <Users className="w-3 h-3" />
+                          {b.passengers.map(p => p.fullName).join(', ')}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {bookingSearch.length >= 3 && !searchingBooking && bookingResults.length === 0 && !selectedBooking && (
+                <p className="text-xs text-gray-400 mt-1">Tidak ada booking ditemukan</p>
+              )}
             </div>
-            <div>
-              <Label>Passenger ID (opsional)</Label>
-              <Input
-                value={form.passengerId}
-                onChange={e => setForm(f => ({ ...f, passengerId: e.target.value }))}
-                placeholder="UUID penumpang"
-                data-testid="input-passenger-id"
-              />
-            </div>
+
+            {selectedBooking && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2.5">
+                <div className="flex items-center gap-3">
+                  <Ticket className="w-5 h-5 text-blue-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800">{selectedBooking.bookingCode}</p>
+                  </div>
+                  <p className="text-sm font-semibold text-emerald-700">{fmtCurrency(parseFloat(String(selectedBooking.totalAmount || '0')))}</p>
+                </div>
+
+                {(selectedBooking.originStop || selectedBooking.serviceDate) && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 pl-8">
+                    {selectedBooking.originStop && selectedBooking.destinationStop && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-blue-400" />
+                        {selectedBooking.originStop} → {selectedBooking.destinationStop}
+                      </span>
+                    )}
+                    {selectedBooking.serviceDate && (
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                        {format(parseISO(selectedBooking.serviceDate), 'EEEE, dd MMM yyyy', { locale: idLocale })}
+                      </span>
+                    )}
+                    {selectedBooking.departureTime && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-blue-400" />
+                        {selectedBooking.departureTime}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {selectedBooking.passengers.length > 0 && (
+                  <div className="pl-8 space-y-1">
+                    <p className="text-xs font-medium text-gray-500 flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5" /> Penumpang ({selectedBooking.passengers.length})
+                    </p>
+                    <div className="space-y-1">
+                      {selectedBooking.passengers.map(p => (
+                        <div key={p.id} className="flex items-center gap-2 text-xs bg-white/60 rounded px-2 py-1.5 border border-blue-100" data-testid={`pax-${p.seatNo}`}>
+                          <Armchair className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                          <span className="font-medium text-gray-700">{p.seatNo}</span>
+                          <span className="text-gray-600 flex-1 truncate">{p.fullName}</span>
+                          {p.phone && <span className="text-gray-400">{p.phone}</span>}
+                          <Badge variant={p.ticketStatus === 'active' ? 'default' : 'secondary'} className="text-[10px] h-4 px-1.5">
+                            {p.ticketStatus === 'active' ? 'Aktif' : p.ticketStatus === 'canceled' ? 'Batal' : p.ticketStatus}
+                          </Badge>
+                          <span className="font-medium text-gray-600">{fmtCurrency(parseFloat(p.fareAmount || '0'))}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <Label>Original Amount</Label>
+                <Label>Jumlah Asli</Label>
                 <Input
                   type="number"
                   value={form.originalAmount}
@@ -361,7 +580,7 @@ export default function RefundsPage() {
                 />
               </div>
               <div>
-                <Label>Refund Amount</Label>
+                <Label>Jumlah Refund</Label>
                 <Input
                   type="number"
                   value={form.refundAmount}
@@ -370,7 +589,7 @@ export default function RefundsPage() {
                 />
               </div>
               <div>
-                <Label>Admin Fee</Label>
+                <Label>Biaya Admin</Label>
                 <Input
                   type="number"
                   value={form.adminFee}
@@ -534,7 +753,7 @@ export default function RefundsPage() {
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t">
                 {detail.status === 'pending' && (
-                  <>
+                  <CanAccess flag="action.refund.approve">
                     <Button
                       size="sm"
                       onClick={() => { approveMutation.mutate(detail.id); }}
@@ -553,18 +772,20 @@ export default function RefundsPage() {
                       <XCircle className="w-4 h-4 mr-1" />
                       Reject
                     </Button>
-                  </>
+                  </CanAccess>
                 )}
                 {detail.status === 'approved' && (
-                  <Button
-                    size="sm"
-                    onClick={() => { processMutation.mutate(detail.id); }}
-                    disabled={processMutation.isPending}
-                    data-testid="button-detail-process"
-                  >
-                    {processMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <ArrowRight className="w-4 h-4 mr-1" />}
-                    Proses Refund
-                  </Button>
+                  <CanAccess flag="action.refund.process">
+                    <Button
+                      size="sm"
+                      onClick={() => { processMutation.mutate(detail.id); }}
+                      disabled={processMutation.isPending}
+                      data-testid="button-detail-process"
+                    >
+                      {processMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <ArrowRight className="w-4 h-4 mr-1" />}
+                      Proses Refund
+                    </Button>
+                  </CanAccess>
                 )}
               </div>
             </div>
