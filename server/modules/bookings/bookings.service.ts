@@ -6,9 +6,9 @@ import { PricingService } from "../pricing/pricing.service";
 import { PromosService } from "../promos/promos.service";
 import { PrintService } from "../printing/print.service";
 import { db } from "../../db";
-import { bookings as bookingsTable, seatHolds, seatInventory } from "@shared/schema";
+import { bookings as bookingsTable, passengers as passengersTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable } from "@shared/schema";
 import { scheduleStopExceptions } from "@shared/schema/scheduling";
-import { eq, and, inArray, gt, lt } from "drizzle-orm";
+import { eq, and, inArray, gt, lt, sql } from "drizzle-orm";
 import { webSocketService } from "../../realtime/ws";
 import { generateBookingCode, generateTicketNumber } from "../../utils/codeGenerator";
 
@@ -186,7 +186,7 @@ export class BookingsService {
     ]);
 
     const booking = await db.transaction(async (tx) => {
-      const newBooking = await this.storage.createBooking({
+      const [newBooking] = await tx.insert(bookingsTable).values({
         ...bookingData,
         bookingCode: generateBookingCode(),
         status: 'paid',
@@ -198,10 +198,10 @@ export class BookingsService {
         snapDestinationStopName: destinationStop?.name || null,
         snapDepartureHHMM: trip?.originDepartHHMM || null,
         snapOutletName: outlet?.name || null,
-      });
+      }).returning();
 
       for (const passengerData of passengers) {
-        await this.storage.createPassenger({
+        await tx.insert(passengersTable).values({
           ...passengerData,
           ticketNumber: generateTicketNumber(),
           bookingId: newBooking.id,
@@ -227,23 +227,45 @@ export class BookingsService {
           ));
       }
 
-      await this.storage.createPayment({
+      await tx.insert(paymentsTable).values({
         method: payment.method,
         amount: payment.amount.toString(),
         bookingId: newBooking.id
       });
 
-      await this.storage.createPrintJob({
+      await tx.insert(printJobsTable).values({
         bookingId: newBooking.id,
         status: 'queued'
       });
 
+      if (promoId && promoValidation) {
+        const [promoUpdate] = await tx.update(promotionsTable)
+          .set({ usageCount: sql`${promotionsTable.usageCount} + 1` })
+          .where(and(
+            eq(promotionsTable.id, promoId),
+            eq(promotionsTable.isActive, true),
+            sql`(${promotionsTable.usageLimit} IS NULL OR ${promotionsTable.usageCount} < ${promotionsTable.usageLimit})`
+          ))
+          .returning({ id: promotionsTable.id });
+        if (!promoUpdate) {
+          throw new Error('Promo is no longer available or usage limit reached');
+        }
+        if (promoValidation.voucher?.id) {
+          const [voucherUpdate] = await tx.update(vouchersTable)
+            .set({ status: 'used', usedAt: new Date(), usedByBookingId: newBooking.id })
+            .where(and(
+              eq(vouchersTable.id, promoValidation.voucher.id),
+              eq(vouchersTable.status, 'active')
+            ))
+            .returning({ id: vouchersTable.id });
+          if (!voucherUpdate) {
+            throw new Error('Voucher is no longer available or already used');
+          }
+        }
+      }
+
       return newBooking;
     });
-
-    if (promoId && promoValidation) {
-      await this.promosService.markUsed(promoId, promoValidation.voucher?.id, booking.id);
-    }
 
     const bookingWithRelations = await this.getBookingById(booking.id);
     const printPayload = await this.printService.generatePrintPayload(booking.id);
@@ -417,31 +439,29 @@ export class BookingsService {
     ]);
 
     const expectedTotal = Number(fareQuote.total) * passengers.length;
-    const booking = await this.storage.createBooking({
-      ...bookingData,
-      bookingCode: generateBookingCode(),
-      status: 'pending',
-      totalAmount: expectedTotal.toString(),
-      pendingExpiresAt,
-      snapOriginStopName: originStop?.name || null,
-      snapDestinationStopName: destinationStop?.name || null,
-      snapDepartureHHMM: tripForSnap?.originDepartHHMM || null,
-      snapOutletName: outlet?.name || null,
-    });
 
-    // Create passengers and mark seats as booked (pending status)
-    for (const passengerData of passengers) {
-      await this.storage.createPassenger({
-        ...passengerData,
-        ticketNumber: generateTicketNumber(),
-        bookingId: booking.id,
-        fareAmount: fareQuote.perPassenger.toString(),
-        fareBreakdown: fareQuote.breakdown
-      });
+    const booking = await db.transaction(async (tx) => {
+      const [newBooking] = await tx.insert(bookingsTable).values({
+        ...bookingData,
+        bookingCode: generateBookingCode(),
+        status: 'pending',
+        totalAmount: expectedTotal.toString(),
+        pendingExpiresAt,
+        snapOriginStopName: originStop?.name || null,
+        snapDestinationStopName: destinationStop?.name || null,
+        snapDepartureHHMM: tripForSnap?.originDepartHHMM || null,
+        snapOutletName: outlet?.name || null,
+      }).returning();
 
-      // Mark seats as booked (with hold cleared) - pending booking
-      await db.transaction(async (tx) => {
-        // Update seat inventory - mark as booked
+      for (const passengerData of passengers) {
+        await tx.insert(passengersTable).values({
+          ...passengerData,
+          ticketNumber: generateTicketNumber(),
+          bookingId: newBooking.id,
+          fareAmount: fareQuote.perPassenger.toString(),
+          fareBreakdown: fareQuote.breakdown
+        });
+
         await tx
           .update(seatInventory)
           .set({ booked: true, holdRef: null })
@@ -451,7 +471,6 @@ export class BookingsService {
             inArray(seatInventory.legIndex, legIndexes)
           ));
 
-        // Delete hold record
         await tx
           .delete(seatHolds)
           .where(and(
@@ -459,35 +478,30 @@ export class BookingsService {
             eq(seatHolds.seatNo, passengerData.seatNo),
             eq(seatHolds.operatorId, operatorId)
           ));
-      });
-    }
+      }
+
+      return newBooking;
+    });
 
     const bookingWithRelations = await this.getBookingById(booking.id);
     return { booking: bookingWithRelations, pendingExpiresAt };
   }
 
   async getPendingBookings(outletId?: string, operatorId?: string): Promise<Booking[]> {
-    // Get all pending bookings
-    const allBookings = await this.storage.getBookings();
-    
-    let pendingBookings = allBookings.filter(b => 
-      b.status === 'pending' && 
-      b.pendingExpiresAt && 
-      new Date(b.pendingExpiresAt) > new Date()
-    );
+    const now = new Date();
+    const conditions = [
+      eq(bookingsTable.status, 'pending'),
+      gt(bookingsTable.pendingExpiresAt, now),
+    ];
 
-    // Filter by outlet if provided
     if (outletId) {
-      pendingBookings = pendingBookings.filter(b => b.outletId === outletId);
+      conditions.push(eq(bookingsTable.outletId, outletId));
     }
-
-    // TODO: Add operator filtering once we have operator tracking in bookings
-    // For now, we'll use the createdBy field as a proxy
     if (operatorId) {
-      pendingBookings = pendingBookings.filter(b => b.createdBy === operatorId);
+      conditions.push(eq(bookingsTable.createdBy, operatorId));
     }
 
-    return pendingBookings;
+    return await db.select().from(bookingsTable).where(and(...conditions));
   }
 
   async releasePendingBooking(bookingId: string, operatorId: string): Promise<void> {
@@ -517,11 +531,13 @@ export class BookingsService {
             inArray(seatInventory.legIndex, legIndexes)
           ));
       }
+
+      await tx.update(bookingsTable)
+        .set({ status: 'canceled' })
+        .where(eq(bookingsTable.id, bookingId));
     });
 
     await this.holdsService.releaseHoldsByOwner(operatorId, bookingId);
-
-    await this.storage.updateBooking(bookingId, { status: 'canceled' });
 
     for (const passenger of passengers) {
       webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
@@ -570,9 +586,11 @@ export class BookingsService {
                 inArray(seatInventory.legIndex, legIndexes)
               ));
           }
-        });
 
-        await this.storage.updateBooking(booking.id, { status: 'canceled' });
+          await tx.update(bookingsTable)
+            .set({ status: 'canceled' })
+            .where(eq(bookingsTable.id, booking.id));
+        });
 
         for (const passenger of bookingPassengers) {
           webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);

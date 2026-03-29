@@ -104,6 +104,14 @@ Based on the Blink AI audit report (174 issues), the following critical/high sec
 - **H-16**: `Math.random()` replaced with `crypto.randomBytes()` + rejection sampling (no modulo bias) in `codeGenerator.ts`
 - **C-01**: `.env` parsing bug fixed (concatenated vars), `.gitignore` updated to exclude `.env`
 
+## Data Integrity Fixes (Sprint 1 — Completed)
+Following Sprint 0 security fixes, these data integrity issues from the Blink AI audit have been resolved:
+- **C-02**: `createBooking` and `createPendingBooking` now use `tx.insert()` directly for all DB writes (booking, passengers, payment, print job) inside a single `db.transaction()`, eliminating partial-write risk from escaped transaction context
+- **H-09**: Promo usage increment and voucher consumption moved inside the booking transaction with race-condition guards — conditional WHERE clauses check `isActive`, `usageCount < usageLimit`, and voucher `status='active'`; affected-row validation prevents double-redemption
+- **H-02**: `releasePendingBooking` and `cleanupExpiredPendingBookings` now update booking status to 'canceled' inside the transaction; WebSocket emits happen only after successful commit
+- **H-06**: `getPendingBookings` replaced in-memory filtering (loaded all bookings) with direct DB query using `WHERE status='pending' AND pendingExpiresAt > now`
+- **H-11**: `deleteTrip` already validates active bookings at repository level (throws `TRIP_HAS_ACTIVE_BOOKINGS`); confirmed no service-level gap
+
 ## Performance Optimizations
 - **`getActiveBookingsForTrip`**: Filters bookings at DB level (WHERE status IN active statuses) instead of fetching all then filtering in memory. Used by getSeatmap and getSeatPassengerDetails.
 - **Virtual trip price rules**: Uses targeted `SELECT WHERE pattern_id IN (...)` + Set membership check instead of loading ALL price rules.
