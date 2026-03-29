@@ -146,16 +146,7 @@ export default function AdminStaffPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="admin-staff-page">
-      <PageHeader
-        icon={Users}
-        title="Kelola Staff"
-        subtitle="Assignment role & outlet tim"
-        actions={
-          <Button size="sm" onClick={openCreate} data-testid="btn-add-staff">
-            <Plus className="w-4 h-4 mr-1" /> Tambah Staff
-          </Button>
-        }
-      />
+      <PageHeader icon={Users} title="Kelola Staff" subtitle="Assignment role & outlet tim" />
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto w-full p-4 md:p-6 space-y-4">
           <div className="hidden lg:block" />
@@ -171,6 +162,9 @@ export default function AdminStaffPage() {
                   <RefreshCw className="w-4 h-4" />
                 </Button>
                 <Badge variant="outline">{filtered.length} staff</Badge>
+                <Button size="sm" onClick={openCreate} data-testid="btn-add-staff">
+                  <Plus className="w-4 h-4 mr-1" /> Tambah Staff
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="p-0">

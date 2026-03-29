@@ -277,16 +277,7 @@ export default function CustomersPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="customers-page">
-      <PageHeader
-        icon={Contact}
-        title="Pelanggan"
-        subtitle="Data pelanggan & kategori"
-        actions={
-          <Button size="sm" onClick={() => { setEditCustomer(null); setFormOpen(true); }} data-testid="button-add-customer">
-            <Plus className="w-4 h-4 mr-1" /> Tambah
-          </Button>
-        }
-      />
+      <PageHeader icon={Contact} title="Pelanggan" subtitle="Data pelanggan & kategori" />
 
       <div className="p-3 md:p-4 space-y-3 flex-shrink-0 bg-white border-b border-gray-100">
         <div className="flex gap-2">
@@ -305,6 +296,9 @@ export default function CustomersPage() {
               </button>
             )}
           </div>
+          <Button size="sm" onClick={() => { setEditCustomer(null); setFormOpen(true); }} data-testid="button-add-customer">
+            <Plus className="w-4 h-4 mr-1" /> Tambah
+          </Button>
         </div>
         <div className="flex gap-1.5 overflow-x-auto">
           <button

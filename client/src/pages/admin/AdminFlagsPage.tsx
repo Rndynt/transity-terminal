@@ -144,16 +144,7 @@ export default function AdminFlagsPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="admin-flags-page">
-      <PageHeader
-        icon={ShieldCheck}
-        title="Feature Flags"
-        subtitle="Toggle permission per role"
-        actions={
-          <Button variant="outline" size="sm" onClick={() => refetchMatrix()} className="gap-1.5">
-            <RefreshCw className="w-4 h-4" /> Refresh
-          </Button>
-        }
-      />
+      <PageHeader icon={ShieldCheck} title="Feature Flags" subtitle="Toggle permission per role" />
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-full mx-auto w-full p-4 md:p-6 space-y-4">
           <div className="hidden lg:block" />

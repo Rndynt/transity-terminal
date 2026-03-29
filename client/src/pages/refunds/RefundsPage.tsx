@@ -189,16 +189,7 @@ export default function RefundsPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="refunds-page">
-      <PageHeader
-        icon={RotateCcw}
-        title="Manajemen Refund"
-        subtitle="Kelola pembatalan & pengembalian"
-        actions={
-          <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="button-create-refund">
-            <Plus className="w-4 h-4 mr-1" /> Buat Refund
-          </Button>
-        }
-      />
+      <PageHeader icon={RotateCcw} title="Manajemen Refund" subtitle="Kelola pembatalan & pengembalian" />
 
       <div className="p-3 md:p-4 space-y-3 flex-shrink-0 bg-white border-b border-gray-100">
         <div className="flex gap-2">
@@ -217,6 +208,9 @@ export default function RefundsPage() {
               </button>
             )}
           </div>
+          <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="button-create-refund">
+            <Plus className="w-4 h-4 mr-1" /> Buat Refund
+          </Button>
         </div>
         <div className="flex gap-1.5 overflow-x-auto">
           {STATUS_PILLS.map(p => (

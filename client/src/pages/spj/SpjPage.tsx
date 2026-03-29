@@ -124,18 +124,7 @@ export default function SpjPage() {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <PageHeader
-        icon={ClipboardList}
-        title="Surat Perintah Jalan"
-        subtitle="Kelola SPJ per trip perjalanan"
-        actions={
-          <CanAccess flag="action.spj.create">
-            <Button size="sm" onClick={() => setShowCreateDialog(true)} data-testid="btn-create-spj">
-              <Plus className="w-4 h-4 mr-1" /> Buat SPJ
-            </Button>
-          </CanAccess>
-        }
-      />
+      <PageHeader icon={ClipboardList} title="Surat Perintah Jalan" subtitle="Kelola SPJ per trip perjalanan" />
 
       <div className="px-6 py-4 border-b bg-muted/20 shrink-0">
         <div className="flex gap-3 items-center">
@@ -152,6 +141,11 @@ export default function SpjPage() {
           <Badge variant="outline" className="text-xs" data-testid="spj-count">
             {filtered.length} SPJ
           </Badge>
+          <CanAccess flag="action.spj.create">
+            <Button size="sm" onClick={() => setShowCreateDialog(true)} data-testid="btn-create-spj">
+              <Plus className="w-4 h-4 mr-1" /> Buat SPJ
+            </Button>
+          </CanAccess>
         </div>
       </div>
 
