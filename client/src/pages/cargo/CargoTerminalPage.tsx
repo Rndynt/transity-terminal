@@ -3,14 +3,15 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Package, MapPin, Search, ArrowRight, Weight, Hash, Ruler, ShieldCheck,
   User, Banknote, QrCode, Wallet, Building2,
-  Loader2, Bus, Clock, Calendar, ChevronRight, Truck, Route,
-  CheckCircle2, AlertCircle, RotateCcw, Printer, Copy
+  Loader2, Bus, Clock, Calendar, ChevronRight, ChevronLeft, Truck, Route,
+  CheckCircle2, AlertCircle, RotateCcw, Printer, Copy, Menu
 } from 'lucide-react';
 import { outletsApi, stopsApi, cargoTypesApi, cargoApi } from '@/lib/api';
 import { fmtCurrency } from '@/lib/constants';
 import { queryClient } from '@/lib/queryClient';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { useLayout } from '@/components/layout/LayoutContext';
 import type { Stop, Outlet, CargoType, CargoAvailableTrip } from '@/types';
 
 const PAYMENT_METHODS = [
@@ -170,6 +171,7 @@ function OutletSelector({ value, outlets, stops: stopsList, onChange }: {
 }
 
 export default function CargoTerminalPage() {
+  const { openSidebar, isMobile } = useLayout();
   const [step, setStep] = useState(1);
   const [selectedOutletId, setSelectedOutletId] = useState('');
   const [destinationStopId, setDestinationStopId] = useState('');
@@ -505,45 +507,78 @@ export default function CargoTerminalPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden" data-testid="cargo-terminal-page">
-      <div className="flex items-center justify-between px-3 md:px-4 h-11 md:h-12 border-b border-gray-200 bg-white flex-shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <Package className="w-4 h-4 text-amber-600 flex-shrink-0" />
-          <span className="text-xs font-bold text-gray-800 hidden sm:inline">Cargo Terminal</span>
-          {step <= 3 && stepLabels.map((label, idx) => {
-            const s = idx + 1;
-            const isActive = step === s;
-            const isDone = step > s;
-            return (
-              <div key={idx} className="flex items-center gap-1">
-                <ChevronRight className={`w-3 h-3 ${isDone ? 'text-emerald-400' : 'text-gray-300'}`} />
+      <div className="bg-white border-b border-gray-200 flex-shrink-0">
+        <div className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {isMobile && (
+              <button
+                onClick={openSidebar}
+                className="p-1 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors flex-shrink-0 mr-0.5"
+                aria-label="Open sidebar"
+                data-testid="cargo-open-sidebar"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+            )}
+            <Package className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <span className="text-sm font-bold text-gray-800 truncate hidden sm:inline">Cargo Terminal</span>
+            <span className="text-sm font-bold text-gray-800 sm:hidden">Cargo</span>
+
+            <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5 flex-shrink-0" />
+            {step === 4 ? (
+              <>
+                <span className="text-xs text-gray-400 whitespace-nowrap">Pembayaran</span>
+                <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5 flex-shrink-0" />
+                <span className="text-xs text-gray-500 font-medium">Selesai</span>
+              </>
+            ) : step === 3 ? (
+              <>
                 <button
-                  onClick={() => { if (isDone) setStep(s); }}
-                  disabled={!isDone}
-                  className={`text-[10px] md:text-xs font-medium px-1.5 py-0.5 rounded transition-colors ${
-                    isActive ? 'text-amber-700 bg-amber-50 border border-amber-200' :
-                    isDone ? 'text-emerald-600 hover:text-emerald-700 cursor-pointer' : 'text-gray-400'
-                  }`}
-                  data-testid={`step-${s}`}
+                  onClick={() => setStep(2)}
+                  className="text-xs text-amber-600 hover:underline whitespace-nowrap"
+                  data-testid="breadcrumb-back-jadwal"
                 >
-                  {isDone && <CheckCircle2 className="w-3 h-3 inline mr-0.5" />}
-                  <span className="hidden md:inline">{label}</span>
-                  <span className="md:hidden">{s}</span>
+                  Pilih Jadwal
                 </button>
+                <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5 flex-shrink-0" />
+                <span className="text-xs text-gray-500">Pembayaran</span>
+              </>
+            ) : step === 2 ? (
+              <>
+                <button
+                  onClick={() => setStep(1)}
+                  className="text-xs text-amber-600 hover:underline whitespace-nowrap"
+                  data-testid="breadcrumb-back-data"
+                >
+                  Data Kiriman
+                </button>
+                <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5 flex-shrink-0" />
+                <span className="text-xs text-gray-500 whitespace-nowrap">Pilih Jadwal</span>
+              </>
+            ) : (
+              <span className="text-xs text-gray-500 whitespace-nowrap">Data Kiriman</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 md:gap-4 flex-shrink-0 ml-2">
+            {step > 1 && step <= 3 && (
+              <button
+                onClick={() => setStep(step - 1)}
+                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-amber-600 hover:bg-amber-50 transition-colors border border-gray-200"
+                data-testid="btn-back-step"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Kembali
+              </button>
+            )}
+            <div className="flex items-center gap-1.5 md:gap-3 text-[10px] md:text-xs text-gray-400">
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-emerald-400" />
+                <span className="hidden sm:inline">Online</span>
               </div>
-            );
-          })}
-          {step === 4 && (
-            <>
-              <ChevronRight className="w-3 h-3 text-emerald-400" />
-              <span className="text-xs font-medium text-emerald-600">Selesai</span>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2 text-[10px] md:text-xs text-gray-400">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-          <span className="font-mono hidden md:inline">
-            {new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
-          </span>
+              <span className="hidden md:inline">Cargo</span>
+              <span className="font-mono">{new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'numeric', year: 'numeric' })}</span>
+            </div>
+          </div>
         </div>
       </div>
 
