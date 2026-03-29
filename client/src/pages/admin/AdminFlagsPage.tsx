@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -51,6 +52,7 @@ const ROLE_ORDER = ['owner', 'finance', 'manager', 'spv_operations', 'operations
 const CATEGORY_ORDER = ['page', 'report', 'master', 'action', 'admin'];
 
 export default function AdminFlagsPage() {
+  usePageTitle("Feature Flags", "Toggle permission per role");
   const { toast } = useToast();
   const { refresh: refreshPermissions } = usePermissions();
   const [pendingToggles, setPendingToggles] = useState<Set<string>>(new Set());
@@ -143,7 +145,7 @@ export default function AdminFlagsPage() {
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="admin-flags-page">
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-full mx-auto w-full p-4 md:p-6 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between hidden lg:flex">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                 <ShieldCheck className="w-6 h-6 text-blue-600" /> Feature Flags

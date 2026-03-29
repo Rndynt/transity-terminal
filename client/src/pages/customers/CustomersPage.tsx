@@ -4,6 +4,8 @@ import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { fmtCurrency, fmtDate, CUSTOMER_TAG_MAP, type CustomerTag } from '@/lib/constants';
 import { customersApi } from '@/lib/api';
+import NotificationBell from '@/components/layout/NotificationBell';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -258,6 +260,7 @@ function CustomerDetailDialog({
 }
 
 export default function CustomersPage() {
+  usePageTitle("Pelanggan", "Data pelanggan & kategori");
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [activeTag, setActiveTag] = useState<CustomerTag | 'all'>('all');
@@ -274,16 +277,19 @@ export default function CustomersPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="customers-page">
-      <div className="bg-white border-b border-gray-200 flex-shrink-0">
+      <div className="bg-white border-b border-gray-200 flex-shrink-0 hidden lg:block">
         <div className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12">
           <div className="flex items-center gap-1.5">
             <Contact className="w-4 h-4 text-blue-600" />
             <span className="text-sm font-bold text-gray-800">Pelanggan</span>
           </div>
-          <Button size="sm" onClick={() => { setEditCustomer(null); setFormOpen(true); }} data-testid="button-add-customer">
-            <Plus className="w-4 h-4 mr-1" />
-            Tambah
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => { setEditCustomer(null); setFormOpen(true); }} data-testid="button-add-customer">
+              <Plus className="w-4 h-4 mr-1" />
+              Tambah
+            </Button>
+            <NotificationBell className="hidden lg:block" />
+          </div>
         </div>
       </div>
 

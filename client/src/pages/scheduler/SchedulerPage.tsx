@@ -1,5 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import NotificationBell from '@/components/layout/NotificationBell';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -971,6 +973,7 @@ function EmptyCellDialog({ cell, open, onClose }: { cell: EmptyCellInfo | null; 
 }
 
 export default function SchedulerPage() {
+  usePageTitle("Penjadwalan", "Atur jadwal trip bulanan");
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
@@ -1132,7 +1135,7 @@ export default function SchedulerPage() {
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="scheduler-page">
-      <div className="border-b px-4 md:px-6 py-3 shrink-0">
+      <div className="border-b px-4 md:px-6 py-3 shrink-0 hidden lg:block">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <CalendarRange className="w-5 h-5 text-primary" />
@@ -1162,6 +1165,7 @@ export default function SchedulerPage() {
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
+            <NotificationBell className="hidden lg:block" />
           </div>
         </div>
 

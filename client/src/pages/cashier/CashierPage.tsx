@@ -4,6 +4,8 @@ import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { fmtCurrency, fmtDate, CASHIER_STATUS_MAP, type CashierSessionStatus } from '@/lib/constants';
 import { cashierApi } from '@/lib/api';
+import NotificationBell from '@/components/layout/NotificationBell';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,6 +73,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function CashierPage() {
+  usePageTitle("Rekonsiliasi Kasir", "Buka, tutup & rekonsiliasi sesi kasir");
   const { toast } = useToast();
   const [tab, setTab] = useState('session');
   const [openBalance, setOpenBalance] = useState('');
@@ -177,7 +180,7 @@ export default function CashierPage() {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="border-b px-4 md:px-6 py-3 md:py-4 shrink-0">
+      <div className="border-b px-4 md:px-6 py-3 md:py-4 shrink-0 hidden lg:block">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Wallet className="w-5 h-5 text-primary" />
@@ -186,6 +189,7 @@ export default function CashierPage() {
               <p className="text-sm text-muted-foreground">Buka, tutup, dan rekonsiliasi sesi kasir harian</p>
             </div>
           </div>
+          <NotificationBell className="hidden lg:block" />
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -57,6 +58,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function AdminStaffPage() {
+  usePageTitle("Kelola Staff", "Assignment role & outlet tim");
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [showDialog, setShowDialog] = useState(false);
@@ -145,7 +147,7 @@ export default function AdminStaffPage() {
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="admin-staff-page">
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto w-full p-4 md:p-6 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between hidden lg:flex">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                 <Users className="w-6 h-6 text-blue-600" /> Kelola Staff

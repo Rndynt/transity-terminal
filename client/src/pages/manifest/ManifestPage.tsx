@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { tripsApi, tripPatternsApi } from '@/lib/api';
+import NotificationBell from '@/components/layout/NotificationBell';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +40,7 @@ function addDays(dateStr: string, days: number) {
 }
 
 export default function ManifestPage() {
+  usePageTitle("Manifest", "Dokumen penumpang & kargo per trip");
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [search, setSearch] = useState('');
   const [manifestTripId, setManifestTripId] = useState<string | null>(null);
@@ -64,12 +67,17 @@ export default function ManifestPage() {
   return (
     <div className="flex flex-col h-full bg-background">
       {/* ── Page Header ── */}
-      <div className="border-b px-6 py-4 shrink-0">
-        <div className="flex items-center gap-3 mb-1">
-          <FileText className="w-5 h-5 text-primary" />
-          <h1 className="text-xl font-semibold">Manifest Perjalanan</h1>
+      <div className="border-b px-6 py-4 shrink-0 hidden lg:block">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <FileText className="w-5 h-5 text-primary" />
+              <h1 className="text-xl font-semibold">Manifest Perjalanan</h1>
+            </div>
+            <p className="text-sm text-muted-foreground">Dokumen resmi penumpang dan kargo per trip. Pilih trip lalu klik <strong>Buka Manifest</strong>.</p>
+          </div>
+          <NotificationBell className="hidden lg:block" />
         </div>
-        <p className="text-sm text-muted-foreground">Dokumen resmi penumpang dan kargo per trip. Pilih trip lalu klik <strong>Buka Manifest</strong>.</p>
       </div>
 
       {/* ── Controls ── */}

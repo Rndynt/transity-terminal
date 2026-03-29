@@ -38,7 +38,7 @@ function severityLabel(severity: string) {
   }
 }
 
-export default function NotificationBell() {
+export default function NotificationBell({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
 
   const { data: unreadData } = useQuery<{ count: number }>({
@@ -75,6 +75,7 @@ export default function NotificationBell() {
   const unreadCount = unreadData?.count ?? 0;
 
   return (
+    <div className={className}>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
@@ -174,5 +175,6 @@ export default function NotificationBell() {
         </ScrollArea>
       </PopoverContent>
     </Popover>
+    </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { usePermissions } from '@/lib/permissions';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,6 +26,7 @@ function buildQuery(f: ReportFilterValues) {
 }
 
 export default function RevenueReportPage() {
+  usePageTitle("Laporan Pendapatan", "Ringkasan pendapatan per kanal & rute");
   const { outletId: scopedOutletId } = usePermissions();
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];

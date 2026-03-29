@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { usePermissions } from '@/lib/permissions';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +36,7 @@ const PAYMENT_STATUS_MAP: Record<string, { label: string; variant: 'default' | '
 };
 
 export default function PaymentsReportPage() {
+  usePageTitle("Laporan Pembayaran", "Detail metode & status pembayaran");
   const { outletId: scopedOutletId } = usePermissions();
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];

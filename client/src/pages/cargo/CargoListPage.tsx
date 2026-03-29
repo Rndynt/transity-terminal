@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { cargoApi } from '@/lib/api';
+import NotificationBell from '@/components/layout/NotificationBell';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import type { TripWithDetails } from '@shared/schema';
@@ -122,6 +124,7 @@ function TripCombobox({
 }
 
 export default function CargoListPage() {
+  usePageTitle("Daftar Kargo", "Semua pengiriman kargo");
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
@@ -203,7 +206,7 @@ export default function CargoListPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="cargo-list-page">
-      <div className="bg-white border-b border-gray-200 flex-shrink-0">
+      <div className="bg-white border-b border-gray-200 flex-shrink-0 hidden lg:block">
         <div className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12">
           <div className="flex items-center gap-1.5">
             <Package className="w-4 h-4 text-amber-600" />
@@ -212,6 +215,7 @@ export default function CargoListPage() {
               {filteredShipments.length} kiriman
             </span>
           </div>
+          <NotificationBell className="hidden lg:block" />
         </div>
       </div>
 

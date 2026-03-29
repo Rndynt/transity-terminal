@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import NotificationBell from '@/components/layout/NotificationBell';
 
 interface ReportPageLayoutProps {
   title: string;
@@ -14,12 +15,17 @@ interface ReportPageLayoutProps {
 export default function ReportPageLayout({ title, description, icon: Icon, isLoading, filterBar, children }: ReportPageLayoutProps) {
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="border-b px-4 sm:px-6 py-3 sm:py-4 shrink-0">
-        <div className="flex items-center gap-2.5 sm:gap-3 mb-1">
-          <Icon className="w-5 h-5 text-primary flex-shrink-0" />
-          <h1 className="text-lg sm:text-xl font-semibold">{title}</h1>
+      <div className="border-b px-4 sm:px-6 py-3 sm:py-4 shrink-0 hidden lg:block">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2.5 sm:gap-3 mb-1">
+              <Icon className="w-5 h-5 text-primary flex-shrink-0" />
+              <h1 className="text-lg sm:text-xl font-semibold">{title}</h1>
+            </div>
+            {description && <p className="text-xs sm:text-sm text-muted-foreground">{description}</p>}
+          </div>
+          <NotificationBell className="hidden lg:block" />
         </div>
-        {description && <p className="text-xs sm:text-sm text-muted-foreground">{description}</p>}
       </div>
 
       {filterBar && (

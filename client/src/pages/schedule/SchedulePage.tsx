@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import { tripsApi, tripPatternsApi, driversApi, spjApi } from '@/lib/api';
+import NotificationBell from '@/components/layout/NotificationBell';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { apiRequest } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,6 +50,7 @@ function formatDisplayDate(dateStr: string) {
 }
 
 export default function SchedulePage() {
+  usePageTitle("Jadwal Harian", "Kelola operasional harian");
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [search, setSearch] = useState('');
   const [showClosed, setShowClosed] = useState(false);
@@ -136,12 +139,17 @@ export default function SchedulePage() {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="border-b px-6 py-4 shrink-0">
-        <div className="flex items-center gap-3 mb-1">
-          <CalendarDays className="w-5 h-5 text-primary" />
-          <h1 className="text-xl font-semibold" data-testid="page-title-schedule">Jadwal Harian</h1>
+      <div className="border-b px-6 py-4 shrink-0 hidden lg:block">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <CalendarDays className="w-5 h-5 text-primary" />
+              <h1 className="text-xl font-semibold" data-testid="page-title-schedule">Jadwal Harian</h1>
+            </div>
+            <p className="text-sm text-muted-foreground">Kelola operasional harian — assign driver, buka manifest, dan buat SPJ.</p>
+          </div>
+          <NotificationBell className="hidden lg:block" />
         </div>
-        <p className="text-sm text-muted-foreground">Kelola operasional harian — assign driver, buka manifest, dan buat SPJ.</p>
       </div>
 
       <div className="px-6 py-3 border-b bg-muted/20 shrink-0">

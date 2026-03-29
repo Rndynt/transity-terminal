@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearch, useLocation } from 'wouter';
+import NotificationBell from '@/components/layout/NotificationBell';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -64,6 +66,7 @@ const ALL_TABS: TabDef[] = [
 ];
 
 export default function MastersPage() {
+  usePageTitle("Master Data", "Konfigurasi halte, kendaraan, rute & harga");
   const search = useSearch();
   const [, setLocation] = useLocation();
   const { can } = usePermissions();
@@ -109,14 +112,19 @@ export default function MastersPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="masters-page">
-      <div className="border-b px-4 sm:px-6 py-3 sm:py-4 shrink-0">
-        <div className="flex items-center gap-2.5 sm:gap-3 mb-1">
-          <LayoutGrid className="w-5 h-5 text-primary flex-shrink-0" />
-          <h1 className="text-lg sm:text-xl font-semibold">Master Data</h1>
+      <div className="border-b px-4 sm:px-6 py-3 sm:py-4 shrink-0 hidden lg:block">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2.5 sm:gap-3 mb-1">
+              <LayoutGrid className="w-5 h-5 text-primary flex-shrink-0" />
+              <h1 className="text-lg sm:text-xl font-semibold">Master Data</h1>
+            </div>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Konfigurasi halte, kendaraan, rute, dan aturan harga sistem perjalanan multi-halte
+            </p>
+          </div>
+          <NotificationBell className="hidden lg:block" />
         </div>
-        <p className="text-xs sm:text-sm text-muted-foreground">
-          Konfigurasi halte, kendaraan, rute, dan aturan harga sistem perjalanan multi-halte
-        </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1 flex flex-col overflow-hidden">

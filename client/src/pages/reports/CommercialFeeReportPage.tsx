@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { usePermissions } from '@/lib/permissions';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,6 +38,7 @@ function fmtTierRange(min: number, tiers: any[], idx: number) {
 }
 
 export default function CommercialFeeReportPage() {
+  usePageTitle("Laporan Commercial Fee", "Rekap fee per agen & tier");
   const { outletId: scopedOutletId } = usePermissions();
   const today = new Date().toISOString().split('T')[0];
   const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];

@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { bookingsApi, stopsApi } from '@/lib/api';
+import NotificationBell from '@/components/layout/NotificationBell';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import type { Booking, Stop } from '@/types';
@@ -383,6 +385,7 @@ function BookingDetailModal({
 }
 
 export default function AllBookingsPage() {
+  usePageTitle("Daftar Booking", "Semua booking penumpang");
   const [, navigate] = useLocation();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all');
@@ -433,7 +436,7 @@ export default function AllBookingsPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="all-bookings-page">
-      <div className="bg-white border-b border-gray-200 flex-shrink-0">
+      <div className="bg-white border-b border-gray-200 flex-shrink-0 hidden lg:block">
         <div className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12">
           <div className="flex items-center gap-1.5">
             <List className="w-4 h-4 text-blue-600" />
@@ -442,6 +445,7 @@ export default function AllBookingsPage() {
               {filtered.length} booking
             </span>
           </div>
+          <NotificationBell className="hidden lg:block" />
         </div>
       </div>
 

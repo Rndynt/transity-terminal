@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import { spjApi, tripsApi, tripPatternsApi } from '@/lib/api';
+import NotificationBell from '@/components/layout/NotificationBell';
+import { usePageTitle } from '@/components/layout/LayoutContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +56,7 @@ function addDays(dateStr: string, days: number) {
 }
 
 export default function SpjPage() {
+  usePageTitle("Surat Perintah Jalan", "Kelola SPJ per trip perjalanan");
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -121,7 +124,7 @@ export default function SpjPage() {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="border-b px-6 py-4 shrink-0">
+      <div className="border-b px-6 py-4 shrink-0 hidden lg:block">
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-3 mb-1">
@@ -130,11 +133,14 @@ export default function SpjPage() {
             </div>
             <p className="text-sm text-muted-foreground">Kelola SPJ untuk setiap trip perjalanan. Biaya perjalanan dicatat dan diselesaikan di sini.</p>
           </div>
-          <CanAccess flag="action.spj.create">
-            <Button onClick={() => setShowCreateDialog(true)} data-testid="btn-create-spj">
-              <Plus className="w-4 h-4 mr-1.5" /> Buat SPJ
-            </Button>
-          </CanAccess>
+          <div className="flex items-center gap-3">
+            <CanAccess flag="action.spj.create">
+              <Button onClick={() => setShowCreateDialog(true)} data-testid="btn-create-spj">
+                <Plus className="w-4 h-4 mr-1.5" /> Buat SPJ
+              </Button>
+            </CanAccess>
+            <NotificationBell className="hidden lg:block" />
+          </div>
         </div>
       </div>
 
