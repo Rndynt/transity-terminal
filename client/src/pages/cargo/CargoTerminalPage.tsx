@@ -715,8 +715,10 @@ export default function CargoTerminalPage() {
                     </div>
                     <div className="flex-1">
                       <input
+                        type="tel"
+                        inputMode="numeric"
                         value={senderPhone}
-                        onChange={e => setSenderPhone(e.target.value)}
+                        onChange={e => setSenderPhone(e.target.value.replace(/[^0-9]/g, ''))}
                         placeholder="Telepon *"
                         className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300"
                         data-testid="input-sender-phone"
@@ -742,8 +744,10 @@ export default function CargoTerminalPage() {
                     </div>
                     <div className="flex-1">
                       <input
+                        type="tel"
+                        inputMode="numeric"
                         value={recipientPhone}
-                        onChange={e => setRecipientPhone(e.target.value)}
+                        onChange={e => setRecipientPhone(e.target.value.replace(/[^0-9]/g, ''))}
                         placeholder="Telepon *"
                         className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
                         data-testid="input-recipient-phone"

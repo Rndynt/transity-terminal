@@ -239,8 +239,10 @@ export default function PassengerForm({
                 </div>
                 <div className="flex-1">
                   <input
+                    type="tel"
+                    inputMode="numeric"
                     value={passenger.phone}
-                    onChange={(e) => handleInputChange(index, 'phone', e.target.value)}
+                    onChange={(e) => handleInputChange(index, 'phone', e.target.value.replace(/[^0-9]/g, ''))}
                     onBlur={() => markTouched(phoneKey)}
                     placeholder="Telepon"
                     className={`w-full h-8 px-2.5 bg-white border rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 ${

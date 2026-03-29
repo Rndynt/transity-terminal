@@ -236,8 +236,10 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
             </div>
             <div className="flex-1">
               <input
+                type="tel"
+                inputMode="numeric"
                 value={senderPhone}
-                onChange={(e) => setSenderPhone(e.target.value)}
+                onChange={(e) => setSenderPhone(e.target.value.replace(/[^0-9]/g, ''))}
                 onBlur={() => markTouched('senderPhone')}
                 placeholder="Telepon *"
                 className={`w-full h-8 px-2.5 bg-white border rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 ${
@@ -271,8 +273,10 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
             </div>
             <div className="flex-1">
               <input
+                type="tel"
+                inputMode="numeric"
                 value={recipientPhone}
-                onChange={(e) => setRecipientPhone(e.target.value)}
+                onChange={(e) => setRecipientPhone(e.target.value.replace(/[^0-9]/g, ''))}
                 onBlur={() => markTouched('recipientPhone')}
                 placeholder="Telepon *"
                 className={`w-full h-8 px-2.5 bg-white border rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 ${
