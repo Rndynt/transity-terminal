@@ -57,6 +57,12 @@ export interface FareQuote {
   breakdown: any;
 }
 
+export interface PassengerInput {
+  fullName: string;
+  phone?: string;
+  idNumber?: string;
+}
+
 export interface BookingFlowState {
   outlet?: Outlet;
   trip?: Trip;
@@ -65,7 +71,7 @@ export interface BookingFlowState {
   originSeq?: number;
   destinationSeq?: number;
   selectedSeats: string[];
-  passengers: Passenger[];
+  passengers: PassengerInput[];
   payment?: {
     method: 'cash' | 'qr' | 'ewallet' | 'bank';
     amount: number;
@@ -75,8 +81,8 @@ export interface BookingFlowState {
   promoValidation?: {
     valid: boolean;
     discountAmount: number;
-    promotion?: any;
-    voucher?: any;
+    promotion?: Record<string, unknown>;
+    voucher?: Record<string, unknown>;
     error?: string;
   };
   currentStep: number;

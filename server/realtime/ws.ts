@@ -19,6 +19,10 @@ class WebSocketService {
   private io: SocketIOServer | null = null;
 
   initialize(httpServer: HttpServer) {
+    if (this.io) {
+      return;
+    }
+
     const allowedOrigins = process.env.CORS_ORIGINS
       ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
       : (process.env.NODE_ENV === 'development' ? true : false);

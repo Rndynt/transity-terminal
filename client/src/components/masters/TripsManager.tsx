@@ -75,22 +75,22 @@ export default function TripsManager() {
     queryFn: () => tripsApi.getAll()
   });
 
-  const { data: patterns = [] } = useQuery({
+  const { data: patterns = [], isLoading: patternsLoading } = useQuery({
     queryKey: ['/api/trip-patterns'],
     queryFn: tripPatternsApi.getAll
   });
 
-  const { data: vehicles = [] } = useQuery({
+  const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery({
     queryKey: ['/api/vehicles'],
     queryFn: vehiclesApi.getAll
   });
 
-  const { data: layouts = [] } = useQuery({
+  const { data: layouts = [], isLoading: layoutsLoading } = useQuery({
     queryKey: ['/api/layouts'],
     queryFn: layoutsApi.getAll
   });
 
-  const { data: driversList = [] } = useQuery<Driver[]>({
+  const { data: driversList = [], isLoading: driversLoading } = useQuery<Driver[]>({
     queryKey: ['/api/drivers'],
     queryFn: driversApi.getAll
   });
@@ -645,9 +645,10 @@ export default function TripsManager() {
           <SearchableSelect
             value={formData.patternId}
             options={patternOptions}
-            placeholder="Pilih pola rute perjalanan..."
+            placeholder={patternsLoading ? "Memuat pola..." : "Pilih pola rute perjalanan..."}
             searchPlaceholder="Cari pola..."
             onChange={(v) => setFormData(prev => ({ ...prev, patternId: v }))}
+            disabled={patternsLoading}
             data-testid="select-pattern"
           />
         </div>
@@ -670,9 +671,10 @@ export default function TripsManager() {
           <SearchableSelect
             value={formData.vehicleId}
             options={vehicleOptions}
-            placeholder="Pilih kendaraan..."
+            placeholder={vehiclesLoading ? "Memuat kendaraan..." : "Pilih kendaraan..."}
             searchPlaceholder="Cari kode atau plat..."
             onChange={(v) => setFormData(prev => ({ ...prev, vehicleId: v }))}
+            disabled={vehiclesLoading}
             data-testid="select-vehicle"
           />
         </div>
@@ -687,9 +689,10 @@ export default function TripsManager() {
               badge: d.code || undefined,
               subtitle: d.phone || undefined
             }))}
-            placeholder="Pilih driver..."
+            placeholder={driversLoading ? "Memuat driver..." : "Pilih driver..."}
             searchPlaceholder="Cari nama atau kode..."
             onChange={(v) => setFormData(prev => ({ ...prev, driverId: v }))}
+            disabled={driversLoading}
             clearValue=""
             data-testid="select-driver"
           />

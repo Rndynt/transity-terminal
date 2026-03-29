@@ -25,7 +25,7 @@ import {
   Armchair, ArrowRight, Ticket, Package, Clock,
   FileText, Lock, CalendarClock, User, X, Menu
 } from 'lucide-react';
-import type { Stop, Outlet, CsoAvailableTrip, CargoShipmentWithStops } from '@/types';
+import type { Stop, Outlet, CsoAvailableTrip, CargoShipmentWithStops, PassengerInput } from '@/types';
 
 
 type Phase = 'select' | 'book';
@@ -229,7 +229,7 @@ export default function CsoPage() {
 
   const handleSeatSelect = (seatNo: string) => addSeat(seatNo);
   const handleSeatDeselect = (seatNo: string) => removeSeat(seatNo);
-  const handlePassengersUpdate = (passengers: any[]) => updatePassengers(passengers);
+  const handlePassengersUpdate = (passengers: PassengerInput[]) => updatePassengers(passengers);
 
   const handleProceedToBook = () => {
     if (state.originStop && state.destinationStop) {
@@ -247,7 +247,7 @@ export default function CsoPage() {
     releaseAllHolds();
   };
 
-  const handleBookWithData = async (passengers: any[]) => {
+  const handleBookWithData = async (passengers: PassengerInput[]) => {
     updatePassengers(passengers);
     setIsProcessing(true);
     try {
@@ -263,7 +263,7 @@ export default function CsoPage() {
 
   const handlePaymentUpdate = (payment: any) => updateState({ payment });
 
-  const handlePayWithData = async (passengers: any[], payment: { method: string; amount: number }) => {
+  const handlePayWithData = async (passengers: PassengerInput[], payment: { method: 'cash' | 'qr' | 'ewallet' | 'bank'; amount: number }) => {
     updatePassengers(passengers);
     updateState({ payment });
     setIsProcessing(true);

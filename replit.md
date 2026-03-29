@@ -104,6 +104,13 @@ Based on the Blink AI audit report (174 issues), the following critical/high sec
 - **H-16**: `Math.random()` replaced with `crypto.randomBytes()` + rejection sampling (no modulo bias) in `codeGenerator.ts`
 - **C-01**: `.env` parsing bug fixed (concatenated vars), `.gitignore` updated to exclude `.env`
 
+## Quick Wins & Safety Fixes (Sprint 2 — Completed)
+- **B7**: Payment validation changed from float comparison (`> 0.01`) to `Math.round()` comparison — correct for IDR (no decimals)
+- **F3**: Mobile `avgRating.toFixed()` crash guarded with `?? 0` fallback
+- **H-08**: React Query global `staleTime` changed from `Infinity` to 5 minutes — data now auto-refreshes
+- **B8**: WebSocket `initialize()` guard added (`if (this.io) return`) — prevents duplicate listeners on hot reload
+- **H-03**: Confirmed not applicable — auth uses session-based (not JWT) with 7-day expiry, already reasonable
+
 ## Data Integrity Fixes (Sprint 1 — Completed)
 Following Sprint 0 security fixes, these data integrity issues from the Blink AI audit have been resolved:
 - **C-02**: `createBooking` and `createPendingBooking` now use `tx.insert()` directly for all DB writes (booking, passengers, payment, print job) inside a single `db.transaction()`, eliminating partial-write risk from escaped transaction context
@@ -111,6 +118,15 @@ Following Sprint 0 security fixes, these data integrity issues from the Blink AI
 - **H-02**: `releasePendingBooking` and `cleanupExpiredPendingBookings` now update booking status to 'canceled' inside the transaction; WebSocket emits happen only after successful commit
 - **H-06**: `getPendingBookings` replaced in-memory filtering (loaded all bookings) with direct DB query using `WHERE status='pending' AND pendingExpiresAt > now`
 - **H-11**: `deleteTrip` already validates active bookings at repository level (throws `TRIP_HAS_ACTIVE_BOOKINGS`); confirmed no service-level gap
+
+## UI/UX & Type Safety Fixes (Sprint 3+4 — Completed)
+- **F4**: Loading states added to TripsManager dropdown queries (patterns/vehicles/layouts/drivers) with disabled state and "Memuat..." placeholders
+- **F5**: setTimeout cleanup fixed in RouteTimeline (useEffect return clearTimeout) and useWebSocket (reconnect timer ref + cleanup on disconnect)
+- **F6**: SeatMap already had error state with retry button (confirmed existing)
+- **F7**: RouteTimeline `any` types replaced with proper `EffectiveStopTime` type matching API contract (`effectiveBoardingAllowed`/`effectiveAlightingAllowed`)
+- **F8**: useBookingFlow `any` types replaced — `PassengerInput` type for booking form, `BookingOverrides`/`BookingResult` type aliases, CsoPage callsites updated
+- **S-4**: React `ErrorBoundary` component created (`shared/ErrorBoundary.tsx`) and integrated in `App.tsx` wrapping Router
+- **S-6/R-7**: `LoadingState` and `EmptyState` shared components exist at `components/ui/loading-state.tsx` and `components/ui/empty-state.tsx`
 
 ## Performance Optimizations
 - **`getActiveBookingsForTrip`**: Filters bookings at DB level (WHERE status IN active statuses) instead of fetching all then filtering in memory. Used by getSeatmap and getSeatPassengerDetails.

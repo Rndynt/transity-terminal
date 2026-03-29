@@ -1,7 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { bookingsApi, pricingApi, promotionsApi } from '@/lib/api';
-import type { BookingFlowState, BookingStep, CreateBookingRequest } from '@/types';
+import type { BookingFlowState, BookingStep, CreateBookingRequest, PassengerInput } from '@/types';
+
+type PaymentInfo = NonNullable<BookingFlowState['payment']>;
+type BookingOverrides = { passengers?: PassengerInput[]; payment?: PaymentInfo };
+type BookingResult = { booking: { id: string; [key: string]: unknown }; printPayload: unknown };
 
 const BOOKING_STEPS: BookingStep[] = [
   { id: 1, name: 'Outlet', status: 'pending' },
@@ -75,7 +79,7 @@ export function useBookingFlow() {
     }));
   }, []);
 
-  const updatePassengers = useCallback((passengers: any[]) => {
+  const updatePassengers = useCallback((passengers: PassengerInput[]) => {
     setState(current => ({ ...current, passengers }));
   }, []);
 
@@ -119,7 +123,7 @@ export function useBookingFlow() {
     }
   }, [state.trip?.id, state.originSeq, state.destinationSeq, state.selectedSeats.length]);
 
-  const validateBookingData = useCallback((overrides?: { passengers?: any[]; payment?: any }) => {
+  const validateBookingData = useCallback((overrides?: BookingOverrides) => {
     const s = { ...stateRef.current, ...overrides };
     const validationErrors = [];
     
@@ -147,7 +151,7 @@ export function useBookingFlow() {
       }
     });
     
-    s.passengers.forEach((passenger: any, index: number) => {
+    s.passengers.forEach((passenger, index) => {
       if (!passenger.fullName || !passenger.fullName.trim()) {
         validationErrors.push(`Passenger ${index + 1} name is required`);
       }
@@ -156,7 +160,7 @@ export function useBookingFlow() {
     return validationErrors;
   }, []);
 
-  const createPendingBooking = useCallback(async (overrides?: { passengers?: any[] }): Promise<{ booking: any; printPayload: any }> => {
+  const createPendingBooking = useCallback(async (overrides?: Pick<BookingOverrides, 'passengers'>): Promise<BookingResult> => {
     const s = { ...stateRef.current, ...overrides };
     const validationErrors = validateBookingData(overrides);
 
@@ -180,7 +184,7 @@ export function useBookingFlow() {
         totalAmount: totalAmount,
         channel: 'CSO' as const,
         createdBy: 'CSO User',
-        passengers: s.passengers.map((passenger: any, index: number) => ({
+        passengers: s.passengers.map((passenger, index) => ({
           fullName: passenger.fullName,
           phone: passenger.phone || undefined,
           idNumber: passenger.idNumber || undefined,
@@ -190,7 +194,6 @@ export function useBookingFlow() {
 
       const idempotencyKey = `pending-booking-${Date.now()}-${Math.random()}`;
       
-      // Call the pending booking API
       const response = await fetch('/api/bookings/pending', {
         method: 'POST',
         headers: {
@@ -243,7 +246,7 @@ export function useBookingFlow() {
     }
 
     const subtotal = await calculateTotalAmount();
-    const trip = s.trip as any;
+    const trip = s.trip as { patternId?: string };
 
     const result = await promotionsApi.validate({
       code: code.trim(),
@@ -274,7 +277,7 @@ export function useBookingFlow() {
     }));
   }, []);
 
-  const createBooking = useCallback(async (overrides?: { passengers?: any[]; payment?: any }): Promise<{ booking: any; printPayload: any }> => {
+  const createBooking = useCallback(async (overrides?: BookingOverrides): Promise<BookingResult> => {
     const s = { ...stateRef.current, ...overrides };
     const validationErrors = validateBookingData(overrides);
     
@@ -314,7 +317,7 @@ export function useBookingFlow() {
         channel: 'CSO',
         createdBy: 'CSO User',
         promoCode: s.promoCode || undefined,
-        passengers: s.passengers.map((passenger: any, index: number) => ({
+        passengers: s.passengers.map((passenger, index) => ({
           fullName: passenger.fullName,
           phone: passenger.phone || undefined,
           idNumber: passenger.idNumber || undefined,

@@ -174,7 +174,7 @@ export class BookingsService {
 
     const expectedTotal = subtotal - discountAmount;
     const paymentAmount = Number(payment.amount);
-    if (Math.abs(paymentAmount - expectedTotal) > 0.01) {
+    if (Math.round(paymentAmount) !== Math.round(expectedTotal)) {
       throw new Error(`Payment amount ${paymentAmount} does not match expected total ${expectedTotal}`);
     }
 

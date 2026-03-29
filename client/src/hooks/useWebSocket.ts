@@ -34,6 +34,7 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
   const socketRef = useRef<Socket | null>(null);
   const eventHandlersRef = useRef<Map<WSEventName, Set<Function>>>(new Map());
   const subscriptionsRef = useRef<Set<string>>(new Set());
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Initialize WebSocket connection
   const connect = useCallback(() => {
@@ -123,13 +124,19 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
     setIsReconnecting(true);
     setReconnectionAttempt(prev => prev + 1);
 
-    setTimeout(() => {
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
       connect();
     }, reconnectionDelay);
   }, [reconnectionAttempt, maxReconnectionAttempts, reconnectionDelay, connect]);
 
   // Disconnect from server
   const disconnect = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;

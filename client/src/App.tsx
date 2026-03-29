@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { PermissionsProvider } from "@/lib/permissions";
 import { RequireFlag } from "@/components/rbac/RequireFlag";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { Loader2 } from "lucide-react";
 import { useLocation, Redirect } from "wouter";
 
@@ -216,8 +217,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
-          <Toaster />
-          <Router />
+          <ErrorBoundary>
+            <Toaster />
+            <Router />
+          </ErrorBoundary>
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>

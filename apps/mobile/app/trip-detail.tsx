@@ -94,7 +94,7 @@ export default function TripDetailScreen() {
           <View style={styles.reviewsSummary}>
             <View style={styles.ratingRow}>
               <Ionicons name="star" size={20} color="#F59E0B" />
-              <Text style={styles.ratingText}>{Number(trip.reviews.avgRating).toFixed(1)}</Text>
+              <Text style={styles.ratingText}>{Number(trip.reviews?.avgRating ?? 0).toFixed(1)}</Text>
               <Text style={styles.reviewCount}>({trip.reviews.count} ulasan)</Text>
             </View>
           </View>

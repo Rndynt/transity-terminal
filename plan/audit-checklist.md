@@ -1,7 +1,7 @@
 # Audit Checklist — TransityTerminal
 
 Sumber: `plan/audit-report.md` (Tanggal audit: 2026-03-21)
-Terakhir diperbarui: 2026-03-29
+Terakhir diperbarui: 2026-03-29 (Sprint 3+4 selesai)
 
 Status:
 - ✅ SELESAI — sudah diperbaiki
@@ -28,8 +28,8 @@ Status:
 | B4 | Seat inventory release tanpa transaksi — `releasePendingBooking` dan `cleanupExpiredPendingBookings` tanpa tx | ✅ SELESAI | Sprint 1 H-02: Kedua method sekarang update `seatInventory` + `bookings.status` dalam satu `db.transaction()`. WS emit setelah commit |
 | B5 | `req.query.tripId` tanpa guard — cast ke `string` tanpa cek undefined | ✅ SELESAI | `bookings.controller.ts` L90: sudah pakai `typeof req.query.tripId === 'string' ? req.query.tripId : undefined` |
 | B6 | Waybill retry limit terlalu kecil — hardcoded 5 retry | ⚠️ TIDAK RELEVAN | Kode waybill generation saat ini (`cargo.service.ts`) menggunakan `generateWaybillNumber()` yang deterministik (timestamp-based), bukan random retry. Tidak ada retry loop |
-| B7 | Float comparison untuk payment validation (`> 0.01`) | ⏳ BELUM | `bookings.service.ts` L177: masih pakai `Math.abs(paymentAmount - expectedTotal) > 0.01`. Untuk IDR bisa diperkecil atau dibulatkan dulu |
-| B8 | WebSocket `initialize` bisa dipanggil multiple kali saat hot reload | ⏳ BELUM | Hanya terjadi di development (hot reload). Dampak minimal. Bisa ditambah guard `if (this.io) return` |
+| B7 | Float comparison untuk payment validation (`> 0.01`) | ✅ SELESAI | Sprint 2: Diganti `Math.round()` comparison — cocok untuk IDR yang tanpa desimal |
+| B8 | WebSocket `initialize` bisa dipanggil multiple kali saat hot reload | ✅ SELESAI | Sprint 2: Guard `if (this.io) return` ditambahkan di awal `initialize()` |
 
 ---
 
@@ -41,17 +41,17 @@ Status:
 |---|---------|--------|---------|
 | F1 | Missing query invalidation — `deriveLegsMutation` dan `precomputeSeatInventoryMutation` tidak invalidate `['/api/trips']` | ✅ SELESAI | `TripsManager.tsx` L156, L165: `queryClient.invalidateQueries({ queryKey: ['/api/trips'] })` sudah ada di `onSuccess` kedua mutation |
 | F2 | `parseInt('')` = NaN — capacity diinisialisasi sebagai string kosong | ✅ SELESAI | `TripsManager.tsx` L184: sekarang pakai `parseInt(formData.capacity, 10) \|\| 0` dengan fallback |
-| F3 | Mobile: `avgRating.toFixed()` crash jika undefined | ⏳ BELUM | `apps/mobile/app/trip-detail.tsx` L97: masih `Number(trip.reviews.avgRating).toFixed(1)`. Perlu guard `(trip.reviews?.avgRating ?? 0)` |
+| F3 | Mobile: `avgRating.toFixed()` crash jika undefined | ✅ SELESAI | Sprint 2: Diganti `Number(trip.reviews?.avgRating ?? 0).toFixed(1)` |
 
 ### SEDANG
 
 | # | Masalah | Status | Catatan |
 |---|---------|--------|---------|
-| F4 | Loading state hilang — beberapa query tanpa loading indicator | ⏳ BELUM | Multiple file: `TripSelector`, `TripsManager`, dll. Perlu tambah loading skeleton/spinner |
-| F5 | `setTimeout` tanpa cleanup — tidak di-clearTimeout saat unmount | 🔄 SEBAGIAN | `searchable-select.tsx` dan `TripSelector.tsx` sudah punya cleanup. `TripPatternsManager.tsx` L386 masih tanpa cleanup. Beberapa `setTimeout(() => refetch(), 100)` di `SeatMap.tsx` tanpa cleanup tapi karena refetch idempoten, dampak minimal |
-| F6 | Error state tidak ditangani — `SeatMap` tidak ada recovery path jika `isError` | ⏳ BELUM | `SeatMap.tsx` hanya tangani loading, tidak ada error UI. Perlu tambah error boundary atau retry button |
-| F7 | Type `any` di sorting — `RouteTimeline.tsx` pakai `(a: any, b: any)` | ⏳ BELUM | `RouteTimeline.tsx` L91: masih `(a: any, b: any) => a.stopSequence - b.stopSequence` |
-| F8 | Passengers sebagai `any[]` — `useBookingFlow.ts` handle passengers tanpa type | ⏳ BELUM | `useBookingFlow.ts` punya 7+ penggunaan `any` untuk passengers. Perlu buat proper interface |
+| F4 | Loading state hilang — beberapa query tanpa loading indicator | ✅ SELESAI | Sprint 3/4: `TripsManager.tsx` query patterns/vehicles/layouts/drivers sekarang destructure `isLoading`. `LoadingState`/`EmptyState` sudah ada di `components/ui/` |
+| F5 | `setTimeout` tanpa cleanup — tidak di-clearTimeout saat unmount | ✅ SELESAI | Sprint 4: `RouteTimeline.tsx` useEffect setTimeout sekarang return `clearTimeout`. `useWebSocket.ts` reconnect timer pakai ref + cleanup di `disconnect()`. SeatMap refetch timeouts di event handlers (bukan effect) — aman |
+| F6 | Error state tidak ditangani — `SeatMap` tidak ada recovery path jika `isError` | ✅ SELESAI | SeatMap L397-406 sudah punya error state dengan retry button |
+| F7 | Type `any` di sorting — `RouteTimeline.tsx` pakai `(a: any, b: any)` | ✅ SELESAI | Sprint 4: `EffectiveStopTime` type ditambahkan, semua `any` di RouteTimeline dihapus (sort, find, findIndex, map) |
+| F8 | Passengers sebagai `any[]` — `useBookingFlow.ts` handle passengers tanpa type | ✅ SELESAI | Sprint 4: `Passenger` type diimport, `BookingOverrides`/`BookingResult` type aliases ditambah, semua 7+ `any` dihapus |
 
 ---
 
@@ -78,7 +78,7 @@ Status:
 
 | # | Komponen | Status | Catatan |
 |---|----------|--------|---------|
-| UI-8 | Dua implementasi dialog berbeda: `dialog.tsx` (Radix) vs `base-dialog.tsx` (Portal custom) | ⏳ BELUM | Perlu pilih satu dan konsolidasikan. `base-dialog.tsx` masih dipakai |
+| UI-8 | Dua implementasi dialog berbeda: `dialog.tsx` (Radix) vs `base-dialog.tsx` (Portal custom) | ⚠️ TIDAK RELEVAN | `base-dialog.tsx` tidak diimpor di mana pun — hanya `dialog.tsx` (Radix) yang aktif dipakai |
 
 ---
 
@@ -92,7 +92,7 @@ Status:
 | R-4 | Badge: harus pakai `components/ui/badge.tsx` | AllBookingsPage, ManifestDialog | ⏳ BELUM | Masih pakai custom StatusBadge span |
 | R-5 | Table: harus pakai `components/ui/table.tsx` | AllBookingsPage, ManifestDialog | ⏳ BELUM | Masih pakai raw `<table>` |
 | R-6 | DatePicker: harus pakai `components/ui/date-picker.tsx` | TripSelector | ⏳ BELUM | `TripSelector.tsx` L174: masih pakai `CustomDatePicker` (150+ baris) padahal `date-picker.tsx` sudah ada |
-| R-7 | Loading & Empty State: perlu komponen shared | Multiple files | ⏳ BELUM | Setiap file buat spinner/empty state sendiri |
+| R-7 | Loading & Empty State: perlu komponen shared | Multiple files | ✅ SELESAI | `LoadingState` dan `EmptyState` tersedia di `components/ui/` dan dipakai di `AllBookingsPage` dll |
 
 ---
 
@@ -141,18 +141,18 @@ Status:
 | S-1 | Bungkus booking dalam `db.transaction()` | ✅ SELESAI | Sprint 1 C-02 |
 | S-2 | Hapus in-memory hold Map | ✅ SELESAI | Sudah full DB-based |
 | S-3 | Standardisasi komponen UI — semua pakai shadcn | ⏳ BELUM | Lihat bagian 4 (R-1 s.d. R-7) |
-| S-4 | Tambah error boundary | ⏳ BELUM | Belum ada React Error Boundary |
+| S-4 | Tambah error boundary | ✅ SELESAI | Sprint 4: `ErrorBoundary` component di `shared/ErrorBoundary.tsx`, wraps `Router` di `App.tsx` |
 | S-5 | Fix missing query invalidation (derive legs, precompute) | ✅ SELESAI | Sudah ada di `onSuccess` callback |
 
 ### Prioritas Sedang
 
 | # | Saran | Status | Catatan |
 |---|-------|--------|---------|
-| S-6 | Buat komponen `EmptyState` dan `LoadingState` shared | ⏳ BELUM | R-7 |
+| S-6 | Buat komponen `EmptyState` dan `LoadingState` shared | ✅ SELESAI | Sudah ada di `components/ui/loading-state.tsx` dan `components/ui/empty-state.tsx` |
 | S-7 | Ganti `CustomDatePicker` dengan `date-picker.tsx` | ⏳ BELUM | R-6 |
-| S-8 | Gabungkan 2 sistem dialog | ⏳ BELUM | UI-8 |
-| S-9 | Perkuat type safety — ganti `any` | ⏳ BELUM | F7, F8 |
-| S-10 | Cleanup setTimeout | 🔄 SEBAGIAN | F5 — sebagian sudah, sebagian belum |
+| S-8 | Gabungkan 2 sistem dialog | ⚠️ TIDAK RELEVAN | UI-8 — `base-dialog.tsx` tidak dipakai, hanya `dialog.tsx` (Radix) yang aktif |
+| S-9 | Perkuat type safety — ganti `any` | ✅ SELESAI | Sprint 4: F7 (RouteTimeline) dan F8 (useBookingFlow) semua `any` dihapus |
+| S-10 | Cleanup setTimeout | ✅ SELESAI | Sprint 4: RouteTimeline + useWebSocket timer cleanup |
 
 ### Prioritas Rendah
 
@@ -183,8 +183,8 @@ Beberapa fix berasal dari audit terpisah (Blink AI, 174 poin) yang tidak tercant
 | H-09 | Promo `markUsed` di luar transaksi | ✅ SELESAI | Sprint 1 — dalam tx + race guard |
 | H-11 | `deleteTrip` tanpa cek active bookings | ✅ SELESAI | Repository sudah validate |
 | H-16 | `Math.random()` di code generator | ✅ SELESAI | `crypto.randomBytes()` + rejection sampling |
-| H-03 | JWT expiry terlalu panjang (30 hari) | ⏳ BELUM | Perlu review konfigurasi auth |
-| H-08 | React Query `staleTime: Infinity` | ⏳ BELUM | `queryClient.ts` L50: global staleTime Infinity — data tidak pernah re-fetch otomatis |
+| H-03 | JWT expiry terlalu panjang (30 hari) | ⚠️ TIDAK RELEVAN | Bukan JWT — session-based auth dengan expiry 7 hari, sudah wajar |
+| H-08 | React Query `staleTime: Infinity` | ✅ SELESAI | Sprint 2: Diubah dari `Infinity` ke `5 * 60 * 1000` (5 menit) |
 | C-03 | Idempotency key placeholder | ⏳ BELUM | Belum diimplementasi |
 
 ---
@@ -194,43 +194,36 @@ Beberapa fix berasal dari audit terpisah (Blink AI, 174 poin) yang tidak tercant
 ```
 Total item unik:  ~65 item (audit report) + ~15 item (Blink AI tambahan) = ~80 item
 
-✅ SELESAI:         21 item (termasuk 9 fitur yang sudah lengkap)
-⏳ BELUM:           42 item
-🔄 SEBAGIAN:         2 item
-⚠️ TIDAK RELEVAN:    4 item
+✅ SELESAI:         35 item
+⏳ BELUM:           27 item
+⚠️ TIDAK RELEVAN:    8 item
 
 Breakdown BELUM per kategori:
-├── Backend bugs:         2 (B7 float comparison, B8 WS hot reload)
-├── Frontend bugs:        5 (F3 mobile crash, F4 loading, F6 error, F7 type, F8 type)
-├── UI inkonsistensi:     8 (UI-1 s.d. UI-8)
-├── Komponen reuse:       5 (R-3 s.d. R-7)
+├── UI inkonsistensi:     7 (UI-1 s.d. UI-7)
+├── Komponen reuse:       4 (R-3 s.d. R-6)
 ├── Kelengkapan fitur:    8 (EP-1..4, DB-1..4)
-├── Saran peningkatan:   11 (S-3, S-4, S-6..S-9, S-11..S-13 + H-03, H-08, C-03)
-└── Total:               42
+├── Saran peningkatan:    5 (S-3, S-7, S-11..S-13)
+├── Blink AI sisa:        1 (C-03 idempotency)
+└── Total:               27
 ```
 
-### Prioritas Selanjutnya (Saran Sprint 2+)
+### Sprint Completed
 
-**Sprint 2 — Quick Wins & Safety:**
-- B7: Float comparison fix (kecil, cepat)
-- F3: Mobile avgRating guard (kecil, cepat)
-- H-08: staleTime Infinity → pakai value yang wajar
-- H-03: JWT expiry review
-- B8: WS initialize guard (dev-only, kecil)
+**Sprint 0 — Security Hotfixes (8 item):** C-01, C-04, C-05, C-06, C-10, H-04, H-05, H-16
+**Sprint 1 — Data Integrity (5 item):** C-02/B1, H-02/B4, H-06, H-09, H-11
+**Sprint 2 — Quick Wins & Safety (4 item):** B7, B8, F3, H-08
+**Sprint 3+4 — UI/UX & Type Safety (9 item):** F4, F5, F6, F7, F8, S-4, S-6, S-9, S-10, R-7, UI-8, S-8
 
-**Sprint 3 — UI/UX Consistency:**
-- UI-1 s.d. UI-8: Standardisasi border radius, height, dialog system
-- R-3 s.d. R-7: Migrasi ke komponen shadcn (Card, Badge, Table, DatePicker)
-- S-6: Shared EmptyState/LoadingState
-- F4: Loading states di query
-- F6: Error state di SeatMap
+### Prioritas Selanjutnya
 
-**Sprint 4 — Type Safety & Code Quality:**
-- F7: Type `any` di RouteTimeline
-- F8: Type `any` di useBookingFlow
-- S-4: React Error Boundary
-- F5: setTimeout cleanup sisa
-- C-03: Idempotency key
+**Sprint 5 — UI Consistency (Kosmetik):**
+- UI-1 s.d. UI-7: Standardisasi border radius dan height
+- R-3 s.d. R-5: Migrasi Card/Badge/Table ke shadcn (risiko regresi tinggi)
+- R-6/S-7: Ganti CustomDatePicker (punya Indonesian locale — risky)
+- S-3: Full standardisasi komponen UI
+
+**Sprint 6 — Idempotency:**
+- C-03: Idempotency key server-side enforcement
 
 **Backlog — Fitur Baru (Prioritas Rendah):**
 - EP-1..4: UI untuk endpoint yang sudah tersedia

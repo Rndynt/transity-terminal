@@ -6,6 +6,22 @@ import {
 } from 'lucide-react';
 import type { Trip, Stop } from '@/types';
 
+type EffectiveStopTime = {
+  id: string;
+  tripId: string;
+  stopId: string;
+  stopSequence: number;
+  arriveAt: string | null;
+  departAt: string | null;
+  dwellSeconds: number;
+  boardingAllowed: boolean | null;
+  alightingAllowed: boolean | null;
+  tripBoardingAllowed: boolean | null;
+  tripAlightingAllowed: boolean | null;
+  effectiveBoardingAllowed: boolean;
+  effectiveAlightingAllowed: boolean;
+};
+
 type StopException = {
   id: string;
   stopId: string;
@@ -63,7 +79,7 @@ export default function RouteTimeline({
 }: RouteTimelineProps) {
   const autoSelectDone = useRef(false);
 
-  const { data: stopTimes = [], isLoading } = useQuery({
+  const { data: stopTimes = [], isLoading } = useQuery<EffectiveStopTime[]>({
     queryKey: ['/api/trips', trip.id, 'stop-times', 'effective'],
     queryFn: () => tripsApi.getStopTimesWithEffectiveFlags(trip.id),
     enabled: !!trip.id
@@ -88,15 +104,15 @@ export default function RouteTimeline({
   const getStopException = (stopId: string) => stopExceptions.find(e => e.stopId === stopId);
 
   const getStopById = (stopId: string) => stops.find(s => s.id === stopId);
-  const sortedStopTimes = [...stopTimes].sort((a: any, b: any) => a.stopSequence - b.stopSequence);
+  const sortedStopTimes = [...stopTimes].sort((a, b) => a.stopSequence - b.stopSequence);
 
   useEffect(() => {
     if (autoSelectDone.current) return;
     if (!initialOriginStopId || !initialDestinationStopId) return;
     if (sortedStopTimes.length === 0 || stops.length === 0) return;
 
-    const originSt = sortedStopTimes.find((st: any) => st.stopId === initialOriginStopId);
-    const destSt = sortedStopTimes.find((st: any) => st.stopId === initialDestinationStopId);
+    const originSt = sortedStopTimes.find(st => st.stopId === initialOriginStopId);
+    const destSt = sortedStopTimes.find(st => st.stopId === initialDestinationStopId);
     const originStop = originSt ? getStopById(originSt.stopId) : undefined;
     const destStop = destSt ? getStopById(destSt.stopId) : undefined;
 
@@ -110,15 +126,16 @@ export default function RouteTimeline({
       }
       autoSelectDone.current = true;
       onOriginSelect(originStop, originSt.stopSequence);
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         onDestinationSelect(destStop, destSt.stopSequence);
         onInitialRouteConsumed?.();
       }, 50);
+      return () => clearTimeout(timer);
     }
   }, [sortedStopTimes, stops, initialOriginStopId, initialDestinationStopId, stopExceptions]);
 
-  const originIdx = selectedOrigin ? sortedStopTimes.findIndex((st: any) => st.stopId === selectedOrigin.id) : -1;
-  const destIdx = selectedDestination ? sortedStopTimes.findIndex((st: any) => st.stopId === selectedDestination.id) : -1;
+  const originIdx = selectedOrigin ? sortedStopTimes.findIndex(st => st.stopId === selectedOrigin.id) : -1;
+  const destIdx = selectedDestination ? sortedStopTimes.findIndex(st => st.stopId === selectedDestination.id) : -1;
   const legCount = originIdx >= 0 && destIdx > originIdx ? destIdx - originIdx : 0;
 
   const isInSelectedRange = (i: number) => {
@@ -143,7 +160,7 @@ export default function RouteTimeline({
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        {sortedStopTimes.map((stopTime: any, index: number) => {
+        {sortedStopTimes.map((stopTime, index) => {
           const stop = getStopById(stopTime.stopId);
           if (!stop) return null;
 
