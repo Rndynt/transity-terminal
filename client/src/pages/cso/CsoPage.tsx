@@ -691,8 +691,8 @@ export default function CsoPage() {
                     onTripSelect={handleTripSelect}
                     selectedDate={selectedDate}
                     onDateChange={setSelectedDate}
-                    initialOutletId={initialOutletId}
-                    lockedOutletId={scopedOutletId ?? undefined}
+                    initialOutletId={initialOutletId || (can('action.cso.cross_outlet') ? scopedOutletId ?? undefined : undefined)}
+                    lockedOutletId={scopedOutletId && !can('action.cso.cross_outlet') ? scopedOutletId : undefined}
                     initialTripId={initialTripId}
                     onInitialConsumed={() => navigate('/cso', { replace: true })}
                     canViewClosed={can('page.cso.view_closed')}

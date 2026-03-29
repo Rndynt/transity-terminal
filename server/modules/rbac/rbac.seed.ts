@@ -69,6 +69,8 @@ const FEATURE_FLAGS = [
   { id: "action.refund.approve", name: "Approve Refund",   description: "Setujui atau tolak permintaan refund",    category: "action" },
   { id: "action.refund.process", name: "Proses Refund",    description: "Proses pengembalian dana refund",         category: "action" },
 
+  { id: "action.cso.cross_outlet", name: "Jual Lintas Outlet", description: "CSO bisa jual tiket dari semua outlet, bukan hanya outlet sendiri", category: "action" },
+
   { id: "admin.staff.manage", name: "Kelola Staff",         description: "Tambah/edit/hapus staff dan assign role & outlet", category: "admin" },
   { id: "admin.flags.manage", name: "Kelola Feature Flags", description: "Toggle feature flags per role",                    category: "admin" },
 ];
@@ -133,6 +135,8 @@ const DEFAULT_MATRIX: Record<string, FlagMatrix> = {
   "action.refund.create":  { owner: true, finance: false, manager: true,  spv_operations: false, operations: false, spv_cso: true,  cso: true  },
   "action.refund.approve": { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
   "action.refund.process": { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
+
+  "action.cso.cross_outlet": { owner: true, finance: false, manager: true, spv_operations: false, operations: false, spv_cso: false, cso: false },
 
   "admin.staff.manage": { owner: true, finance: false, manager: false, spv_operations: false, operations: false, spv_cso: false, cso: false },
   "admin.flags.manage": { owner: true, finance: false, manager: false, spv_operations: false, operations: false, spv_cso: false, cso: false },
