@@ -196,8 +196,8 @@ export default function AdminFlagsPage() {
                           {flags.map((flag, idx) => {
                             const isSub = isSubFlag(flag.id);
                             return (
-                            <tr key={flag.id} className={`border-b last:border-0 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
-                              <td className="py-2 px-3 sticky left-0 bg-inherit border-r border-gray-200">
+                            <tr key={flag.id} className={`border-b last:border-0 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                              <td className={`py-2 px-3 sticky left-0 border-r border-gray-200 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                                 <div className={isSub ? 'pl-4 border-l-2 border-gray-200 ml-1' : ''}>
                                   {isSub ? (
                                     <>
