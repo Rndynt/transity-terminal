@@ -4,7 +4,7 @@ import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { fmtCurrency, fmtDate, REFUND_STATUS_MAP, type RefundStatus } from '@/lib/constants';
 import { refundsApi } from '@/lib/api';
-import NotificationBell from '@/components/layout/NotificationBell';
+import PageHeader from '@/components/layout/PageHeader';
 import { usePageTitle } from '@/components/layout/LayoutContext';
 import {
   RotateCcw, Search, X, Loader2, Eye, Check, XCircle,
@@ -189,21 +189,16 @@ export default function RefundsPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="refunds-page">
-      <div className="bg-white border-b border-gray-200 flex-shrink-0 hidden lg:block">
-        <div className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12">
-          <div className="flex items-center gap-1.5">
-            <RotateCcw className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-bold text-gray-800" data-testid="text-page-title">Manajemen Refund</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="button-create-refund">
-              <Plus className="w-4 h-4 mr-1" />
-              Buat Refund
-            </Button>
-            <NotificationBell className="hidden lg:block" />
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        icon={RotateCcw}
+        title="Manajemen Refund"
+        subtitle="Kelola pembatalan & pengembalian"
+        actions={
+          <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="button-create-refund">
+            <Plus className="w-4 h-4 mr-1" /> Buat Refund
+          </Button>
+        }
+      />
 
       <div className="p-3 md:p-4 space-y-3 flex-shrink-0 bg-white border-b border-gray-100">
         <div className="flex gap-2">

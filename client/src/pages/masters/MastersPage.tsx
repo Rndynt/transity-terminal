@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearch, useLocation } from 'wouter';
-import NotificationBell from '@/components/layout/NotificationBell';
+import PageHeader from '@/components/layout/PageHeader';
 import { usePageTitle } from '@/components/layout/LayoutContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -112,20 +112,7 @@ export default function MastersPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="masters-page">
-      <div className="border-b px-4 sm:px-6 py-3 sm:py-4 shrink-0 hidden lg:block">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2.5 sm:gap-3 mb-1">
-              <LayoutGrid className="w-5 h-5 text-primary flex-shrink-0" />
-              <h1 className="text-lg sm:text-xl font-semibold">Master Data</h1>
-            </div>
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              Konfigurasi halte, kendaraan, rute, dan aturan harga sistem perjalanan multi-halte
-            </p>
-          </div>
-          <NotificationBell className="hidden lg:block" />
-        </div>
-      </div>
+      <PageHeader icon={LayoutGrid} title="Master Data" subtitle="Konfigurasi halte, kendaraan, rute & harga" />
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1 flex flex-col overflow-hidden">
         <div className="bg-white border-b border-gray-100 flex-shrink-0">

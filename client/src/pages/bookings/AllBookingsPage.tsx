@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { bookingsApi, stopsApi } from '@/lib/api';
-import NotificationBell from '@/components/layout/NotificationBell';
+import PageHeader from '@/components/layout/PageHeader';
 import { usePageTitle } from '@/components/layout/LayoutContext';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -436,18 +436,7 @@ export default function AllBookingsPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="all-bookings-page">
-      <div className="bg-white border-b border-gray-200 flex-shrink-0 hidden lg:block">
-        <div className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12">
-          <div className="flex items-center gap-1.5">
-            <List className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-bold text-gray-800">Daftar Booking</span>
-            <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded ml-1">
-              {filtered.length} booking
-            </span>
-          </div>
-          <NotificationBell className="hidden lg:block" />
-        </div>
-      </div>
+      <PageHeader icon={List} title="Daftar Booking" subtitle="Semua booking penumpang" badge={`${filtered.length} booking`} />
 
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden">

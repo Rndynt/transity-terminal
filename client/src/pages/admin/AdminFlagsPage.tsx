@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import PageHeader from '@/components/layout/PageHeader';
 import { usePageTitle } from '@/components/layout/LayoutContext';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
@@ -143,21 +144,19 @@ export default function AdminFlagsPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="admin-flags-page">
+      <PageHeader
+        icon={ShieldCheck}
+        title="Feature Flags"
+        subtitle="Toggle permission per role"
+        actions={
+          <Button variant="outline" size="sm" onClick={() => refetchMatrix()} className="gap-1.5">
+            <RefreshCw className="w-4 h-4" /> Refresh
+          </Button>
+        }
+      />
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-full mx-auto w-full p-4 md:p-6 space-y-4">
-          <div className="flex items-center justify-between hidden lg:flex">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <ShieldCheck className="w-6 h-6 text-blue-600" /> Feature Flags
-              </h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Toggle permission per role secara real-time. Perubahan langsung berlaku tanpa restart.
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => refetchMatrix()} className="gap-1.5">
-              <RefreshCw className="w-4 h-4" /> Refresh
-            </Button>
-          </div>
+          <div className="hidden lg:block" />
 
           {isLoading ? (
             <div className="flex items-center justify-center py-16">

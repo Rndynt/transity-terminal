@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { tripsApi, tripPatternsApi } from '@/lib/api';
-import NotificationBell from '@/components/layout/NotificationBell';
+import PageHeader from '@/components/layout/PageHeader';
 import { usePageTitle } from '@/components/layout/LayoutContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,19 +66,7 @@ export default function ManifestPage() {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* ── Page Header ── */}
-      <div className="border-b px-6 py-4 shrink-0 hidden lg:block">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <FileText className="w-5 h-5 text-primary" />
-              <h1 className="text-xl font-semibold">Manifest Perjalanan</h1>
-            </div>
-            <p className="text-sm text-muted-foreground">Dokumen resmi penumpang dan kargo per trip. Pilih trip lalu klik <strong>Buka Manifest</strong>.</p>
-          </div>
-          <NotificationBell className="hidden lg:block" />
-        </div>
-      </div>
+      <PageHeader icon={FileText} title="Manifest Perjalanan" subtitle="Dokumen penumpang & kargo per trip" />
 
       {/* ── Controls ── */}
       <div className="px-6 py-4 border-b bg-muted/20 shrink-0">

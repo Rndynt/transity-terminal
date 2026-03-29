@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import NotificationBell from '@/components/layout/NotificationBell';
+import PageHeader from '@/components/layout/PageHeader';
 import { usePageTitle } from '@/components/layout/LayoutContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1135,13 +1135,12 @@ export default function SchedulerPage() {
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="scheduler-page">
-      <div className="border-b px-4 md:px-6 py-3 shrink-0 hidden lg:block">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <CalendarRange className="w-5 h-5 text-primary" />
-            <h1 className="text-lg font-semibold">Penjadwalan</h1>
-          </div>
-          <div className="flex items-center gap-2">
+      <PageHeader
+        icon={CalendarRange}
+        title="Penjadwalan"
+        subtitle="Atur jadwal trip bulanan"
+        actions={
+          <>
             <Select value={selectedOutletId} onValueChange={setSelectedOutletId}>
               <SelectTrigger className="h-8 w-[180px] text-xs" data-testid="select-outlet-filter">
                 <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground shrink-0" />
@@ -1165,34 +1164,32 @@ export default function SchedulerPage() {
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
-            <NotificationBell className="hidden lg:block" />
-          </div>
+          </>
+        }
+      />
+      <div className="px-4 md:px-6 py-1.5 border-b bg-muted/20 shrink-0 hidden lg:flex items-center gap-4">
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="w-3 h-3 rounded border border-blue-300 bg-blue-50 dark:bg-blue-950/50" />
+          <span>Trip Aktif</span>
         </div>
-
-        <div className="flex items-center gap-4 mt-2.5">
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <div className="w-3 h-3 rounded border border-blue-300 bg-blue-50 dark:bg-blue-950/50" />
-            <span>Trip Aktif</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <div className="w-3 h-3 rounded border border-dashed border-muted-foreground/40 bg-muted/30" />
-            <span>Virtual</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <div className="w-3 h-3 rounded border border-red-300 bg-red-50 dark:bg-red-950/50" />
-            <span>Pengecualian</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <div className="w-3 h-3 rounded border border-green-300 bg-green-50 dark:bg-green-950/50" />
-            <span>Dalam Perjalanan</span>
-          </div>
-          {isLoading && (
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground ml-auto">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              <span>Memuat...</span>
-            </div>
-          )}
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="w-3 h-3 rounded border border-dashed border-muted-foreground/40 bg-muted/30" />
+          <span>Virtual</span>
         </div>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="w-3 h-3 rounded border border-red-300 bg-red-50 dark:bg-red-950/50" />
+          <span>Pengecualian</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="w-3 h-3 rounded border border-green-300 bg-green-50 dark:bg-green-950/50" />
+          <span>Dalam Perjalanan</span>
+        </div>
+        {isLoading && (
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground ml-auto">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>Memuat...</span>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto relative" ref={scrollRef}>

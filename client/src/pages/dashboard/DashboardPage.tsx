@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import NotificationBell from '@/components/layout/NotificationBell';
+import PageHeader from '@/components/layout/PageHeader';
 import { usePageTitle } from '@/components/layout/LayoutContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -54,20 +54,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="dashboard-page">
-      <div className="border-b px-4 md:px-6 py-3 md:py-4 shrink-0 hidden lg:block">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <LayoutDashboard className="w-5 h-5 text-primary" />
-            <div>
-              <h1 className="text-lg md:text-xl font-semibold" data-testid="text-dashboard-title">Dashboard</h1>
-              <p className="text-sm text-muted-foreground">
-                {format(new Date(), 'EEEE, d MMMM yyyy', { locale: id })}
-              </p>
-            </div>
-          </div>
-          <NotificationBell className="hidden lg:block" />
-        </div>
-      </div>
+      <PageHeader icon={LayoutDashboard} title="Dashboard" subtitle={format(new Date(), 'EEEE, d MMMM yyyy', { locale: id })} />
 
       <div className="flex-1 overflow-auto px-4 md:px-6 py-4 pb-20 space-y-5">
         {isLoading ? (

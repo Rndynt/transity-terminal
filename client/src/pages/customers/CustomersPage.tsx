@@ -4,7 +4,7 @@ import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { fmtCurrency, fmtDate, CUSTOMER_TAG_MAP, type CustomerTag } from '@/lib/constants';
 import { customersApi } from '@/lib/api';
-import NotificationBell from '@/components/layout/NotificationBell';
+import PageHeader from '@/components/layout/PageHeader';
 import { usePageTitle } from '@/components/layout/LayoutContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -277,21 +277,16 @@ export default function CustomersPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="customers-page">
-      <div className="bg-white border-b border-gray-200 flex-shrink-0 hidden lg:block">
-        <div className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12">
-          <div className="flex items-center gap-1.5">
-            <Contact className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-bold text-gray-800">Pelanggan</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" onClick={() => { setEditCustomer(null); setFormOpen(true); }} data-testid="button-add-customer">
-              <Plus className="w-4 h-4 mr-1" />
-              Tambah
-            </Button>
-            <NotificationBell className="hidden lg:block" />
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        icon={Contact}
+        title="Pelanggan"
+        subtitle="Data pelanggan & kategori"
+        actions={
+          <Button size="sm" onClick={() => { setEditCustomer(null); setFormOpen(true); }} data-testid="button-add-customer">
+            <Plus className="w-4 h-4 mr-1" /> Tambah
+          </Button>
+        }
+      />
 
       <div className="p-3 md:p-4 space-y-3 flex-shrink-0 bg-white border-b border-gray-100">
         <div className="flex gap-2">

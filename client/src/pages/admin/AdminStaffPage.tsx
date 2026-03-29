@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PageHeader from '@/components/layout/PageHeader';
 import { usePageTitle } from '@/components/layout/LayoutContext';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
@@ -145,19 +146,19 @@ export default function AdminStaffPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="admin-staff-page">
+      <PageHeader
+        icon={Users}
+        title="Kelola Staff"
+        subtitle="Assignment role & outlet tim"
+        actions={
+          <Button size="sm" onClick={openCreate} data-testid="btn-add-staff">
+            <Plus className="w-4 h-4 mr-1" /> Tambah Staff
+          </Button>
+        }
+      />
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto w-full p-4 md:p-6 space-y-4">
-          <div className="flex items-center justify-between hidden lg:flex">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <Users className="w-6 h-6 text-blue-600" /> Kelola Staff
-              </h1>
-              <p className="text-sm text-gray-500 mt-1">Kelola anggota tim dan assignment role serta outlet mereka.</p>
-            </div>
-            <Button onClick={openCreate} data-testid="btn-add-staff">
-              <Plus className="w-4 h-4 mr-1.5" /> Tambah Staff
-            </Button>
-          </div>
+          <div className="hidden lg:block" />
 
           <Card>
             <CardHeader className="pb-3">

@@ -4,7 +4,7 @@ import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { fmtCurrency, fmtDate, CASHIER_STATUS_MAP, type CashierSessionStatus } from '@/lib/constants';
 import { cashierApi } from '@/lib/api';
-import NotificationBell from '@/components/layout/NotificationBell';
+import PageHeader from '@/components/layout/PageHeader';
 import { usePageTitle } from '@/components/layout/LayoutContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -180,18 +180,7 @@ export default function CashierPage() {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="border-b px-4 md:px-6 py-3 md:py-4 shrink-0 hidden lg:block">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Wallet className="w-5 h-5 text-primary" />
-            <div>
-              <h1 className="text-lg md:text-xl font-semibold" data-testid="text-page-title">Rekonsiliasi Kasir</h1>
-              <p className="text-sm text-muted-foreground">Buka, tutup, dan rekonsiliasi sesi kasir harian</p>
-            </div>
-          </div>
-          <NotificationBell className="hidden lg:block" />
-        </div>
-      </div>
+      <PageHeader icon={Wallet} title="Rekonsiliasi Kasir" subtitle="Buka, tutup & rekonsiliasi sesi kasir" />
 
       <div className="flex-1 overflow-auto">
         <Tabs value={tab} onValueChange={setTab} className="flex flex-col h-full">
