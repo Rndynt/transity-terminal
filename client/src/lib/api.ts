@@ -426,6 +426,7 @@ export const notificationsApi = {
 // Cashier API
 export const cashierApi = {
   getActive: () => fetch('/api/cashier/active').then(r => r.json()),
+  getActiveSummary: () => fetch('/api/cashier/active/summary').then(r => r.json()),
   open: (data: { openingBalance: number; notes?: string }) => apiRequest('POST', '/api/cashier/open', data).then(r => r.json()),
   close: (data: { sessionId: string; settlements: any[]; notes?: string }) => apiRequest('POST', '/api/cashier/close', data),
   approve: (id: string) => apiRequest('PATCH', `/api/cashier/${id}/approve`),

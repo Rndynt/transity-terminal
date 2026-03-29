@@ -56,7 +56,7 @@ Halaman utama yang memberikan overview real-time operasional hari ini. Operator 
 ### Yang Harus Dibuat
 
 #### Backend
-- [ ] `GET /api/dashboard/today` — Endpoint agregasi data hari ini:
+- [x] `GET /api/dashboard/today` — Endpoint agregasi data hari ini:
   - Total trip hari ini (scheduled, departed, completed)
   - Total penumpang (booked, checked-in, canceled)
   - Total pendapatan hari ini (dari payments)
@@ -67,16 +67,16 @@ Halaman utama yang memberikan overview real-time operasional hari ini. Operator 
   - Load factor rata-rata hari ini
 
 #### Frontend
-- [ ] Halaman `/dashboard` dengan route dan sidebar entry
-- [ ] Summary Cards (4 kartu utama): Pendapatan, Penumpang, Trip, Kargo
-- [ ] Section "Perlu Perhatian" (alert cards):
+- [x] Halaman `/dashboard` dengan route dan sidebar entry
+- [x] Summary Cards (4 kartu utama): Pendapatan, Penumpang, Trip, Kargo
+- [x] Section "Perlu Perhatian" (alert cards):
   - Trip tanpa driver
   - Booking pending lama
   - SPJ belum settle
-- [ ] Section "Trip Hari Ini" — mini timeline trip dengan status
-- [ ] Section "Aktivitas Terkini" — 10 transaksi terakhir (booking + kargo)
-- [ ] Auto-refresh setiap 60 detik atau manual refresh button
-- [ ] Responsive: card grid 1 kolom mobile, 2-4 kolom desktop
+- [x] Section "Trip Hari Ini" — mini timeline trip dengan status
+- [x] Section "Aktivitas Terkini" — 10 transaksi terakhir (booking + kargo)
+- [x] Auto-refresh setiap 60 detik atau manual refresh button
+- [x] Responsive: card grid 1 kolom mobile, 2-4 kolom desktop
 
 #### Dependensi
 - Tidak ada dependensi ke fitur lain
@@ -96,7 +96,7 @@ Sistem notifikasi internal (in-app) yang memberi tahu staff tentang event pentin
 ### Yang Harus Dibuat
 
 #### Database
-- [ ] Tabel `notifications`:
+- [x] Tabel `notifications`:
   - id, type (booking_pending, trip_no_driver, spj_overdue, capacity_alert, dll)
   - title, message, severity (info, warning, critical)
   - target_user_id (nullable = broadcast), target_outlet_id
@@ -105,10 +105,10 @@ Sistem notifikasi internal (in-app) yang memberi tahu staff tentang event pentin
   - created_at, expires_at
 
 #### Backend
-- [ ] `GET /api/notifications` — List notifikasi user (paginasi, filter read/unread)
-- [ ] `PATCH /api/notifications/:id/read` — Tandai sudah dibaca
-- [ ] `PATCH /api/notifications/read-all` — Tandai semua sudah dibaca
-- [ ] `DELETE /api/notifications/:id` — Hapus notifikasi
+- [x] `GET /api/notifications` — List notifikasi user (paginasi, filter read/unread)
+- [x] `PATCH /api/notifications/:id/read` — Tandai sudah dibaca
+- [x] `PATCH /api/notifications/read-all` — Tandai semua sudah dibaca
+- [x] `DELETE /api/notifications/:id` — Hapus notifikasi
 - [ ] Service `NotificationService`:
   - `create(type, title, message, target)` — buat notifikasi + emit via Socket.io
   - Trigger otomatis dari:
@@ -119,8 +119,8 @@ Sistem notifikasi internal (in-app) yang memberi tahu staff tentang event pentin
     - Kargo status berubah → info ke outlet pengirim
 
 #### Frontend
-- [ ] Bell icon di header AppLayout dengan unread count badge
-- [ ] Dropdown panel notifikasi (klik bell):
+- [x] Bell icon di header AppLayout dengan unread count badge
+- [x] Dropdown panel notifikasi (klik bell):
   - List notifikasi dengan icon severity
   - Klik notifikasi → navigate ke halaman terkait
   - Tombol "Tandai semua dibaca"
@@ -181,14 +181,14 @@ Proses operasional harian di setiap outlet: CSO menghitung uang di akhir shift, 
 ### Yang Harus Dibuat
 
 #### Database
-- [ ] Tabel `cashier_sessions`:
+- [x] Tabel `cashier_sessions`:
   - id, outlet_id, staff_id (kasir)
   - opened_at, closed_at
   - opening_balance (saldo awal kas)
   - status (open, closing, closed, approved)
   - approved_by, approved_at
   - notes
-- [ ] Tabel `cashier_settlements`:
+- [x] Tabel `cashier_settlements`:
   - id, session_id
   - payment_method (cash, transfer, qris, dll)
   - system_amount (total dari sistem)
@@ -197,28 +197,29 @@ Proses operasional harian di setiap outlet: CSO menghitung uang di akhir shift, 
   - notes
 
 #### Backend
-- [ ] `POST /api/cashier/open` — Buka sesi kasir (set opening balance)
-- [ ] `GET /api/cashier/active` — Cek sesi kasir aktif untuk outlet
-- [ ] `POST /api/cashier/close` — Tutup kasir:
+- [x] `POST /api/cashier/open` — Buka sesi kasir (set opening balance)
+- [x] `GET /api/cashier/active` — Cek sesi kasir aktif untuk outlet
+- [x] `GET /api/cashier/active/summary` — Ringkasan transaksi real-time selama sesi aktif (per metode bayar + daftar transaksi, filter by outlet)
+- [x] `POST /api/cashier/close` — Tutup kasir:
   - Hitung otomatis semua transaksi dalam sesi
   - Kasir input jumlah fisik per metode bayar
   - Hitung selisih
-- [ ] `PATCH /api/cashier/:id/approve` — Supervisor approve closing
-- [ ] `GET /api/cashier/history` — Riwayat sesi kasir per outlet
-- [ ] `GET /api/cashier/:id/detail` — Detail sesi: semua transaksi + settlement
+- [x] `PATCH /api/cashier/:id/approve` — Supervisor approve closing
+- [x] `GET /api/cashier/history` — Riwayat sesi kasir per outlet
+- [x] `GET /api/cashier/:id/detail` — Detail sesi: semua transaksi + settlement (filter by outlet)
 
 #### Frontend
-- [ ] Halaman `/cashier` — Kasir Management
-- [ ] Flow buka kasir: input saldo awal → mulai sesi
+- [x] Halaman `/cashier` — Kasir Management
+- [x] Flow buka kasir: input saldo awal → mulai sesi
 - [ ] Indicator "Kasir Aktif" di header/toolbar saat ada sesi terbuka
-- [ ] Flow tutup kasir:
+- [x] Flow tutup kasir:
   - Summary otomatis: total cash, transfer, QRIS dari sistem
   - Input field untuk jumlah fisik per metode
   - Tampilkan selisih (hijau jika cocok, merah jika selisih)
   - Tombol submit → status closing
-- [ ] Supervisor approval flow
-- [ ] Riwayat tutup kasir dengan filter tanggal dan outlet
-- [ ] Sidebar entry di bawah "Operasional"
+- [x] Supervisor approval flow
+- [x] Riwayat tutup kasir dengan filter tanggal dan outlet
+- [x] Sidebar entry di bawah "Operasional"
 
 #### Dependensi
 - Tabel payments sudah ada dan sudah tracking metode bayar
@@ -239,7 +240,7 @@ Alur pengelolaan pengembalian dana saat booking dibatalkan. Saat ini pembatalan 
 ### Yang Harus Dibuat
 
 #### Database
-- [ ] Tabel `refunds`:
+- [x] Tabel `refunds`:
   - id, booking_id, passenger_id (nullable)
   - original_amount, refund_amount, admin_fee
   - reason, refund_method (cash, transfer)
@@ -251,19 +252,19 @@ Alur pengelolaan pengembalian dana saat booking dibatalkan. Saat ini pembatalan 
   - notes
 
 #### Backend
-- [ ] `POST /api/refunds` — Ajukan refund (otomatis saat cancel, atau manual)
-- [ ] `GET /api/refunds` — List refund (filter: status, outlet, tanggal)
-- [ ] `GET /api/refunds/:id` — Detail refund
-- [ ] `PATCH /api/refunds/:id/approve` — Approve refund (supervisor)
-- [ ] `PATCH /api/refunds/:id/process` — Proses refund (tandai uang sudah dikembalikan)
-- [ ] `PATCH /api/refunds/:id/reject` — Tolak refund
-- [ ] Konfigurasi: persentase potongan admin default (misal 10%)
+- [x] `POST /api/refunds` — Ajukan refund (otomatis saat cancel, atau manual)
+- [x] `GET /api/refunds` — List refund (filter: status, outlet, tanggal)
+- [x] `GET /api/refunds/:id` — Detail refund
+- [x] `PATCH /api/refunds/:id/approve` — Approve refund (supervisor)
+- [x] `PATCH /api/refunds/:id/process` — Proses refund (tandai uang sudah dikembalikan)
+- [x] `PATCH /api/refunds/:id/reject` — Tolak refund
+- [x] Konfigurasi: persentase potongan admin default (misal 10%)
 
 #### Frontend
-- [ ] Halaman `/refunds` — Daftar Refund
+- [x] Halaman `/refunds` — Daftar Refund
   - Filter: status (pending/approved/processed/rejected), tanggal, outlet
   - Tabel: kode booking, penumpang, jumlah asli, jumlah refund, status, tanggal
-- [ ] Dialog detail refund:
+- [x] Dialog detail refund:
   - Info booking dan penumpang
   - Breakdown: harga asli, potongan admin, jumlah refund
   - Action buttons: Approve / Reject / Process
@@ -273,7 +274,7 @@ Alur pengelolaan pengembalian dana saat booking dibatalkan. Saat ini pembatalan 
 - [ ] Integrasi di BookingDetailModal:
   - Tombol "Ajukan Refund" saat status canceled
   - Status refund ditampilkan jika ada
-- [ ] Sidebar entry di bawah "Operasional" atau "Keuangan"
+- [x] Sidebar entry di bawah "Operasional" atau "Keuangan"
 
 #### Dependensi
 - Tabel bookings, passengers, payments sudah ada
@@ -338,7 +339,7 @@ Tracking jadwal perawatan, riwayat perbaikan, dan status kesiapan setiap kendara
 ### Yang Harus Dibuat
 
 #### Database
-- [ ] Tabel `vehicle_maintenance`:
+- [x] Tabel `vehicle_maintenance`:
   - id, vehicle_id
   - type (routine_service, repair, inspection, tire_change, oil_change)
   - description
@@ -350,8 +351,8 @@ Tracking jadwal perawatan, riwayat perbaikan, dan status kesiapan setiap kendara
   - created_by, notes
 
 #### Backend
-- [ ] CRUD `/api/vehicles/:id/maintenance` — List, create, update, delete maintenance
-- [ ] `GET /api/vehicles/maintenance/alerts` — Kendaraan yang overdue atau mendekati jadwal service
+- [x] CRUD `/api/vehicles/:id/maintenance` — List, create, update, delete maintenance
+- [x] `GET /api/vehicles/maintenance/alerts` — Kendaraan yang overdue atau mendekati jadwal service
 - [ ] Update status kendaraan otomatis: jika ada maintenance in_progress → vehicle status = maintenance
 
 #### Frontend
@@ -380,14 +381,14 @@ Melihat riwayat perjalanan, akumulasi jam kerja, dan performa setiap driver. BER
 ### Yang Harus Dibuat
 
 #### Backend
-- [ ] `GET /api/drivers/:id/performance` — Agregasi performa:
+- [x] `GET /api/drivers/:id/performance` — Agregasi performa:
   - Total trip dalam periode
   - Total jam kerja (dari departure - arrival trip)
   - Total KM (jika odometer ditracking di F07)
   - Total pendapatan trip yang di-handle
   - Rata-rata load factor trip yang di-handle
   - Jumlah complain/insiden (future)
-- [ ] `GET /api/drivers/:id/trip-history` — List trip yang pernah di-handle (paginasi)
+- [x] `GET /api/drivers/:id/trip-history` — List trip yang pernah di-handle (paginasi)
 - [ ] `GET /api/drivers/leaderboard` — Ranking driver berdasarkan jumlah trip/load factor
 
 #### Frontend
@@ -416,30 +417,30 @@ Memanfaatkan data pelanggan yang sudah terekam dari booking untuk memberikan lay
 ### Yang Harus Dibuat
 
 #### Database
-- [ ] Tabel `customer_profiles` (atau enhance app_users):
+- [x] Tabel `customer_profiles`:
   - id, full_name, phone, email, id_number
   - total_trips, total_spent
   - first_trip_date, last_trip_date
   - preferred_seat, preferred_route
   - tags (vip, frequent, blacklist)
   - notes, created_at, updated_at
-- [ ] Index unique di phone untuk cepat lookup
+- [x] Index unique di phone untuk cepat lookup
 
 #### Backend
-- [ ] `GET /api/customers` — List pelanggan (search by name/phone)
-- [ ] `GET /api/customers/:id` — Detail + riwayat booking
-- [ ] `POST /api/customers` — Tambah manual
-- [ ] Auto-create/update customer profile saat booking selesai:
+- [x] `GET /api/customers` — List pelanggan (search by name/phone)
+- [x] `GET /api/customers/:id` — Detail + riwayat booking
+- [x] `POST /api/customers` — Tambah manual
+- [x] Auto-create/update customer profile saat booking selesai:
   - Match by phone number
   - Update total_trips, total_spent, last_trip_date
-- [ ] `GET /api/customers/search?phone=08xx` — Quick search untuk auto-fill di CSO
+- [x] `GET /api/customers/search?phone=08xx` — Quick search untuk auto-fill di CSO
 
 #### Frontend
-- [ ] Halaman `/customers` — Daftar Pelanggan
+- [x] Halaman `/customers` — Daftar Pelanggan
   - Search by nama/telepon
   - Tabel: nama, telepon, total trip, total spending, terakhir perjalanan
   - Sort by frequent (total trip) atau spending
-- [ ] Detail pelanggan:
+- [x] Detail pelanggan:
   - Summary cards: total trip, total spending, sejak kapan
   - Riwayat booking (list)
   - Tag management (VIP, frequent)
@@ -447,7 +448,7 @@ Memanfaatkan data pelanggan yang sudah terekam dari booking untuk memberikan lay
   - Saat CSO ketik nomor telepon penumpang, suggest data pelanggan
   - Klik suggestion → auto-fill nama, email, ID
   - Hemat waktu CSO dan kurangi typo
-- [ ] Sidebar entry di bawah "Operasional"
+- [x] Sidebar entry di bawah "Operasional"
 
 #### Dependensi
 - Data passengers dari bookings sudah ada

@@ -80,7 +80,7 @@ The system uses Socket.io with room-based subscriptions for efficient event targ
 ## New Modules (Phase 2)
 The following modules were added with Controller-Service-Routes pattern:
 - **Dashboard** (`/dashboard`): Operational summary — trips, bookings, revenue, cargo, load factor, alerts, recent bookings. Flag: `page.dashboard`.
-- **Cashier** (`/cashier`): Open/close/approve daily cash sessions with settlement breakdown. Flag: `page.cashier`.
+- **Cashier** (`/cashier`): Open/close/approve daily cash sessions with settlement breakdown. Live transaction summary during active session (auto-refresh 30s). System amount auto-calculated from `payments` JOIN `bookings` filtered by outlet + session time range. Outlet ownership enforced on close/approve/detail. Flag: `page.cashier`.
 - **Refunds** (`/refunds`): Create/approve/process/reject refund requests with booking code search autocomplete. Supports URL pre-fill (`?bookingId=&bookingCode=`). CSO can create refunds; manager/finance approve/process. Flags: `page.refunds`, `action.refund.create`, `action.refund.approve`, `action.refund.process`. Booking search endpoint: `GET /api/bookings/search?q=CODE`.
 - **Customers** (`/customers`): CRM — customer profiles with tags (regular/vip/frequent/blacklist), booking history. Flag: `page.customers`.
 - **Maintenance** (`/api/maintenance/*`): Vehicle maintenance records and alerts. Embedded in MastersPage vehicle detail.

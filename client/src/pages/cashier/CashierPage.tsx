@@ -45,17 +45,31 @@ type CashierSettlement = {
   notes: string | null;
 };
 
+type TransactionRow = {
+  id: string;
+  amount: string;
+  method: string;
+  status: string;
+  created_at: string;
+  booking_code: string;
+};
+
+type SummaryRow = {
+  method: string;
+  count: number;
+  total: string;
+};
+
+type ActiveSummary = {
+  session: CashierSession | null;
+  summary: SummaryRow[];
+  transactions: TransactionRow[];
+};
+
 type SessionDetail = {
   session: CashierSession | null;
   settlements: CashierSettlement[];
-  transactions: Array<{
-    id: string;
-    amount: string;
-    method: string;
-    status: string;
-    created_at: string;
-    booking_code: string;
-  }>;
+  transactions: TransactionRow[];
 };
 
 const PAYMENT_METHODS = [
@@ -91,6 +105,12 @@ export default function CashierPage() {
     queryKey: ['/api/cashier/active'],
   });
 
+  const { data: activeSummary, isLoading: loadingSummary } = useQuery<ActiveSummary>({
+    queryKey: ['/api/cashier/active/summary'],
+    enabled: !!activeSession,
+    refetchInterval: 30000,
+  });
+
   const { data: history = [], isLoading: loadingHistory } = useQuery<CashierSession[]>({
     queryKey: ['/api/cashier/history'],
   });
@@ -119,11 +139,16 @@ export default function CashierPage() {
     },
   });
 
+  const summaryByMethod = activeSummary?.summary?.reduce<Record<string, number>>((acc, s) => {
+    acc[s.method] = parseFloat(s.total) || 0;
+    return acc;
+  }, {}) ?? {};
+
   const closeMutation = useMutation({
     mutationFn: async () => {
       const settlementsArr = PAYMENT_METHODS.map(pm => ({
         paymentMethod: pm.key,
-        systemAmount: settlements[pm.key]?.system || 0,
+        systemAmount: summaryByMethod[pm.key] || 0,
         actualAmount: parseFloat(settlements[pm.key]?.actual || '0') || 0,
       }));
       await cashierApi.close({
@@ -134,6 +159,7 @@ export default function CashierPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/cashier/active'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/cashier/active/summary'] });
       queryClient.invalidateQueries({ queryKey: ['/api/cashier/history'] });
       setCloseNotes('');
       setSettlements({
@@ -168,7 +194,7 @@ export default function CashierPage() {
     return PAYMENT_METHODS.reduce((sum, pm) => {
       const s = settlements[pm.key];
       const actual = parseFloat(s?.actual || '0') || 0;
-      const system = s?.system || 0;
+      const system = summaryByMethod[pm.key] || 0;
       return sum + (actual - system);
     }, 0);
   }
@@ -267,6 +293,68 @@ export default function CashierPage() {
                   </CardContent>
                 </Card>
 
+                {loadingSummary ? (
+                  <Card><CardContent className="p-6 text-center text-muted-foreground">Memuat transaksi...</CardContent></Card>
+                ) : (activeSummary?.transactions?.length ?? 0) > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Banknote className="w-5 h-5" />
+                        Transaksi Sesi Ini ({activeSummary?.transactions?.length ?? 0})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="grid grid-cols-3 gap-3 px-4 pb-3">
+                        {PAYMENT_METHODS.map(pm => {
+                          const total = summaryByMethod[pm.key] || 0;
+                          const count = activeSummary?.summary?.find(s => s.method === pm.key)?.count || 0;
+                          const Icon = pm.icon;
+                          return (
+                            <div key={pm.key} className="rounded-md border p-3 text-center">
+                              <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">
+                                <Icon className="w-3 h-3" />
+                                {pm.label}
+                              </div>
+                              <p className="font-semibold" data-testid={`text-summary-${pm.key}`}>{fmtCurrency(total)}</p>
+                              <p className="text-xs text-muted-foreground">{count} transaksi</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Kode Booking</TableHead>
+                            <TableHead>Metode</TableHead>
+                            <TableHead className="text-right">Jumlah</TableHead>
+                            <TableHead>Waktu</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {activeSummary!.transactions.map(tx => (
+                            <TableRow key={tx.id}>
+                              <TableCell className="font-mono text-sm">{tx.booking_code || '—'}</TableCell>
+                              <TableCell className="capitalize">{tx.method}</TableCell>
+                              <TableCell className="text-right">{fmtCurrency(tx.amount)}</TableCell>
+                              <TableCell>{fmtDate(tx.created_at)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="p-6">
+                      <EmptyState
+                        icon={Banknote}
+                        title="Belum ada transaksi"
+                        description="Transaksi pembayaran selama sesi ini akan muncul di sini secara otomatis"
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -286,9 +374,10 @@ export default function CashierPage() {
                       </TableHeader>
                       <TableBody>
                         {PAYMENT_METHODS.map(pm => {
+                          const systemAmt = summaryByMethod[pm.key] || 0;
                           const s = settlements[pm.key];
                           const actual = parseFloat(s?.actual || '0') || 0;
-                          const diff = actual - (s?.system || 0);
+                          const diff = actual - systemAmt;
                           const Icon = pm.icon;
                           return (
                             <TableRow key={pm.key}>
@@ -298,14 +387,8 @@ export default function CashierPage() {
                                   {pm.label}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-right">
-                                <Input
-                                  data-testid={`input-system-${pm.key}`}
-                                  type="number"
-                                  value={s?.system || 0}
-                                  readOnly
-                                  className="text-right w-32 ml-auto"
-                                />
+                              <TableCell className="text-right font-medium" data-testid={`text-system-${pm.key}`}>
+                                {fmtCurrency(systemAmt)}
                               </TableCell>
                               <TableCell className="text-right">
                                 <Input
@@ -362,10 +445,10 @@ export default function CashierPage() {
                       data-testid="button-close-session"
                       variant="destructive"
                       onClick={() => closeMutation.mutate()}
-                      disabled={closeMutation.isPending}
+                      disabled={closeMutation.isPending || loadingSummary}
                     >
                       <DoorClosed className="w-4 h-4 mr-2" />
-                      {closeMutation.isPending ? 'Menutup...' : 'Tutup Sesi'}
+                      {closeMutation.isPending ? 'Menutup...' : loadingSummary ? 'Memuat data...' : 'Tutup Sesi'}
                     </Button>
                   </CardContent>
                 </Card>

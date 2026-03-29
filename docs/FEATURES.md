@@ -6,6 +6,7 @@ Dokumen ini menjelaskan seluruh fitur yang telah dibangun di sistem TransityCore
 
 ## Daftar Isi
 
+### Phase 1 — Core
 1. [Arsitektur & Teknologi](#1-arsitektur--teknologi)
 2. [Terminal CSO (Reservasi)](#2-terminal-cso-reservasi)
 3. [Manajemen Kursi & Seat Hold](#3-manajemen-kursi--seat-hold)
@@ -25,6 +26,15 @@ Dokumen ini menjelaskan seluruh fitur yang telah dibangun di sistem TransityCore
 17. [Database & Skema](#17-database--skema)
 18. [Data Integrity — Snapshot System](#18-data-integrity--snapshot-system)
 19. [Security](#19-security)
+
+### Phase 2 — Operasional & Keuangan
+20. [Dashboard Ringkasan Harian (F01)](#20-dashboard-ringkasan-harian-f01)
+21. [Notifikasi & Alert System (F02)](#21-notifikasi--alert-system-f02)
+22. [Rekonsiliasi Pembayaran & Tutup Kasir (F04)](#22-rekonsiliasi-pembayaran--tutup-kasir-f04)
+23. [Refund Management (F05)](#23-refund-management-f05)
+24. [Database Pelanggan / CRM Sederhana (F09)](#24-database-pelanggan--crm-sederhana-f09)
+25. [Fitur RBAC Tambahan — Cross-Outlet CSO](#25-fitur-rbac-tambahan--cross-outlet-cso-phase-2)
+26. [Dev Staff Seed](#26-dev-staff-seed-development-only)
 
 ---
 
@@ -1020,3 +1030,197 @@ Verifikasi menggunakan `crypto.timingSafeEqual` untuk mencegah timing attacks.
 - `JWT_SECRET` wajib di production (fatal error jika kosong)
 - Seed endpoints (`/api/seed`, `/api/seed/rbac`) diblokir total di production
 - Response logging me-redact semua data sensitif (token, password, session)
+
+---
+
+## 20. Dashboard Ringkasan Harian (F01)
+
+Halaman utama yang memberikan overview real-time operasional hari ini.
+
+### Komponen
+
+| Komponen | Fungsi |
+|----------|--------|
+| DashboardPage | Halaman `/dashboard` — landing page default |
+| Summary Cards | 4 kartu utama: Pendapatan, Penumpang, Trip, Kargo |
+| Alerts Section | "Perlu Perhatian" — trip tanpa driver, booking pending lama, SPJ belum settle |
+| Trip Timeline | Mini timeline trip hari ini dengan status |
+| Aktivitas Terkini | 10 transaksi terakhir (booking + kargo) |
+
+### Endpoint
+
+- `GET /api/dashboard/today` — Agregasi data hari ini (trip count, penumpang, pendapatan, kargo, alerts, load factor)
+
+### Fitur
+
+- Auto-refresh setiap 60 detik
+- Responsive: 1 kolom mobile, 2-4 kolom desktop
+- Data diambil dari tabel existing: trips, bookings, payments, cargo_shipments, spj
+
+---
+
+## 21. Notifikasi & Alert System (F02)
+
+Sistem notifikasi internal (in-app) untuk staff.
+
+### Database
+
+Tabel `notifications`:
+- `id`, `type`, `title`, `message`, `severity` (info/warning/critical)
+- `target_user_id` (nullable = broadcast), `target_outlet_id`
+- `is_read`, `read_at`
+- `related_entity_type`, `related_entity_id`
+- `created_at`, `expires_at`
+
+### Endpoint
+
+| Endpoint | Fungsi |
+|----------|--------|
+| `GET /api/notifications` | List notifikasi (paginasi, filter read/unread) |
+| `PATCH /api/notifications/:id/read` | Tandai sudah dibaca |
+| `PATCH /api/notifications/read-all` | Tandai semua sudah dibaca |
+| `DELETE /api/notifications/:id` | Hapus notifikasi |
+
+### Frontend
+
+- Bell icon di header AppLayout dengan unread count badge
+- Dropdown panel notifikasi (list, klik → navigate ke halaman terkait)
+- Tombol "Tandai semua dibaca"
+
+---
+
+## 22. Rekonsiliasi Pembayaran & Tutup Kasir (F04)
+
+Proses operasional harian di setiap outlet: CSO menghitung uang di akhir shift, sistem mencocokkan dengan transaksi tercatat, supervisor approve.
+
+### Alur Kerja
+
+```
+Buka Sesi → Transaksi Berjalan → Lihat Summary Real-time → Tutup Sesi → Supervisor Approve
+```
+
+### Database
+
+| Tabel | Keterangan |
+|-------|------------|
+| `cashier_sessions` | id, outlet_id, staff_id, opened_at, closed_at, opening_balance, status (open/closing/approved), approved_by |
+| `cashier_settlements` | id, session_id, payment_method, system_amount, actual_amount, difference |
+
+### Endpoint
+
+| Endpoint | Fungsi |
+|----------|--------|
+| `GET /api/cashier/active` | Cek sesi kasir aktif untuk outlet |
+| `GET /api/cashier/active/summary` | Ringkasan transaksi real-time per metode bayar + daftar transaksi (filter by outlet) |
+| `POST /api/cashier/open` | Buka sesi kasir (set opening balance) |
+| `POST /api/cashier/close` | Tutup kasir (system auto-calc + kasir input aktual per metode) |
+| `PATCH /api/cashier/:id/approve` | Supervisor approve closing |
+| `GET /api/cashier/history` | Riwayat sesi kasir per outlet |
+| `GET /api/cashier/:id/detail` | Detail sesi: transaksi + settlement (filter by outlet) |
+
+### Mekanisme Penting
+
+- **Transaksi otomatis terhitung**: Sistem JOIN `payments` dengan `bookings` untuk filter by outlet dan rentang waktu sesi
+- **Kolom `system_amount` dihitung otomatis** dari total pembayaran per metode bayar selama sesi aktif — tidak perlu input manual
+- **Kasir hanya input `actual_amount`** (jumlah fisik yang dihitung manual), sistem hitung selisih
+- **Auto-refresh** setiap 30 detik selama sesi aktif — transaksi baru langsung muncul
+- **RBAC**: Dilindungi flag `page.cashier`
+
+---
+
+## 23. Refund Management (F05)
+
+Alur pengelolaan pengembalian dana saat booking dibatalkan.
+
+### Alur Kerja
+
+```
+CSO Ajukan Refund → Pending → Manager/Finance Approve → Proses (uang dikembalikan) → Selesai
+                                         ↘ Reject
+```
+
+### Database
+
+Tabel `refunds`:
+- `id`, `booking_id`, `passenger_id` (nullable)
+- `original_amount`, `refund_amount`, `admin_fee`
+- `reason`, `refund_method` (cash/transfer)
+- `status` (pending/approved/processed/rejected)
+- `requested_by`, `approved_by`, `processed_by` + timestamps
+- `bank_account`, `bank_name` (untuk transfer)
+- `notes`
+
+### Endpoint
+
+| Endpoint | Fungsi |
+|----------|--------|
+| `POST /api/refunds` | Ajukan refund (dengan booking search untuk pilih penumpang) |
+| `GET /api/refunds` | List refund (filter: status, tanggal) |
+| `GET /api/refunds/:id` | Detail refund |
+| `PATCH /api/refunds/:id/approve` | Approve refund (supervisor/finance) |
+| `PATCH /api/refunds/:id/process` | Proses refund (tandai uang dikembalikan) |
+| `PATCH /api/refunds/:id/reject` | Tolak refund |
+
+### Frontend
+
+- Halaman `/refunds` — daftar refund dengan filter status
+- Dialog create: search booking → pilih penumpang → lihat detail fare → set admin fee
+- Dialog detail: breakdown harga, action buttons (approve/reject/process)
+- URL pre-fill: `/refunds?bookingId=X&bookingCode=Y`
+- Permission: CSO bisa *create*; hanya manager/finance bisa approve/process/reject
+
+---
+
+## 24. Database Pelanggan / CRM Sederhana (F09)
+
+Memanfaatkan data penumpang yang sudah terekam dari booking untuk layanan lebih baik.
+
+### Database
+
+Tabel `customer_profiles`:
+- `id`, `full_name`, `phone` (unique index), `email`, `id_number`
+- `total_trips`, `total_spent`
+- `first_trip_date`, `last_trip_date`
+- `preferred_seat`, `preferred_route`
+- `tags` (vip, frequent, blacklist)
+- `notes`, `created_at`, `updated_at`
+
+### Endpoint
+
+| Endpoint | Fungsi |
+|----------|--------|
+| `GET /api/customers` | List pelanggan (search by name/phone) |
+| `GET /api/customers/:id` | Detail + riwayat booking |
+| `POST /api/customers` | Tambah manual |
+| `GET /api/customers/search?phone=08xx` | Quick search untuk auto-fill |
+
+### Frontend
+
+- Halaman `/customers` — daftar pelanggan dengan search
+- Detail pelanggan: summary cards, riwayat booking, tag management
+- Auto-create/update customer profile saat booking selesai (match by phone)
+
+---
+
+## 25. Fitur RBAC Tambahan — Cross-Outlet CSO (Phase 2)
+
+### Flag `action.cso.cross_outlet`
+
+| Role | Nilai Default | Perilaku |
+|------|--------------|----------|
+| owner, manager | `true` | Bisa pilih outlet mana saja di CSO |
+| spv_cso, cso | `false` | Terkunci ke outlet yang di-assign |
+
+- Saat flag aktif: semua outlet tampil di dropdown, outlet user di-select sebagai default
+- Saat flag tidak aktif: outlet dropdown hidden, otomatis pakai outlet user
+
+---
+
+## 26. Dev Staff Seed (Development Only)
+
+### Mekanisme
+
+- `POST /api/seed/rbac` — seed user dev (`dev-user-001`) sebagai staff owner @ outlet Dipatiukur (DPU)
+- Menggunakan `ON CONFLICT DO UPDATE` untuk idempotent
+- Hanya aktif di non-production environment
+- Tidak auto-run saat startup — harus dipanggil manual

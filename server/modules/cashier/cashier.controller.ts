@@ -15,6 +15,13 @@ export class CashierController {
     reply.send(session);
   }
 
+  async getActiveSummary(req: FastifyRequest, reply: FastifyReply) {
+    const outletId = (req as any).rbac?.outletId;
+    if (!outletId) return reply.send({ session: null, summary: [], transactions: [] });
+    const result = await this.service.getActiveSummary(outletId);
+    reply.send(result);
+  }
+
   async open(req: FastifyRequest, reply: FastifyReply) {
     const { openingBalance, notes } = req.body as any;
     const outletId = (req as any).rbac?.outletId;
@@ -33,12 +40,28 @@ export class CashierController {
 
   async close(req: FastifyRequest, reply: FastifyReply) {
     const { sessionId, settlements, notes } = req.body as any;
-    const result = await this.service.closeSession(sessionId, settlements, notes);
-    reply.send(result);
+    const outletId = (req as any).rbac?.outletId;
+    if (outletId) {
+      const session = await this.service.getActiveSession(outletId);
+      if (!session || session.id !== sessionId) {
+        return reply.code(403).send({ error: 'Tidak bisa menutup sesi outlet lain' });
+      }
+    }
+    try {
+      const result = await this.service.closeSession(sessionId, settlements, notes);
+      reply.send(result);
+    } catch (err: any) {
+      reply.code(400).send({ error: err.message });
+    }
   }
 
   async approve(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
+    const outletId = (req as any).rbac?.outletId;
+    const detail = await this.service.getDetail(id);
+    if (outletId && detail.session && detail.session.outletId !== outletId) {
+      return reply.code(403).send({ error: 'Tidak bisa approve sesi outlet lain' });
+    }
     const approvedBy = (req as any).user?.email || 'Unknown';
     const result = await this.service.approveSession(id, approvedBy);
     reply.send(result);
@@ -52,7 +75,11 @@ export class CashierController {
 
   async getDetail(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
+    const outletId = (req as any).rbac?.outletId;
     const detail = await this.service.getDetail(id);
+    if (outletId && detail.session && detail.session.outletId !== outletId) {
+      return reply.code(403).send({ error: 'Tidak bisa melihat sesi outlet lain' });
+    }
     reply.send(detail);
   }
 }

@@ -30,19 +30,81 @@ export class CashierService {
     return session;
   }
 
-  async closeSession(sessionId: string, settlements: Array<{ paymentMethod: string; systemAmount: number; actualAmount: number; notes?: string }>, notes?: string) {
+  private buildOutletTimeFilter(outletId: string, openedAt: Date, closedAt: Date | null) {
+    return closedAt
+      ? sql`
+          b.outlet_id = ${outletId}
+          AND p.status = 'success'
+          AND p.paid_at >= ${openedAt}
+          AND p.paid_at <= ${closedAt}
+        `
+      : sql`
+          b.outlet_id = ${outletId}
+          AND p.status = 'success'
+          AND p.paid_at >= ${openedAt}
+        `;
+  }
+
+  async getActiveSummary(outletId: string) {
+    const session = await this.getActiveSession(outletId);
+    if (!session) return { session: null, summary: [], transactions: [] };
+
+    const summaryResult = await db.execute(sql`
+      SELECT p.method, COUNT(*)::int AS count, COALESCE(SUM(p.amount::numeric), 0) AS total
+      FROM payments p
+      JOIN bookings b ON b.id = p.booking_id
+      WHERE ${this.buildOutletTimeFilter(outletId, session.openedAt, null)}
+      GROUP BY p.method
+      ORDER BY p.method
+    `);
+    const summary = Array.isArray(summaryResult) ? summaryResult : (summaryResult as any).rows || [];
+
+    const txResult = await db.execute(sql`
+      SELECT p.id, p.amount, p.method, p.status, p.paid_at AS created_at, b.booking_code
+      FROM payments p
+      JOIN bookings b ON b.id = p.booking_id
+      WHERE ${this.buildOutletTimeFilter(outletId, session.openedAt, null)}
+      ORDER BY p.paid_at DESC
+    `);
+    const transactions = Array.isArray(txResult) ? txResult : (txResult as any).rows || [];
+
+    return { session, summary, transactions };
+  }
+
+  async closeSession(sessionId: string, settlements: Array<{ paymentMethod: string; actualAmount: number; notes?: string }>, notes?: string) {
+    const [session] = await db.select().from(cashierSessions).where(eq(cashierSessions.id, sessionId));
+    if (!session) throw new Error('Sesi tidak ditemukan');
+    if (session.status !== 'open') throw new Error('Sesi sudah ditutup');
+
+    const closedAt = new Date();
+
+    const systemTotals = await db.execute(sql`
+      SELECT p.method, COALESCE(SUM(p.amount::numeric), 0) AS total
+      FROM payments p
+      JOIN bookings b ON b.id = p.booking_id
+      WHERE ${this.buildOutletTimeFilter(session.outletId, session.openedAt, closedAt)}
+      GROUP BY p.method
+    `);
+    const systemByMethod: Record<string, number> = {};
+    const rows = Array.isArray(systemTotals) ? systemTotals : (systemTotals as any).rows || [];
+    for (const r of rows) {
+      systemByMethod[r.method] = parseFloat(r.total) || 0;
+    }
+
     await db.update(cashierSessions)
-      .set({ status: 'closing', closedAt: new Date(), notes })
+      .set({ status: 'closing', closedAt, notes })
       .where(eq(cashierSessions.id, sessionId));
 
     if (settlements?.length) {
       for (const s of settlements) {
+        const systemAmount = systemByMethod[s.paymentMethod] || 0;
+        const actualAmount = s.actualAmount || 0;
         await db.insert(cashierSettlements).values({
           sessionId,
           paymentMethod: s.paymentMethod,
-          systemAmount: String(s.systemAmount || 0),
-          actualAmount: String(s.actualAmount || 0),
-          difference: String((s.actualAmount || 0) - (s.systemAmount || 0)),
+          systemAmount: String(systemAmount),
+          actualAmount: String(actualAmount),
+          difference: String(actualAmount - systemAmount),
           notes: s.notes,
         });
       }
@@ -76,10 +138,9 @@ export class CashierService {
       const txResult = await db.execute(sql`
         SELECT p.id, p.amount, p.method, p.status, p.paid_at AS created_at, b.booking_code
         FROM payments p
-        LEFT JOIN bookings b ON b.id = p.booking_id
-        WHERE p.status = 'success'
-          AND p.paid_at >= ${session.openedAt}
-          ${session.closedAt ? sql`AND p.paid_at <= ${session.closedAt}` : sql``}
+        JOIN bookings b ON b.id = p.booking_id
+        WHERE ${this.buildOutletTimeFilter(session.outletId, session.openedAt, session.closedAt)}
+        ORDER BY p.paid_at DESC
       `);
       transactions = Array.isArray(txResult) ? txResult : (txResult as any).rows || [];
     }
