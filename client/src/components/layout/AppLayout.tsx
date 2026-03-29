@@ -60,8 +60,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
           onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
         />
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {isMobile ? (
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+          {isMobile && (
             <div className="h-10 bg-white border-b border-gray-200 flex items-center justify-between gap-2 px-3 flex-shrink-0 lg:hidden cso-hide-default-header">
               <div className="flex items-center gap-2">
                 <button
@@ -76,8 +76,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
               </div>
               <NotificationBell />
             </div>
-          ) : (
-            <div className="h-10 bg-white border-b border-gray-200 flex items-center justify-end gap-2 px-4 flex-shrink-0">
+          )}
+          {!isMobile && (
+            <div className="absolute top-2.5 right-4 z-30">
               <NotificationBell />
             </div>
           )}
