@@ -409,6 +409,72 @@ export const spjApi = {
   getTripProfit: (tripId: string) => fetchJson(`/api/spj/trip/${tripId}/profit`),
 };
 
+// Dashboard API
+export const dashboardApi = {
+  getToday: () => fetch('/api/dashboard/today').then(r => r.json()),
+};
+
+// Notifications API
+export const notificationsApi = {
+  getAll: () => fetch('/api/notifications').then(r => r.json()),
+  getUnreadCount: () => fetch('/api/notifications/unread-count').then(r => r.json()),
+  markRead: (id: string) => apiRequest('PATCH', `/api/notifications/${id}/read`),
+  markAllRead: () => apiRequest('PATCH', '/api/notifications/read-all'),
+  remove: (id: string) => apiRequest('DELETE', `/api/notifications/${id}`),
+};
+
+// Cashier API
+export const cashierApi = {
+  getActive: () => fetch('/api/cashier/active').then(r => r.json()),
+  open: (data: { openingBalance: number; notes?: string }) => apiRequest('POST', '/api/cashier/open', data).then(r => r.json()),
+  close: (data: { sessionId: string; settlements: any[]; notes?: string }) => apiRequest('POST', '/api/cashier/close', data),
+  approve: (id: string) => apiRequest('PATCH', `/api/cashier/${id}/approve`),
+  getHistory: () => fetch('/api/cashier/history').then(r => r.json()),
+  getDetail: (id: string) => fetch(`/api/cashier/${id}/detail`).then(r => r.json()),
+};
+
+// Refunds API
+export const refundsApi = {
+  getAll: () => fetch('/api/refunds').then(r => r.json()),
+  getById: (id: string) => fetch(`/api/refunds/${id}`).then(r => r.json()),
+  create: (data: any) => apiRequest('POST', '/api/refunds', data),
+  approve: (id: string) => apiRequest('PATCH', `/api/refunds/${id}/approve`),
+  process: (id: string) => apiRequest('PATCH', `/api/refunds/${id}/process`),
+  reject: (id: string, notes: string) => apiRequest('PATCH', `/api/refunds/${id}/reject`, { notes }),
+};
+
+// Maintenance API
+export const maintenanceApi = {
+  getByVehicle: (vehicleId: string) => fetch(`/api/vehicles/${vehicleId}/maintenance`).then(r => r.json()),
+  getAlerts: () => fetch('/api/maintenance/alerts').then(r => r.json()),
+  create: (vehicleId: string, data: any) => apiRequest('POST', `/api/vehicles/${vehicleId}/maintenance`, data),
+  update: (id: string, data: any) => apiRequest('PATCH', `/api/maintenance/${id}`, data),
+  remove: (id: string) => apiRequest('DELETE', `/api/maintenance/${id}`),
+};
+
+// Customers API
+export const customersApi = {
+  getAll: (search?: string, limit?: number) => {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (limit) params.set('limit', limit.toString());
+    const qs = params.toString();
+    return fetch(`/api/customers${qs ? `?${qs}` : ''}`).then(r => r.json());
+  },
+  search: (phone: string) => fetch(`/api/customers/search?phone=${encodeURIComponent(phone)}`).then(r => r.json()),
+  getById: (id: string) => fetch(`/api/customers/${id}`).then(r => r.json()),
+  create: (data: any) => apiRequest('POST', '/api/customers', data),
+  update: (id: string, data: any) => apiRequest('PATCH', `/api/customers/${id}`, data),
+};
+
+// Driver Performance API
+export const driverPerformanceApi = {
+  get: (driverId: string, days?: number) => {
+    const qs = days ? `?days=${days}` : '';
+    return fetch(`/api/drivers/${driverId}/performance${qs}`).then(r => r.json());
+  },
+};
+
 // Seed API
 export const seedApi = {
   run: () => apiRequest('POST', '/api/seed').then(res => res.json())

@@ -4,7 +4,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   MapPin, Store, Truck, UserCheck, LayoutGrid, Route, Calendar, DollarSign,
   Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText, BadgePercent, ClipboardList, CalendarDays, CalendarRange, LogOut,
-  BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard, ShieldCheck, Receipt, PackagePlus, PackageSearch, Boxes, Weight
+  BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard, ShieldCheck, Receipt, PackagePlus, PackageSearch, Boxes, Weight,
+  LayoutDashboard, RotateCcw, Contact
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { usePermissions } from "@/lib/permissions";
@@ -13,6 +14,7 @@ const NAV_SECTIONS = [
   {
     title: "OPERASIONAL",
     items: [
+      { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard, flag: "page.dashboard" },
       { name: "Reservasi", path: "/cso", icon: Ticket, flag: "page.cso" },
       { name: "Kargo", path: "/cargo-terminal", icon: PackagePlus, flag: "page.cargo" },
       { name: "All Kargo", path: "/cargo", icon: PackageSearch, flag: "page.cargo" },
@@ -21,6 +23,14 @@ const NAV_SECTIONS = [
       { name: "Penjadwalan", path: "/scheduler", icon: CalendarRange, flag: "page.schedule" },
       { name: "SPJ", path: "/spj", icon: ClipboardList, flag: "page.spj" },
       { name: "Manifest", path: "/manifest", icon: FileText, flag: "page.manifest" },
+      { name: "Kasir", path: "/cashier", icon: Wallet, flag: "page.cashier" },
+      { name: "Refund", path: "/refunds", icon: RotateCcw, flag: "page.refunds" },
+    ]
+  },
+  {
+    title: "CRM",
+    items: [
+      { name: "Pelanggan", path: "/customers", icon: Contact, flag: "page.customers" },
     ]
   },
   {

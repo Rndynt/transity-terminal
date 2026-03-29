@@ -23,6 +23,12 @@ import { registerReportsRoutes } from "./modules/reports/reports.routes";
 import { registerAdminRoutes } from "./modules/rbac/rbac.admin.routes";
 import { registerAppRoutes } from "./modules/app/app.routes";
 import { registerSchedulerRoutes } from "./modules/scheduler/scheduler.routes";
+import { registerDashboardRoutes } from "./modules/dashboard/dashboard.routes";
+import { registerNotificationsRoutes } from "./modules/notifications/notifications.routes";
+import { registerCashierRoutes } from "./modules/cashier/cashier.routes";
+import { registerRefundsRoutes } from "./modules/refunds/refunds.routes";
+import { registerMaintenanceRoutes } from "./modules/maintenance/maintenance.routes";
+import { registerCustomersRoutes } from "./modules/customers/customers.routes";
 
 export async function registerRoutes(app: FastifyInstance): Promise<FastifyInstance> {
   registerAuthRoutes(app);
@@ -68,6 +74,12 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
   registerReportsRoutes(app);
   registerAdminRoutes(app);
   registerSchedulerRoutes(app, storage);
+  registerDashboardRoutes(app);
+  registerNotificationsRoutes(app);
+  registerCashierRoutes(app);
+  registerRefundsRoutes(app);
+  registerMaintenanceRoutes(app);
+  registerCustomersRoutes(app);
 
   app.post('/api/seed', { preHandler: [requireFlag('admin.flags.manage')] }, async (req: any, reply: any) => {
     if (process.env.NODE_ENV === 'production') {

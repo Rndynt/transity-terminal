@@ -60,6 +60,11 @@ const FEATURE_FLAGS = [
   { id: "action.spj.issue",             name: "Terbitkan SPJ",          description: "Terbitkan / issue SPJ",                 category: "action" },
   { id: "action.spj.settle",            name: "Settle SPJ",             description: "Selesaikan / settle SPJ",               category: "action" },
 
+  { id: "page.dashboard",   name: "Halaman Dashboard",     description: "Akses dashboard ringkasan operasional", category: "page" },
+  { id: "page.cashier",     name: "Halaman Kasir",         description: "Akses halaman rekonsiliasi kasir",       category: "page" },
+  { id: "page.refunds",     name: "Halaman Refund",        description: "Akses halaman manajemen refund",         category: "page" },
+  { id: "page.customers",   name: "Halaman Pelanggan",     description: "Akses halaman CRM pelanggan",            category: "page" },
+
   { id: "admin.staff.manage", name: "Kelola Staff",         description: "Tambah/edit/hapus staff dan assign role & outlet", category: "admin" },
   { id: "admin.flags.manage", name: "Kelola Feature Flags", description: "Toggle feature flags per role",                    category: "admin" },
 ];
@@ -115,6 +120,11 @@ const DEFAULT_MATRIX: Record<string, FlagMatrix> = {
   "action.spj.create":            { owner: true, finance: false, manager: true,  spv_operations: true,  operations: true,  spv_cso: false, cso: false },
   "action.spj.issue":             { owner: true, finance: false, manager: true,  spv_operations: true,  operations: false, spv_cso: false, cso: false },
   "action.spj.settle":            { owner: true, finance: false, manager: true,  spv_operations: true,  operations: false, spv_cso: false, cso: false },
+
+  "page.dashboard":   { owner: true, finance: true,  manager: true,  spv_operations: true,  operations: false, spv_cso: true,  cso: false },
+  "page.cashier":     { owner: true, finance: true,  manager: true,  spv_operations: true,  operations: false, spv_cso: true,  cso: true  },
+  "page.refunds":     { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false },
+  "page.customers":   { owner: true, finance: false, manager: true,  spv_operations: false, operations: false, spv_cso: true,  cso: true  },
 
   "admin.staff.manage": { owner: true, finance: false, manager: false, spv_operations: false, operations: false, spv_cso: false, cso: false },
   "admin.flags.manage": { owner: true, finance: false, manager: false, spv_operations: false, operations: false, spv_cso: false, cso: false },

@@ -77,6 +77,22 @@ The system uses Socket.io with room-based subscriptions for efficient event targ
 - **TripSelector subscriptions**: Subscribes to trip rooms (for real trips), base rooms (for virtual trips — to catch materialization), and CSO room (for outlet-scoped updates).
 - **SeatMap subscriptions**: Subscribes to the specific trip room for real-time seat updates.
 
+## New Modules (Phase 2)
+The following modules were added with Controller-Service-Routes pattern:
+- **Dashboard** (`/dashboard`): Operational summary — trips, bookings, revenue, cargo, load factor, alerts, recent bookings. Flag: `page.dashboard`.
+- **Cashier** (`/cashier`): Open/close/approve daily cash sessions with settlement breakdown. Flag: `page.cashier`.
+- **Refunds** (`/refunds`): Create/approve/process/reject refund requests. Flag: `page.refunds`.
+- **Customers** (`/customers`): CRM — customer profiles with tags (regular/vip/frequent/blacklist), booking history. Flag: `page.customers`.
+- **Maintenance** (`/api/maintenance/*`): Vehicle maintenance records and alerts. Embedded in MastersPage vehicle detail.
+- **Notifications**: Bell icon in header with real-time unread count, mark read/all, delete.
+- **Driver Performance** (`/api/drivers/:id/performance`): Trip count, revenue, ratings per driver. Embedded in MastersPage driver detail.
+
+### Key Patterns for New Modules
+- Backend: `routes.ts` (thin, with `requireFlag` preHandler) → `controller.ts` → `service.ts` (uses `db.execute(sql)` for raw SQL)
+- Frontend: `lib/api.ts` has domain API helpers (`customersApi`, `cashierApi`, etc.); `lib/constants.ts` has status maps (`REFUND_STATUS_MAP`, etc.)
+- `payments` table uses `paid_at` (NOT `created_at`) — all queries referencing payment time must use `paid_at`
+- `db.execute(sql)` returns `{rows:[]}` — always extract with: `Array.isArray(result) ? result : (result as any).rows || []`
+
 ## Performance Optimizations
 - **`getActiveBookingsForTrip`**: Filters bookings at DB level (WHERE status IN active statuses) instead of fetching all then filtering in memory. Used by getSeatmap and getSeatPassengerDetails.
 - **Virtual trip price rules**: Uses targeted `SELECT WHERE pattern_id IN (...)` + Set membership check instead of loading ALL price rules.

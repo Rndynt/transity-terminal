@@ -31,6 +31,10 @@ const PaymentsReportPage = lazy(() => import("@/pages/reports/PaymentsReportPage
 const CommercialFeeReportPage = lazy(() => import("@/pages/reports/CommercialFeeReportPage"));
 const AdminStaffPage = lazy(() => import("@/pages/admin/AdminStaffPage"));
 const AdminFlagsPage = lazy(() => import("@/pages/admin/AdminFlagsPage"));
+const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage"));
+const CashierPage = lazy(() => import("@/pages/cashier/CashierPage"));
+const RefundsPage = lazy(() => import("@/pages/refunds/RefundsPage"));
+const CustomersPage = lazy(() => import("@/pages/customers/CustomersPage"));
 
 function PageLoader() {
   return (
@@ -111,6 +115,26 @@ function Router() {
                     <Route path="/bookings">
                       <RequireFlag flag="page.bookings">
                         <AllBookingsPage />
+                      </RequireFlag>
+                    </Route>
+                    <Route path="/dashboard">
+                      <RequireFlag flag="page.dashboard">
+                        <DashboardPage />
+                      </RequireFlag>
+                    </Route>
+                    <Route path="/cashier">
+                      <RequireFlag flag="page.cashier">
+                        <CashierPage />
+                      </RequireFlag>
+                    </Route>
+                    <Route path="/refunds">
+                      <RequireFlag flag="page.refunds">
+                        <RefundsPage />
+                      </RequireFlag>
+                    </Route>
+                    <Route path="/customers">
+                      <RequireFlag flag="page.customers">
+                        <CustomersPage />
                       </RequireFlag>
                     </Route>
                     <Route path="/spj">

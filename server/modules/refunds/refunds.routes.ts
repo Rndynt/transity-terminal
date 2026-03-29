@@ -1,0 +1,14 @@
+import type { FastifyInstance } from "fastify";
+import { RefundsController } from "./refunds.controller";
+import { requireFlag } from "../rbac/rbac.middleware";
+
+export function registerRefundsRoutes(app: FastifyInstance) {
+  const controller = new RefundsController();
+
+  app.get('/api/refunds', { preHandler: [requireFlag('page.refunds')] }, async (req, reply) => controller.getAll(req, reply));
+  app.get('/api/refunds/:id', { preHandler: [requireFlag('page.refunds')] }, async (req, reply) => controller.getById(req, reply));
+  app.post('/api/refunds', { preHandler: [requireFlag('page.refunds')] }, async (req, reply) => controller.create(req, reply));
+  app.patch('/api/refunds/:id/approve', { preHandler: [requireFlag('page.refunds')] }, async (req, reply) => controller.approve(req, reply));
+  app.patch('/api/refunds/:id/process', { preHandler: [requireFlag('page.refunds')] }, async (req, reply) => controller.process(req, reply));
+  app.patch('/api/refunds/:id/reject', { preHandler: [requireFlag('page.refunds')] }, async (req, reply) => controller.reject(req, reply));
+}

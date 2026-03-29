@@ -17,3 +17,11 @@ export const cargoStatusEnum = pgEnum('cargo_status', ['pending', 'received', 'l
 export const spjStatusEnum = pgEnum('spj_status', ['draft', 'issued', 'on_trip', 'settled']);
 export const costItemCategoryEnum = pgEnum('cost_item_category', ['bbm', 'tol', 'makan', 'parkir', 'lainnya']);
 export const bookingHistoryActionEnum = pgEnum('booking_history_action', ['unseated', 'reassigned', 'rescheduled', 'canceled', 'status_change']);
+
+export const notificationSeverityEnum = pgEnum('notification_severity', ['info', 'warning', 'critical']);
+export const notificationTypeEnum = pgEnum('notification_type', ['booking_pending', 'trip_no_driver', 'spj_overdue', 'capacity_alert', 'cargo_status', 'refund_request', 'cashier_closing', 'maintenance_due', 'general']);
+export const cashierSessionStatusEnum = pgEnum('cashier_session_status', ['open', 'closing', 'closed', 'approved']);
+export const refundStatusEnum = pgEnum('refund_status', ['pending', 'approved', 'processed', 'rejected']);
+export const maintenanceTypeEnum = pgEnum('maintenance_type', ['routine_service', 'repair', 'inspection', 'tire_change', 'oil_change', 'other']);
+export const maintenanceStatusEnum = pgEnum('maintenance_status', ['scheduled', 'in_progress', 'completed', 'overdue']);
+export const customerTagEnum = pgEnum('customer_tag', ['regular', 'vip', 'frequent', 'blacklist']);

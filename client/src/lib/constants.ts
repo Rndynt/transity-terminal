@@ -64,6 +64,39 @@ export const HISTORY_ACTION_MAP: Record<HistoryAction, { label: string; color: s
   status_change: { label: 'Status Berubah', color: 'text-gray-600',   dotColor: 'bg-gray-400' },
 };
 
+export type RefundStatus = 'pending' | 'approved' | 'processed' | 'rejected';
+export type CashierSessionStatus = 'open' | 'closing' | 'closed' | 'approved';
+export type MaintenanceStatus = 'scheduled' | 'in_progress' | 'completed' | 'overdue';
+export type CustomerTag = 'regular' | 'vip' | 'frequent' | 'blacklist';
+
+export const REFUND_STATUS_MAP: Record<RefundStatus, { label: string; color: string; bg: string }> = {
+  pending:   { label: 'Pending',   color: 'text-amber-700',   bg: 'bg-amber-50 border border-amber-200' },
+  approved:  { label: 'Approved',  color: 'text-blue-700',    bg: 'bg-blue-50 border border-blue-200' },
+  processed: { label: 'Diproses',  color: 'text-green-700',   bg: 'bg-green-50 border border-green-200' },
+  rejected:  { label: 'Ditolak',   color: 'text-red-700',     bg: 'bg-red-50 border border-red-200' },
+};
+
+export const CASHIER_STATUS_MAP: Record<CashierSessionStatus, { label: string; color: string; bg: string }> = {
+  open:     { label: 'Aktif',              color: 'text-green-700',  bg: 'bg-green-50 border border-green-200' },
+  closing:  { label: 'Menunggu Approval',  color: 'text-amber-700',  bg: 'bg-amber-50 border border-amber-200' },
+  closed:   { label: 'Ditutup',            color: 'text-gray-600',   bg: 'bg-gray-50 border border-gray-200' },
+  approved: { label: 'Disetujui',          color: 'text-blue-700',   bg: 'bg-blue-50 border border-blue-200' },
+};
+
+export const MAINTENANCE_STATUS_MAP: Record<MaintenanceStatus, { label: string; color: string; bg: string }> = {
+  scheduled:   { label: 'Terjadwal',     color: 'text-blue-700',   bg: 'bg-blue-50 border border-blue-200' },
+  in_progress: { label: 'Dalam Proses',  color: 'text-amber-700',  bg: 'bg-amber-50 border border-amber-200' },
+  completed:   { label: 'Selesai',       color: 'text-green-700',  bg: 'bg-green-50 border border-green-200' },
+  overdue:     { label: 'Terlambat',     color: 'text-red-700',    bg: 'bg-red-50 border border-red-200' },
+};
+
+export const CUSTOMER_TAG_MAP: Record<CustomerTag, { label: string; color: string; bg: string }> = {
+  regular:   { label: 'Regular',   color: 'text-gray-700',   bg: 'bg-gray-50 border border-gray-200' },
+  vip:       { label: 'VIP',       color: 'text-purple-700', bg: 'bg-purple-50 border border-purple-200' },
+  frequent:  { label: 'Frequent',  color: 'text-blue-700',   bg: 'bg-blue-50 border border-blue-200' },
+  blacklist: { label: 'Blacklist', color: 'text-red-700',    bg: 'bg-red-50 border border-red-200' },
+};
+
 export const ALL_BOOKING_STATUSES: BookingStatus[] = ['pending', 'confirmed', 'checked_in', 'paid', 'canceled', 'refunded', 'unseated'];
 export const ALL_CHANNELS: BookingChannel[] = ['CSO', 'WEB', 'APP', 'OTA'];
 
