@@ -868,6 +868,7 @@ export default function CargoTerminalPage() {
                     setSelectedTripDate('');
                     setTripsSearched(true);
                     setStep(2);
+                    setMobilePanel('right');
                     setTimeout(() => { refetchAllTrips(); }, 50);
                   }}
                   disabled={!canProceedStep1}
