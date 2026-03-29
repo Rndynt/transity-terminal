@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearch, useLocation } from 'wouter';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -106,74 +105,75 @@ export default function MastersPage() {
     );
   }
 
+  const activeTabDef = tabs.find(t => t.id === activeTab);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="masters-page">
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
-        <div className="max-w-7xl mx-auto w-full p-3 sm:p-4 md:p-6 space-y-4">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Master Data
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Konfigurasi halte, kendaraan, rute, dan aturan harga sistem perjalanan multi-halte
-            </p>
+      <div className="border-b px-4 sm:px-6 py-3 sm:py-4 shrink-0">
+        <div className="flex items-center gap-2.5 sm:gap-3 mb-1">
+          <LayoutGrid className="w-5 h-5 text-primary flex-shrink-0" />
+          <h1 className="text-lg sm:text-xl font-semibold">Master Data</h1>
+        </div>
+        <p className="text-xs sm:text-sm text-muted-foreground">
+          Konfigurasi halte, kendaraan, rute, dan aturan harga sistem perjalanan multi-halte
+        </p>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1 flex flex-col overflow-hidden">
+        <div className="bg-white border-b border-gray-100 flex-shrink-0">
+          <div className="sm:hidden px-3 py-2">
+            <Select value={activeTab} onValueChange={handleTabChange}>
+              <SelectTrigger className="w-full h-9 text-sm">
+                <SelectValue placeholder="Pilih modul..." />
+              </SelectTrigger>
+              <SelectContent>
+                {tabs.map((tab) => (
+                  <SelectItem key={tab.id} value={tab.id}>
+                    <div className="flex items-center gap-2">
+                      <tab.icon className="h-3.5 w-3.5" />
+                      <span>{tab.label}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <Card className="overflow-hidden border-none shadow-none bg-transparent sm:bg-card sm:border sm:shadow-sm">
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-              <div className="sm:hidden mb-4">
-                <Select value={activeTab} onValueChange={handleTabChange}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Pilih modul..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tabs.map((tab) => (
-                      <SelectItem key={tab.id} value={tab.id}>
-                        <div className="flex items-center gap-2">
-                          <tab.icon className="h-4 w-4" />
-                          <span>{tab.label}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="hidden sm:block border-b border-border overflow-x-auto">
-                <TabsList className="inline-flex h-auto p-0 bg-transparent w-max min-w-full">
-                  {tabs.map((tab) => {
-                    const Icon = tab.icon;
-                    return (
-                      <TabsTrigger
-                        key={tab.id}
-                        value={tab.id}
-                        className="flex items-center gap-1.5 h-auto py-3 px-4 flex-shrink-0 data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none data-[state=active]:shadow-none text-muted-foreground hover:text-foreground transition-colors"
-                        data-testid={`tab-${tab.id}`}
-                      >
-                        <Icon className="h-4 w-4 flex-shrink-0" />
-                        <span className="text-sm font-medium whitespace-nowrap">{tab.label}</span>
-                      </TabsTrigger>
-                    );
-                  })}
-                </TabsList>
-              </div>
-
-              <CardContent className="p-0 sm:p-4 md:p-6 mt-4 sm:mt-0">
-                {tabs.map((tab) => (
-                  <TabsContent
+          <div className="hidden sm:block overflow-x-auto">
+            <TabsList className="inline-flex h-auto p-0 bg-transparent w-max min-w-full px-3 md:px-5">
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <TabsTrigger
                     key={tab.id}
                     value={tab.id}
-                    className="mt-0 focus-visible:outline-none focus-visible:ring-0"
-                    data-testid={`content-${tab.id}`}
+                    className="flex items-center gap-1.5 h-auto py-2.5 px-3 flex-shrink-0 data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-blue-600 data-[state=active]:text-blue-700 rounded-none data-[state=active]:shadow-none text-gray-500 hover:text-gray-700 transition-colors"
+                    data-testid={`tab-${tab.id}`}
                   >
-                    <tab.component />
-                  </TabsContent>
-                ))}
-              </CardContent>
-            </Tabs>
-          </Card>
+                    <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="text-xs font-medium whitespace-nowrap">{tab.label}</span>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </div>
         </div>
-      </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-3 md:p-5">
+            {tabs.map((tab) => (
+              <TabsContent
+                key={tab.id}
+                value={tab.id}
+                className="mt-0 focus-visible:outline-none focus-visible:ring-0"
+                data-testid={`content-${tab.id}`}
+              >
+                <tab.component />
+              </TabsContent>
+            ))}
+          </div>
+        </div>
+      </Tabs>
     </div>
   );
 }
