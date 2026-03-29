@@ -645,8 +645,8 @@ export default function CargoTerminalPage() {
             </div>
           </div>
           <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-            <div className={`${mobilePanel === 'left' ? 'flex' : 'hidden'} md:flex md:w-[420px] lg:w-[420px] xl:w-[460px] md:border-r md:border-gray-200 flex-col flex-shrink-0`}>
-              <div className="p-3 md:p-4 space-y-3 overflow-y-auto flex-1">
+            <div className={`${mobilePanel === 'left' ? 'flex' : 'hidden'} md:flex flex-1 md:border-r md:border-gray-200 flex-col`}>
+              <div className="p-3 md:p-5 space-y-4 overflow-y-auto flex-1">
               <div className="border border-gray-200 rounded-xl p-3 bg-white">
                 <div className="flex items-center gap-1.5 mb-2">
                   <MapPin className="w-3.5 h-3.5 text-amber-600" />
@@ -864,7 +864,7 @@ export default function CargoTerminalPage() {
 
               </div>
 
-              <div className="border-t border-gray-200 bg-white px-3 md:px-4 py-2.5 flex-shrink-0">
+              <div className="border-t border-gray-200 bg-white px-3 md:px-5 py-2.5 flex-shrink-0">
                 <button
                   onClick={() => {
                     setTariffCache({});
@@ -886,7 +886,7 @@ export default function CargoTerminalPage() {
             </div>
 
             <div className={`${mobilePanel === 'right' ? 'flex' : 'hidden'} md:flex flex-1 flex-col bg-gray-50/50`}>
-              <div className="p-3 md:p-4 space-y-3 flex-1 overflow-y-auto">
+              <div className="p-3 md:p-5 space-y-4 flex-1 overflow-y-auto">
                 {!showTripsPanel && (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <Package className="w-10 h-10 text-gray-200 mb-3" />
