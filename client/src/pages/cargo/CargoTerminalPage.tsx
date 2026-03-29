@@ -888,10 +888,9 @@ export default function CargoTerminalPage() {
             <div className={`${mobilePanel === 'right' ? 'flex' : 'hidden'} md:flex flex-1 flex-col bg-gray-50/50`}>
               <div className="p-3 md:p-5 space-y-4 flex-1 overflow-y-auto">
                 {!showTripsPanel && (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <Package className="w-10 h-10 text-gray-200 mb-3" />
-                    <p className="text-sm text-gray-400 font-medium">Klik "Cari Jadwal" untuk melihat trip</p>
-                    <p className="text-[11px] text-gray-300 mt-1">Isi data kiriman terlebih dahulu, lalu cari jadwal</p>
+                  <div className="h-full flex flex-col items-center justify-center text-gray-300 py-12 md:py-0">
+                    <Package className="w-8 h-8 text-gray-300 mb-1.5" />
+                    <p className="text-xs text-gray-400">Isi data kiriman terlebih dahulu</p>
                   </div>
                 )}
 

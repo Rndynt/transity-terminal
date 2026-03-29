@@ -723,9 +723,8 @@ export default function CsoPage() {
                     />
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-gray-300 py-12 md:py-0">
-                      <MapPin className="w-10 h-10 md:w-12 md:h-12 mb-3" />
-                      <p className="text-sm font-medium text-gray-400">Pilih jadwal terlebih dahulu</p>
-                      <p className="text-xs text-gray-300 mt-1">Rute akan muncul di sini</p>
+                      <MapPin className="w-8 h-8 text-gray-300 mb-1.5" />
+                      <p className="text-xs text-gray-400">Pilih jadwal terlebih dahulu</p>
                     </div>
                   )}
                 </div>
