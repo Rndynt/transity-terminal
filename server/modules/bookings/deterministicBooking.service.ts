@@ -275,7 +275,7 @@ export class DeterministicBookingService {
               conflicts.push(seatNo);
             }
             // For hold conflicts, verify operator ownership
-            if (row.holdRef && !this.isHoldOwnedByOperator(row.holdRef, request.createdBy)) {
+            if (row.holdRef && !(await this.isHoldOwnedByOperator(row.holdRef, request.createdBy))) {
               conflicts.push(seatNo);
             }
           }

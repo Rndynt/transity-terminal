@@ -19,9 +19,13 @@ class WebSocketService {
   private io: SocketIOServer | null = null;
 
   initialize(httpServer: HttpServer) {
+    const allowedOrigins = process.env.CORS_ORIGINS
+      ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
+      : (process.env.NODE_ENV === 'development' ? true : false);
+
     this.io = new SocketIOServer(httpServer, {
       cors: {
-        origin: "*",
+        origin: allowedOrigins,
         methods: ["GET", "POST"]
       },
       transports: ['websocket', 'polling']

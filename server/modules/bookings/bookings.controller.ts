@@ -162,7 +162,7 @@ export class BookingsController {
         ...bookingData,
         outletId: staffOutletId ?? bookingData.outletId ?? undefined,
         totalAmount: bookingData.totalAmount.toString(),
-        createdBy: req.user?.id || req.headers['x-operator-id'] as string || 'default-operator'
+        createdBy: req.user?.id ?? 'system'
       };
 
       const result = await this.bookingsService.createBooking(
@@ -221,7 +221,7 @@ export class BookingsController {
   async createHold(req: FastifyRequest, reply: FastifyReply) {
     try {
       const validatedData = createHoldSchema.parse(req.body);
-      const operatorId = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
+      const operatorId = req.user?.id ?? 'system';
       
       const result = await this.bookingsService.createHold(
         validatedData.tripId,
@@ -273,6 +273,24 @@ export class BookingsController {
 
   async releaseHold(req: FastifyRequest, reply: FastifyReply) {
     const { holdRef } = req.params;
+    const operatorId = req.user?.id ?? 'system';
+
+    const holdCheck = await this.bookingsService.isHoldOwner(holdRef, operatorId);
+    if (!holdCheck.exists) {
+      return reply.code(404).send({
+        error: 'Not found',
+        code: 'HOLD_NOT_FOUND',
+        details: 'Hold not found or already expired'
+      });
+    }
+    if (!holdCheck.owned) {
+      return reply.code(403).send({
+        error: 'Forbidden',
+        code: 'NOT_HOLD_OWNER',
+        details: 'You can only release holds that belong to you'
+      });
+    }
+
     await this.bookingsService.releaseHold(holdRef);
     reply.code(204).send();
   }
@@ -281,7 +299,7 @@ export class BookingsController {
     try {
       const validatedData = createPendingBookingSchema.parse(req.body);
       const { passengers, ...bookingData } = validatedData;
-      const operatorId = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
+      const operatorId = req.user?.id ?? 'system';
       
       // Enhanced validation
       if (validatedData.totalAmount <= 0) {
@@ -344,7 +362,7 @@ export class BookingsController {
 
   async getPendingBookings(req: FastifyRequest, reply: FastifyReply) {
     const { outletId } = req.query;
-    const operatorId = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
+    const operatorId = req.user?.id ?? 'system';
     
     const pendingBookings = await this.bookingsService.getPendingBookings(outletId as string, operatorId);
     reply.send(pendingBookings);
@@ -353,7 +371,7 @@ export class BookingsController {
   async releasePendingBooking(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { id } = req.params;
-      const operatorId = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
+      const operatorId = req.user?.id ?? 'system';
       
       await this.bookingsService.releasePendingBooking(id, operatorId);
       reply.code(204).send();
@@ -371,7 +389,7 @@ export class BookingsController {
     try {
       const { passengerId } = req.params;
       const { reason } = unseatPassengerSchema.parse(req.body || {});
-      const performedBy = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
+      const performedBy = req.user?.id ?? 'system';
       const result = await this.unseatService.unseatPassenger(passengerId, performedBy, reason);
       reply.send(result);
     } catch (error: any) {
@@ -387,7 +405,7 @@ export class BookingsController {
     try {
       const { bookingId } = req.params;
       const { reason } = unseatPassengerSchema.parse(req.body || {});
-      const performedBy = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
+      const performedBy = req.user?.id ?? 'system';
       const result = await this.unseatService.unseatAllPassengers(bookingId, performedBy, reason);
       reply.send(result);
     } catch (error: any) {
@@ -404,7 +422,7 @@ export class BookingsController {
     try {
       const { passengerId } = req.params;
       const data = reschedulePassengerSchema.parse(req.body);
-      const performedBy = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
+      const performedBy = req.user?.id ?? 'system';
       const result = await this.rescheduleService.reschedulePassenger(
         passengerId,
         data.newTripId,
@@ -432,7 +450,7 @@ export class BookingsController {
     try {
       const { passengerId } = req.params;
       const { newSeatNo } = z.object({ newSeatNo: z.string() }).parse(req.body);
-      const performedBy = req.user?.id || req.headers['x-operator-id'] as string || 'default-operator';
+      const performedBy = req.user?.id ?? 'system';
       const result = await this.unseatService.assignSeatToUnseated(passengerId, newSeatNo, performedBy);
       reply.send(result);
     } catch (error: any) {

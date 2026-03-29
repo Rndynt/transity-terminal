@@ -46,7 +46,7 @@ export function registerTripBasesRoutes(app: FastifyInstance, storage: IStorage)
         return reply.code(400).send({ message: 'Missing required fields: newTripId, newOriginStopId, newDestinationStopId, newOriginSeq, newDestinationSeq' });
       }
 
-      const performedBy = req.user?.id || req.headers['x-operator-id'] as string || 'system';
+      const performedBy = req.user?.id ?? 'system';
       const reason = body.reason || 'Batch reschedule — trip ditutup oleh operator';
 
       const result = await rescheduleService.batchRescheduleForTripClose(

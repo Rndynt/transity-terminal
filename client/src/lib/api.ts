@@ -6,10 +6,18 @@ import type {
   CsoAvailableTrip, Driver
 } from "@/types";
 
+async function assertOk<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error((body as any).error || (body as any).message || `Request failed (${response.status})`);
+  }
+  return response.json() as Promise<T>;
+}
+
 // Drivers API
 export const driversApi = {
-  getAll: () => fetch('/api/drivers').then(res => res.json()) as Promise<Driver[]>,
-  getById: (id: string) => fetch(`/api/drivers/${id}`).then(res => res.json()) as Promise<Driver>,
+  getAll: () => fetch('/api/drivers').then(r => assertOk<Driver[]>(r)),
+  getById: (id: string) => fetch(`/api/drivers/${id}`).then(r => assertOk<Driver>(r)),
   create: (data: any) => apiRequest('POST', '/api/drivers', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PUT', `/api/drivers/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/drivers/${id}`)
@@ -17,8 +25,8 @@ export const driversApi = {
 
 // Stops API
 export const stopsApi = {
-  getAll: () => fetch('/api/stops').then(res => res.json()) as Promise<Stop[]>,
-  getById: (id: string) => fetch(`/api/stops/${id}`).then(res => res.json()) as Promise<Stop>,
+  getAll: () => fetch('/api/stops').then(r => assertOk<Stop[]>(r)),
+  getById: (id: string) => fetch(`/api/stops/${id}`).then(r => assertOk<Stop>(r)),
   create: (data: any) => apiRequest('POST', '/api/stops', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PUT', `/api/stops/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/stops/${id}`)
@@ -26,8 +34,8 @@ export const stopsApi = {
 
 // Outlets API
 export const outletsApi = {
-  getAll: () => fetch('/api/outlets').then(res => res.json()) as Promise<Outlet[]>,
-  getById: (id: string) => fetch(`/api/outlets/${id}`).then(res => res.json()) as Promise<Outlet>,
+  getAll: () => fetch('/api/outlets').then(r => assertOk<Outlet[]>(r)),
+  getById: (id: string) => fetch(`/api/outlets/${id}`).then(r => assertOk<Outlet>(r)),
   create: (data: any) => apiRequest('POST', '/api/outlets', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PUT', `/api/outlets/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/outlets/${id}`)
@@ -35,8 +43,8 @@ export const outletsApi = {
 
 // Vehicles API
 export const vehiclesApi = {
-  getAll: () => fetch('/api/vehicles').then(res => res.json()) as Promise<Vehicle[]>,
-  getById: (id: string) => fetch(`/api/vehicles/${id}`).then(res => res.json()) as Promise<Vehicle>,
+  getAll: () => fetch('/api/vehicles').then(r => assertOk<Vehicle[]>(r)),
+  getById: (id: string) => fetch(`/api/vehicles/${id}`).then(r => assertOk<Vehicle>(r)),
   create: (data: any) => apiRequest('POST', '/api/vehicles', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PUT', `/api/vehicles/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/vehicles/${id}`)
@@ -44,8 +52,8 @@ export const vehiclesApi = {
 
 // Layouts API
 export const layoutsApi = {
-  getAll: () => fetch('/api/layouts').then(res => res.json()) as Promise<Layout[]>,
-  getById: (id: string) => fetch(`/api/layouts/${id}`).then(res => res.json()) as Promise<Layout>,
+  getAll: () => fetch('/api/layouts').then(r => assertOk<Layout[]>(r)),
+  getById: (id: string) => fetch(`/api/layouts/${id}`).then(r => assertOk<Layout>(r)),
   create: (data: any) => apiRequest('POST', '/api/layouts', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PUT', `/api/layouts/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/layouts/${id}`)
@@ -53,18 +61,18 @@ export const layoutsApi = {
 
 // Trip Patterns API
 export const tripPatternsApi = {
-  getAll: () => fetch('/api/trip-patterns').then(res => res.json()) as Promise<TripPattern[]>,
-  getById: (id: string) => fetch(`/api/trip-patterns/${id}`).then(res => res.json()) as Promise<TripPattern>,
+  getAll: () => fetch('/api/trip-patterns').then(r => assertOk<TripPattern[]>(r)),
+  getById: (id: string) => fetch(`/api/trip-patterns/${id}`).then(r => assertOk<TripPattern>(r)),
   create: (data: any) => apiRequest('POST', '/api/trip-patterns', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PUT', `/api/trip-patterns/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/trip-patterns/${id}`),
-  getStops: (patternId: string) => fetch(`/api/trip-patterns/${patternId}/stops`).then(res => res.json()) as Promise<PatternStop[]>
+  getStops: (patternId: string) => fetch(`/api/trip-patterns/${patternId}/stops`).then(r => assertOk<PatternStop[]>(r))
 };
 
 // Trip Bases API
 export const tripBasesApi = {
-  getAll: () => fetch('/api/trip-bases').then(res => res.json()),
-  getById: (id: string) => fetch(`/api/trip-bases/${id}`).then(res => res.json()),
+  getAll: () => fetch('/api/trip-bases').then(r => assertOk<any[]>(r)),
+  getById: (id: string) => fetch(`/api/trip-bases/${id}`).then(r => assertOk<any>(r)),
   create: (data: any) => apiRequest('POST', '/api/trip-bases', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PUT', `/api/trip-bases/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/trip-bases/${id}`)
@@ -83,25 +91,25 @@ export const patternStopsApi = {
 export const tripsApi = {
   getAll: (date?: string) => {
     const url = date ? `/api/trips?date=${date}` : '/api/trips';
-    return fetch(url).then(res => res.json()) as Promise<TripWithDetails[]>;
+    return fetch(url).then(r => assertOk<TripWithDetails[]>(r));
   },
   getCsoAvailableTrips: (date: string, outletId: string) => {
     return fetch(`/api/cso/available-trips?date=${date}&outletId=${outletId}`)
-      .then(res => res.json()) as Promise<CsoAvailableTrip[]>;
+      .then(r => assertOk<CsoAvailableTrip[]>(r));
   },
-  getById: (id: string) => fetch(`/api/trips/${id}`).then(res => res.json()) as Promise<Trip>,
+  getById: (id: string) => fetch(`/api/trips/${id}`).then(r => assertOk<Trip>(r)),
   create: (data: any) => apiRequest('POST', '/api/trips', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PUT', `/api/trips/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/trips/${id}`),
   deriveLegs: (id: string) => apiRequest('POST', `/api/trips/${id}/derive-legs`).then(res => res.json()),
   precomputeSeatInventory: (id: string) => apiRequest('POST', `/api/trips/${id}/precompute-seat-inventory`).then(res => res.json()),
-  getStopTimes: (id: string) => fetch(`/api/trips/${id}/stop-times`).then(res => res.json()) as Promise<TripStopTime[]>,
-  getStopTimesWithEffectiveFlags: (id: string) => fetch(`/api/trips/${id}/stop-times/effective`).then(res => res.json()),
+  getStopTimes: (id: string) => fetch(`/api/trips/${id}/stop-times`).then(r => assertOk<TripStopTime[]>(r)),
+  getStopTimesWithEffectiveFlags: (id: string) => fetch(`/api/trips/${id}/stop-times/effective`).then(r => assertOk<any>(r)),
   bulkUpsertStopTimes: (id: string, data: any[]) => apiRequest('POST', `/api/trips/${id}/stop-times/bulk-upsert`, data).then(res => res.json()),
   syncStopTimesFromPattern: (id: string) => apiRequest('POST', `/api/trips/${id}/stop-times/sync-from-pattern`).then(res => res.json()),
   getSeatmap: (id: string, originSeq: number, destinationSeq: number) => 
     fetch(`/api/trips/${id}/seatmap?originSeq=${originSeq}&destinationSeq=${destinationSeq}`)
-      .then(res => res.json()) as Promise<SeatmapResponse>,
+      .then(r => assertOk<SeatmapResponse>(r)),
   getSeatPassengerDetails: (tripId: string, seatNo: string, originSeq: number, destinationSeq: number) =>
     fetch(`/api/trips/${tripId}/seats/${seatNo}/passenger-details?originSeq=${originSeq}&destinationSeq=${destinationSeq}`)
       .then(res => {
@@ -126,7 +134,7 @@ export const tripStopTimesApi = {
 
 // Price Rules API
 export const priceRulesApi = {
-  getAll: () => fetch('/api/price-rules').then(res => res.json()) as Promise<PriceRule[]>,
+  getAll: () => fetch('/api/price-rules').then(r => assertOk<PriceRule[]>(r)),
   create: (data: any) => apiRequest('POST', '/api/price-rules', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PUT', `/api/price-rules/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/price-rules/${id}`)
@@ -136,10 +144,10 @@ export const priceRulesApi = {
 export const bookingsApi = {
   getAll: (tripId?: string) => {
     const url = tripId ? `/api/bookings?tripId=${tripId}` : '/api/bookings';
-    return fetch(url).then(res => res.json()) as Promise<Booking[]>;
+    return fetch(url).then(r => assertOk<Booking[]>(r));
   },
-  getById: (id: string) => fetch(`/api/bookings/${id}`).then(res => res.json()) as Promise<Booking>,
-  getHistory: (bookingId: string) => fetch(`/api/bookings/${bookingId}/history`).then(res => res.json()),
+  getById: (id: string) => fetch(`/api/bookings/${id}`).then(r => assertOk<Booking>(r)),
+  getHistory: (bookingId: string) => fetch(`/api/bookings/${bookingId}/history`).then(r => assertOk<any>(r)),
   unseatAll: async (bookingId: string, reason?: string) => {
     const res = await fetch(`/api/bookings/${bookingId}/unseat-all`, {
       method: 'POST',
@@ -284,19 +292,19 @@ export const pricingApi = {
       destinationSeq: destinationSeq.toString(),
       passengerCount: passengerCount.toString()
     });
-    return fetch(`/api/pricing/quote-fare?${params}`).then(res => res.json()) as Promise<{
+    return fetch(`/api/pricing/quote-fare?${params}`).then(r => assertOk<{
       perPassenger: number;
       totalForAllPassengers: number;
       passengerCount: number;
       breakdown: any;
-    }>;
+    }>(r));
   }
 };
 
 // Cargo Types API
 export const cargoTypesApi = {
-  getAll: () => fetch('/api/cargo-types').then(res => res.json()),
-  getById: (id: string) => fetch(`/api/cargo-types/${id}`).then(res => res.json()),
+  getAll: () => fetch('/api/cargo-types').then(r => assertOk<any[]>(r)),
+  getById: (id: string) => fetch(`/api/cargo-types/${id}`).then(r => assertOk<any>(r)),
   create: (data: Record<string, unknown>) => apiRequest('POST', '/api/cargo-types', data).then(res => res.json()),
   update: (id: string, data: Record<string, unknown>) => apiRequest('PUT', `/api/cargo-types/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/cargo-types/${id}`)
@@ -305,9 +313,9 @@ export const cargoTypesApi = {
 export const cargoRatesApi = {
   getAll: (cargoTypeId?: string) => {
     const qs = cargoTypeId ? `?cargoTypeId=${cargoTypeId}` : '';
-    return fetch(`/api/cargo-rates${qs}`).then(res => res.json());
+    return fetch(`/api/cargo-rates${qs}`).then(r => assertOk<any[]>(r));
   },
-  getById: (id: string) => fetch(`/api/cargo-rates/${id}`).then(res => res.json()),
+  getById: (id: string) => fetch(`/api/cargo-rates/${id}`).then(r => assertOk<any>(r)),
   create: (data: Record<string, unknown>) => apiRequest('POST', '/api/cargo-rates', data).then(res => res.json()),
   update: (id: string, data: Record<string, unknown>) => apiRequest('PUT', `/api/cargo-rates/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/cargo-rates/${id}`)
@@ -320,21 +328,21 @@ export const cargoApi = {
     if (filters?.status) params.set('status', filters.status);
     if (filters?.outletId) params.set('outletId', filters.outletId);
     const qs = params.toString();
-    return fetch(`/api/cargo${qs ? `?${qs}` : ''}`).then(res => res.json());
+    return fetch(`/api/cargo${qs ? `?${qs}` : ''}`).then(r => assertOk<any[]>(r));
   },
-  getById: (id: string) => fetch(`/api/cargo/${id}`).then(res => res.json()),
-  getByWaybill: (waybillNumber: string) => fetch(`/api/cargo/waybill/${waybillNumber}`).then(res => res.json()),
+  getById: (id: string) => fetch(`/api/cargo/${id}`).then(r => assertOk<any>(r)),
+  getByWaybill: (waybillNumber: string) => fetch(`/api/cargo/waybill/${waybillNumber}`).then(r => assertOk<any>(r)),
   create: (data: Record<string, unknown>) => apiRequest('POST', '/api/cargo', data).then(res => res.json()),
   update: (id: string, data: Record<string, unknown>) => apiRequest('PUT', `/api/cargo/${id}`, data).then(res => res.json()),
   updateStatus: (id: string, status: string) => apiRequest('PATCH', `/api/cargo/${id}/status`, { status }).then(res => res.json()),
   quoteTariff: (cargoTypeId: string, originStopId: string, destinationStopId: string, weightKg: number, tripId?: string) => {
     const params = new URLSearchParams({ cargoTypeId, originStopId, destinationStopId, weightKg: String(weightKg) });
     if (tripId) params.set('tripId', tripId);
-    return fetch(`/api/cargo/quote-tariff?${params}`).then(res => res.json());
+    return fetch(`/api/cargo/quote-tariff?${params}`).then(r => assertOk<any>(r));
   },
   getAvailableTrips: (date: string, originStopId: string, destinationStopId: string) => {
     const params = new URLSearchParams({ date, originStopId, destinationStopId });
-    return fetch(`/api/cargo/available-trips?${params}`).then(res => res.json());
+    return fetch(`/api/cargo/available-trips?${params}`).then(r => assertOk<any[]>(r));
   }
 };
 
@@ -342,13 +350,13 @@ export const cargoApi = {
 export const costTemplatesApi = {
   getAll: (patternId?: string) => {
     const qs = patternId ? `?patternId=${patternId}` : '';
-    return fetch(`/api/cost-templates${qs}`).then(res => res.json());
+    return fetch(`/api/cost-templates${qs}`).then(r => assertOk<any[]>(r));
   },
-  getById: (id: string) => fetch(`/api/cost-templates/${id}`).then(res => res.json()),
+  getById: (id: string) => fetch(`/api/cost-templates/${id}`).then(r => assertOk<any>(r)),
   create: (data: any) => apiRequest('POST', '/api/cost-templates', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PUT', `/api/cost-templates/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/cost-templates/${id}`),
-  getItems: (templateId: string) => fetch(`/api/cost-templates/${templateId}/items`).then(res => res.json()),
+  getItems: (templateId: string) => fetch(`/api/cost-templates/${templateId}/items`).then(r => assertOk<any[]>(r)),
   createItem: (templateId: string, data: any) => apiRequest('POST', `/api/cost-templates/${templateId}/items`, data).then(res => res.json()),
   updateItem: (id: string, data: any) => apiRequest('PUT', `/api/cost-items/${id}`, data).then(res => res.json()),
   deleteItem: (id: string) => apiRequest('DELETE', `/api/cost-items/${id}`)
@@ -356,14 +364,14 @@ export const costTemplatesApi = {
 
 // Manifest API
 export const manifestApi = {
-  get: (tripId: string) => fetch(`/api/trips/${tripId}/manifest`).then(res => res.json()),
+  get: (tripId: string) => fetch(`/api/trips/${tripId}/manifest`).then(r => assertOk<any>(r)),
   recordPrint: (tripId: string) => apiRequest('POST', `/api/trips/${tripId}/manifest/print`).then(res => res.json()),
 };
 
 // Promotions API
 export const promotionsApi = {
-  getAll: () => fetch('/api/promotions').then(res => res.json()),
-  getById: (id: string) => fetch(`/api/promotions/${id}`).then(res => res.json()),
+  getAll: () => fetch('/api/promotions').then(r => assertOk<any[]>(r)),
+  getById: (id: string) => fetch(`/api/promotions/${id}`).then(r => assertOk<any>(r)),
   create: (data: any) => apiRequest('POST', '/api/promotions', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PATCH', `/api/promotions/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/promotions/${id}`),
@@ -375,7 +383,7 @@ export const promotionsApi = {
 export const vouchersApi = {
   getAll: (promoId?: string) => {
     const qs = promoId ? `?promoId=${promoId}` : '';
-    return fetch(`/api/vouchers${qs}`).then(res => res.json());
+    return fetch(`/api/vouchers${qs}`).then(r => assertOk<any[]>(r));
   },
   generate: (data: { promoId: string; count: number; prefix?: string; assignedTo?: string }) =>
     apiRequest('POST', '/api/vouchers/generate', data).then(res => res.json()),
@@ -411,13 +419,13 @@ export const spjApi = {
 
 // Dashboard API
 export const dashboardApi = {
-  getToday: () => fetch('/api/dashboard/today').then(r => r.json()),
+  getToday: () => fetch('/api/dashboard/today').then(r => assertOk<any>(r)),
 };
 
 // Notifications API
 export const notificationsApi = {
-  getAll: () => fetch('/api/notifications').then(r => r.json()),
-  getUnreadCount: () => fetch('/api/notifications/unread-count').then(r => r.json()),
+  getAll: () => fetch('/api/notifications').then(r => assertOk<any[]>(r)),
+  getUnreadCount: () => fetch('/api/notifications/unread-count').then(r => assertOk<any>(r)),
   markRead: (id: string) => apiRequest('PATCH', `/api/notifications/${id}/read`),
   markAllRead: () => apiRequest('PATCH', '/api/notifications/read-all'),
   remove: (id: string) => apiRequest('DELETE', `/api/notifications/${id}`),
@@ -425,19 +433,19 @@ export const notificationsApi = {
 
 // Cashier API
 export const cashierApi = {
-  getActive: () => fetch('/api/cashier/active').then(r => r.json()),
-  getActiveSummary: () => fetch('/api/cashier/active/summary').then(r => r.json()),
+  getActive: () => fetch('/api/cashier/active').then(r => assertOk<any>(r)),
+  getActiveSummary: () => fetch('/api/cashier/active/summary').then(r => assertOk<any>(r)),
   open: (data: { openingBalance: number; notes?: string }) => apiRequest('POST', '/api/cashier/open', data).then(r => r.json()),
   close: (data: { sessionId: string; settlements: any[]; notes?: string }) => apiRequest('POST', '/api/cashier/close', data),
   approve: (id: string) => apiRequest('PATCH', `/api/cashier/${id}/approve`),
-  getHistory: () => fetch('/api/cashier/history').then(r => r.json()),
-  getDetail: (id: string) => fetch(`/api/cashier/${id}/detail`).then(r => r.json()),
+  getHistory: () => fetch('/api/cashier/history').then(r => assertOk<any[]>(r)),
+  getDetail: (id: string) => fetch(`/api/cashier/${id}/detail`).then(r => assertOk<any>(r)),
 };
 
 // Refunds API
 export const refundsApi = {
-  getAll: () => fetch('/api/refunds').then(r => r.json()),
-  getById: (id: string) => fetch(`/api/refunds/${id}`).then(r => r.json()),
+  getAll: () => fetch('/api/refunds').then(r => assertOk<any[]>(r)),
+  getById: (id: string) => fetch(`/api/refunds/${id}`).then(r => assertOk<any>(r)),
   create: (data: any) => apiRequest('POST', '/api/refunds', data),
   approve: (id: string) => apiRequest('PATCH', `/api/refunds/${id}/approve`),
   process: (id: string) => apiRequest('PATCH', `/api/refunds/${id}/process`),
@@ -446,8 +454,8 @@ export const refundsApi = {
 
 // Maintenance API
 export const maintenanceApi = {
-  getByVehicle: (vehicleId: string) => fetch(`/api/vehicles/${vehicleId}/maintenance`).then(r => r.json()),
-  getAlerts: () => fetch('/api/maintenance/alerts').then(r => r.json()),
+  getByVehicle: (vehicleId: string) => fetch(`/api/vehicles/${vehicleId}/maintenance`).then(r => assertOk<any[]>(r)),
+  getAlerts: () => fetch('/api/maintenance/alerts').then(r => assertOk<any[]>(r)),
   create: (vehicleId: string, data: any) => apiRequest('POST', `/api/vehicles/${vehicleId}/maintenance`, data),
   update: (id: string, data: any) => apiRequest('PATCH', `/api/maintenance/${id}`, data),
   remove: (id: string) => apiRequest('DELETE', `/api/maintenance/${id}`),
@@ -460,10 +468,10 @@ export const customersApi = {
     if (search) params.set('search', search);
     if (limit) params.set('limit', limit.toString());
     const qs = params.toString();
-    return fetch(`/api/customers${qs ? `?${qs}` : ''}`).then(r => r.json());
+    return fetch(`/api/customers${qs ? `?${qs}` : ''}`).then(r => assertOk<any[]>(r));
   },
-  search: (phone: string) => fetch(`/api/customers/search?phone=${encodeURIComponent(phone)}`).then(r => r.json()),
-  getById: (id: string) => fetch(`/api/customers/${id}`).then(r => r.json()),
+  search: (phone: string) => fetch(`/api/customers/search?phone=${encodeURIComponent(phone)}`).then(r => assertOk<any[]>(r)),
+  getById: (id: string) => fetch(`/api/customers/${id}`).then(r => assertOk<any>(r)),
   create: (data: any) => apiRequest('POST', '/api/customers', data),
   update: (id: string, data: any) => apiRequest('PATCH', `/api/customers/${id}`, data),
 };
@@ -472,7 +480,7 @@ export const customersApi = {
 export const driverPerformanceApi = {
   get: (driverId: string, days?: number) => {
     const qs = days ? `?days=${days}` : '';
-    return fetch(`/api/drivers/${driverId}/performance${qs}`).then(r => r.json());
+    return fetch(`/api/drivers/${driverId}/performance${qs}`).then(r => assertOk<any>(r));
   },
 };
 

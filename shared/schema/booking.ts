@@ -68,7 +68,7 @@ export const payments = pgTable("payments", {
   id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   bookingId:   uuid("booking_id").notNull().references(() => bookings.id),
   method:      paymentMethodEnum("method").notNull(),
-  status:      paymentStatusEnum("status").default('success'),
+  status:      paymentStatusEnum("status").default('pending'),
   amount:      numeric("amount", { precision: 12, scale: 2 }).notNull(),
   providerRef: text("provider_ref"),
   paidAt:      timestamp("paid_at", { withTimezone: true }).defaultNow()

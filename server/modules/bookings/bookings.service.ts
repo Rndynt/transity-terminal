@@ -345,6 +345,15 @@ export class BookingsService {
     }
   }
 
+  async isHoldOwner(holdRef: string, operatorId: string): Promise<{ exists: boolean; owned: boolean }> {
+    const [hold] = await db
+      .select({ operatorId: seatHolds.operatorId })
+      .from(seatHolds)
+      .where(eq(seatHolds.holdRef, holdRef));
+    if (!hold) return { exists: false, owned: false };
+    return { exists: true, owned: hold.operatorId === operatorId };
+  }
+
   async releaseHold(holdRef: string): Promise<void> {
     await this.deterministicService.releaseHoldByRef(holdRef);
   }

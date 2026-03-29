@@ -122,7 +122,7 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
     const legIndexes: number[] = [];
     for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
 
-    const performedBy = req.headers['x-operator-id'] as string || 'default-operator';
+    const performedBy = req.user?.id ?? 'system';
 
     const updatedPassenger = await db.transaction(async (tx) => {
       const [updated] = await tx.update(passengersTable)

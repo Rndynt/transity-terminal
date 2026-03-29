@@ -93,6 +93,17 @@ The following modules were added with Controller-Service-Routes pattern:
 - `payments` table uses `paid_at` (NOT `created_at`) — all queries referencing payment time must use `paid_at`
 - `db.execute(sql)` returns `{rows:[]}` — always extract with: `Array.isArray(result) ? result : (result as any).rows || []`
 
+## Security Audit Fixes (Sprint 0 — Completed)
+Based on the Blink AI audit report (174 issues), the following critical/high security fixes have been applied:
+- **C-04**: Added `await` on `isHoldOwnedByOperator()` — prevents promise-truthiness bypass
+- **C-05**: Removed all `x-operator-id` header fallback patterns (10 locations) — prevents identity spoofing; all endpoints now use `req.user?.id ?? 'system'`
+- **C-06**: Changed `payments.status` default from `'success'` to `'pending'` — correct payment lifecycle
+- **C-10**: Added `assertOk<T>()` helper in `client/src/lib/api.ts` — all GET fetch calls now check `res.ok` before parsing JSON
+- **H-04**: WebSocket CORS tightened from `"*"` to env-configurable `CORS_ORIGINS` (defaults to `true` in dev, `false` in prod)
+- **H-05**: Hold delete (`DELETE /api/holds/:holdRef`) now validates ownership (404 if not found, 403 if not owner)
+- **H-16**: `Math.random()` replaced with `crypto.randomBytes()` + rejection sampling (no modulo bias) in `codeGenerator.ts`
+- **C-01**: `.env` parsing bug fixed (concatenated vars), `.gitignore` updated to exclude `.env`
+
 ## Performance Optimizations
 - **`getActiveBookingsForTrip`**: Filters bookings at DB level (WHERE status IN active statuses) instead of fetching all then filtering in memory. Used by getSeatmap and getSeatPassengerDetails.
 - **Virtual trip price rules**: Uses targeted `SELECT WHERE pattern_id IN (...)` + Set membership check instead of loading ALL price rules.
