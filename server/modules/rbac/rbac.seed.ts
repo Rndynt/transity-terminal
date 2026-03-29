@@ -174,5 +174,24 @@ export async function seedRbac() {
   }
   console.log(`  ✓ ${count} role-flag mappings (upserted)`);
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.log("[RBAC] Seeding dev staff member...");
+    await db.execute(sql`
+      INSERT INTO staff_members (id, user_id, role_id, outlet_id, is_active)
+      VALUES (
+        'aaaaaaaa-0000-0000-0000-000000000001',
+        'dev-user-001',
+        'owner',
+        (SELECT id FROM outlets WHERE name = 'Dipatiukur' LIMIT 1),
+        true
+      )
+      ON CONFLICT (user_id) DO UPDATE SET
+        role_id = EXCLUDED.role_id,
+        outlet_id = EXCLUDED.outlet_id,
+        is_active = EXCLUDED.is_active
+    `);
+    console.log("  ✓ dev staff member (owner @ Dipatiukur)");
+  }
+
   console.log("[RBAC] Seed complete.");
 }
