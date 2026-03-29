@@ -19,7 +19,7 @@ import BatchRescheduleDialog from '@/components/cso/BatchRescheduleDialog';
 import { useBookingFlow } from '@/hooks/useBookingFlow';
 import { useSeatHold } from '@/hooks/useSeatHold';
 import ModeTimer from '@/components/cso/ModeTimer';
-import { useLayout } from '@/components/layout/LayoutContext';
+import { useLayout, useHideAppHeader } from '@/components/layout/LayoutContext';
 import {
   ChevronRight, ChevronLeft, Loader2, MapPin,
   Armchair, ArrowRight, Ticket, Package, Clock,
@@ -321,12 +321,10 @@ export default function CsoPage() {
   const sortedSeats = [...selectedSeats].sort();
   const nowDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'numeric', year: 'numeric', timeZone: 'Asia/Jakarta' });
 
+  const hideHeader = useHideAppHeader();
   useEffect(() => {
-    if (!isMobile) return;
-    const el = document.querySelector('.cso-hide-default-header') as HTMLElement | null;
-    if (el) el.style.display = 'none';
-    return () => { if (el) el.style.display = ''; };
-  }, [isMobile]);
+    return hideHeader();
+  }, [hideHeader]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="cso-page">

@@ -11,7 +11,7 @@ import { fmtCurrency } from '@/lib/constants';
 import { queryClient } from '@/lib/queryClient';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { useLayout } from '@/components/layout/LayoutContext';
+import { useLayout, useHideAppHeader } from '@/components/layout/LayoutContext';
 import type { Stop, Outlet, CargoType, CargoAvailableTrip } from '@/types';
 
 const PAYMENT_METHODS = [
@@ -194,12 +194,10 @@ export default function CargoTerminalPage() {
   const [createdShipment, setCreatedShipment] = useState<any>(null);
   const [mobilePanel, setMobilePanel] = useState<'left' | 'right'>('left');
 
+  const hideHeader = useHideAppHeader();
   useEffect(() => {
-    if (!isMobile) return;
-    const el = document.querySelector('.cso-hide-default-header') as HTMLElement | null;
-    if (el) el.style.display = 'none';
-    return () => { if (el) el.style.display = ''; };
-  }, [isMobile]);
+    return hideHeader();
+  }, [hideHeader]);
 
   const { data: outlets = [], isLoading: outletsLoading } = useQuery({
     queryKey: ['/api/outlets'],

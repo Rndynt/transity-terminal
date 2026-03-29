@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState, useEffect, useCallback, useMemo } from "react";
 import Sidebar from "./Sidebar";
 import NotificationBell from "./NotificationBell";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -11,6 +11,7 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hideAppHeader, setHideAppHeaderState] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sidebar-collapsed');
@@ -40,10 +41,18 @@ export default function AppLayout({ children }: AppLayoutProps) {
     return () => { document.body.style.overflow = 'unset'; };
   }, [sidebarOpen, isMobile]);
 
-  const openSidebar = () => setSidebarOpen(true);
+  const openSidebar = useCallback(() => setSidebarOpen(true), []);
+  const setHideAppHeader = useCallback((hide: boolean) => setHideAppHeaderState(hide), []);
+
+  const ctxValue = useMemo(() => ({
+    openSidebar,
+    isMobile,
+    hideAppHeader,
+    setHideAppHeader,
+  }), [openSidebar, isMobile, hideAppHeader, setHideAppHeader]);
 
   return (
-    <LayoutContext.Provider value={{ openSidebar, isMobile }}>
+    <LayoutContext.Provider value={ctxValue}>
       <div className="flex h-screen bg-gray-50 font-['Inter',sans-serif]">
         {isMobile && sidebarOpen && (
           <div
@@ -60,26 +69,27 @@ export default function AppLayout({ children }: AppLayoutProps) {
           onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
         />
 
-        <div className="flex-1 flex flex-col overflow-hidden relative">
-          {isMobile && (
-            <div className="h-10 bg-white border-b border-gray-200 flex items-center justify-between gap-2 px-3 flex-shrink-0 lg:hidden cso-hide-default-header">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {!hideAppHeader && (
+            <div className="h-10 bg-white border-b border-gray-200 flex items-center justify-between gap-2 px-3 flex-shrink-0">
               <div className="flex items-center gap-2">
-                <button
-                  onClick={openSidebar}
-                  className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                  aria-label="Open sidebar"
-                  data-testid="open-sidebar"
-                >
-                  <Menu className="w-5 h-5" />
-                </button>
-                <span className="text-sm font-semibold text-gray-800">Transity</span>
+                {isMobile && (
+                  <button
+                    onClick={openSidebar}
+                    className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                    aria-label="Open sidebar"
+                    data-testid="open-sidebar"
+                  >
+                    <Menu className="w-5 h-5" />
+                  </button>
+                )}
+                {isMobile && (
+                  <span className="text-sm font-semibold text-gray-800">Transity</span>
+                )}
               </div>
-              <NotificationBell />
-            </div>
-          )}
-          {!isMobile && (
-            <div className="absolute top-2.5 right-4 z-30">
-              <NotificationBell />
+              <div className="ml-auto">
+                <NotificationBell />
+              </div>
             </div>
           )}
           {children}
