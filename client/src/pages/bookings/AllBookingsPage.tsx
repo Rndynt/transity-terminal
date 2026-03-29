@@ -5,8 +5,6 @@ import { bookingsApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import type { Booking, Stop } from '@/types';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -19,13 +17,13 @@ import {
   List, Search, X, Loader2, RefreshCw,
   ArrowRight, User,
   Calendar, Ticket, MapPin, ChevronDown, ChevronUp,
-  Bus, Package, ExternalLink, UserMinus, History
+  Package, ExternalLink, UserMinus, History
 } from 'lucide-react';
 import PassengerCard from '@/components/cso/PassengerCard';
 import { BookingStatusBadge, ChannelBadge } from '@/components/shared/StatusBadges';
 import { CanAccess } from '@/components/rbac/CanAccess';
 import {
-  BOOKING_STATUS_MAP, CHANNEL_MAP, HISTORY_ACTION_MAP,
+  BOOKING_STATUS_MAP, HISTORY_ACTION_MAP,
   ALL_BOOKING_STATUSES, ALL_CHANNELS,
   fmtCurrency, fmtDate, fmtShortDate, getPaymentLabel,
   type BookingStatus, type BookingChannel,
@@ -432,222 +430,185 @@ export default function AllBookingsPage() {
     });
   }, [enriched, search, statusFilter, channelFilter]);
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { all: bookings.length };
-    ALL_BOOKING_STATUSES.forEach(s => { c[s] = bookings.filter(b => b.status === s).length; });
-    return c;
-  }, [bookings]);
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Header */}
-      <div className="border-b px-6 py-4 shrink-0">
-        <div className="flex items-center gap-3 mb-1">
-          <List className="w-5 h-5 text-primary" />
-          <h1 className="text-xl font-semibold">All Bookings</h1>
+    <div className="flex-1 flex flex-col overflow-hidden" data-testid="all-bookings-page">
+      <div className="bg-white border-b border-gray-200 flex-shrink-0">
+        <div className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12">
+          <div className="flex items-center gap-1.5">
+            <List className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-bold text-gray-800">Daftar Booking</span>
+            <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded ml-1">
+              {filtered.length} booking
+            </span>
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Daftar semua transaksi booking dari semua channel dan outlet.
-        </p>
       </div>
 
-      {/* Filters */}
-      <div className="px-6 py-4 border-b bg-muted/20 shrink-0 space-y-3">
-        {/* Search + Refresh */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Cari kode, rute, atau operator..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-9 h-9 text-sm"
-              data-testid="input-search-bookings"
-            />
-            {search && (
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="p-3 md:p-4 space-y-3 flex-shrink-0 bg-white border-b border-gray-100">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Cari kode, rute, atau operator..."
+                  className="w-full h-9 pl-9 pr-8 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                  data-testid="input-search-bookings"
+                />
+                {search && (
+                  <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500" data-testid="btn-clear-search">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
               <button
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                onClick={() => setSearch('')}
-                data-testid="btn-clear-search"
+                onClick={() => refetch()}
+                disabled={isFetching}
+                className="h-9 px-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                data-testid="btn-refresh-bookings"
               >
-                <X className="w-3.5 h-3.5" />
+                <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+                <span className="hidden md:inline">Refresh</span>
               </button>
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto">
+              {([
+                { value: 'all' as const, label: 'Semua' },
+                ...ALL_BOOKING_STATUSES.map(s => ({ value: s, label: BOOKING_STATUS_MAP[s].label }))
+              ]).map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => setStatusFilter(f.value)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border whitespace-nowrap transition-colors ${
+                    statusFilter === f.value
+                      ? 'bg-blue-50 border-blue-300 text-blue-700'
+                      : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                  data-testid={`filter-status-${f.value}`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto">
+              {(['all', ...ALL_CHANNELS] as const).map(ch => (
+                <button
+                  key={ch}
+                  onClick={() => setChannelFilter(ch as BookingChannel | 'all')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border whitespace-nowrap transition-colors ${
+                    channelFilter === ch
+                      ? 'bg-blue-50 border-blue-300 text-blue-700'
+                      : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                  data-testid={`filter-channel-${ch}`}
+                >
+                  {ch === 'all' ? 'Semua Channel' : ch}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto">
+            {isLoading ? (
+              <LoadingState message="Memuat data booking..." size="lg" />
+            ) : filtered.length === 0 ? (
+              <EmptyState
+                icon={Package}
+                title="Tidak ada booking ditemukan."
+                action={(search || statusFilter !== 'all' || channelFilter !== 'all') ? (
+                  <button
+                    className="text-xs text-blue-600 hover:underline"
+                    onClick={() => { setSearch(''); setStatusFilter('all'); setChannelFilter('all'); }}
+                    data-testid="button-reset-filters"
+                  >
+                    Reset filter
+                  </button>
+                ) : undefined}
+              />
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-muted/60 backdrop-blur border-b z-10">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kode Booking</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rute</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden md:table-cell">Channel</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden lg:table-cell">Dibuat</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {filtered.map(b => (
+                    <tr
+                      key={b.id}
+                      className="hover:bg-muted/30 cursor-pointer transition-colors"
+                      onClick={() => setSelectedId(b.id)}
+                      data-testid={`row-booking-${b.id}`}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Ticket className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                          <span className="font-mono font-semibold text-blue-700 text-xs">
+                            {b.bookingCode ?? b.id.slice(0, 8).toUpperCase()}
+                          </span>
+                        </div>
+                        {b.createdBy && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5 pl-5 truncate max-w-[140px]">{b.createdBy}</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <BookingStatusBadge status={b.status ?? ''} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5 text-xs text-foreground">
+                          <span className="font-medium max-w-[100px] truncate">
+                            {b._originStop?.name ?? b.originStopId?.slice(0, 6) ?? '—'}
+                          </span>
+                          <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                          <span className="font-medium max-w-[100px] truncate">
+                            {b._destinationStop?.name ?? b.destinationStopId?.slice(0, 6) ?? '—'}
+                          </span>
+                        </div>
+                        {(b._originStop?.city || b._destinationStop?.city) && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {b._originStop?.city ?? ''} → {b._destinationStop?.city ?? ''}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell">
+                        <ChannelBadge channel={b.channel ?? ''} />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="font-semibold text-emerald-700 text-xs whitespace-nowrap">
+                          {fmtCurrency(b.totalAmount ?? 0)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 hidden lg:table-cell">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Calendar className="w-3 h-3 flex-shrink-0" />
+                          {fmtDate(b.createdAt)}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="gap-2 h-9"
-            data-testid="btn-refresh-bookings"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
-
-        {/* Status tabs */}
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            onClick={() => setStatusFilter('all')}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
-              statusFilter === 'all'
-                ? 'bg-gray-900 text-white border-gray-900'
-                : 'text-gray-600 border-gray-200 hover:border-gray-400'
-            }`}
-            data-testid="filter-status-all"
-          >
-            Semua ({counts.all})
-          </button>
-          {ALL_BOOKING_STATUSES.map(s => {
-            const sm = BOOKING_STATUS_MAP[s];
-            return (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(statusFilter === s ? 'all' : s)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
-                  statusFilter === s ? `${sm.bg} ${sm.color} border-current` : 'text-gray-600 border-gray-200 hover:border-gray-400'
-                }`}
-                data-testid={`filter-status-${s}`}
-              >
-                {sm.label} ({counts[s] ?? 0})
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Channel filter */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground font-medium">Channel:</span>
-          {(['all', ...ALL_CHANNELS] as const).map(ch => (
-            <button
-              key={ch}
-              onClick={() => setChannelFilter(ch as BookingChannel | 'all')}
-              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors border ${
-                channelFilter === ch
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'text-gray-600 border-gray-200 hover:border-blue-400'
-              }`}
-              data-testid={`filter-channel-${ch}`}
-            >
-              {ch === 'all' ? 'Semua' : ch}
-            </button>
-          ))}
+          {!isLoading && filtered.length > 0 && (
+            <div className="border-t px-3 md:px-5 py-2 flex-shrink-0 flex items-center justify-between bg-white">
+              <p className="text-xs text-muted-foreground">
+                Menampilkan <strong>{filtered.length}</strong> dari <strong>{bookings.length}</strong> booking
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto">
-        {isLoading ? (
-          <LoadingState message="Memuat data booking..." size="lg" />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={Package}
-            title="Tidak ada booking ditemukan."
-            action={(search || statusFilter !== 'all' || channelFilter !== 'all') ? (
-              <button
-                className="text-xs text-blue-600 hover:underline"
-                onClick={() => { setSearch(''); setStatusFilter('all'); setChannelFilter('all'); }}
-                data-testid="button-reset-filters"
-              >
-                Reset filter
-              </button>
-            ) : undefined}
-          />
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-muted/60 backdrop-blur border-b z-10">
-              <tr>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kode Booking</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rute</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden md:table-cell">Channel</th>
-                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden lg:table-cell">Dibuat</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {filtered.map(b => (
-                <tr
-                  key={b.id}
-                  className="hover:bg-muted/30 cursor-pointer transition-colors"
-                  onClick={() => setSelectedId(b.id)}
-                  data-testid={`row-booking-${b.id}`}
-                >
-                  {/* Kode Booking */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <Ticket className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                      <span className="font-mono font-semibold text-blue-700 text-xs">
-                        {b.bookingCode ?? b.id.slice(0, 8).toUpperCase()}
-                      </span>
-                    </div>
-                    {b.createdBy && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5 pl-5 truncate max-w-[140px]">{b.createdBy}</p>
-                    )}
-                  </td>
-
-                  {/* Status */}
-                  <td className="px-4 py-3">
-                    <BookingStatusBadge status={b.status ?? ''} />
-                  </td>
-
-                  {/* Rute */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5 text-xs text-foreground">
-                      <span className="font-medium max-w-[100px] truncate">
-                        {b._originStop?.name ?? b.originStopId?.slice(0, 6) ?? '—'}
-                      </span>
-                      <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                      <span className="font-medium max-w-[100px] truncate">
-                        {b._destinationStop?.name ?? b.destinationStopId?.slice(0, 6) ?? '—'}
-                      </span>
-                    </div>
-                    {(b._originStop?.city || b._destinationStop?.city) && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {b._originStop?.city ?? ''} → {b._destinationStop?.city ?? ''}
-                      </p>
-                    )}
-                  </td>
-
-                  {/* Channel */}
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <ChannelBadge channel={b.channel ?? ''} />
-                  </td>
-
-                  {/* Total */}
-                  <td className="px-4 py-3 text-right">
-                    <span className="font-semibold text-emerald-700 text-xs whitespace-nowrap">
-                      {fmtCurrency(b.totalAmount ?? 0)}
-                    </span>
-                  </td>
-
-                  {/* Dibuat */}
-                  <td className="px-4 py-3 hidden lg:table-cell">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Calendar className="w-3 h-3 flex-shrink-0" />
-                      {fmtDate(b.createdAt)}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Footer count */}
-      {!isLoading && filtered.length > 0 && (
-        <div className="border-t px-6 py-2 shrink-0 flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            Menampilkan <strong>{filtered.length}</strong> dari <strong>{bookings.length}</strong> booking
-          </p>
-        </div>
-      )}
-
-      {/* Detail Modal */}
       <BookingDetailModal
         bookingId={selectedId}
         isOpen={!!selectedId}
