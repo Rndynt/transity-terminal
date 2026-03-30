@@ -54,6 +54,23 @@ Pages interact with components, which utilize hooks, API clients, and React Quer
 - **Mobile App**: Uses internal JWT for authentication.
 - **RBAC + ABAC + Feature Flags**: A granular permission system with 7 roles and 36+ permission flags across 5 categories (page, report, master, action, admin). This controls access at both backend (middleware) and frontend levels. Refund permissions: `action.refund.create` (owner/manager/spv_cso/cso), `action.refund.approve` (owner/finance/manager), `action.refund.process` (owner/finance/manager).
 
+## Operator Settings & Branding
+Each terminal instance has customizable branding via `/admin/settings`:
+- **Brand name & tagline** displayed in sidebar
+- **Logo** (URL-based)
+- **Primary, secondary, accent colors** for UI theming
+- Stored in `operator_settings` table (auto-created on first access)
+- Sidebar reads settings via `GET /api/settings` with 5-min stale cache
+- Default fallback: "Transity" / "Multi-Stop Travel System" / blue (#2563EB)
+
+## Deployment
+See `DEPLOY.md` for full VPS deployment guide. Key points:
+- Each operator gets own terminal instance + database + Realmio tenant
+- Environment: `AUTHCORE_BASE_URL`, `AUTHCORE_TENANT_ID`, `DATABASE_URL`
+- `.env.example` provided as template
+- Nginx reverse proxy per subdomain (e.g., `nusa-terminal.transity.web.id`)
+- `apps/transityweb` is the OTA channel (separate deployment, ignore for terminal)
+
 ## External Dependencies
 - **PostgreSQL (via Neon)**: Primary database for all application data.
 - **Drizzle ORM**: Used for interacting with the PostgreSQL database.
