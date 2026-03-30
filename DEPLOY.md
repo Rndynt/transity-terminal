@@ -60,8 +60,8 @@ Hubungi admin Realmio untuk mendaftarkan tenant baru. Info yang didapat:
 
 | Info | Contoh Nusa Shuttle |
 |---|---|
-| `AUTHCORE_TENANT_ID` | `nusa-shuttle` |
-| `AUTHCORE_BASE_URL` | `https://transity.realmio.web.id` |
+| `REALMIO_TENANT_ID` | `nusa-shuttle` |
+| `REALMIO_BASE_URL` | `https://transity.realmio.web.id` |
 
 Minta juga admin Realmio menambahkan domain `nusa-terminal.transity.web.id` ke `TRUSTED_ORIGINS`.
 
@@ -88,8 +88,8 @@ Edit `.env`:
 DATABASE_URL=postgresql://nusa_user:password_aman_disini@localhost:5432/nusa_terminal
 
 # === AUTH (Realmio) ===
-AUTHCORE_BASE_URL=https://transity.realmio.web.id
-AUTHCORE_TENANT_ID=nusa-shuttle
+REALMIO_BASE_URL=https://transity.realmio.web.id
+REALMIO_TENANT_ID=nusa-shuttle
 
 # === SERVER ===
 NODE_ENV=production
@@ -196,8 +196,8 @@ sudo certbot --nginx -d nusa-terminal.transity.web.id
 | Variable | Wajib | Default | Keterangan |
 |---|---|---|---|
 | `DATABASE_URL` | Ya | - | Connection string PostgreSQL |
-| `AUTHCORE_BASE_URL` | Ya (prod) | `""` | URL Realmio |
-| `AUTHCORE_TENANT_ID` | Ya (prod) | `transity` | Tenant ID di Realmio |
+| `REALMIO_BASE_URL` | Ya (prod) | `""` | URL Realmio |
+| `REALMIO_TENANT_ID` | Ya (prod) | `transity` | Tenant ID di Realmio |
 | `NODE_ENV` | Ya | `development` | Set `production` untuk deploy |
 | `PORT` | Tidak | `5000` | Port Fastify server |
 | `DEV_BYPASS_AUTH` | Tidak | `false` | `true` = skip auth (dev only!) |
@@ -288,7 +288,7 @@ Setiap instance punya database sendiri, tenant Realmio sendiri, dan kustomisasi 
 
 | Masalah | Solusi |
 |---|---|
-| Login gagal / 502 | Cek `AUTHCORE_BASE_URL` benar dan Realmio bisa diakses dari VPS |
+| Login gagal / 502 | Cek `REALMIO_BASE_URL` benar dan Realmio bisa diakses dari VPS |
 | CORS error di browser | Pastikan domain sudah terdaftar di TRUSTED_ORIGINS Realmio |
 | Sidebar tetap "Transity" | Ubah via `/admin/settings`, atau cek tabel `operator_settings` |
 | Auth bypass di production | Pastikan `DEV_BYPASS_AUTH` tidak di-set atau `false` |

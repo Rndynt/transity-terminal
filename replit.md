@@ -66,7 +66,7 @@ Each terminal instance has customizable branding via `/admin/settings`:
 ## Deployment
 See `DEPLOY.md` for full VPS deployment guide. Key points:
 - Each operator gets own terminal instance + database + Realmio tenant
-- Environment: `AUTHCORE_BASE_URL`, `AUTHCORE_TENANT_ID`, `DATABASE_URL`
+- Environment: `REALMIO_BASE_URL`, `REALMIO_TENANT_ID`, `DATABASE_URL`
 - `.env.example` provided as template
 - Nginx reverse proxy per subdomain (e.g., `nusa-terminal.transity.web.id`)
 - `apps/transityweb` is the OTA channel (separate deployment, ignore for terminal)

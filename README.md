@@ -336,8 +336,8 @@ npm start
 |----------|---------|-----------|----------|
 | `DATABASE_URL` | — | PostgreSQL connection string | Ya |
 | `PORT` | 5000 | Port server | Tidak |
-| `AUTHCORE_BASE_URL` | — | URL Realmio auth server | Tidak (dev bypass tersedia) |
-| `AUTHCORE_TENANT_ID` | — | Realmio tenant ID | Tidak |
+| `REALMIO_BASE_URL` | — | URL Realmio auth server | Tidak (dev bypass tersedia) |
+| `REALMIO_TENANT_ID` | — | Realmio tenant ID | Tidak |
 | `DEV_BYPASS_AUTH` | — | Hanya aktif jika `NODE_ENV !== 'production'` | Tidak |
 | `JWT_SECRET` | — | Secret untuk JWT mobile auth | Ya (production) |
 | `PAYMENT_WEBHOOK_SECRET` | — | Secret untuk verifikasi webhook pembayaran | Ya (production) |
@@ -348,7 +348,7 @@ npm start
 
 ### Dev Mode
 
-Jika `NODE_ENV !== 'production'` dan `AUTHCORE_BASE_URL` kosong, sistem akan auto-login sebagai owner dengan semua permission. `DEV_BYPASS_AUTH` di-hardcode ke `!IS_PRODUCTION` — tidak bisa aktif di production meskipun env var di-set.
+Jika `NODE_ENV !== 'production'` dan `REALMIO_BASE_URL` kosong, sistem akan auto-login sebagai owner dengan semua permission. `DEV_BYPASS_AUTH` di-hardcode ke `!IS_PRODUCTION` — tidak bisa aktif di production meskipun env var di-set.
 
 ### Security Notes
 

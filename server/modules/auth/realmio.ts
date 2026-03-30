@@ -10,14 +10,14 @@ export interface RealmioUser {
   createdAt: string;
 }
 
-const AUTHCORE_BASE_URL = process.env.AUTHCORE_BASE_URL || "";
-const AUTHCORE_TENANT_ID = process.env.AUTHCORE_TENANT_ID || "transity";
+const REALMIO_BASE_URL = process.env.REALMIO_BASE_URL || "";
+const REALMIO_TENANT_ID = process.env.REALMIO_TENANT_ID || "transity";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const DEV_BYPASS_AUTH =
-  process.env.DEV_BYPASS_AUTH === "true" || (!IS_PRODUCTION && !AUTHCORE_BASE_URL);
+  process.env.DEV_BYPASS_AUTH === "true" || (!IS_PRODUCTION && !REALMIO_BASE_URL);
 
-if (IS_PRODUCTION && !AUTHCORE_BASE_URL && !DEV_BYPASS_AUTH) {
-  console.error("FATAL: AUTHCORE_BASE_URL is required in production. Auth will reject all requests.");
+if (IS_PRODUCTION && !REALMIO_BASE_URL && !DEV_BYPASS_AUTH) {
+  console.error("FATAL: REALMIO_BASE_URL is required in production. Auth will reject all requests.");
 }
 
 if (DEV_BYPASS_AUTH) {
@@ -37,17 +37,17 @@ async function verifyWithRealmio(
   cookieHeader?: string,
   authHeader?: string
 ): Promise<RealmioUser | null> {
-  if (!AUTHCORE_BASE_URL) return null;
+  if (!REALMIO_BASE_URL) return null;
 
   const headers: Record<string, string> = {
-    "X-Tenant-Id": AUTHCORE_TENANT_ID,
+    "X-Tenant-Id": REALMIO_TENANT_ID,
   };
 
   if (cookieHeader) headers["Cookie"] = cookieHeader;
   if (authHeader) headers["Authorization"] = authHeader;
 
   try {
-    const res = await fetch(`${AUTHCORE_BASE_URL}/me`, { headers });
+    const res = await fetch(`${REALMIO_BASE_URL}/me`, { headers });
     if (!res.ok) return null;
     const data = await res.json();
     return data.user ?? data;
@@ -101,4 +101,4 @@ export async function optionalAuth(req: FastifyRequest, _reply: FastifyReply) {
   }
 }
 
-export { AUTHCORE_BASE_URL, AUTHCORE_TENANT_ID, DEV_BYPASS_AUTH, DEV_USER };
+export { REALMIO_BASE_URL, REALMIO_TENANT_ID, DEV_BYPASS_AUTH, DEV_USER };

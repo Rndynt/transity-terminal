@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import {
-  AUTHCORE_BASE_URL,
-  AUTHCORE_TENANT_ID,
+  REALMIO_BASE_URL,
+  REALMIO_TENANT_ID,
   DEV_BYPASS_AUTH,
   DEV_USER,
 } from "./realmio";
@@ -21,11 +21,11 @@ export function registerAuthRoutes(app: FastifyInstance) {
     }
 
     try {
-      const upstream = await fetch(`${AUTHCORE_BASE_URL}/api/auth/sign-in/email`, {
+      const upstream = await fetch(`${REALMIO_BASE_URL}/api/auth/sign-in/email`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Tenant-Id": AUTHCORE_TENANT_ID,
+          "X-Tenant-Id": REALMIO_TENANT_ID,
           ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}),
         },
         body: JSON.stringify(req.body),
@@ -57,11 +57,11 @@ export function registerAuthRoutes(app: FastifyInstance) {
     }
 
     try {
-      const upstream = await fetch(`${AUTHCORE_BASE_URL}/api/auth/sign-up/email`, {
+      const upstream = await fetch(`${REALMIO_BASE_URL}/api/auth/sign-up/email`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Tenant-Id": AUTHCORE_TENANT_ID,
+          "X-Tenant-Id": REALMIO_TENANT_ID,
         },
         body: JSON.stringify(req.body),
       });
@@ -84,10 +84,10 @@ export function registerAuthRoutes(app: FastifyInstance) {
     }
 
     try {
-      const upstream = await fetch(`${AUTHCORE_BASE_URL}/api/auth/sign-out`, {
+      const upstream = await fetch(`${REALMIO_BASE_URL}/api/auth/sign-out`, {
         method: "POST",
         headers: {
-          "X-Tenant-Id": AUTHCORE_TENANT_ID,
+          "X-Tenant-Id": REALMIO_TENANT_ID,
           ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}),
         },
       });
@@ -118,9 +118,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
     }
 
     try {
-      const upstream = await fetch(`${AUTHCORE_BASE_URL}/api/auth/get-session`, {
+      const upstream = await fetch(`${REALMIO_BASE_URL}/api/auth/get-session`, {
         headers: {
-          "X-Tenant-Id": AUTHCORE_TENANT_ID,
+          "X-Tenant-Id": REALMIO_TENANT_ID,
           ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}),
           ...(req.headers.authorization
             ? { Authorization: req.headers.authorization }
@@ -143,14 +143,14 @@ export function registerAuthRoutes(app: FastifyInstance) {
     if (DEV_BYPASS_AUTH) {
       return reply.send({
         user: DEV_USER,
-        tenant: { id: AUTHCORE_TENANT_ID, slug: AUTHCORE_TENANT_ID },
+        tenant: { id: REALMIO_TENANT_ID, slug: REALMIO_TENANT_ID },
       });
     }
 
     try {
-      const upstream = await fetch(`${AUTHCORE_BASE_URL}/me`, {
+      const upstream = await fetch(`${REALMIO_BASE_URL}/me`, {
         headers: {
-          "X-Tenant-Id": AUTHCORE_TENANT_ID,
+          "X-Tenant-Id": REALMIO_TENANT_ID,
           ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}),
           ...(req.headers.authorization
             ? { Authorization: req.headers.authorization }
