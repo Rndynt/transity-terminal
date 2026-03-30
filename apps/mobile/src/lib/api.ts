@@ -1,6 +1,6 @@
 import { storage } from './storage';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://your-repl-domain.replit.app';
+const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://www.transity.web.id';
 
 interface AppUser {
   id: string;
