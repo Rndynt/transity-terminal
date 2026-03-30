@@ -22,7 +22,7 @@ export default function SelectStopsPage({ tripId, passengers, tripLabel, fare, s
   const [dropStopId, setDropStopId] = useState<string | null>(null);
   const [mode, setMode] = useState<'pickup' | 'drop'>('pickup');
 
-  const pickupStops = stops.filter(s => s.sequence <= originSeq);
+  const pickupStops = stops.filter(s => s.sequence < destSeq);
   const dropStops = stops.filter(s => s.sequence >= destSeq);
 
   const pickupStop = pickupStopId ? stops.find(s => s.stopId === pickupStopId) : null;
