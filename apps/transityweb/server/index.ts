@@ -9,18 +9,33 @@ const API_UPSTREAM = process.env.API_UPSTREAM || 'http://localhost:5000';
 
 const app = Fastify({ logger: false });
 
+app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+  done(null, body);
+});
+
 app.addHook('onRequest', async (req, reply) => {
   if (req.url.startsWith('/api/')) {
     const upstream = `${API_UPSTREAM}${req.url}`;
     try {
-      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      const headers: Record<string, string> = {};
+      const ct = req.headers['content-type'];
+      if (ct) headers['content-type'] = ct;
       const authHeader = req.headers['authorization'];
       if (authHeader) headers['authorization'] = authHeader;
+
+      let rawBody: string | undefined;
+      if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req.raw) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        rawBody = Buffer.concat(chunks).toString('utf8');
+      }
 
       const res = await fetch(upstream, {
         method: req.method,
         headers,
-        body: ['POST', 'PUT', 'PATCH'].includes(req.method) ? JSON.stringify(req.body) : undefined,
+        body: rawBody || undefined,
       });
 
       const contentType = res.headers.get('content-type') || '';
