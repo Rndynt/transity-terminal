@@ -1,20 +1,24 @@
-import { useState } from 'react';
+import { useState, useMemo, lazy, Suspense } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { DataTable } from '@/components/shared/DataTable';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { vehiclesApi, layoutsApi } from '@/lib/api';
+import { vehiclesApi, layoutsApi, maintenanceApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Bus } from 'lucide-react';
+import { Plus, Pencil, Trash2, Bus, Wrench, AlertTriangle } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
 import { RowActionsMenu } from './RowActionsMenu';
 import type { Vehicle, Layout } from '@/types';
+
+const VehicleMaintenanceTab = lazy(() => import('./VehicleMaintenanceTab'));
 
 interface VehicleFormData {
   code: string;
@@ -22,6 +26,16 @@ interface VehicleFormData {
   layoutId: string;
   capacity: string;
   notes: string;
+}
+
+interface MaintenanceAlert {
+  id: string;
+  vehicle_id: string;
+  vehicle_code: string;
+  plate: string;
+  type: string;
+  status: string;
+  scheduled_date: string | null;
 }
 
 function SectionDivider({ label }: { label: string }) {
@@ -38,6 +52,7 @@ export default function VehiclesManager() {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [maintenanceVehicle, setMaintenanceVehicle] = useState<Vehicle | null>(null);
   const [formData, setFormData] = useState<VehicleFormData>({
     code: '',
     plate: '',
@@ -57,11 +72,29 @@ export default function VehiclesManager() {
     queryFn: layoutsApi.getAll
   });
 
+  const { data: alerts = [] } = useQuery<MaintenanceAlert[]>({
+    queryKey: ['/api/maintenance/alerts'],
+    queryFn: maintenanceApi.getAlerts,
+    staleTime: 60_000,
+  });
+
+  const alertsByVehicle = useMemo(() => {
+    const map = new Map<string, { overdue: number; upcoming: number }>();
+    for (const a of alerts) {
+      if (!a.vehicle_id) continue;
+      const entry = map.get(a.vehicle_id) ?? { overdue: 0, upcoming: 0 };
+      if (a.status === 'overdue') entry.overdue++;
+      else entry.upcoming++;
+      map.set(a.vehicle_id, entry);
+    }
+    return map;
+  }, [alerts]);
+
   const layoutOptions = layouts.map(l => ({
     value: l.id,
     label: l.name,
     badge: `${l.rows}×${l.cols}`,
-    subtitle: `${(l.seatMap as any[]).length} kursi`
+    subtitle: `${(l.seatMap as unknown[]).length} kursi`
   }));
 
   const filteredData = vehicles.filter(vehicle =>
@@ -84,7 +117,7 @@ export default function VehiclesManager() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => vehiclesApi.update(id, data),
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => vehiclesApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/vehicles'] });
       setIsDialogOpen(false);
@@ -265,7 +298,25 @@ export default function VehiclesManager() {
           {
             key: 'code', header: 'Kode',
             className: 'font-mono font-medium text-primary/80 whitespace-nowrap',
-            render: (v) => v.code,
+            render: (v) => (
+              <div className="flex items-center gap-2">
+                <span>{v.code}</span>
+                {(() => {
+                  const a = alertsByVehicle.get(v.id);
+                  if (!a) return null;
+                  if (a.overdue > 0) return (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-red-700 bg-red-50 border-red-200" data-testid={`badge-overdue-${v.code}`}>
+                      <AlertTriangle className="w-3 h-3 mr-0.5" />Overdue
+                    </Badge>
+                  );
+                  return (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-700 bg-amber-50 border-amber-200" data-testid={`badge-upcoming-${v.code}`}>
+                      <Wrench className="w-3 h-3 mr-0.5" />Service
+                    </Badge>
+                  );
+                })()}
+              </div>
+            ),
           },
           {
             key: 'plate', header: 'Plat Nomor',
@@ -294,6 +345,7 @@ export default function VehiclesManager() {
             render: (v) => (
               <RowActionsMenu
                 actions={[
+                  { label: 'Maintenance', icon: <Wrench className="h-3.5 w-3.5" />, onClick: () => setMaintenanceVehicle(v) },
                   { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(v) },
                   { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(v.id), variant: 'destructive', disabled: deleteMutation.isPending },
                 ]}
@@ -303,6 +355,22 @@ export default function VehiclesManager() {
           },
         ]}
       />
+
+      <Dialog open={!!maintenanceVehicle} onOpenChange={(open) => { if (!open) setMaintenanceVehicle(null); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wrench className="w-5 h-5" />
+              Maintenance — {maintenanceVehicle?.code} ({maintenanceVehicle?.plate})
+            </DialogTitle>
+          </DialogHeader>
+          {maintenanceVehicle && (
+            <Suspense fallback={<div className="py-8 text-center text-sm text-muted-foreground">Memuat...</div>}>
+              <VehicleMaintenanceTab vehicleId={maintenanceVehicle.id} vehiclePlate={maintenanceVehicle.plate} />
+            </Suspense>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

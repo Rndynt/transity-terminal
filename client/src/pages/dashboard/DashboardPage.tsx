@@ -8,11 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import {
   Bus, Ticket, DollarSign, Package, AlertTriangle,
   ChevronRight, LayoutDashboard,
-  CalendarDays, FileText
+  CalendarDays, FileText, Wrench
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { fmtCurrency, BOOKING_STATUS_MAP } from '@/lib/constants';
+import { fmtCurrency, BOOKING_STATUS_MAP, MAINTENANCE_STATUS_MAP } from '@/lib/constants';
+import type { MaintenanceStatus } from '@/lib/constants';
+import { maintenanceApi } from '@/lib/api';
 import { useLocation } from 'wouter';
 
 interface DashboardData {
@@ -42,6 +44,15 @@ export default function DashboardPage() {
     queryKey: ['/api/dashboard/today'],
   });
 
+  const { data: maintenanceAlerts = [] } = useQuery<Array<{
+    id: string; vehicle_id: string; vehicle_code: string; plate: string;
+    type: string; status: string; scheduled_date: string | null; description: string | null;
+  }>>({
+    queryKey: ['/api/maintenance/alerts'],
+    queryFn: maintenanceApi.getAlerts,
+    staleTime: 60_000,
+  });
+
   const trips = data?.trips ?? { total: 0, scheduled: 0, completed: 0, canceled: 0, no_driver: 0 };
   const bookings = data?.bookings ?? { total: 0, paid: 0, pending: 0, canceled: 0 };
   const revenue = data?.revenue ?? 0;
@@ -50,7 +61,8 @@ export default function DashboardPage() {
   const avgLoadFactor = data?.avgLoadFactor ?? 0;
   const recentBookings = data?.recentBookings ?? [];
 
-  const hasAlerts = alerts.tripsNoDriver > 0 || alerts.pendingBookingsOld > 0 || alerts.spjOverdue > 0;
+  const maintenanceOverdueCount = maintenanceAlerts.filter(a => a.status === 'overdue').length;
+  const hasAlerts = alerts.tripsNoDriver > 0 || alerts.pendingBookingsOld > 0 || alerts.spjOverdue > 0 || maintenanceOverdueCount > 0;
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="dashboard-page">
@@ -162,6 +174,73 @@ export default function DashboardPage() {
                         {alerts.spjOverdue} SPJ overdue
                       </Badge>
                     )}
+                    {maintenanceOverdueCount > 0 && (
+                      <Badge variant="secondary" className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300" data-testid="badge-alert-maintenance-overdue">
+                        <Wrench className="w-3 h-3 mr-1" />
+                        {maintenanceOverdueCount} maintenance overdue
+                      </Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {maintenanceAlerts.length > 0 && (
+              <Card data-testid="card-maintenance-alerts">
+                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="w-5 h-5 text-amber-500" />
+                    <CardTitle className="text-base">Maintenance Kendaraan</CardTitle>
+                    <Badge variant="outline" className="text-xs">{maintenanceAlerts.length}</Badge>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate('/masters')}
+                    data-testid="button-view-maintenance"
+                  >
+                    Lihat Semua
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {maintenanceAlerts.slice(0, 5).map((alert) => {
+                      const statusInfo = MAINTENANCE_STATUS_MAP[alert.status as MaintenanceStatus];
+                      return (
+                        <div
+                          key={alert.id}
+                          className="flex items-center justify-between gap-3 p-2.5 rounded-lg border bg-card"
+                          data-testid={`maintenance-alert-${alert.id}`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                              alert.status === 'overdue'
+                                ? 'bg-red-100 dark:bg-red-900/30'
+                                : 'bg-amber-100 dark:bg-amber-900/30'
+                            }`}>
+                              {alert.status === 'overdue'
+                                ? <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                : <Wrench className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                              }
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {alert.vehicle_code} — {alert.plate}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {alert.type}{alert.scheduled_date ? ` · ${format(new Date(alert.scheduled_date), 'd MMM yyyy', { locale: id })}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                          {statusInfo && (
+                            <Badge variant="outline" className={`text-[10px] shrink-0 ${statusInfo.color} ${statusInfo.bg}`}>
+                              {statusInfo.label}
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>

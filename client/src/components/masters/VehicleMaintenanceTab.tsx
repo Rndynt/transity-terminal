@@ -99,6 +99,7 @@ export default function VehicleMaintenanceTab({ vehicleId, vehiclePlate }: Vehic
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/vehicles', vehicleId, 'maintenance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/maintenance/alerts'] });
       setIsAddOpen(false);
       setFormData({ ...emptyForm });
       toast({ title: 'Berhasil', description: 'Data perawatan berhasil ditambahkan' });
@@ -114,6 +115,7 @@ export default function VehicleMaintenanceTab({ vehicleId, vehiclePlate }: Vehic
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/vehicles', vehicleId, 'maintenance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/maintenance/alerts'] });
       setStatusDialog(null);
       toast({ title: 'Berhasil', description: 'Status perawatan berhasil diperbarui' });
     },
@@ -128,6 +130,7 @@ export default function VehicleMaintenanceTab({ vehicleId, vehiclePlate }: Vehic
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/vehicles', vehicleId, 'maintenance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/maintenance/alerts'] });
       setDeleteTarget(null);
       toast({ title: 'Berhasil', description: 'Data perawatan berhasil dihapus' });
     },
