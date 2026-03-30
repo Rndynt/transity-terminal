@@ -34,6 +34,8 @@ export default function SearchResultsPage({ originCity, destinationCity, date, p
       tripLabel: `${trip.patternName || trip.patternCode}`,
       fare,
       stops: trip.stops || [],
+      originSeq: trip.origin?.sequence || 0,
+      destSeq: trip.destination?.sequence || 0,
     });
   };
 

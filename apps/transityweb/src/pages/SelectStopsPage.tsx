@@ -12,29 +12,31 @@ interface Props {
   tripLabel: string;
   fare: number;
   stops: TripStopInfo[];
+  originSeq: number;
+  destSeq: number;
 }
 
-export default function SelectStopsPage({ tripId, passengers, tripLabel, fare, stops }: Props) {
+export default function SelectStopsPage({ tripId, passengers, tripLabel, fare, stops, originSeq, destSeq }: Props) {
   const { navigate, goBack } = useNav();
-  const [pickupIdx, setPickupIdx] = useState<number | null>(null);
-  const [dropIdx, setDropIdx] = useState<number | null>(null);
+  const [pickupStopId, setPickupStopId] = useState<string | null>(null);
+  const [dropStopId, setDropStopId] = useState<string | null>(null);
   const [mode, setMode] = useState<'pickup' | 'drop'>('pickup');
 
-  const handlePickup = (idx: number) => {
-    setPickupIdx(idx);
-    if (dropIdx !== null && dropIdx <= idx) setDropIdx(null);
+  const pickupStops = stops.filter(s => s.sequence <= originSeq);
+  const dropStops = stops.filter(s => s.sequence >= destSeq);
+
+  const pickupStop = pickupStopId ? stops.find(s => s.stopId === pickupStopId) : null;
+  const dropStop = dropStopId ? stops.find(s => s.stopId === dropStopId) : null;
+  const canProceed = !!pickupStop && !!dropStop;
+
+  const handlePickup = (stop: TripStopInfo) => {
+    setPickupStopId(stop.stopId);
     setMode('drop');
   };
 
-  const handleDrop = (idx: number) => {
-    if (pickupIdx !== null && idx > pickupIdx) {
-      setDropIdx(idx);
-    }
+  const handleDrop = (stop: TripStopInfo) => {
+    setDropStopId(stop.stopId);
   };
-
-  const canProceed = pickupIdx !== null && dropIdx !== null;
-  const pickupStop = pickupIdx !== null ? stops[pickupIdx] : null;
-  const dropStop = dropIdx !== null ? stops[dropIdx] : null;
 
   const proceed = () => {
     if (!pickupStop || !dropStop) return;
@@ -50,6 +52,8 @@ export default function SelectStopsPage({ tripId, passengers, tripLabel, fare, s
       fare,
     });
   };
+
+  const activeStops = mode === 'pickup' ? pickupStops : dropStops;
 
   return (
     <div className="anim-fade min-h-screen bg-slate-50">
@@ -82,13 +86,12 @@ export default function SelectStopsPage({ tripId, passengers, tripLabel, fare, s
             {pickupStop && <span className="ml-1 opacity-70">✓</span>}
           </button>
           <button
-            onClick={() => pickupIdx !== null && setMode('drop')}
+            onClick={() => setMode('drop')}
             className={cn(
               'flex-1 py-2.5 rounded-xl text-[13px] font-bold transition-all',
               mode === 'drop'
                 ? 'bg-coral-500 text-white shadow-md'
                 : 'bg-white text-slate-500 border border-slate-200',
-              pickupIdx === null && 'opacity-50',
             )}
             data-testid="tab-drop"
           >
@@ -121,40 +124,39 @@ export default function SelectStopsPage({ tripId, passengers, tripLabel, fare, s
         )}
 
         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">
-          {mode === 'pickup' ? 'Pilih titik naik' : 'Pilih titik turun'}
+          {mode === 'pickup'
+            ? `Pilih titik naik (${pickupStops.length} halte)`
+            : `Pilih titik turun (${dropStops.length} halte)`
+          }
         </p>
 
         <div className="grid gap-2.5">
-          {stops.map((stop, i) => {
-            const isPickup = pickupIdx === i;
-            const isDrop = dropIdx === i;
-            const isSelected = isPickup || isDrop;
-            const disabledDrop = mode === 'drop' && pickupIdx !== null && i <= pickupIdx;
+          {activeStops.map((stop) => {
+            const isPickup = pickupStopId === stop.stopId;
+            const isDrop = dropStopId === stop.stopId;
+            const isSelected = (mode === 'pickup' && isPickup) || (mode === 'drop' && isDrop);
             const time = mode === 'pickup' ? stop.departAt : stop.arriveAt;
 
             return (
               <button
                 key={stop.stopId}
                 onClick={() => {
-                  if (disabledDrop) return;
-                  if (mode === 'pickup') handlePickup(i);
-                  else handleDrop(i);
+                  if (mode === 'pickup') handlePickup(stop);
+                  else handleDrop(stop);
                 }}
-                disabled={disabledDrop}
                 className={cn(
                   'w-full rounded-2xl p-4 text-left transition-all duration-200 border-2',
-                  isPickup && 'bg-teal-50 border-teal-500 shadow-md shadow-teal-500/10',
-                  isDrop && 'bg-coral-50 border-coral-400 shadow-md shadow-coral-400/10',
-                  !isSelected && !disabledDrop && 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm active:scale-[0.98]',
-                  disabledDrop && 'bg-slate-50 border-slate-100 opacity-40 cursor-not-allowed',
+                  isSelected && mode === 'pickup' && 'bg-teal-50 border-teal-500 shadow-md shadow-teal-500/10',
+                  isSelected && mode === 'drop' && 'bg-coral-50 border-coral-400 shadow-md shadow-coral-400/10',
+                  !isSelected && 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm active:scale-[0.98]',
                 )}
                 data-testid={`stop-${stop.code}`}
               >
                 <div className="flex items-center gap-3">
                   <div className={cn(
                     'w-11 h-11 rounded-xl flex items-center justify-center shrink-0',
-                    isPickup && 'bg-teal-600',
-                    isDrop && 'bg-coral-500',
+                    isSelected && mode === 'pickup' && 'bg-teal-600',
+                    isSelected && mode === 'drop' && 'bg-coral-500',
                     !isSelected && 'bg-slate-100',
                   )}>
                     {isSelected ? (
@@ -171,17 +173,17 @@ export default function SelectStopsPage({ tripId, passengers, tripLabel, fare, s
                     )}>
                       {stop.name}
                     </p>
-                    {isPickup && <span className="text-[11px] font-bold text-teal-600">Titik naik dipilih</span>}
-                    {isDrop && <span className="text-[11px] font-bold text-coral-600">Titik turun dipilih</span>}
-                    {!isSelected && !disabledDrop && (
+                    {isSelected && mode === 'pickup' && <span className="text-[11px] font-bold text-teal-600">Titik naik dipilih</span>}
+                    {isSelected && mode === 'drop' && <span className="text-[11px] font-bold text-coral-600">Titik turun dipilih</span>}
+                    {!isSelected && (
                       <span className="text-[11px] text-slate-400">Halte {stop.sequence}</span>
                     )}
                   </div>
 
                   <div className={cn(
                     'shrink-0 px-3 py-1.5 rounded-lg',
-                    isPickup && 'bg-teal-600',
-                    isDrop && 'bg-coral-500',
+                    isSelected && mode === 'pickup' && 'bg-teal-600',
+                    isSelected && mode === 'drop' && 'bg-coral-500',
                     !isSelected && 'bg-slate-50',
                   )}>
                     <span className={cn(
@@ -207,7 +209,7 @@ export default function SelectStopsPage({ tripId, passengers, tripLabel, fare, s
             data-testid="button-continue-stops"
           >
             {!canProceed
-              ? (pickupIdx === null ? 'Pilih titik naik dulu' : 'Pilih titik turun')
+              ? (pickupStopId === null ? 'Pilih titik naik dulu' : 'Pilih titik turun')
               : 'Lanjut Pilih Kursi'
             }
           </Button>

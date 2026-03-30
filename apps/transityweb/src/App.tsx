@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 type Page =
   | { name: 'home' }
   | { name: 'search-results'; originCity: string; destinationCity: string; date: string; passengers: number }
-  | { name: 'select-stops'; tripId: string; passengers: number; tripLabel: string; fare: number; stops: import('@/lib/api').TripStopInfo[] }
+  | { name: 'select-stops'; tripId: string; passengers: number; tripLabel: string; fare: number; stops: import('@/lib/api').TripStopInfo[]; originSeq: number; destSeq: number }
   | { name: 'select-seats'; tripId: string; originStopId: string; destStopId: string; originSeq: number; destSeq: number; passengers: number; tripLabel: string; fare: number }
   | { name: 'booking-confirm'; tripId: string; originStopId: string; destStopId: string; originSeq: number; destSeq: number; seats: string[]; tripLabel: string; fare: number }
   | { name: 'booking-detail'; bookingId: string }
