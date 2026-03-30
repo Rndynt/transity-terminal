@@ -29,6 +29,7 @@ import { registerCashierRoutes } from "./modules/cashier/cashier.routes";
 import { registerRefundsRoutes } from "./modules/refunds/refunds.routes";
 import { registerMaintenanceRoutes } from "./modules/maintenance/maintenance.routes";
 import { registerCustomersRoutes } from "./modules/customers/customers.routes";
+import { registerSettingsRoutes } from "./modules/settings/settings.routes";
 
 export async function registerRoutes(app: FastifyInstance): Promise<FastifyInstance> {
   registerAuthRoutes(app);
@@ -80,6 +81,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
   registerRefundsRoutes(app);
   registerMaintenanceRoutes(app);
   registerCustomersRoutes(app);
+  registerSettingsRoutes(app);
 
   app.post('/api/seed', { preHandler: [requireFlag('admin.flags.manage')] }, async (req: any, reply: any) => {
     if (process.env.NODE_ENV === 'production') {

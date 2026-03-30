@@ -17,3 +17,4 @@ export * from "./refunds";
 export * from "./maintenance";
 export * from "./customers";
 export * from "./relations";
+export * from "./settings";

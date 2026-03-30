@@ -36,6 +36,7 @@ const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage"));
 const CashierPage = lazy(() => import("@/pages/cashier/CashierPage"));
 const RefundsPage = lazy(() => import("@/pages/refunds/RefundsPage"));
 const CustomersPage = lazy(() => import("@/pages/customers/CustomersPage"));
+const SettingsPage = lazy(() => import("@/pages/admin/SettingsPage"));
 
 function PageLoader() {
   return (
@@ -196,6 +197,11 @@ function Router() {
                     <Route path="/admin/flags">
                       <RequireFlag flag="admin.flags.manage">
                         <AdminFlagsPage />
+                      </RequireFlag>
+                    </Route>
+                    <Route path="/admin/settings">
+                      <RequireFlag flag="admin.flags.manage">
+                        <SettingsPage />
                       </RequireFlag>
                     </Route>
                     <Route component={NotFound} />

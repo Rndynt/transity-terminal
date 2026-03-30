@@ -5,10 +5,11 @@ import {
   MapPin, Store, Truck, UserCheck, LayoutGrid, Route, Calendar, DollarSign,
   Ticket, List, Bus, PanelLeftClose, PanelLeftOpen, X, Package, Tag, Wallet, FileText, BadgePercent, ClipboardList, CalendarDays, CalendarRange, LogOut,
   BarChart3, ShoppingCart, TrendingUp, Users, AlertTriangle, CreditCard, ShieldCheck, Receipt, PackagePlus, PackageSearch, Boxes, Weight,
-  LayoutDashboard, RotateCcw, Contact
+  LayoutDashboard, RotateCcw, Contact, Settings2
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { usePermissions } from "@/lib/permissions";
+import { useQuery } from "@tanstack/react-query";
 
 const NAV_SECTIONS = [
   {
@@ -68,6 +69,7 @@ const NAV_SECTIONS = [
     items: [
       { name: "Kelola Staff", path: "/admin/staff", icon: Users, flag: "admin.staff.manage" },
       { name: "Feature Flags", path: "/admin/flags", icon: ShieldCheck, flag: "admin.flags.manage" },
+      { name: "Pengaturan", path: "/admin/settings", icon: Settings2, flag: "admin.flags.manage" },
     ]
   }
 ];
@@ -85,6 +87,14 @@ export default function Sidebar({ isOpen = true, onClose, isMobile = false, isCo
   const search = useSearch();
   const { user, signOut } = useAuth();
   const { can, isLoading: permLoading } = usePermissions();
+  const { data: opSettings } = useQuery<{ brandName: string; tagline: string; logoUrl: string | null; primaryColor: string }>({
+    queryKey: ['/api/settings'],
+    staleTime: 5 * 60 * 1000,
+  });
+  const brandName = opSettings?.brandName || 'Transity';
+  const tagline = opSettings?.tagline || 'Multi-Stop Travel System';
+  const logoUrl = opSettings?.logoUrl;
+  const brandColor = opSettings?.primaryColor || '#2563EB';
 
   const handleLinkClick = () => {
     if (isMobile && onClose) onClose();
@@ -135,13 +145,17 @@ export default function Sidebar({ isOpen = true, onClose, isMobile = false, isCo
         isCollapsed && !isMobile ? "px-3 justify-center" : "px-4 justify-between"
       )}>
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
-            <Bus className="w-4 h-4 text-white" />
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ backgroundColor: brandColor }}>
+            {logoUrl ? (
+              <img src={logoUrl} alt={brandName} className="w-full h-full object-contain" />
+            ) : (
+              <Bus className="w-4 h-4 text-white" />
+            )}
           </div>
           {(!isCollapsed || isMobile) && (
             <div>
-              <h1 className="text-sm font-bold text-gray-800 leading-tight">Transity</h1>
-              <p className="text-[10px] text-gray-400">Multi-Stop Travel System</p>
+              <h1 className="text-sm font-bold text-gray-800 leading-tight">{brandName}</h1>
+              <p className="text-[10px] text-gray-400">{tagline}</p>
             </div>
           )}
         </div>
