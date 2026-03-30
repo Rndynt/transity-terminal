@@ -3,7 +3,7 @@ import { useNav, useAuth } from '@/App';
 import { tripsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { ArrowDownUp, Search, Loader2, MapPin, CalendarDays, Users, Zap, ShieldCheck, Clock, X } from 'lucide-react';
+import { ArrowDownUp, Search, Loader2, MapPin, CalendarDays, Users, X, Percent, Star, TrendingUp, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function HomePage() {
@@ -135,34 +135,78 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="flex gap-2.5 mt-5 anim-slide-up delay-1">
-          {[
-            { icon: Zap, text: 'Pesan\nInstan', accent: 'text-amber-500', bg: 'bg-amber-50' },
-            { icon: ShieldCheck, text: 'Bayar\nAman', accent: 'text-emerald-600', bg: 'bg-emerald-50' },
-            { icon: Clock, text: 'Support\n24/7', accent: 'text-violet-500', bg: 'bg-violet-50' },
-          ].map((f) => (
-            <div key={f.text} className="flex-1 bg-white rounded-2xl p-3 shadow-soft text-center">
-              <div className={cn('w-9 h-9 rounded-xl mx-auto mb-1.5 flex items-center justify-center', f.bg)}>
-                <f.icon className={cn('w-[18px] h-[18px]', f.accent)} />
+        <div className="mt-5 anim-slide-up delay-1">
+          <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1 snap-x snap-mandatory">
+            <div className="snap-start shrink-0 w-[85%] rounded-2xl overflow-hidden relative bg-gradient-to-br from-teal-800 via-teal-700 to-emerald-600 shadow-lg">
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute top-[-20px] right-[-20px] w-32 h-32 rounded-full bg-white/30" />
+                <div className="absolute bottom-[-10px] left-[-10px] w-24 h-24 rounded-full bg-white/20" />
               </div>
-              <p className="text-[11px] font-semibold text-slate-500 leading-tight whitespace-pre-line">{f.text}</p>
+              <div className="relative p-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Percent className="w-4 h-4 text-amber-300" />
+                  <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">Promo Spesial</span>
+                </div>
+                <p className="font-display font-extrabold text-[18px] text-white leading-tight">Diskon 20% Rute Baru</p>
+                <p className="text-teal-200/80 text-[12px] mt-1 leading-snug">Nikmati potongan harga untuk semua rute baru. Berlaku hingga akhir bulan!</p>
+                <div className="mt-3 inline-flex items-center gap-1 bg-white/20 backdrop-blur px-3 py-1.5 rounded-full">
+                  <span className="text-[11px] font-bold text-white">Pesan Sekarang</span>
+                  <ArrowRight className="w-3 h-3 text-white" />
+                </div>
+              </div>
             </div>
-          ))}
+
+            <div className="snap-start shrink-0 w-[85%] rounded-2xl overflow-hidden relative bg-gradient-to-br from-coral-500 via-orange-400 to-amber-400 shadow-lg">
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute top-[-15px] left-[50%] w-28 h-28 rounded-full bg-white/30" />
+              </div>
+              <div className="relative p-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Star className="w-4 h-4 text-white" />
+                  <span className="text-[10px] font-bold text-white/90 uppercase tracking-wider">Member Baru</span>
+                </div>
+                <p className="font-display font-extrabold text-[18px] text-white leading-tight">Cashback Rp 25.000</p>
+                <p className="text-white/80 text-[12px] mt-1 leading-snug">Daftar sekarang dan dapatkan cashback untuk perjalanan pertamamu.</p>
+                <div className="mt-3 inline-flex items-center gap-1 bg-white/20 backdrop-blur px-3 py-1.5 rounded-full">
+                  <span className="text-[11px] font-bold text-white">Daftar Gratis</span>
+                  <ArrowRight className="w-3 h-3 text-white" />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-center gap-1.5 mt-3">
+            <div className="w-5 h-1.5 rounded-full bg-teal-600" />
+            <div className="w-1.5 h-1.5 rounded-full bg-slate-200" />
+          </div>
         </div>
 
-        {cities.length > 0 && (
-          <div className="mt-5 anim-slide-up delay-2">
-            <h3 className="text-[13px] font-bold text-slate-700 mb-2.5 px-0.5">Rute Populer</h3>
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
-              {cities.slice(0, 8).map((city) => (
+        {cities.length > 1 && (
+          <div className="mt-6 anim-slide-up delay-2">
+            <div className="flex items-center justify-between mb-3 px-0.5">
+              <h3 className="text-[14px] font-bold text-slate-800">Rute Populer</h3>
+              <TrendingUp className="w-4 h-4 text-teal-500" />
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              {[
+                { from: cities[0], to: cities[1], price: 'Rp 95.000', emoji: '🏙️' },
+                { from: cities[1], to: cities[0], price: 'Rp 95.000', emoji: '🌄' },
+                ...(cities[2] ? [{ from: cities[0], to: cities[2], price: 'Rp 120.000', emoji: '🌊' }] : []),
+                ...(cities[3] ? [{ from: cities[0], to: cities[3], price: 'Rp 110.000', emoji: '🏛️' }] : []),
+              ].slice(0, 4).map((route) => (
                 <button
-                  key={city}
-                  onClick={() => setOrigin(city)}
-                  className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-200/80 rounded-full text-[13px] font-medium text-slate-600 hover:border-teal-400 hover:text-teal-800 hover:bg-teal-50/50 transition-all active:scale-95 shadow-sm"
-                  data-testid={`chip-city-${city}`}
+                  key={`${route.from}-${route.to}`}
+                  onClick={() => { setOrigin(route.from); setDestination(route.to); }}
+                  className="bg-white rounded-2xl p-3.5 text-left border border-slate-100 hover:border-teal-300 hover:shadow-md transition-all active:scale-[0.97] shadow-soft"
+                  data-testid={`route-${route.from}-${route.to}`}
                 >
-                  <MapPin className="w-3 h-3 text-teal-500 shrink-0" />
-                  {city}
+                  <span className="text-[20px] block mb-2">{route.emoji}</span>
+                  <p className="text-[13px] font-bold text-slate-800 leading-tight">{route.from}</p>
+                  <div className="flex items-center gap-1 my-0.5">
+                    <div className="flex-1 h-[1px] bg-slate-200" />
+                    <ArrowRight className="w-3 h-3 text-teal-400" />
+                  </div>
+                  <p className="text-[13px] font-bold text-slate-800 leading-tight">{route.to}</p>
+                  <p className="text-[11px] text-teal-600 font-semibold mt-1.5">mulai {route.price}</p>
                 </button>
               ))}
             </div>
