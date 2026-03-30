@@ -302,7 +302,7 @@ export class AppService {
     const all = [...realTrips, ...filteredVirtual]
       .filter(t => {
         if (!t.origin?.departAt) return true;
-        return new Date(t.origin.departAt).getTime() > now.getTime() - 30 * 60 * 1000;
+        return new Date(t.origin.departAt).getTime() > now.getTime();
       })
       .sort((a, b) => {
         const aTime = a.origin?.departAt ? new Date(a.origin.departAt).getTime() : 0;
