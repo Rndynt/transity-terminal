@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 160 15% 97%;
+    --foreground: 170 30% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 170 30% 8%;
+    --primary: 170 75% 18%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 160 25% 93%;
+    --secondary-foreground: 170 75% 18%;
+    --muted: 160 12% 93%;
+    --muted-foreground: 170 10% 44%;
+    --accent: 16 80% 58%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 160 12% 89%;
+    --input: 160 12% 86%;
+    --ring: 170 75% 18%;
+    --radius: 0.875rem;
+  }
+
+  * {
+    @apply border-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  input, select, textarea {
+    font-size: 16px;
+  }
+}
+
+@layer utilities {
+  .safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+  }
+
+  .font-display {
+    font-family: 'Outfit', 'DM Sans', system-ui, sans-serif;
+  }
+
+  .hero-mesh {
+    background:
+      radial-gradient(ellipse 120% 80% at 10% 90%, rgba(20, 184, 166, 0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 80% 100% at 100% 10%, rgba(251, 113, 133, 0.08) 0%, transparent 50%),
+      linear-gradient(165deg, #134E4A 0%, #115E59 40%, #0F766E 100%);
+  }
+
+  .ticket-cut-top::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 16px;
+    height: 16px;
+    background: hsl(var(--background));
+    border-radius: 50%;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.anim-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-fade { animation: fadeIn 0.35s ease-out both; }
+.anim-scale { animation: scaleIn 0.3s ease-out both; }
+.delay-1 { animation-delay: 60ms; }
+.delay-2 { animation-delay: 120ms; }
+.delay-3 { animation-delay: 180ms; }
+.delay-4 { animation-delay: 240ms; }
