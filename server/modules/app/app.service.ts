@@ -2,13 +2,14 @@ import { db } from "../../db";
 import { 
   appUsers, reviews, bookings, passengers, payments, trips, tripPatterns, 
   tripStopTimes, stops, patternStops, vehicles, cargoShipments, cargoTypes,
-  seatInventory, tripLegs, seatHolds,
+  seatInventory, tripLegs, seatHolds, tripBases, scheduleExceptions,
   type AppUser, type InsertAppUser, type Review, type InsertReview
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, lte, inArray, gt, isNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { signToken, type AppUserPayload } from "./app.auth";
 import { IStorage } from "../../storage.interface";
+import { fromZonedHHMMToUtc } from "../../utils/timezone";
 
 interface OperatorSummary {
   id: string;
@@ -27,6 +28,10 @@ interface TripStopPoint {
   arriveAt: string | null;
 }
 
+interface TripStopPointWithCity extends TripStopPoint {
+  city?: string;
+}
+
 interface TripSearchResult {
   tripId: string;
   serviceDate: string;
@@ -40,7 +45,8 @@ interface TripSearchResult {
   destination: TripStopPoint;
   availableSeats: number;
   farePerPerson: number;
-  stops: TripStopPoint[];
+  stops: TripStopPointWithCity[];
+  isVirtual?: boolean;
 }
 
 interface UserBookingSummary {
@@ -269,10 +275,10 @@ export class AppService {
     passengers?: number;
   }): Promise<TripSearchResult[]> {
     const [originStops, destStops] = await Promise.all([
-      db.select({ id: stops.id, name: stops.name, code: stops.code })
+      db.select({ id: stops.id, name: stops.name, code: stops.code, city: stops.city })
         .from(stops)
         .where(and(eq(stops.city, params.originCity), isNull(stops.deletedAt))),
-      db.select({ id: stops.id, name: stops.name, code: stops.code })
+      db.select({ id: stops.id, name: stops.name, code: stops.code, city: stops.city })
         .from(stops)
         .where(and(eq(stops.city, params.destinationCity), isNull(stops.deletedAt)))
     ]);
@@ -282,8 +288,40 @@ export class AppService {
     const originStopIds = originStops.map(s => s.id);
     const destStopIds = destStops.map(s => s.id);
 
+    const [realTrips, virtualTrips] = await Promise.all([
+      this.searchRealTrips(params, originStopIds, destStopIds),
+      this.searchVirtualTrips(params, originStopIds, destStopIds),
+    ]);
+
+    const realBaseIds = new Set(
+      realTrips.map(t => t._baseId).filter(Boolean)
+    );
+    const filteredVirtual = virtualTrips.filter(v => !realBaseIds.has(v._baseId));
+
+    const now = new Date();
+    const all = [...realTrips, ...filteredVirtual]
+      .filter(t => {
+        if (!t.origin?.departAt) return true;
+        return new Date(t.origin.departAt).getTime() > now.getTime() - 30 * 60 * 1000;
+      })
+      .sort((a, b) => {
+        const aTime = a.origin?.departAt ? new Date(a.origin.departAt).getTime() : 0;
+        const bTime = b.origin?.departAt ? new Date(b.origin.departAt).getTime() : 0;
+        return aTime - bTime;
+      })
+      .map(({ _baseId, ...rest }) => rest);
+
+    return all;
+  }
+
+  private async searchRealTrips(
+    params: { originCity: string; destinationCity: string; date: string; passengers?: number },
+    originStopIds: string[],
+    destStopIds: string[]
+  ): Promise<(TripSearchResult & { _baseId?: string })[]> {
     const result = await db.select({
       tripId: trips.id,
+      baseId: trips.baseId,
       serviceDate: trips.serviceDate,
       patternId: trips.patternId,
       patternCode: tripPatterns.code,
@@ -328,7 +366,8 @@ export class AppService {
       .orderBy(tripStopTimes.stopSequence);
 
       const originST = stopTimes.find(st => originStopIds.includes(st.stopId));
-      const destST = stopTimes.find(st => destStopIds.includes(st.stopId) && st.stopSequence > (originST?.stopSequence ?? 0));
+      const destSTList = stopTimes.filter(st => destStopIds.includes(st.stopId) && st.stopSequence > (originST?.stopSequence ?? 0));
+      const destST = destSTList.length > 0 ? destSTList[destSTList.length - 1] : null;
 
       if (!originST || !destST) return null;
 
@@ -338,6 +377,7 @@ export class AppService {
       ]);
 
       return {
+        _baseId: trip.baseId ?? undefined,
         tripId: trip.tripId,
         serviceDate: trip.serviceDate,
         patternCode: trip.patternCode,
@@ -362,7 +402,172 @@ export class AppService {
       };
     }));
 
-    return enriched.filter((t) => t !== null) as TripSearchResult[];
+    return enriched.filter((t) => t !== null) as (TripSearchResult & { _baseId?: string })[];
+  }
+
+  private async searchVirtualTrips(
+    params: { originCity: string; destinationCity: string; date: string; passengers?: number },
+    originStopIds: string[],
+    destStopIds: string[]
+  ): Promise<(TripSearchResult & { _baseId?: string })[]> {
+    const serviceDateObj = new Date(params.date);
+    const dayOfWeek = serviceDateObj.getUTCDay();
+    const dayColumns = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+    const dayCol = dayColumns[dayOfWeek];
+
+    const allBases = await db.select({
+      id: tripBases.id,
+      patternId: tripBases.patternId,
+      code: tripBases.code,
+      capacity: tripBases.capacity,
+      defaultStopTimes: tripBases.defaultStopTimes,
+    })
+    .from(tripBases)
+    .where(
+      and(
+        eq(tripBases.active, true),
+        isNull(tripBases.deletedAt),
+        sql`${tripBases[dayCol]} = true`,
+        sql`(${tripBases.validFrom} IS NULL OR ${tripBases.validFrom} <= ${params.date})`,
+        sql`(${tripBases.validTo} IS NULL OR ${params.date} <= ${tripBases.validTo})`
+      )
+    );
+
+    if (allBases.length === 0) return [];
+
+    const exceptions = await db.select({ baseId: scheduleExceptions.baseId })
+      .from(scheduleExceptions)
+      .where(eq(scheduleExceptions.exceptionDate, params.date));
+    const exceptedIds = new Set(exceptions.map(e => e.baseId));
+    const bases = allBases.filter(b => !exceptedIds.has(b.id));
+    if (bases.length === 0) return [];
+
+    const uniquePatternIds = [...new Set(bases.map(b => b.patternId))];
+
+    const [patterns, patternStopsRows] = await Promise.all([
+      db.select().from(tripPatterns).where(inArray(tripPatterns.id, uniquePatternIds)),
+      db.query.patternStops.findMany({
+        where: and(inArray(patternStops.patternId, uniquePatternIds), isNull(patternStops.deletedAt)),
+        orderBy: patternStops.stopSequence,
+        with: { stop: true }
+      }),
+    ]);
+
+    const patternsMap = new Map(patterns.map(p => [p.id, p]));
+    const patternStopsMap = new Map<string, typeof patternStopsRows>();
+    for (const ps of patternStopsRows) {
+      const list = patternStopsMap.get(ps.patternId) || [];
+      list.push(ps);
+      patternStopsMap.set(ps.patternId, list);
+    }
+
+    const results: (TripSearchResult & { _baseId?: string })[] = [];
+
+    for (const base of bases) {
+      const pattern = patternsMap.get(base.patternId);
+      if (!pattern) continue;
+
+      const pStops = patternStopsMap.get(base.patternId) || [];
+      const defaultTimes = (base.defaultStopTimes as any[]) || [];
+
+      const hasOrigin = pStops.some(ps => originStopIds.includes(ps.stopId));
+      const hasDestAfterOrigin = pStops.some(ps => {
+        if (!destStopIds.includes(ps.stopId)) return false;
+        const originSeq = pStops.find(o => originStopIds.includes(o.stopId))?.stopSequence ?? Infinity;
+        return ps.stopSequence > originSeq;
+      });
+      if (!hasOrigin || !hasDestAfterOrigin) continue;
+
+      const originPS = pStops.find(ps => originStopIds.includes(ps.stopId));
+      const destPSList = pStops.filter(ps => destStopIds.includes(ps.stopId) && ps.stopSequence > (originPS?.stopSequence ?? 0));
+      const destPS = destPSList.length > 0 ? destPSList[destPSList.length - 1] : null;
+      if (!originPS || !destPS) continue;
+
+      const originTime = defaultTimes.find((t: any) => t.stopSequence === originPS.stopSequence);
+      const destTime = defaultTimes.find((t: any) => t.stopSequence === destPS.stopSequence);
+
+      const originDepartUtc = originTime?.departAt ? fromZonedHHMMToUtc(params.date, originTime.departAt, 'Asia/Jakarta') : null;
+      const destArriveUtc = destTime?.arriveAt ? fromZonedHHMMToUtc(params.date, destTime.arriveAt, 'Asia/Jakarta') : null;
+
+      if (destArriveUtc && originDepartUtc && destArriveUtc.getTime() <= originDepartUtc.getTime()) {
+        destArriveUtc.setDate(destArriveUtc.getDate() + 1);
+      }
+
+      const fareQuote = await this.getPatternFare(base.patternId, originPS.stopSequence, destPS.stopSequence);
+
+      const stopsData: TripStopPointWithCity[] = pStops.map(ps => {
+        const t = defaultTimes.find((dt: any) => dt.stopSequence === ps.stopSequence);
+        const departUtc = t?.departAt ? fromZonedHHMMToUtc(params.date, t.departAt, 'Asia/Jakarta') : null;
+        const arriveUtc = t?.arriveAt ? fromZonedHHMMToUtc(params.date, t.arriveAt, 'Asia/Jakarta') : null;
+        return {
+          stopId: ps.stopId,
+          name: (ps as any).stop?.name || '',
+          code: (ps as any).stop?.code || '',
+          city: (ps as any).stop?.city || undefined,
+          sequence: ps.stopSequence,
+          departAt: departUtc?.toISOString() || null,
+          arriveAt: arriveUtc?.toISOString() || null,
+        };
+      });
+
+      results.push({
+        _baseId: base.id,
+        tripId: `virtual-${base.id}`,
+        serviceDate: params.date,
+        patternCode: pattern.code || '',
+        patternName: pattern.name || '',
+        vehicleCode: null,
+        vehicleClass: pattern.vehicleClass,
+        operatorName: pattern.name || '',
+        operatorLogo: null,
+        origin: {
+          stopId: originPS.stopId,
+          name: (originPS as any).stop?.name || '',
+          code: (originPS as any).stop?.code || '',
+          sequence: originPS.stopSequence,
+          departAt: originDepartUtc?.toISOString() || null,
+          arriveAt: null,
+        },
+        destination: {
+          stopId: destPS.stopId,
+          name: (destPS as any).stop?.name || '',
+          code: (destPS as any).stop?.code || '',
+          sequence: destPS.stopSequence,
+          departAt: null,
+          arriveAt: destArriveUtc?.toISOString() || null,
+        },
+        availableSeats: base.capacity || 14,
+        farePerPerson: fareQuote,
+        stops: stopsData,
+        isVirtual: true,
+      });
+    }
+
+    return results;
+  }
+
+  private async getPatternFare(patternId: string, originSeq: number, destSeq: number): Promise<number> {
+    try {
+      const rows = await db.execute(sql`
+        SELECT rule FROM price_rules
+        WHERE pattern_id = ${patternId}
+          AND trip_id IS NULL
+          AND deleted_at IS NULL
+        ORDER BY priority ASC
+        LIMIT 1
+      `);
+      const result = Array.isArray(rows) ? rows : (rows as any).rows || [];
+      if (result.length > 0) {
+        const ruleData = result[0].rule as any;
+        const basePricePerLeg: number = ruleData?.basePricePerLeg ?? 0;
+        const multiplier: number = ruleData?.multiplier ?? 1;
+        const pricingMode: string = ruleData?.pricingMode ?? 'per_leg';
+        if (pricingMode === 'flat') return Math.round(basePricePerLeg * multiplier);
+        const legCount = Math.max(destSeq - originSeq, 1);
+        return Math.round(legCount * basePricePerLeg * multiplier);
+      }
+    } catch {}
+    return 0;
   }
 
   private async getAvailableSeatsCount(tripId: string, originSeq: number, destSeq: number): Promise<number> {

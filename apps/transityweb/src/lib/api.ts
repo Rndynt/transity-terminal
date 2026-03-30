@@ -46,6 +46,7 @@ export interface TripSearchResult {
   baseFare: string | null;
   farePerPerson?: number;
   stops?: TripStopInfo[];
+  isVirtual?: boolean;
 }
 
 export interface TripDetail {

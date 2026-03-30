@@ -107,9 +107,7 @@ function TripCard({ trip, index, passengers, onSelect }: {
   const [expanded, setExpanded] = useState(false);
   const fare = trip.farePerPerson || parseFloat(trip.baseFare || '0') || 0;
 
-  const originSeq = trip.origin?.sequence || 0;
-  const destSeq = trip.destination?.sequence || 0;
-  const allStops = (trip.stops || []).filter(s => s.sequence >= originSeq && s.sequence <= destSeq);
+  const allStops = trip.stops || [];
 
   return (
     <div
@@ -123,6 +121,9 @@ function TripCard({ trip, index, passengers, onSelect }: {
             <div className="flex items-center gap-1.5 mt-1">
               {trip.vehicleClass && (
                 <Badge variant="secondary" className="text-[10px] font-semibold bg-teal-50 text-teal-700 border-0 px-2 py-0.5 rounded-md">{trip.vehicleClass}</Badge>
+              )}
+              {trip.isVirtual && (
+                <Badge variant="secondary" className="text-[10px] font-semibold bg-amber-50 text-amber-700 border-0 px-2 py-0.5 rounded-md">Jadwal Rutin</Badge>
               )}
             </div>
           </div>
@@ -161,7 +162,7 @@ function TripCard({ trip, index, passengers, onSelect }: {
         </div>
 
         {expanded && allStops.length > 0 && (
-          <StopsTimeline stops={allStops} originSeq={originSeq} destSeq={destSeq} />
+          <StopsTimeline stops={allStops} />
         )}
 
         <div className="flex items-center justify-between pt-3 border-t border-dashed border-slate-100">
@@ -169,31 +170,33 @@ function TripCard({ trip, index, passengers, onSelect }: {
             <Users className="w-3.5 h-3.5" />
             <span>{trip.availableSeats} kursi tersedia</span>
           </div>
-          <Button
-            size="sm"
-            className="h-9 px-5 rounded-xl bg-teal-800 hover:bg-teal-900 text-[13px] font-bold shadow-sm"
-            onClick={onSelect}
-            disabled={trip.availableSeats < passengers}
-            data-testid={`button-select-trip-${trip.tripId}`}
-          >
-            Pilih
-          </Button>
+          {trip.isVirtual ? (
+            <span className="text-[11px] text-amber-600 font-semibold">Belum dibuka</span>
+          ) : (
+            <Button
+              size="sm"
+              className="h-9 px-5 rounded-xl bg-teal-800 hover:bg-teal-900 text-[13px] font-bold shadow-sm"
+              onClick={onSelect}
+              disabled={trip.availableSeats < passengers}
+              data-testid={`button-select-trip-${trip.tripId}`}
+            >
+              Pilih
+            </Button>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function StopsTimeline({ stops, originSeq, destSeq }: {
-  stops: TripStopInfo[]; originSeq: number; destSeq: number;
-}) {
+function StopsTimeline({ stops }: { stops: TripStopInfo[] }) {
   return (
     <div className="mb-3 mx-1 bg-slate-50 rounded-xl p-3 anim-fade">
       <div className="relative pl-5">
         <div className="absolute left-[7px] top-2 bottom-2 w-[2px] bg-gradient-to-b from-teal-400 via-teal-300 to-coral-400 rounded-full" />
         {stops.map((stop, i) => {
-          const isFirst = stop.sequence === originSeq;
-          const isLast = stop.sequence === destSeq;
+          const isFirst = i === 0;
+          const isLast = i === stops.length - 1;
           const time = isFirst ? stop.departAt : stop.arriveAt;
           return (
             <div key={stop.stopId} className="relative flex items-start gap-3 pb-3 last:pb-0">
