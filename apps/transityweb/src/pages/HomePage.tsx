@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNav, useAuth } from '@/App';
 import { tripsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { ArrowDownUp, Search, Loader2, MapPin, CalendarDays, Users, Zap, ShieldCheck, Clock } from 'lucide-react';
+import { ArrowDownUp, Search, Loader2, MapPin, CalendarDays, Users, Zap, ShieldCheck, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function HomePage() {
@@ -15,8 +15,7 @@ export default function HomePage() {
   const [destination, setDestination] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [passengers, setPassengers] = useState(1);
-  const [showOriginList, setShowOriginList] = useState(false);
-  const [showDestList, setShowDestList] = useState(false);
+  const [sheetFor, setSheetFor] = useState<'origin' | 'destination' | null>(null);
 
   useEffect(() => {
     tripsApi.getCities()
@@ -31,8 +30,11 @@ export default function HomePage() {
     navigate({ name: 'search-results', originCity: origin, destinationCity: destination, date, passengers });
   };
 
-  const fo = cities.filter((c) => c.toLowerCase().includes(origin.toLowerCase()));
-  const fd = cities.filter((c) => c.toLowerCase().includes(destination.toLowerCase()));
+  const selectCity = (city: string) => {
+    if (sheetFor === 'origin') setOrigin(city);
+    else if (sheetFor === 'destination') setDestination(city);
+    setSheetFor(null);
+  };
 
   return (
     <div className="anim-fade pb-28">
@@ -55,13 +57,11 @@ export default function HomePage() {
           <div className="p-5">
             <div className="relative">
               <div className="space-y-0 border border-slate-200/80 rounded-2xl overflow-hidden">
-                <CityInput
-                  label="Dari"
+                <CityField
+                  label="DARI"
                   placeholder="Kota keberangkatan"
                   value={origin}
-                  onChange={(v) => { setOrigin(v); setShowOriginList(true); }}
-                  onFocus={() => setShowOriginList(true)}
-                  onBlur={() => setTimeout(() => setShowOriginList(false), 200)}
+                  onClick={() => setSheetFor('origin')}
                   testId="input-origin"
                   dotClass="border-2 border-teal-600"
                 />
@@ -75,20 +75,15 @@ export default function HomePage() {
                     <ArrowDownUp className="w-4 h-4 text-teal-700" />
                   </button>
                 </div>
-                <CityInput
-                  label="Ke"
+                <CityField
+                  label="KE"
                   placeholder="Kota tujuan"
                   value={destination}
-                  onChange={(v) => { setDestination(v); setShowDestList(true); }}
-                  onFocus={() => setShowDestList(true)}
-                  onBlur={() => setTimeout(() => setShowDestList(false), 200)}
+                  onClick={() => setSheetFor('destination')}
                   testId="input-destination"
                   dotClass="bg-coral-500"
                 />
               </div>
-
-              <Dropdown items={fo} show={showOriginList && !!origin} onSelect={(c) => { setOrigin(c); setShowOriginList(false); }} position="top" />
-              <Dropdown items={fd} show={showDestList && !!destination} onSelect={(c) => { setDestination(c); setShowDestList(false); }} position="bottom" />
             </div>
 
             <div className="grid grid-cols-2 gap-3 mt-4">
@@ -174,48 +169,142 @@ export default function HomePage() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
 
-function CityInput({ label, placeholder, value, onChange, onFocus, onBlur, testId, dotClass }: {
-  label: string; placeholder: string; value: string;
-  onChange: (v: string) => void; onFocus: () => void; onBlur: () => void;
-  testId: string; dotClass: string;
-}) {
-  return (
-    <div className="relative">
-      <div className="absolute left-4 top-1/2 -translate-y-1/2">
-        <div className={cn('w-[10px] h-[10px] rounded-full', dotClass)} />
-      </div>
-      <span className="absolute left-11 top-2 text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em]">{label}</span>
-      <input
-        className="w-full h-[62px] pl-11 pr-4 pt-4 text-[15px] font-semibold placeholder:text-slate-300 placeholder:font-normal focus:outline-none focus:bg-teal-50/20 transition-colors bg-transparent"
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        data-testid={testId}
+      <CityBottomSheet
+        open={sheetFor !== null}
+        title={sheetFor === 'origin' ? 'Kota Keberangkatan' : 'Kota Tujuan'}
+        cities={cities}
+        onSelect={selectCity}
+        onClose={() => setSheetFor(null)}
       />
     </div>
   );
 }
 
-function Dropdown({ items, show, onSelect, position }: {
-  items: string[]; show: boolean; onSelect: (v: string) => void; position: 'top' | 'bottom';
+function CityField({ label, placeholder, value, onClick, testId, dotClass }: {
+  label: string; placeholder: string; value: string;
+  onClick: () => void; testId: string; dotClass: string;
 }) {
-  if (!show || items.length === 0) return null;
   return (
-    <div className={cn(
-      'absolute left-0 right-0 z-40 bg-white border border-slate-200 rounded-2xl shadow-float max-h-52 overflow-y-auto anim-scale',
-      position === 'top' ? 'top-[68px]' : 'bottom-0 translate-y-[calc(100%+4px)]',
-    )}>
-      {items.map((c) => (
-        <button key={c} className="w-full text-left px-4 py-3 text-[14px] font-medium hover:bg-teal-50 flex items-center gap-3 transition-colors first:rounded-t-2xl last:rounded-b-2xl" onMouseDown={() => onSelect(c)}>
-          <MapPin className="w-4 h-4 text-slate-300 shrink-0" />{c}
-        </button>
-      ))}
-    </div>
+    <button
+      onClick={onClick}
+      className="relative w-full text-left h-[62px] flex items-center hover:bg-teal-50/30 transition-colors"
+      data-testid={testId}
+    >
+      <div className="absolute left-4 top-1/2 -translate-y-1/2">
+        <div className={cn('w-[10px] h-[10px] rounded-full', dotClass)} />
+      </div>
+      <div className="pl-11 pr-4 pt-1">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.08em] block">{label}</span>
+        {value ? (
+          <span className="text-[15px] font-semibold text-slate-900 block mt-0.5">{value}</span>
+        ) : (
+          <span className="text-[15px] text-slate-300 block mt-0.5">{placeholder}</span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function CityBottomSheet({ open, title, cities, onSelect, onClose }: {
+  open: boolean; title: string; cities: string[];
+  onSelect: (city: string) => void; onClose: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setQuery('');
+      setTimeout(() => inputRef.current?.focus(), 300);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
+
+  const filtered = cities.filter((c) =>
+    c.toLowerCase().includes(query.toLowerCase())
+  );
+
+  return (
+    <>
+      <div
+        className={cn(
+          'fixed inset-0 z-[60] bg-black/40 transition-opacity duration-300',
+          open ? 'opacity-100' : 'opacity-0 pointer-events-none',
+        )}
+        onClick={onClose}
+      />
+      <div
+        className={cn(
+          'fixed inset-x-0 bottom-0 z-[70] bg-white rounded-t-[1.5rem] transition-transform duration-300 ease-out',
+          'max-h-[85vh] flex flex-col',
+          open ? 'translate-y-0' : 'translate-y-full',
+        )}
+      >
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-slate-200" />
+        </div>
+
+        <div className="flex items-center justify-between px-5 pb-3">
+          <h2 className="text-[16px] font-bold text-slate-800">{title}</h2>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors"
+            data-testid="button-close-sheet"
+          >
+            <X className="w-4 h-4 text-slate-500" />
+          </button>
+        </div>
+
+        <div className="px-5 pb-3">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-300 pointer-events-none" />
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Cari kota..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-slate-50 text-[14px] placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600/40 transition-all"
+              data-testid="input-search-city"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto overscroll-contain pb-8">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center py-12 gap-2">
+              <MapPin className="w-10 h-10 text-slate-200" />
+              <p className="text-[13px] text-slate-400">Kota tidak ditemukan</p>
+            </div>
+          ) : (
+            filtered.map((city) => (
+              <button
+                key={city}
+                onClick={() => onSelect(city)}
+                className="w-full flex items-center gap-3.5 px-5 py-3.5 hover:bg-teal-50/50 active:bg-teal-50 transition-colors text-left"
+                data-testid={`sheet-city-${city}`}
+              >
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+                  <MapPin className="w-[16px] h-[16px] text-teal-600" />
+                </div>
+                <div>
+                  <p className="text-[14px] font-semibold text-slate-800">{city}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Kota</p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </>
   );
 }

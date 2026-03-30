@@ -23,6 +23,15 @@ export interface StopDetail extends StopSummary {
   stopId: string;
 }
 
+export interface TripStopInfo {
+  stopId: string;
+  name: string;
+  code: string;
+  sequence: number;
+  arriveAt: string | null;
+  departAt: string | null;
+}
+
 export interface TripSearchResult {
   tripId: string;
   serviceDate: string;
@@ -35,6 +44,7 @@ export interface TripSearchResult {
   availableSeats: number;
   baseFare: string | null;
   farePerPerson?: number;
+  stops?: TripStopInfo[];
 }
 
 export interface TripDetail {
