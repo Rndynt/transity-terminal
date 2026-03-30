@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === 'production';
-const PORT = parseInt(process.env.TRANSITYWEB_PORT || '3000', 10);
+const PORT = parseInt(process.env.TRANSITYWEB_PORT || '3001', 10);
 const API_UPSTREAM = process.env.API_UPSTREAM || 'http://localhost:5000';
 
 const app = Fastify({ logger: false });

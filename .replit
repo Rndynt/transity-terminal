@@ -79,7 +79,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "echo 'TransityWeb served via main app at /web'"
+args = "cd apps/transityweb && node --import tsx server/index.ts"
 
 [userenv]
 
