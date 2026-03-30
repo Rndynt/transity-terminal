@@ -3,8 +3,31 @@ import { useNav, useAuth } from '@/App';
 import { tripsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { ArrowDownUp, Search, Loader2, MapPin, CalendarDays, Users, X, Percent, Star, TrendingUp, ArrowRight } from 'lucide-react';
+import { ArrowDownUp, Search, Loader2, MapPin, CalendarDays, Users, X, Percent, Star, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+const CITY_IMAGES: Record<string, string> = {
+  'Jakarta': 'https://images.unsplash.com/photo-1555899434-94d1368aa7af?w=600&h=400&fit=crop&q=80',
+  'Bandung': 'https://images.unsplash.com/photo-1598880940080-ff9a29891b85?w=600&h=400&fit=crop&q=80',
+  'Semarang': 'https://images.unsplash.com/photo-1565967511849-76a60a516170?w=600&h=400&fit=crop&q=80',
+  'Yogyakarta': 'https://images.unsplash.com/photo-1596402184320-417e7178b2cd?w=600&h=400&fit=crop&q=80',
+  'Surabaya': 'https://images.unsplash.com/photo-1586818398936-0999fbd1d3b7?w=600&h=400&fit=crop&q=80',
+  'Cirebon': 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=600&h=400&fit=crop&q=80',
+};
+const FALLBACK_IMG = 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=600&h=400&fit=crop&q=80';
+
+function popularRoutes(cities: string[]) {
+  const routes = [
+    { from: cities[0], to: cities[1], price: 'Rp 95.000', duration: '~3 jam' },
+    { from: cities[1], to: cities[0], price: 'Rp 95.000', duration: '~3 jam' },
+    ...(cities[2] ? [{ from: cities[0], to: cities[2], price: 'Rp 120.000', duration: '~5 jam' }] : []),
+    ...(cities[3] ? [{ from: cities[1], to: cities[3], price: 'Rp 110.000', duration: '~7 jam' }] : []),
+  ];
+  return routes.slice(0, 4).map(r => ({
+    ...r,
+    img: CITY_IMAGES[r.to] || FALLBACK_IMG,
+  }));
+}
 
 export default function HomePage() {
   const { navigate } = useNav();
@@ -184,29 +207,33 @@ export default function HomePage() {
           <div className="mt-6 anim-slide-up delay-2">
             <div className="flex items-center justify-between mb-3 px-0.5">
               <h3 className="text-[14px] font-bold text-slate-800">Rute Populer</h3>
-              <TrendingUp className="w-4 h-4 text-teal-500" />
+              <span className="text-[11px] font-semibold text-teal-600">Lihat semua</span>
             </div>
-            <div className="grid grid-cols-2 gap-2.5">
-              {[
-                { from: cities[0], to: cities[1], price: 'Rp 95.000', emoji: '🏙️' },
-                { from: cities[1], to: cities[0], price: 'Rp 95.000', emoji: '🌄' },
-                ...(cities[2] ? [{ from: cities[0], to: cities[2], price: 'Rp 120.000', emoji: '🌊' }] : []),
-                ...(cities[3] ? [{ from: cities[0], to: cities[3], price: 'Rp 110.000', emoji: '🏛️' }] : []),
-              ].slice(0, 4).map((route) => (
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1 snap-x">
+              {popularRoutes(cities).map((route) => (
                 <button
                   key={`${route.from}-${route.to}`}
                   onClick={() => { setOrigin(route.from); setDestination(route.to); }}
-                  className="bg-white rounded-2xl p-3.5 text-left border border-slate-100 hover:border-teal-300 hover:shadow-md transition-all active:scale-[0.97] shadow-soft"
+                  className="snap-start shrink-0 w-[70%] rounded-2xl overflow-hidden relative group active:scale-[0.97] transition-transform shadow-lg"
                   data-testid={`route-${route.from}-${route.to}`}
                 >
-                  <span className="text-[20px] block mb-2">{route.emoji}</span>
-                  <p className="text-[13px] font-bold text-slate-800 leading-tight">{route.from}</p>
-                  <div className="flex items-center gap-1 my-0.5">
-                    <div className="flex-1 h-[1px] bg-slate-200" />
-                    <ArrowRight className="w-3 h-3 text-teal-400" />
+                  <img
+                    src={route.img}
+                    alt={route.to}
+                    className="w-full h-[160px] object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-3.5">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="text-white/70 text-[12px] font-medium">{route.from}</span>
+                      <ArrowRight className="w-3 h-3 text-coral-400" />
+                      <span className="text-white font-bold text-[13px]">{route.to}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-teal-300 text-[12px] font-bold">mulai {route.price}</span>
+                      <span className="bg-white/20 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{route.duration}</span>
+                    </div>
                   </div>
-                  <p className="text-[13px] font-bold text-slate-800 leading-tight">{route.to}</p>
-                  <p className="text-[11px] text-teal-600 font-semibold mt-1.5">mulai {route.price}</p>
                 </button>
               ))}
             </div>
