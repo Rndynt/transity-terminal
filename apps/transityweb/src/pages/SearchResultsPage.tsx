@@ -28,15 +28,12 @@ export default function SearchResultsPage({ originCity, destinationCity, date, p
   const selectTrip = (trip: TripSearchResult) => {
     const fare = trip.farePerPerson || parseFloat(trip.baseFare || '0') || 0;
     navigate({
-      name: 'select-seats',
+      name: 'select-stops',
       tripId: trip.tripId,
-      originStopId: trip.origin?.stopId || '',
-      destStopId: trip.destination?.stopId || '',
-      originSeq: trip.origin?.sequence || 0,
-      destSeq: trip.destination?.sequence || 0,
       passengers,
       tripLabel: `${trip.patternName || trip.patternCode}`,
       fare,
+      stops: trip.stops || [],
     });
   };
 

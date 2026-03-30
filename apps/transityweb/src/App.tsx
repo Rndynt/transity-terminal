@@ -2,6 +2,7 @@ import { useState, useEffect, createContext, useContext, useCallback } from 'rea
 import { store, authApi, type AppUser } from '@/lib/api';
 import HomePage from '@/pages/HomePage';
 import SearchResultsPage from '@/pages/SearchResultsPage';
+import SelectStopsPage from '@/pages/SelectStopsPage';
 import SelectSeatsPage from '@/pages/SelectSeatsPage';
 import BookingConfirmPage from '@/pages/BookingConfirmPage';
 import BookingDetailPage from '@/pages/BookingDetailPage';
@@ -13,6 +14,7 @@ import { cn } from '@/lib/utils';
 type Page =
   | { name: 'home' }
   | { name: 'search-results'; originCity: string; destinationCity: string; date: string; passengers: number }
+  | { name: 'select-stops'; tripId: string; passengers: number; tripLabel: string; fare: number; stops: import('@/lib/api').TripStopInfo[] }
   | { name: 'select-seats'; tripId: string; originStopId: string; destStopId: string; originSeq: number; destSeq: number; passengers: number; tripLabel: string; fare: number }
   | { name: 'booking-confirm'; tripId: string; originStopId: string; destStopId: string; originSeq: number; destSeq: number; seats: string[]; tripLabel: string; fare: number }
   | { name: 'booking-detail'; bookingId: string }
@@ -95,6 +97,7 @@ function PageRouter() {
   switch (page.name) {
     case 'home': return <HomePage />;
     case 'search-results': return <SearchResultsPage {...page} />;
+    case 'select-stops': return <SelectStopsPage {...page} />;
     case 'select-seats': return <SelectSeatsPage {...page} />;
     case 'booking-confirm': return <BookingConfirmPage {...page} />;
     case 'booking-detail': return <BookingDetailPage {...page} />;
@@ -108,7 +111,7 @@ function BottomNav() {
   const { page, navigate } = useNav();
   const { isLoggedIn } = useAuth();
 
-  const hide = ['search-results', 'select-seats', 'booking-confirm', 'booking-detail'].includes(page.name);
+  const hide = ['search-results', 'select-stops', 'select-seats', 'booking-confirm', 'booking-detail'].includes(page.name);
   if (hide) return null;
 
   const tabs = [
@@ -119,7 +122,7 @@ function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-xl border-t border-teal-900/5 safe-bottom">
-      <div className="max-w-lg mx-auto flex">
+      <div className="flex">
         {tabs.map((tab) => {
           const active =
             (tab.key === 'home' && page.name === 'home') ||
@@ -177,7 +180,7 @@ function AppShell() {
     );
   }
   return (
-    <div className="max-w-lg mx-auto min-h-screen bg-background relative">
+    <div className="min-h-screen bg-background relative">
       <PageRouter />
       <BottomNav />
     </div>
