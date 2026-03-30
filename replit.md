@@ -40,6 +40,23 @@ Pages interact with components, which utilize hooks, API clients, and React Quer
 - **React Query**: Manages server state, caching, and invalidation.
 - **UI/UX**: Utilizes Tailwind CSS and shadcn/ui for consistent styling. All interactive elements and data displays require `data-testid` attributes. Routing is handled by `wouter`, with pages lazy-loaded.
 
+### Seed Data
+Seed files are split by context in `server/seeds/`:
+- `01-stops` — Stops & outlets
+- `02-layouts` — Seat layouts
+- `03-vehicles` — Vehicles
+- `04-patterns` — Trip patterns & pattern stops
+- `05-prices` — Price rules
+- `06-tripbases` — Trip base schedules
+- `07-cargo` — Cargo types & rates
+- `08-trips` — Materialize trips (30 days)
+- `09-rbac` — Roles, feature flags, matrix
+
+Run all: `npx tsx server/seeds/index.ts`
+Run specific: `npx tsx server/seeds/index.ts rbac` (auto-resolves dependencies)
+Help: `npx tsx server/seeds/index.ts --help`
+Legacy `server/seed.ts` still works (delegates to `server/seeds/index.ts`).
+
 ### Feature Specifications
 - **CSO Booking Terminal**: Interactive seat map with real-time updates, multi-phase booking flow, unseat/reschedule/cancel functionalities, promo code support.
 - **Cargo Management**: Tracks cargo types, rates, and shipments; generates waybills; calculates tariffs. Cargo Terminal uses own `/api/cargo/available-trips` endpoint (origin+destination stop-based) with pattern_stops fallback for trip_stop_times, filters virtual trips (only real/materialized shown), and listens to WebSocket events for real-time schedule updates.
