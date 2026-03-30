@@ -320,6 +320,7 @@ export class AppService {
         departAt: tripStopTimes.departAt,
         stopName: stops.name,
         stopCode: stops.code,
+        stopCity: stops.city,
       })
       .from(tripStopTimes)
       .innerJoin(stops, eq(tripStopTimes.stopId, stops.id))
@@ -353,6 +354,7 @@ export class AppService {
           stopId: st.stopId,
           name: st.stopName,
           code: st.stopCode,
+          city: st.stopCity,
           sequence: st.stopSequence,
           arriveAt: st.arriveAt,
           departAt: st.departAt

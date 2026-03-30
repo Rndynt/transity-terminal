@@ -12,18 +12,20 @@ interface Props {
   tripLabel: string;
   fare: number;
   stops: TripStopInfo[];
+  originCity: string;
+  destCity: string;
   originSeq: number;
   destSeq: number;
 }
 
-export default function SelectStopsPage({ tripId, passengers, tripLabel, fare, stops, originSeq, destSeq }: Props) {
+export default function SelectStopsPage({ tripId, passengers, tripLabel, fare, stops, originCity, destCity, originSeq, destSeq }: Props) {
   const { navigate, goBack } = useNav();
   const [pickupStopId, setPickupStopId] = useState<string | null>(null);
   const [dropStopId, setDropStopId] = useState<string | null>(null);
   const [mode, setMode] = useState<'pickup' | 'drop'>('pickup');
 
-  const pickupStops = stops.filter(s => s.sequence < destSeq);
-  const dropStops = stops.filter(s => s.sequence >= destSeq);
+  const pickupStops = stops.filter(s => s.city ? s.city === originCity : s.sequence < destSeq);
+  const dropStops = stops.filter(s => s.city ? s.city === destCity : s.sequence >= destSeq);
 
   const pickupStop = pickupStopId ? stops.find(s => s.stopId === pickupStopId) : null;
   const dropStop = dropStopId ? stops.find(s => s.stopId === dropStopId) : null;

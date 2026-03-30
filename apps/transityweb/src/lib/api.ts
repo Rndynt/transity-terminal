@@ -27,6 +27,7 @@ export interface TripStopInfo {
   stopId: string;
   name: string;
   code: string;
+  city?: string;
   sequence: number;
   arriveAt: string | null;
   departAt: string | null;
