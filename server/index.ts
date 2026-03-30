@@ -126,6 +126,25 @@ app.setErrorHandler((err: Error & { status?: number; statusCode?: number; code?:
     log("Mobile web app served at /mobile");
   }
 
+  const webDist = join(process.cwd(), "apps/transityweb/dist");
+  if (existsSync(webDist)) {
+    await app.register(async function webPlugin(instance) {
+      await instance.register(import("@fastify/static"), {
+        root: webDist,
+        prefix: "/web/",
+        decorateReply: false,
+        wildcard: false,
+      });
+      instance.get("/web", async (_req, reply) => {
+        return reply.redirect("/web/");
+      });
+      instance.get("/web/*", async (_req, reply) => {
+        return reply.sendFile("index.html", webDist);
+      });
+    });
+    log("TransityWeb served at /web");
+  }
+
   if (process.env.NODE_ENV === "development" || !process.env.NODE_ENV) {
     await setupVite(app, app.server);
   } else {
