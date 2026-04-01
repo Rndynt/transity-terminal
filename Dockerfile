@@ -1,32 +1,41 @@
-FROM node:20-alpine AS base
+FROM node:20-alpine AS builder
+
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
-# Layer 1: Install SEMUA deps (dev + prod) untuk keperluan build
-# Layer ini hanya rebuild jika package.json / package-lock.json berubah
-FROM base AS deps
+# Install semua deps (termasuk dev) untuk keperluan build
+# Layer ini di-cache selama package.json tidak berubah
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
-# Layer 2: Build frontend (Vite) dan backend (esbuild)
-FROM deps AS builder
+# Copy source dan build
 COPY . .
 RUN npm run build
 
-# Layer 3: Install hanya production deps untuk image final
-FROM base AS prod-deps
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# ─────────────────────────────────────────────
+# Stage production: hanya yang dibutuhkan runtime
+# ─────────────────────────────────────────────
+FROM node:20-alpine AS production
 
-# Layer 4: Image final — sekecil mungkin
-FROM node:20-alpine AS runner
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Install hanya production deps — skip vite, tsx, drizzle-kit, dll
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Hasil build
 COPY --from=builder /app/dist ./dist
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+
+# Migrations dan shared diperlukan karena ada dynamic import di runtime
+COPY --from=builder /app/migrations ./migrations
+COPY --from=builder /app/shared ./shared
+COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 
 EXPOSE 5000
 
-CMD ["npm", "start"]
+CMD ["node", "dist/index.js"]
