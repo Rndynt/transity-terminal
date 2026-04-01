@@ -5,10 +5,10 @@ export async function runMigrations() {
   try {
     await client.query(`
       ALTER TABLE staff_members
-        ADD COLUMN IF NOT EXISTS name  text,
-        ADD COLUMN IF NOT EXISTS email text;
+        DROP COLUMN IF EXISTS name,
+        DROP COLUMN IF EXISTS email;
     `);
-    console.log("[migrate] staff_members: name, email columns OK");
+    console.log("[migrate] staff_members: removed name/email columns (now linked via users table)");
   } catch (err) {
     console.error("[migrate] Failed:", err);
     throw err;

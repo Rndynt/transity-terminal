@@ -39,8 +39,6 @@ export type RoleFlag = typeof roleFlags.$inferSelect;
 export const staffMembers = pgTable("staff_members", {
   id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   userId:    text("user_id").notNull().unique(),
-  name:      text("name"),
-  email:     text("email"),
   roleId:    text("role_id").notNull().references(() => roles.id),
   outletId:  uuid("outlet_id").references(() => outlets.id),
   isActive:  boolean("is_active").notNull().default(true),

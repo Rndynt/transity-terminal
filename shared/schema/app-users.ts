@@ -19,15 +19,17 @@ export type AppUser = typeof appUsers.$inferSelect;
 export type InsertAppUser = z.infer<typeof insertAppUserSchema>;
 
 export const users = pgTable("users", {
-  id:       uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  id:            text("id").primaryKey(),
+  email:         text("email").notNull(),
+  name:          text("name"),
+  image:         text("image"),
+  emailVerified: boolean("emailVerified").notNull().default(false),
+  createdAt:     timestamp("createdAt").notNull().defaultNow(),
+  updatedAt:     timestamp("updatedAt").notNull().defaultNow(),
+  role:          text("role"),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
+export const insertUserSchema = createInsertSchema(users).omit({ createdAt: true, updatedAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;

@@ -7,7 +7,7 @@ import {
   createRealmioUser,
 } from "./realmio";
 import { db } from "../../db";
-import { staffMembers } from "../../../shared/schema";
+import { staffMembers, users } from "../../../shared/schema";
 
 export function registerAuthRoutes(app: FastifyInstance) {
   app.post("/api/auth/sign-in/email", { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -176,11 +176,21 @@ export function registerAuthRoutes(app: FastifyInstance) {
       return reply.code(500).send({ message: "Role 'owner' tidak ditemukan di database. Pastikan seed sudah dijalankan." });
     }
 
+    await db
+      .insert(users)
+      .values({
+        id:    realmioUser.userId,
+        email: realmioUser.email,
+        name:  realmioUser.name,
+      })
+      .onConflictDoUpdate({
+        target: users.id,
+        set: { name: realmioUser.name, email: realmioUser.email },
+      });
+
     const [created] = await db.insert(staffMembers).values({
-      userId:  realmioUser.userId,
-      name:    realmioUser.name,
-      email:   realmioUser.email,
-      roleId:  ownerRoleId,
+      userId:   realmioUser.userId,
+      roleId:   ownerRoleId,
       isActive: true,
     }).returning();
 
