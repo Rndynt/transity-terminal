@@ -1,13 +1,15 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useNav } from '@/App';
 import { tripsApi, type TripSearchResult, type TripStopInfo } from '@/lib/api';
 import { fmtCurrency, fmtTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, SearchX, Users, Clock, MapPin, ChevronDown, ChevronUp, Bus } from 'lucide-react';
+import { ArrowLeft, Loader2, SearchX, Clock, MapPin, ChevronDown, ChevronUp, Bus, Users, CheckCircle2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+
+const PAGE_LIMIT = 10;
 
 interface Props {
   originCity: string;
@@ -18,11 +20,40 @@ interface Props {
 
 export default function SearchResultsPage({ originCity, destinationCity, date, passengers }: Props) {
   const { navigate, goBack } = useNav();
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const { data: trips, isLoading, error } = useQuery({
-    queryKey: ['trips-search', originCity, destinationCity, date, passengers],
-    queryFn: () => tripsApi.search({ originCity, destinationCity, date, passengers }),
+  const {
+    data,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['trips-search-infinite', originCity, destinationCity, date, passengers],
+    queryFn: ({ pageParam }) =>
+      tripsApi.searchPaginated({ originCity, destinationCity, date, passengers, page: pageParam, limit: PAGE_LIMIT }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.page + 1 : undefined,
   });
+
+  const trips = data?.pages.flatMap((p) => p.data) ?? [];
+  const total = data?.pages[0]?.total ?? 0;
+
+  const loadMore = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMore(); },
+      { rootMargin: '120px' }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loadMore]);
 
   const selectTrip = (trip: TripSearchResult) => {
     const fare = trip.farePerPerson || parseFloat(trip.baseFare || '0') || 0;
@@ -47,7 +78,11 @@ export default function SearchResultsPage({ originCity, destinationCity, date, p
     <div className="anim-fade min-h-screen bg-slate-50">
       <div className="hero-mesh px-4 pt-3 pb-5">
         <div className="flex items-center gap-3">
-          <button onClick={goBack} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 transition-colors" data-testid="button-back">
+          <button
+            onClick={goBack}
+            className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
+            data-testid="button-back"
+          >
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
           <div className="flex-1 min-w-0">
@@ -56,7 +91,9 @@ export default function SearchResultsPage({ originCity, destinationCity, date, p
               <span className="text-teal-300 text-[13px]">→</span>
               <span className="truncate">{destinationCity}</span>
             </div>
-            <p className="text-teal-300/80 text-[12px] mt-0.5 font-medium">{dateLabel} · {passengers} penumpang</p>
+            <p className="text-teal-300/80 text-[12px] mt-0.5 font-medium">
+              {dateLabel} · {passengers} penumpang
+            </p>
           </div>
         </div>
       </div>
@@ -78,7 +115,7 @@ export default function SearchResultsPage({ originCity, destinationCity, date, p
           </div>
         )}
 
-        {trips && trips.length === 0 && (
+        {!isLoading && !error && trips.length === 0 && (
           <div className="text-center py-20">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 flex items-center justify-center">
               <SearchX className="w-8 h-8 text-slate-300" />
@@ -88,15 +125,39 @@ export default function SearchResultsPage({ originCity, destinationCity, date, p
           </div>
         )}
 
-        {trips && trips.length > 0 && (
-          <p className="text-[12px] font-semibold text-slate-400 mb-3 uppercase tracking-wider">{trips.length} perjalanan ditemukan</p>
+        {trips.length > 0 && (
+          <p className="text-[12px] font-semibold text-slate-400 mb-3 uppercase tracking-wider">
+            {trips.length} dari {total} perjalanan
+          </p>
         )}
 
         <div className="space-y-3">
-          {trips?.map((trip, i) => (
-            <TripCard key={trip.tripId} trip={trip} index={i} passengers={passengers} onSelect={() => selectTrip(trip)} />
+          {trips.map((trip, i) => (
+            <TripCard
+              key={trip.tripId}
+              trip={trip}
+              index={i}
+              passengers={passengers}
+              onSelect={() => selectTrip(trip)}
+            />
           ))}
         </div>
+
+        <div ref={sentinelRef} className="h-1" />
+
+        {isFetchingNextPage && (
+          <div className="flex flex-col items-center py-6 gap-2" data-testid="status-loading-more">
+            <Loader2 className="w-5 h-5 animate-spin text-teal-500" />
+            <p className="text-[12px] text-slate-400 font-medium">Memuat lebih banyak...</p>
+          </div>
+        )}
+
+        {!isLoading && !hasNextPage && trips.length > 0 && (
+          <div className="flex flex-col items-center py-6 gap-1.5" data-testid="status-all-loaded">
+            <CheckCircle2 className="w-4 h-4 text-slate-300" />
+            <p className="text-[11px] text-slate-300 font-medium">Semua perjalanan ditampilkan</p>
+          </div>
+        )}
       </div>
     </div>
   );

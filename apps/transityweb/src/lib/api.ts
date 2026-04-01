@@ -214,6 +214,12 @@ export const tripsApi = {
     if (Array.isArray(result)) return result;
     return result.data;
   },
+  searchPaginated: async (params: { originCity: string; destinationCity: string; date: string; passengers?: number; page: number; limit: number }): Promise<TripSearchPaginatedResponse> => {
+    const qs = new URLSearchParams(params as unknown as Record<string, string>).toString();
+    const result = await api.get<TripSearchResult[] | TripSearchPaginatedResponse>(`/api/app/trips/search?${qs}`);
+    if (Array.isArray(result)) return { data: result, total: result.length, page: 1, limit: result.length, hasMore: false };
+    return result;
+  },
   getDetail: (tripId: string) => api.get<TripDetail>(`/api/app/trips/${tripId}`),
   getSeatmap: (tripId: string, originSeq: number, destSeq: number) =>
     api.get<SeatmapResponse>(`/api/app/trips/${tripId}/seatmap?originSeq=${originSeq}&destinationSeq=${destSeq}`),
