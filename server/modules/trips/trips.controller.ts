@@ -24,10 +24,15 @@ export class TripsController {
     const { date } = req.query;
     let { outletId } = req.query;
     
-    // ABAC: if the authenticated user has an outlet scope, enforce it — ignore client-supplied outletId
-    const scopedOutlet = req.scopedOutletId ?? req.rbac?.outletId ?? null;
-    if (scopedOutlet) {
-      outletId = scopedOutlet;
+    // ABAC: enforce outlet scope unless CSO has cross_outlet permission.
+    // With cross_outlet: CSO may browse any outlet's trips; payment is still recorded to their outlet.
+    // Without cross_outlet: always override with their assigned outlet.
+    const hasCrossOutlet = req.rbac?.flags.has('action.cso.cross_outlet') ?? false;
+    if (!hasCrossOutlet) {
+      const scopedOutlet = req.scopedOutletId ?? req.rbac?.outletId ?? null;
+      if (scopedOutlet) {
+        outletId = scopedOutlet;
+      }
     }
 
     // Validate required parameters
