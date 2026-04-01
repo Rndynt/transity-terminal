@@ -8,6 +8,7 @@ import { runMigrations } from "./migrate";
 import { seedRbac } from "./modules/rbac/rbac.seed";
 import { existsSync } from "fs";
 import { join, resolve } from "path";
+import { runSchemaMigrations } from "./migrator";
 
 const app = Fastify({
   logger: false,
@@ -113,7 +114,14 @@ app.setErrorHandler((err: Error & { status?: number; statusCode?: number; code?:
 });
 
 (async () => {
+  // 1. Jalankan SQL migration files (membuat semua tabel dari nol di fresh DB,
+  //    atau hanya migration baru jika DB sudah ada sebelumnya)
+  await runSchemaMigrations();
+
+  // 2. Safety-net ALTER TABLE (untuk kompatibilitas Realmio)
   await runMigrations();
+
+  // 3. Seed roles, feature flags, dan staff dev
   await seedRbac();
   await registerRoutes(app);
 

@@ -41,6 +41,10 @@ RUN npm ci --omit=dev
 # Salin hasil build dari stage builder
 COPY --from=builder /app/dist ./dist
 
+# Migrations folder wajib ada di production karena server menjalankan
+# drizzle migrate() saat startup untuk membuat/update tabel di fresh DB.
+COPY --from=builder /app/migrations ./migrations
+
 EXPOSE 5000
 
 CMD ["node", "dist/index.js"]
