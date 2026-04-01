@@ -198,11 +198,21 @@ export const authApi = {
     api.patch<AppUser>('/api/app/profile', data),
 };
 
+export interface TripSearchPaginatedResponse {
+  data: TripSearchResult[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
 export const tripsApi = {
   getCities: () => api.get<{ city: string; stopCount: number }[]>('/api/app/cities'),
-  search: (params: { originCity: string; destinationCity: string; date: string; passengers?: number }) => {
+  search: async (params: { originCity: string; destinationCity: string; date: string; passengers?: number; page?: number; limit?: number }) => {
     const qs = new URLSearchParams(params as unknown as Record<string, string>).toString();
-    return api.get<TripSearchResult[]>(`/api/app/trips/search?${qs}`);
+    const result = await api.get<TripSearchResult[] | TripSearchPaginatedResponse>(`/api/app/trips/search?${qs}`);
+    if (Array.isArray(result)) return result;
+    return result.data;
   },
   getDetail: (tripId: string) => api.get<TripDetail>(`/api/app/trips/${tripId}`),
   getSeatmap: (tripId: string, originSeq: number, destSeq: number) =>
