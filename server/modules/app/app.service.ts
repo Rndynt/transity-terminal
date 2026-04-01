@@ -3,6 +3,7 @@ import {
   appUsers, reviews, bookings, passengers, payments, trips, tripPatterns, 
   tripStopTimes, stops, patternStops, vehicles, cargoShipments, cargoTypes,
   seatInventory, tripLegs, seatHolds, tripBases, scheduleExceptions,
+  operatorSettings,
   type AppUser, type InsertAppUser, type Review, type InsertReview
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, lte, inArray, gt, isNull } from "drizzle-orm";
@@ -268,12 +269,53 @@ export class AppService {
     return result.rows.map((r: Record<string, unknown>) => ({ city: r.city as string, stopCount: r.stop_count as number }));
   }
 
+  async getOperatorInfo(): Promise<{
+    tenantId: string;
+    brandName: string | null;
+    tagline: string | null;
+    logoUrl: string | null;
+    primaryColor: string | null;
+    secondaryColor: string | null;
+    accentColor: string | null;
+  }> {
+    const rows = await db.select({
+      brandName: operatorSettings.brandName,
+      tagline: operatorSettings.tagline,
+      logoUrl: operatorSettings.logoUrl,
+      primaryColor: operatorSettings.primaryColor,
+      secondaryColor: operatorSettings.secondaryColor,
+      accentColor: operatorSettings.accentColor,
+    }).from(operatorSettings).limit(1);
+
+    const settings = rows[0] ?? null;
+    return {
+      tenantId: process.env.REALMIO_TENANT_ID || 'transity',
+      brandName: settings?.brandName ?? null,
+      tagline: settings?.tagline ?? null,
+      logoUrl: settings?.logoUrl ?? null,
+      primaryColor: settings?.primaryColor ?? null,
+      secondaryColor: settings?.secondaryColor ?? null,
+      accentColor: settings?.accentColor ?? null,
+    };
+  }
+
   async searchTrips(params: {
     originCity: string;
     destinationCity: string;
     date: string;
     passengers?: number;
-  }): Promise<TripSearchResult[]> {
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    data: TripSearchResult[];
+    total: number;
+    page: number;
+    limit: number;
+    hasMore: boolean;
+  }> {
+    const page = Math.max(1, params.page ?? 1);
+    const limit = Math.min(50, Math.max(1, params.limit ?? 20));
+
     const [originStops, destStops] = await Promise.all([
       db.select({ id: stops.id, name: stops.name, code: stops.code, city: stops.city })
         .from(stops)
@@ -283,7 +325,9 @@ export class AppService {
         .where(and(eq(stops.city, params.destinationCity), isNull(stops.deletedAt)))
     ]);
 
-    if (originStops.length === 0 || destStops.length === 0) return [];
+    if (originStops.length === 0 || destStops.length === 0) {
+      return { data: [], total: 0, page, limit, hasMore: false };
+    }
 
     const originStopIds = originStops.map(s => s.id);
     const destStopIds = destStops.map(s => s.id);
@@ -311,7 +355,11 @@ export class AppService {
       })
       .map(({ _baseId, ...rest }) => rest);
 
-    return all;
+    const total = all.length;
+    const offset = (page - 1) * limit;
+    const data = all.slice(offset, offset + limit);
+
+    return { data, total, page, limit, hasMore: offset + data.length < total };
   }
 
   private async searchRealTrips(

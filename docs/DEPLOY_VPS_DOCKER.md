@@ -350,6 +350,14 @@ JWT_SECRET=<RANDOM_STRING_MINIMAL_32_KARAKTER>
 CORS_ORIGINS=https://nusa-terminal.transity.web.id,https://nusa-web.transity.web.id
 
 # ─────────────────────────────────────────
+# SERVICE KEY — TransityConsole / TransityWeb
+# ─────────────────────────────────────────
+# Key wajib dikirim TransityConsole via header X-Service-Key
+# Jika kosong, header X-Service-Key diabaikan (backward compatible)
+# Generate: openssl rand -hex 32
+TERMINAL_SERVICE_KEY=<RANDOM_HEX_32_KARAKTER>
+
+# ─────────────────────────────────────────
 # PAYMENT WEBHOOK (opsional)
 # ─────────────────────────────────────────
 # PAYMENT_WEBHOOK_SECRET=<secret-dari-payment-gateway>

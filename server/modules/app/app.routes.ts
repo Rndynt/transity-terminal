@@ -1,14 +1,31 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { AppController } from "./app.controller";
 import { IStorage } from "../../storage.interface";
-import { appAuthMiddleware, optionalAuthMiddleware } from "./app.auth";
+import { appAuthMiddleware } from "./app.auth";
 
 const ALLOWED_APP_ORIGINS = (process.env.APP_CORS_ORIGINS || '*').split(',').map(s => s.trim());
+const TERMINAL_SERVICE_KEY = process.env.TERMINAL_SERVICE_KEY || '';
 
 function getAppCorsOrigin(reqOrigin: string | undefined): string {
   if (ALLOWED_APP_ORIGINS.includes('*')) return '*';
   if (reqOrigin && ALLOWED_APP_ORIGINS.includes(reqOrigin)) return reqOrigin;
   return '';
+}
+
+function serviceKeyMiddleware(req: FastifyRequest, reply: FastifyReply, done: () => void) {
+  const incomingKey = req.headers['x-service-key'] as string | undefined;
+  if (incomingKey) {
+    if (!TERMINAL_SERVICE_KEY) {
+      reply.code(401).send({ error: 'Service key not configured on this terminal', code: 'SERVICE_KEY_NOT_CONFIGURED' });
+      return;
+    }
+    if (incomingKey !== TERMINAL_SERVICE_KEY) {
+      reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
+      return;
+    }
+    (req as any).isServiceClient = true;
+  }
+  done();
 }
 
 export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
@@ -18,7 +35,7 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
     if (origin) {
       reply.header('Access-Control-Allow-Origin', origin);
       reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Service-Key');
       if (origin !== '*') reply.header('Vary', 'Origin');
     }
   });
@@ -28,7 +45,7 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
     if (origin) {
       reply.header('Access-Control-Allow-Origin', origin);
       reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Service-Key');
       if (origin !== '*') reply.header('Vary', 'Origin');
     }
     reply.code(204).send();
@@ -43,12 +60,13 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
   app.get('/api/app/profile', { preHandler: [appAuthMiddleware] }, async (req, reply) => appController.getProfile(req, reply));
   app.patch('/api/app/profile', { preHandler: [appAuthMiddleware] }, async (req, reply) => appController.updateProfile(req, reply));
 
-  app.get('/api/app/cities', async (req, reply) => appController.getCities(req, reply));
-  app.get('/api/app/operators', async (req, reply) => appController.getOperators(req, reply));
-  app.get('/api/app/trips/search', async (req, reply) => appController.searchTrips(req, reply));
-  app.get('/api/app/trips/:id', async (req, reply) => appController.getTripDetail(req, reply));
-  app.get('/api/app/trips/:id/seatmap', async (req, reply) => appController.getSeatmap(req, reply));
-  app.get('/api/app/trips/:tripId/reviews', async (req, reply) => appController.getTripReviews(req, reply));
+  app.get('/api/app/operator-info', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getOperatorInfo(req, reply));
+  app.get('/api/app/cities', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getCities(req, reply));
+  app.get('/api/app/operators', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getOperators(req, reply));
+  app.get('/api/app/trips/search', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.searchTrips(req, reply));
+  app.get('/api/app/trips/:id', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getTripDetail(req, reply));
+  app.get('/api/app/trips/:id/seatmap', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getSeatmap(req, reply));
+  app.get('/api/app/trips/:tripId/reviews', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getTripReviews(req, reply));
 
   app.post('/api/app/bookings', { preHandler: [appAuthMiddleware] }, async (req, reply) => appController.createBooking(req, reply));
   app.get('/api/app/bookings', { preHandler: [appAuthMiddleware] }, async (req, reply) => appController.getMyBookings(req, reply));
@@ -60,7 +78,7 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
 
   app.post('/api/app/reviews', { preHandler: [appAuthMiddleware] }, async (req, reply) => appController.createReview(req, reply));
 
-  app.get('/api/app/cargo/track/:waybillNumber', async (req, reply) => appController.trackCargo(req, reply));
-  app.get('/api/app/cargo/:waybillNumber', async (req, reply) => appController.trackCargo(req, reply));
+  app.get('/api/app/cargo/track/:waybillNumber', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.trackCargo(req, reply));
+  app.get('/api/app/cargo/:waybillNumber', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.trackCargo(req, reply));
   app.post('/api/app/cargo', { preHandler: [appAuthMiddleware] }, async (req, reply) => appController.createCargo(req, reply));
 }

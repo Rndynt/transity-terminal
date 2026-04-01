@@ -36,3 +36,9 @@ id = "OaVRKlruWr46Tnj6TEUw1"
 uri = "file://docs/DEPLOY_VPS_DOCKER.md"
 type = "text"
 title = "DEPLOY_VPS_DOCKER.md — Transity Terminal"
+
+[[outputs]]
+id = "h1SLaDUuqTHE1oMnmIRia"
+uri = "file://apps/transityweb/ROADMAP.md"
+type = "text"
+title = "TransityWeb & TransityConsole — Product Roadmap"

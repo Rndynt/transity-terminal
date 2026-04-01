@@ -32,6 +32,15 @@ import { registerCustomersRoutes } from "./modules/customers/customers.routes";
 import { registerSettingsRoutes } from "./modules/settings/settings.routes";
 
 export async function registerRoutes(app: FastifyInstance): Promise<FastifyInstance> {
+  app.get('/api/health', async (_req, reply) => {
+    reply.send({
+      status: 'ok',
+      service: 'transity-terminal',
+      tenantId: process.env.REALMIO_TENANT_ID || 'transity',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   registerAuthRoutes(app);
 
   app.addHook('preHandler', async (req, reply) => {

@@ -19,7 +19,9 @@ const searchSchema = z.object({
   originCity: z.string().min(1),
   destinationCity: z.string().min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  passengers: z.coerce.number().int().min(1).optional()
+  passengers: z.coerce.number().int().min(1).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).optional(),
 });
 
 const createBookingSchema = z.object({
@@ -137,11 +139,20 @@ export class AppController {
     reply.send(operators);
   }
 
+  async getOperatorInfo(_req: FastifyRequest, reply: FastifyReply) {
+    try {
+      const info = await this.service.getOperatorInfo();
+      reply.send(info);
+    } catch (e: unknown) {
+      reply.code(500).send({ error: errMsg(e), code: 'OPERATOR_INFO_ERROR' });
+    }
+  }
+
   async searchTrips(req: FastifyRequest, reply: FastifyReply) {
     const parsed = searchSchema.safeParse(req.query);
-    if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
-    const results = await this.service.searchTrips(parsed.data);
-    reply.send(results);
+    if (!parsed.success) return reply.code(400).send({ error: "Validation failed", code: 'VALIDATION_ERROR', details: parsed.error.flatten() });
+    const result = await this.service.searchTrips(parsed.data);
+    reply.send(result);
   }
 
   async getTripDetail(req: FastifyRequest, reply: FastifyReply) {
