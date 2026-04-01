@@ -71,16 +71,19 @@ export function registerAdminRoutes(app: FastifyInstance) {
       return reply.code(422).send({ message: err.message || 'Gagal membuat akun di sistem autentikasi' });
     }
 
+    const now = new Date();
     await db
       .insert(users)
       .values({
-        id:    realmioUser.userId,
-        email: realmioUser.email,
-        name:  realmioUser.name,
+        id:        realmioUser.userId,
+        email:     realmioUser.email,
+        name:      realmioUser.name,
+        createdAt: now,
+        updatedAt: now,
       })
       .onConflictDoUpdate({
         target: users.id,
-        set: { name: realmioUser.name, email: realmioUser.email },
+        set: { name: realmioUser.name, email: realmioUser.email, updatedAt: now },
       });
 
     const [created] = await db
