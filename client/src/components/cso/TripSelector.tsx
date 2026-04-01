@@ -494,6 +494,9 @@ export default function TripSelector({
           onTripSelect(match);
           onInitialConsumed?.();
         }
+      } else if (!initialTripId) {
+        // Outlet pre-selection is done, mark consumed so user can freely change outlet
+        setInitialConsumed(true);
       }
       return;
     }
