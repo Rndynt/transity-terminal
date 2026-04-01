@@ -13,6 +13,7 @@ import { useLocation, Redirect } from "wouter";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const LoginPage = lazy(() => import("@/pages/auth/LoginPage"));
+const SetupPage = lazy(() => import("@/pages/auth/SetupPage"));
 const CsoPage = lazy(() => import("@/pages/cso/CsoPage"));
 const MastersPage = lazy(() => import("@/pages/masters/MastersPage"));
 const CargoListPage = lazy(() => import("@/pages/cargo/CargoListPage"));
@@ -73,6 +74,7 @@ function Router() {
     <Suspense fallback={<PageLoader />}>
       <Switch>
         <Route path="/login" component={LoginPage} />
+        <Route path="/setup" component={SetupPage} />
         <Route>
           <ProtectedRoute>
             <PermissionsProvider>

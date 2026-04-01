@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../../db";
 import { eq, and } from "drizzle-orm";
 import { requireFlag, requireAnyFlag } from "./rbac.middleware";
+import { createRealmioUser } from "../auth/realmio";
 
 export function registerAdminRoutes(app: FastifyInstance) {
   app.get('/api/admin/roles', { preHandler: [requireAnyFlag('admin.flags.manage', 'admin.staff.manage')] }, async (_req: any, reply: any) => {
@@ -45,13 +46,28 @@ export function registerAdminRoutes(app: FastifyInstance) {
 
   app.post('/api/admin/staff', { preHandler: [requireFlag('admin.staff.manage')] }, async (req: any, reply: any) => {
     const { staffMembers } = await import('../../../shared/schema');
-    const { userId, roleId, outletId, isActive } = req.body;
+    const { name, email, password, roleId, outletId, isActive } = req.body;
+
+    if (!name || !email || !password || !roleId) {
+      return reply.code(400).send({ message: 'name, email, password, dan roleId wajib diisi' });
+    }
+
+    let realmioUser: { userId: string; email: string; name: string };
+    try {
+      realmioUser = await createRealmioUser(name, email, password);
+    } catch (err: any) {
+      return reply.code(422).send({ message: err.message || 'Gagal membuat akun di sistem autentikasi' });
+    }
+
     const [created] = await db.insert(staffMembers).values({
-      userId,
+      userId:   realmioUser.userId,
+      name:     realmioUser.name,
+      email:    realmioUser.email,
       roleId,
       outletId: outletId || null,
       isActive: isActive !== false,
     }).returning();
+
     reply.code(201).send(created);
   });
 

@@ -16,14 +16,16 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
-  Users, Plus, Pencil, PowerOff, Shield, Store, Loader2, Search, RefreshCw
+  Users, Plus, Pencil, PowerOff, Shield, Store, Loader2, Search, RefreshCw, Eye, EyeOff
 } from 'lucide-react';
 
 interface StaffMember {
   id: string;
   userId: string;
+  name: string | null;
+  email: string | null;
   roleId: string;
   outletId: string | null;
   isActive: boolean;
@@ -49,22 +51,28 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  owner: 'bg-purple-100 text-purple-700',
-  finance: 'bg-blue-100 text-blue-700',
-  manager: 'bg-indigo-100 text-indigo-700',
+  owner:          'bg-purple-100 text-purple-700',
+  finance:        'bg-blue-100 text-blue-700',
+  manager:        'bg-indigo-100 text-indigo-700',
   spv_operations: 'bg-orange-100 text-orange-700',
-  operations: 'bg-amber-100 text-amber-700',
-  spv_cso: 'bg-green-100 text-green-700',
-  cso: 'bg-teal-100 text-teal-700',
+  operations:     'bg-amber-100 text-amber-700',
+  spv_cso:        'bg-green-100 text-green-700',
+  cso:            'bg-teal-100 text-teal-700',
 };
 
+const EMPTY_CREATE = { name: '', email: '', password: '', roleId: '', outletId: '' };
+const EMPTY_EDIT   = { roleId: '', outletId: '' };
+
 export default function AdminStaffPage() {
-  usePageTitle("Kelola Staff", "Assignment role & outlet tim");
+  usePageTitle("Kelola Staff", "Manajemen akun & role tim");
   const { toast } = useToast();
-  const [search, setSearch] = useState('');
+  const [search, setSearch]         = useState('');
   const [showDialog, setShowDialog] = useState(false);
   const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
-  const [form, setForm] = useState({ userId: '', roleId: '', outletId: '' });
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [createForm, setCreateForm] = useState(EMPTY_CREATE);
+  const [editForm, setEditForm]     = useState(EMPTY_EDIT);
 
   const { data: staffList = [], isLoading, refetch } = useQuery<StaffMember[]>({
     queryKey: ['/api/admin/staff'],
@@ -82,15 +90,23 @@ export default function AdminStaffPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: { userId: string; roleId: string; outletId: string | null }) =>
-      apiFetch('/api/admin/staff', { method: 'POST', body: JSON.stringify(data) }),
+    mutationFn: (data: typeof EMPTY_CREATE) =>
+      apiFetch('/api/admin/staff', {
+        method: 'POST',
+        body: JSON.stringify({
+          name:     data.name.trim(),
+          email:    data.email.trim(),
+          password: data.password,
+          roleId:   data.roleId,
+          outletId: data.outletId || null,
+        }),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/staff'] });
-      toast({ title: 'Staff berhasil ditambahkan' });
-      setShowDialog(false);
-      resetForm();
+      toast({ title: 'Staff berhasil ditambahkan', description: 'Akun login sudah dibuat otomatis.' });
+      closeDialog();
     },
-    onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' }),
+    onError: (e: Error) => toast({ title: 'Gagal menambahkan staff', description: e.message, variant: 'destructive' }),
   });
 
   const updateMutation = useMutation({
@@ -99,9 +115,7 @@ export default function AdminStaffPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/staff'] });
       toast({ title: 'Staff berhasil diperbarui' });
-      setShowDialog(false);
-      setEditTarget(null);
-      resetForm();
+      closeDialog();
     },
     onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' }),
   });
@@ -113,40 +127,62 @@ export default function AdminStaffPage() {
     onError: (e: Error) => toast({ title: 'Gagal', description: e.message, variant: 'destructive' }),
   });
 
-  const resetForm = () => setForm({ userId: '', roleId: '', outletId: '' });
+  const closeDialog = () => {
+    setShowDialog(false);
+    setEditTarget(null);
+    setCreateForm(EMPTY_CREATE);
+    setEditForm(EMPTY_EDIT);
+    setShowPassword(false);
+  };
 
   const openCreate = () => {
     setEditTarget(null);
-    resetForm();
+    setCreateForm(EMPTY_CREATE);
     setShowDialog(true);
   };
 
   const openEdit = (staff: StaffMember) => {
     setEditTarget(staff);
-    setForm({ userId: staff.userId, roleId: staff.roleId, outletId: staff.outletId || '' });
+    setEditForm({ roleId: staff.roleId, outletId: staff.outletId || '' });
     setShowDialog(true);
   };
 
   const handleSave = () => {
-    const payload = { userId: form.userId.trim(), roleId: form.roleId, outletId: form.outletId || null };
     if (editTarget) {
-      updateMutation.mutate({ id: editTarget.id, data: { roleId: payload.roleId, outletId: payload.outletId } });
+      updateMutation.mutate({
+        id: editTarget.id,
+        data: { roleId: editForm.roleId, outletId: editForm.outletId || null },
+      });
     } else {
-      createMutation.mutate(payload);
+      createMutation.mutate(createForm);
     }
   };
 
-  const filtered = staffList.filter(s =>
-    s.userId.toLowerCase().includes(search.toLowerCase()) ||
-    s.roleId.toLowerCase().includes(search.toLowerCase())
-  );
+  const isCreateValid =
+    createForm.name.trim().length > 0 &&
+    createForm.email.trim().length > 0 &&
+    createForm.password.length >= 8 &&
+    createForm.roleId.length > 0;
 
-  const getRoleName = (roleId: string) => rolesList.find(r => r.id === roleId)?.name || roleId;
-  const getOutletName = (outletId: string | null) => outletId ? (outlets.find(o => o.id === outletId)?.name || outletId.slice(0, 8) + '…') : 'Semua Outlet';
+  const isEditValid = editForm.roleId.length > 0;
+
+  const filtered = staffList.filter(s => {
+    const q = search.toLowerCase();
+    return (
+      (s.name  ?? '').toLowerCase().includes(q) ||
+      (s.email ?? '').toLowerCase().includes(q) ||
+      s.roleId.toLowerCase().includes(q)
+    );
+  });
+
+  const getRoleName   = (roleId: string)           => rolesList.find(r => r.id === roleId)?.name || roleId;
+  const getOutletName = (outletId: string | null)  => outletId ? (outlets.find(o => o.id === outletId)?.name || outletId.slice(0, 8) + '…') : 'Semua Outlet';
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="admin-staff-page">
-      <PageHeader icon={Users} title="Kelola Staff" subtitle="Assignment role & outlet tim" />
+      <PageHeader icon={Users} title="Kelola Staff" subtitle="Manajemen akun & role tim" />
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto w-full p-4 md:p-6 space-y-4">
           <div className="hidden lg:block" />
@@ -156,7 +192,13 @@ export default function AdminStaffPage() {
               <div className="flex items-center gap-3">
                 <div className="relative flex-1 max-w-sm">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <Input placeholder="Cari user ID atau role..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
+                  <Input
+                    placeholder="Cari nama, email, atau role..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="pl-9 h-9"
+                    data-testid="input-search-staff"
+                  />
                 </div>
                 <Button variant="outline" size="sm" onClick={() => refetch()} className="h-9">
                   <RefreshCw className="w-4 h-4" />
@@ -181,7 +223,8 @@ export default function AdminStaffPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs">User ID</TableHead>
+                      <TableHead className="text-xs">Nama</TableHead>
+                      <TableHead className="text-xs">Email</TableHead>
                       <TableHead className="text-xs">Role</TableHead>
                       <TableHead className="text-xs">Outlet Scope</TableHead>
                       <TableHead className="text-xs">Status</TableHead>
@@ -190,8 +233,13 @@ export default function AdminStaffPage() {
                   </TableHeader>
                   <TableBody>
                     {filtered.map(staff => (
-                      <TableRow key={staff.id} className={!staff.isActive ? 'opacity-50' : ''}>
-                        <TableCell className="font-mono text-xs text-gray-600">{staff.userId}</TableCell>
+                      <TableRow key={staff.id} className={!staff.isActive ? 'opacity-50' : ''} data-testid={`row-staff-${staff.id}`}>
+                        <TableCell className="font-medium text-sm">
+                          {staff.name || <span className="text-gray-400 text-xs font-mono">{staff.userId.slice(0, 12)}…</span>}
+                        </TableCell>
+                        <TableCell className="text-xs text-gray-500">
+                          {staff.email || '—'}
+                        </TableCell>
                         <TableCell>
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${ROLE_COLORS[staff.roleId] || 'bg-gray-100 text-gray-700'}`}>
                             <Shield className="w-3 h-3" /> {getRoleName(staff.roleId)}
@@ -234,26 +282,74 @@ export default function AdminStaffPage() {
         </div>
       </div>
 
-      <Dialog open={showDialog} onOpenChange={open => { setShowDialog(open); if (!open) { setEditTarget(null); resetForm(); } }}>
+      <Dialog open={showDialog} onOpenChange={open => { if (!open) closeDialog(); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editTarget ? 'Edit Staff' : 'Tambah Staff Baru'}</DialogTitle>
+            <DialogTitle>{editTarget ? 'Edit Role & Outlet Staff' : 'Tambah Staff Baru'}</DialogTitle>
           </DialogHeader>
+
           <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">User ID</label>
-              <Input
-                placeholder="e.g. user-abc123"
-                value={form.userId}
-                onChange={e => setForm(f => ({ ...f, userId: e.target.value }))}
-                disabled={!!editTarget}
-                data-testid="input-staff-userid"
-              />
-              {!editTarget && <p className="text-xs text-gray-400">ID unik dari sistem autentikasi</p>}
-            </div>
+            {!editTarget ? (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700">Nama Lengkap</label>
+                  <Input
+                    placeholder="Budi Santoso"
+                    value={createForm.name}
+                    onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
+                    data-testid="input-staff-name"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700">Email</label>
+                  <Input
+                    type="email"
+                    placeholder="budi@transity.id"
+                    value={createForm.email}
+                    onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))}
+                    data-testid="input-staff-email"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700">Password</label>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Min. 8 karakter"
+                      value={createForm.password}
+                      onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))}
+                      className="pr-9"
+                      data-testid="input-staff-password"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      onClick={() => setShowPassword(v => !v)}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {createForm.password.length > 0 && createForm.password.length < 8 && (
+                    <p className="text-xs text-red-500">Password minimal 8 karakter</p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-lg bg-gray-50 border px-4 py-3 space-y-0.5">
+                <p className="text-sm font-medium">{editTarget.name || 'Tanpa nama'}</p>
+                <p className="text-xs text-gray-500">{editTarget.email || editTarget.userId}</p>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-gray-700">Role</label>
-              <Select value={form.roleId} onValueChange={v => setForm(f => ({ ...f, roleId: v }))}>
+              <Select
+                value={editTarget ? editForm.roleId : createForm.roleId}
+                onValueChange={v => editTarget
+                  ? setEditForm(f => ({ ...f, roleId: v }))
+                  : setCreateForm(f => ({ ...f, roleId: v }))
+                }
+              >
                 <SelectTrigger data-testid="select-staff-role">
                   <SelectValue placeholder="Pilih role..." />
                 </SelectTrigger>
@@ -269,9 +365,16 @@ export default function AdminStaffPage() {
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Outlet (opsional)</label>
-              <Select value={form.outletId || '__all__'} onValueChange={v => setForm(f => ({ ...f, outletId: v === '__all__' ? '' : v }))}>
+              <label className="text-sm font-medium text-gray-700">Outlet <span className="text-gray-400 font-normal">(opsional)</span></label>
+              <Select
+                value={(editTarget ? editForm.outletId : createForm.outletId) || '__all__'}
+                onValueChange={v => {
+                  const val = v === '__all__' ? '' : v;
+                  editTarget ? setEditForm(f => ({ ...f, outletId: val })) : setCreateForm(f => ({ ...f, outletId: val }));
+                }}
+              >
                 <SelectTrigger data-testid="select-staff-outlet">
                   <SelectValue placeholder="Semua Outlet" />
                 </SelectTrigger>
@@ -294,15 +397,16 @@ export default function AdminStaffPage() {
               <p className="text-xs text-gray-400">Kosongkan untuk akses semua outlet</p>
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowDialog(false); setEditTarget(null); resetForm(); }}>Batal</Button>
+            <Button variant="outline" onClick={closeDialog}>Batal</Button>
             <Button
               onClick={handleSave}
-              disabled={!form.userId.trim() || !form.roleId || createMutation.isPending || updateMutation.isPending}
+              disabled={isPending || (editTarget ? !isEditValid : !isCreateValid)}
               data-testid="btn-save-staff"
             >
-              {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
-              {editTarget ? 'Simpan Perubahan' : 'Tambah Staff'}
+              {isPending && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+              {editTarget ? 'Simpan Perubahan' : 'Tambah & Buat Akun'}
             </Button>
           </DialogFooter>
         </DialogContent>

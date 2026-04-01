@@ -101,4 +101,44 @@ export async function optionalAuth(req: FastifyRequest, _reply: FastifyReply) {
   }
 }
 
+export interface RealmioCreateUserResult {
+  userId: string;
+  email: string;
+  name: string;
+}
+
+export async function createRealmioUser(
+  name: string,
+  email: string,
+  password: string
+): Promise<RealmioCreateUserResult> {
+  if (!REALMIO_BASE_URL) {
+    const fakeId = `dev-${Date.now()}`;
+    return { userId: fakeId, email, name };
+  }
+
+  const res = await fetch(`${REALMIO_BASE_URL}/api/auth/sign-up/email`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Tenant-Id": REALMIO_TENANT_ID,
+    },
+    body: JSON.stringify({ name, email, password }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    const message = data?.message || data?.error || "Gagal membuat akun di sistem autentikasi";
+    throw new Error(message);
+  }
+
+  const user = data.user ?? data;
+  if (!user?.id) {
+    throw new Error("Respons Realmio tidak valid: userId tidak ditemukan");
+  }
+
+  return { userId: user.id, email: user.email, name: user.name ?? name };
+}
+
 export { REALMIO_BASE_URL, REALMIO_TENANT_ID, DEV_BYPASS_AUTH, DEV_USER };

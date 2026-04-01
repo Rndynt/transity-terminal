@@ -4,7 +4,10 @@ import {
   REALMIO_TENANT_ID,
   DEV_BYPASS_AUTH,
   DEV_USER,
+  createRealmioUser,
 } from "./realmio";
+import { db } from "../../db";
+import { staffMembers } from "../../../shared/schema";
 
 export function registerAuthRoutes(app: FastifyInstance) {
   app.post("/api/auth/sign-in/email", { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -137,6 +140,51 @@ export function registerAuthRoutes(app: FastifyInstance) {
     } catch (err) {
       return reply.code(401).send({ user: null, session: null });
     }
+  });
+
+  app.get("/api/setup/status", async (_req, reply) => {
+    const rows = await db.select().from(staffMembers).limit(1);
+    return reply.send({ needsSetup: rows.length === 0 });
+  });
+
+  app.post("/api/setup/init", { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const existing = await db.select().from(staffMembers).limit(1);
+    if (existing.length > 0) {
+      return reply.code(403).send({ message: "Setup sudah dilakukan. Halaman ini tidak bisa diakses lagi." });
+    }
+
+    const { name, email, password } = req.body as { name?: string; email?: string; password?: string };
+    if (!name || !email || !password) {
+      return reply.code(400).send({ message: "name, email, dan password wajib diisi" });
+    }
+    if (password.length < 8) {
+      return reply.code(400).send({ message: "Password minimal 8 karakter" });
+    }
+
+    let realmioUser: { userId: string; email: string; name: string };
+    try {
+      realmioUser = await createRealmioUser(name, email, password);
+    } catch (err: any) {
+      return reply.code(422).send({ message: err.message || "Gagal membuat akun di sistem autentikasi" });
+    }
+
+    const { roles } = await import("../../../shared/schema");
+    const ownerRoles = await db.select().from(roles).limit(1);
+    const ownerRoleId = ownerRoles.find(r => r.id === "owner")?.id ?? ownerRoles[0]?.id;
+
+    if (!ownerRoleId) {
+      return reply.code(500).send({ message: "Role 'owner' tidak ditemukan di database. Pastikan seed sudah dijalankan." });
+    }
+
+    const [created] = await db.insert(staffMembers).values({
+      userId:  realmioUser.userId,
+      name:    realmioUser.name,
+      email:   realmioUser.email,
+      roleId:  ownerRoleId,
+      isActive: true,
+    }).returning();
+
+    return reply.code(201).send({ staff: created, message: "Akun owner berhasil dibuat. Silakan login." });
   });
 
   app.get("/api/auth/me", async (req, reply) => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { Bus, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
@@ -8,12 +8,31 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [checkingSetup, setCheckingSetup] = useState(true);
   const { signIn, isLoading, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    fetch("/api/setup/status")
+      .then(r => r.json())
+      .then(data => {
+        if (data.needsSetup) navigate("/setup");
+      })
+      .catch(() => {})
+      .finally(() => setCheckingSetup(false));
+  }, [navigate]);
 
   if (isAuthenticated) {
     navigate("/");
     return null;
+  }
+
+  if (checkingSetup) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+      </div>
+    );
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
