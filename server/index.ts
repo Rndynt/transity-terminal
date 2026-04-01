@@ -4,6 +4,7 @@ import rateLimit from "@fastify/rate-limit";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { scheduler } from "./scheduler";
+import { runMigrations } from "./migrate";
 import { existsSync } from "fs";
 import { join, resolve } from "path";
 
@@ -111,6 +112,7 @@ app.setErrorHandler((err: Error & { status?: number; statusCode?: number; code?:
 });
 
 (async () => {
+  await runMigrations();
   await registerRoutes(app);
 
   const mobileDist = join(process.cwd(), "apps/mobile/dist");
