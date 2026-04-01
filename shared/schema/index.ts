@@ -1,4 +1,5 @@
 export * from "./enums";
+export * from "./users";
 export * from "./fleet";
 export * from "./network";
 export * from "./scheduling";
