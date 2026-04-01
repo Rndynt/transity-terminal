@@ -11,13 +11,19 @@ export async function runMigrations() {
     console.log("[migrate] staff_members: removed name/email columns (now linked via users table)");
 
     // Ensure users table has all columns our app expects.
-    // Realmio may create the users table without name/image columns.
+    // Realmio may create the users table with a minimal structure (only id + credentials),
+    // so we add every column the application depends on if it doesn't already exist.
     await client.query(`
       ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS email text,
         ADD COLUMN IF NOT EXISTS name text,
-        ADD COLUMN IF NOT EXISTS image text;
+        ADD COLUMN IF NOT EXISTS image text,
+        ADD COLUMN IF NOT EXISTS "emailVerified" boolean NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS "createdAt" timestamptz NOT NULL DEFAULT now(),
+        ADD COLUMN IF NOT EXISTS "updatedAt" timestamptz NOT NULL DEFAULT now(),
+        ADD COLUMN IF NOT EXISTS role text;
     `);
-    console.log("[migrate] users: ensured name/image columns exist");
+    console.log("[migrate] users: ensured all required columns exist (email, name, image, emailVerified, createdAt, updatedAt, role)");
 
   } catch (err) {
     console.error("[migrate] Failed:", err);
