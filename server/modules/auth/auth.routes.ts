@@ -176,16 +176,19 @@ export function registerAuthRoutes(app: FastifyInstance) {
       return reply.code(500).send({ message: "Role 'owner' tidak ditemukan di database. Pastikan seed sudah dijalankan." });
     }
 
+    const now = new Date();
     await db
       .insert(users)
       .values({
-        id:    realmioUser.userId,
-        email: realmioUser.email,
-        name:  realmioUser.name,
+        id:        realmioUser.userId,
+        email:     realmioUser.email,
+        name:      realmioUser.name,
+        createdAt: now,
+        updatedAt: now,
       })
       .onConflictDoUpdate({
         target: users.id,
-        set: { name: realmioUser.name, email: realmioUser.email },
+        set: { name: realmioUser.name, email: realmioUser.email, updatedAt: now },
       });
 
     const [created] = await db.insert(staffMembers).values({
