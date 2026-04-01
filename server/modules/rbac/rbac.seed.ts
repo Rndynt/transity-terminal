@@ -165,18 +165,20 @@ export async function seedRbac() {
 
   console.log("[RBAC] Seeding role_flags (default matrix)...");
   let count = 0;
+  let skipped = 0;
   for (const [flagId, matrix] of Object.entries(DEFAULT_MATRIX)) {
     for (const roleId of Object.keys(matrix) as RoleId[]) {
       const enabled = matrix[roleId];
-      await db.execute(sql`
+      const result = await db.execute(sql`
         INSERT INTO role_flags (role_id, flag_id, enabled)
         VALUES (${roleId}, ${flagId}, ${enabled})
-        ON CONFLICT (role_id, flag_id) DO UPDATE SET enabled = EXCLUDED.enabled
+        ON CONFLICT (role_id, flag_id) DO NOTHING
       `);
-      count++;
+      if ((result as any).rowCount === 0) skipped++;
+      else count++;
     }
   }
-  console.log(`  ✓ ${count} role-flag mappings (upserted)`);
+  console.log(`  ✓ ${count} role-flag mappings inserted, ${skipped} already exist (preserved)`);
 
   if (process.env.NODE_ENV !== 'production') {
     console.log("[RBAC] Seeding dev staff member...");
