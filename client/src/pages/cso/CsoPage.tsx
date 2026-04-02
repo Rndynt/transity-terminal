@@ -77,6 +77,13 @@ export default function CsoPage() {
   const [ppFares, setPpFares] = useState<{ outbound: number; return: number }>({ outbound: 0, return: 0 });
   const [returnOutlet, setReturnOutlet] = useState<Outlet | undefined>();
   const [returnDate, setReturnDate] = useState<string>('');
+  // Return trip sub-steps: 'route' = pilih rute pulang, 'seat' = pilih kursi pulang
+  const [returnSubStep, setReturnSubStep] = useState<'route' | 'seat'>('route');
+  const [returnSelectedTrip, setReturnSelectedTrip] = useState<CsoAvailableTrip | undefined>();
+  const [returnOriginStopSel, setReturnOriginStopSel] = useState<Stop | undefined>();
+  const [returnDestStopSel, setReturnDestStopSel] = useState<Stop | undefined>();
+  const [returnOriginSeqSel, setReturnOriginSeqSel] = useState<number | undefined>();
+  const [returnDestSeqSel, setReturnDestSeqSel] = useState<number | undefined>();
   const { data: allOutlets = [] } = useQuery({ queryKey: ['/api/outlets'], queryFn: outletsApi.getAll });
 
   const [assignModeInfo, setAssignModeInfo] = useState<AssignModeState | null>(
@@ -211,19 +218,42 @@ export default function CsoPage() {
   };
 
   const handleReturnTripSelect = (trip: CsoAvailableTrip) => {
-    roundTripFlow.setReturnTrip(trip, state.destinationStop, state.originStop, 1, trip.stopCount || 10);
+    // Hanya simpan trip, reset pilihan rute/kursi, tampilkan RouteTimeline
+    setReturnSelectedTrip(trip);
+    setReturnOriginStopSel(undefined);
+    setReturnDestStopSel(undefined);
+    setReturnOriginSeqSel(undefined);
+    setReturnDestSeqSel(undefined);
+    roundTripFlow.setReturnSeats([]);
+    setReturnSubStep('route');
     setMobilePanel('right');
   };
 
+  const handleReturnProceedToSeat = () => {
+    if (!returnSelectedTrip || !returnOriginStopSel || !returnDestStopSel ||
+        returnOriginSeqSel === undefined || returnDestSeqSel === undefined) return;
+    // Commit rute ke roundTripFlow dan pindah ke sub-step pilih kursi
+    roundTripFlow.setReturnTrip(
+      returnSelectedTrip,
+      returnOriginStopSel,
+      returnDestStopSel,
+      returnOriginSeqSel,
+      returnDestSeqSel
+    );
+    setReturnSubStep('seat');
+    setMobilePanel('left');
+  };
+
   const handleReturnNext = async () => {
-    if (!roundTripFlow.state.returnTrip || roundTripFlow.state.returnSeats.length === 0) return;
+    if (!roundTripFlow.state.returnTrip || roundTripFlow.state.returnSeats.length === 0 ||
+        roundTripFlow.state.returnOriginSeq === undefined || roundTripFlow.state.returnDestinationSeq === undefined) return;
     
     setIsProcessing(true);
     try {
       const fare = await pricingApi.quoteFare(
         roundTripFlow.state.returnTrip.tripId!,
-        1,
-        roundTripFlow.state.returnTrip.stopCount || 10,
+        roundTripFlow.state.returnOriginSeq,
+        roundTripFlow.state.returnDestinationSeq,
         roundTripFlow.state.returnSeats.length
       );
       setPpFares(prev => ({ ...prev, return: fare.perPassenger }));
@@ -972,18 +1002,39 @@ export default function CsoPage() {
           /* Two-panel layout: step 1 (outbound seats) and step 2 (return trip+seats) */
           <div className="flex-1 flex overflow-hidden">
 
-            {/* LEFT PANEL: SeatMap (step 1) or TripSelector for return (step 2) */}
+            {/* LEFT PANEL: SeatMap (step 1 / return seat sub-step) or TripSelector (return route sub-step) */}
             <div className={`flex-1 border-r border-gray-200 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'left' ? 'block' : 'hidden md:block'}`} data-testid="panel-seat-map">
               {bookingMode === 'round-trip' && ppStep === 2 ? (
-                <TripSelector
-                  selectedOutlet={returnOutlet}
-                  selectedTrip={roundTripFlow.state.returnTrip ?? undefined}
-                  onOutletSelect={setReturnOutlet}
-                  onTripSelect={handleReturnTripSelect}
-                  selectedDate={returnDate}
-                  onDateChange={setReturnDate}
-                  initialOutletId={returnInitialOutletId}
-                />
+                returnSubStep === 'route' ? (
+                  /* Sub-step rute: kiri = pilih jadwal pulang */
+                  <TripSelector
+                    selectedOutlet={returnOutlet}
+                    selectedTrip={returnSelectedTrip}
+                    onOutletSelect={setReturnOutlet}
+                    onTripSelect={handleReturnTripSelect}
+                    selectedDate={returnDate}
+                    onDateChange={setReturnDate}
+                    initialOutletId={returnInitialOutletId}
+                  />
+                ) : (
+                  /* Sub-step kursi: kiri = seat map return */
+                  roundTripFlow.state.returnTrip && roundTripFlow.state.returnOriginSeq !== undefined && roundTripFlow.state.returnDestinationSeq !== undefined ? (
+                    <SeatMap
+                      trip={{ id: roundTripFlow.state.returnTrip.tripId, ...roundTripFlow.state.returnTrip } as any}
+                      originSeq={roundTripFlow.state.returnOriginSeq}
+                      destinationSeq={roundTripFlow.state.returnDestinationSeq}
+                      selectedSeats={roundTripFlow.state.returnSeats}
+                      onSeatSelect={(seat) => {
+                        if (roundTripFlow.state.returnSeats.length < roundTripFlow.state.outboundSeats.length) {
+                          roundTripFlow.setReturnSeats([...roundTripFlow.state.returnSeats, seat]);
+                        }
+                      }}
+                      onSeatDeselect={(seat) => roundTripFlow.setReturnSeats(roundTripFlow.state.returnSeats.filter(s => s !== seat))}
+                      originStopId={returnOriginStopSel?.id}
+                      destinationStopId={returnDestStopSel?.id}
+                    />
+                  ) : null
+                )
               ) : (
                 <>
                   {state.trip?.id && state.originSeq !== undefined && state.destinationSeq !== undefined ? (
@@ -1030,64 +1081,96 @@ export default function CsoPage() {
               )}
             </div>
 
-            {/* RIGHT PANEL: return SeatMap (step 2), PP summary/proceed (step 1 RT), or PassengerForm (single) */}
+            {/* RIGHT PANEL: RouteTimeline/seat-proceed (step 2), PP summary/proceed (step 1 RT), or PassengerForm (single) */}
             <div className={`flex-1 overflow-hidden flex-col relative ${mobilePanel === 'right' ? 'flex' : 'hidden md:flex'}`}>
               {bookingMode === 'round-trip' && ppStep === 2 ? (
-                /* Step 2 right: seat map for return trip */
-                <div className="flex-1 flex flex-col overflow-hidden">
-                  {roundTripFlow.state.returnTrip ? (
-                    <>
-                      <div className="flex-shrink-0 px-4 py-2.5 border-b border-gray-100 bg-blue-50/40 flex items-center gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-blue-700">Pilih Kursi Pulang</p>
-                          <p className="text-[10px] text-blue-500">Butuh {roundTripFlow.state.outboundSeats.length} kursi</p>
-                        </div>
-                        <span className={`text-sm font-black ${roundTripFlow.state.returnSeats.length === roundTripFlow.state.outboundSeats.length ? 'text-emerald-600' : 'text-blue-600'}`}>
-                          {roundTripFlow.state.returnSeats.length}/{roundTripFlow.state.outboundSeats.length} Dipilih
-                        </span>
+                returnSubStep === 'route' ? (
+                  /* Sub-step rute: kanan = RouteTimeline pilih rute pulang */
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    {returnSelectedTrip ? (
+                      <RouteTimeline
+                        trip={{ id: returnSelectedTrip.tripId, ...returnSelectedTrip } as any}
+                        selectedOrigin={returnOriginStopSel}
+                        selectedDestination={returnDestStopSel}
+                        onOriginSelect={(stop, seq) => { setReturnOriginStopSel(stop); setReturnOriginSeqSel(seq); }}
+                        onDestinationSelect={(stop, seq) => { setReturnDestStopSel(stop); setReturnDestSeqSel(seq); }}
+                        onProceed={handleReturnProceedToSeat}
+                      />
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center text-gray-300 p-6">
+                        <MapPin className="w-10 h-10 mb-2" />
+                        <p className="text-sm text-gray-400 text-center font-medium">Pilih jadwal pulang<br />di panel kiri</p>
                       </div>
-                      <div className="flex-1 overflow-y-auto p-3 md:p-4">
-                        <SeatMap
-                          trip={{ id: roundTripFlow.state.returnTrip.tripId, ...roundTripFlow.state.returnTrip } as any}
-                          originSeq={1}
-                          destinationSeq={roundTripFlow.state.returnTrip.stopCount || 10}
-                          selectedSeats={roundTripFlow.state.returnSeats}
-                          onSeatSelect={(seat) => {
-                            if (roundTripFlow.state.returnSeats.length < roundTripFlow.state.outboundSeats.length) {
-                              roundTripFlow.setReturnSeats([...roundTripFlow.state.returnSeats, seat]);
-                            }
-                          }}
-                          onSeatDeselect={(seat) => roundTripFlow.setReturnSeats(roundTripFlow.state.returnSeats.filter(s => s !== seat))}
-                          originStopId={roundTripFlow.state.outboundDestinationStop?.id}
-                          destinationStopId={roundTripFlow.state.outboundOriginStop?.id}
-                        />
-                      </div>
-                      <div className="flex-shrink-0 p-3 border-t border-gray-100 flex gap-2">
-                        <button
-                          onClick={() => { setPpStep(1); setMobilePanel('left'); }}
-                          className="h-10 px-4 bg-gray-100 text-gray-600 rounded-xl font-semibold text-sm flex items-center gap-1.5 hover:bg-gray-200"
-                          data-testid="btn-return-back"
-                        >
-                          <ChevronLeft className="w-4 h-4" /> Kembali
-                        </button>
-                        <button
-                          onClick={handleReturnNext}
-                          disabled={roundTripFlow.state.returnSeats.length !== roundTripFlow.state.outboundSeats.length || isProcessing}
-                          className="flex-1 h-10 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 disabled:opacity-50 shadow-sm"
-                          data-testid="btn-return-next"
-                        >
-                          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-                          Lanjut ke Penumpang
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-gray-300 p-6">
-                      <Armchair className="w-10 h-10 mb-2" />
-                      <p className="text-sm text-gray-400 text-center">Pilih jadwal pulang di panel kiri</p>
+                    )}
+                    <div className="flex-shrink-0 p-3 border-t border-gray-100">
+                      <button
+                        onClick={() => { setPpStep(1); setMobilePanel('left'); }}
+                        className="h-10 px-4 bg-gray-100 text-gray-600 rounded-xl font-semibold text-sm flex items-center gap-1.5 hover:bg-gray-200"
+                        data-testid="btn-return-back-route"
+                      >
+                        <ChevronLeft className="w-4 h-4" /> Kembali ke Pergi
+                      </button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  /* Sub-step kursi: kanan = ringkasan + tombol lanjut */
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex-shrink-0 px-4 py-2.5 border-b border-gray-100 bg-emerald-50/40 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-emerald-700">Pilih Kursi Pulang</p>
+                        <p className="text-[10px] text-emerald-500">
+                          {returnOriginStopSel?.code} → {returnDestStopSel?.code} · Butuh {roundTripFlow.state.outboundSeats.length} kursi
+                        </p>
+                      </div>
+                      <span className={`text-sm font-black ${roundTripFlow.state.returnSeats.length === roundTripFlow.state.outboundSeats.length ? 'text-emerald-600' : 'text-gray-500'}`}>
+                        {roundTripFlow.state.returnSeats.length}/{roundTripFlow.state.outboundSeats.length} Dipilih
+                      </span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                      {/* Kursi pergi ringkasan */}
+                      <div className="bg-blue-50 rounded-2xl border border-blue-100 p-3">
+                        <p className="text-[10px] font-black text-blue-600 uppercase mb-2">Kursi Pergi Terpilih</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {roundTripFlow.state.outboundSeats.map(seat => (
+                            <span key={seat} className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold font-mono">{seat}</span>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Kursi pulang terpilih */}
+                      {roundTripFlow.state.returnSeats.length > 0 && (
+                        <div className="bg-emerald-50 rounded-2xl border border-emerald-100 p-3">
+                          <p className="text-[10px] font-black text-emerald-600 uppercase mb-2">Kursi Pulang Terpilih</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {roundTripFlow.state.returnSeats.map(seat => (
+                              <span key={seat} className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold font-mono">{seat}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {roundTripFlow.state.returnSeats.length < roundTripFlow.state.outboundSeats.length && (
+                        <p className="text-xs text-gray-400 text-center">Pilih kursi dari peta di panel kiri</p>
+                      )}
+                    </div>
+                    <div className="flex-shrink-0 p-3 border-t border-gray-100 flex gap-2">
+                      <button
+                        onClick={() => { setReturnSubStep('route'); setMobilePanel('right'); roundTripFlow.setReturnSeats([]); }}
+                        className="h-10 px-4 bg-gray-100 text-gray-600 rounded-xl font-semibold text-sm flex items-center gap-1.5 hover:bg-gray-200"
+                        data-testid="btn-return-back-to-route"
+                      >
+                        <ChevronLeft className="w-4 h-4" /> Ganti Rute
+                      </button>
+                      <button
+                        onClick={handleReturnNext}
+                        disabled={roundTripFlow.state.returnSeats.length !== roundTripFlow.state.outboundSeats.length || isProcessing}
+                        className="flex-1 h-10 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 disabled:opacity-50 shadow-sm"
+                        data-testid="btn-return-next"
+                      >
+                        {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+                        Lanjut ke Penumpang
+                      </button>
+                    </div>
+                  </div>
+                )
               ) : bookingMode === 'round-trip' ? (
                 /* Step 1 RT right: outbound summary card + return placeholder + proceed */
                 <div className="flex-1 overflow-y-auto p-3 md:p-4 flex flex-col gap-3">
