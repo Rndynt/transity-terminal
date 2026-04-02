@@ -886,7 +886,7 @@ export default function CsoPage() {
                     }`}
                     data-testid="mobile-tab-passenger"
                   >
-                    {bookingMode === 'round-trip' && ppStep === 2 ? 'Pilih Kursi Pulang' : `Data & Bayar${totalAmount > 0 ? ` (${fmtCurrency(totalAmount)})` : ''}`}
+                    {bookingMode === 'round-trip' && ppStep === 2 ? 'Pilih Kursi Pulang' : bookingMode === 'round-trip' ? 'Ringkasan' : `Data & Bayar${totalAmount > 0 ? ` (${fmtCurrency(totalAmount)})` : ''}`}
                   </button>
                 </div>
               </div>
@@ -998,7 +998,7 @@ export default function CsoPage() {
                   )}
                   {selectedSeats.length > 0 && (
                     <button
-                      onClick={() => setMobilePanel('right')}
+                      onClick={() => bookingMode === 'round-trip' ? handleProceedToReturnTrip() : setMobilePanel('right')}
                       className="md:hidden w-full mt-3 h-10 bg-blue-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
                       data-testid="mobile-btn-to-passenger"
                     >
@@ -1068,27 +1068,63 @@ export default function CsoPage() {
                   )}
                 </div>
               ) : bookingMode === 'round-trip' ? (
-                /* Step 1 RT right: seat summary + proceed button, no passenger form yet */
-                <div className="flex-1 overflow-y-auto p-3 md:p-5 flex flex-col gap-4">
+                /* Step 1 RT right: outbound summary card + return placeholder + proceed */
+                <div className="flex-1 overflow-y-auto p-3 md:p-4 flex flex-col gap-3">
                   {state.selectedSeats.length > 0 ? (
                     <>
-                      <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
-                        <p className="text-xs font-bold text-blue-700 uppercase mb-2">Kursi Pergi Terpilih</p>
-                        <div className="flex flex-wrap gap-1.5 mb-3">
-                          {state.selectedSeats.map(seat => (
-                            <span key={seat} className="px-2.5 py-1 bg-blue-600 text-white rounded-lg text-xs font-bold">{seat}</span>
-                          ))}
+                      {/* Outbound trip card */}
+                      <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                        <div className="bg-blue-600 px-4 py-3">
+                          <p className="text-[10px] text-blue-200 uppercase font-semibold tracking-wide mb-1">Perjalanan Pergi</p>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-white font-black text-lg leading-tight">{formatTime(selectedCsoTrip?.departAtAtOutlet)}</span>
+                            <ArrowRight className="w-3.5 h-3.5 text-blue-300 flex-shrink-0" />
+                            <span className="text-blue-100 text-sm font-semibold truncate">{state.destinationStop?.name}</span>
+                          </div>
+                          <p className="text-blue-200 text-[11px] mt-0.5 truncate">{state.originStop?.name} → {state.destinationStop?.name}</p>
                         </div>
-                        <p className="text-[10px] text-blue-500">Langkah berikutnya: pilih jadwal & kursi kepulangan</p>
+                        <div className="px-4 py-3 bg-white flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-gray-400 uppercase font-medium mb-1">Kursi Terpilih</p>
+                            <div className="flex flex-wrap gap-1">
+                              {state.selectedSeats.map(seat => (
+                                <span key={seat} className="px-2 py-0.5 bg-blue-600 text-white rounded text-xs font-bold">{seat}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-[10px] text-gray-400 uppercase font-medium mb-0.5">Total Pergi</p>
+                            <p className="text-sm font-black text-gray-800">{fmtCurrency(totalAmount)}</p>
+                          </div>
+                        </div>
                       </div>
+
+                      {/* Visual connector */}
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 border-t border-dashed border-gray-200" />
+                        <span className="text-[10px] text-gray-400 bg-gray-50 border border-gray-200 rounded-full px-2.5 py-0.5 whitespace-nowrap flex items-center gap-1">
+                          <ChevronRight className="w-3 h-3" /> Pilih jadwal pulang
+                        </span>
+                        <div className="flex-1 border-t border-dashed border-gray-200" />
+                      </div>
+
+                      {/* Return placeholder */}
+                      <div className="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center gap-1.5 text-center">
+                        <Armchair className="w-6 h-6 text-gray-300" />
+                        <p className="text-sm font-semibold text-gray-400">Jadwal Pulang</p>
+                        <p className="text-xs text-gray-400">{state.destinationStop?.name} → {state.originStop?.name}</p>
+                        <p className="text-[10px] text-gray-300 mt-0.5">Belum dipilih</p>
+                      </div>
+
+                      {/* Proceed button */}
                       <button
                         onClick={handleProceedToReturnTrip}
                         disabled={isProcessing}
-                        className="w-full h-12 bg-blue-600 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-100 disabled:opacity-50"
+                        className="w-full h-12 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 shadow-md shadow-blue-100 disabled:opacity-50 mt-auto"
                         data-testid="btn-proceed-to-return"
                       >
-                        {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-                        Lanjut ke Pilih Jadwal Pulang
+                        {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                        Pilih Jadwal Pulang
                       </button>
                     </>
                   ) : (
