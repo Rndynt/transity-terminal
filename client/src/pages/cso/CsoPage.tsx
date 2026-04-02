@@ -16,7 +16,7 @@ import ReturnTripSelector from '@/components/cso/ReturnTripSelector';
 import PassengerFormPP from '@/components/cso/PassengerFormPP';
 import RoundTripReview from '@/components/cso/RoundTripReview';
 import RoundTripPrintPreview from '@/components/cso/RoundTripPrintPreview';
-import { pricingApi } from '@/lib/api';
+import { pricingApi, outletsApi } from '@/lib/api';
 import CargoWaybillPreview from '@/components/cso/CargoWaybillPreview';
 import CsoCargoPanel from './CsoCargoPanel';
 import ManifestDialog from '@/components/manifest/ManifestDialog';
@@ -76,6 +76,13 @@ export default function CsoPage() {
   const roundTripFlow = useRoundTripFlow();
   const [ppResult, setPpResult] = useState<any>(null);
   const [ppFares, setPpFares] = useState<{ outbound: number; return: number }>({ outbound: 0, return: 0 });
+  const [returnOutlet, setReturnOutlet] = useState<Outlet | undefined>();
+  const [returnDate, setReturnDate] = useState<string>('');
+  const { data: allOutlets = [] } = useQuery({ queryKey: ['/api/outlets'], queryFn: outletsApi.getAll });
+  const returnInitialOutletId = useMemo(() => {
+    if (!state.destinationStop) return undefined;
+    return allOutlets.find((o: Outlet) => o.stopId === state.destinationStop!.id)?.id;
+  }, [allOutlets, state.destinationStop]);
 
   const [assignModeInfo, setAssignModeInfo] = useState<AssignModeState | null>(
     initialAssignPassengerId && initialAssignPassengerName
@@ -188,7 +195,13 @@ export default function CsoPage() {
         state.outlet
       );
       roundTripFlow.setOutboundSeats([...state.selectedSeats]);
+      if (!returnDate) {
+        const d = new Date(selectedDate);
+        d.setDate(d.getDate() + 1);
+        setReturnDate(d.toISOString().split('T')[0]);
+      }
       setPpStep(2);
+      setMobilePanel('left');
     } catch (e: any) {
       toast({ title: 'Gagal mengambil harga', description: e.message, variant: 'destructive' });
     } finally {
@@ -197,8 +210,9 @@ export default function CsoPage() {
     }
   };
 
-  const handleReturnTripSelect = async (trip: CsoAvailableTrip) => {
+  const handleReturnTripSelect = (trip: CsoAvailableTrip) => {
     roundTripFlow.setReturnTrip(trip, state.destinationStop, state.originStop, 1, trip.stopCount || 10);
+    setMobilePanel('right');
   };
 
   const handleReturnNext = async () => {
@@ -929,7 +943,7 @@ export default function CsoPage() {
                     }`}
                     data-testid="mobile-tab-seats"
                   >
-                    Pilih Kursi {selectedSeats.length > 0 && `(${selectedSeats.length})`}
+                    {bookingMode === 'round-trip' && ppStep === 2 ? 'Pilih Jadwal Pulang' : `Pilih Kursi${selectedSeats.length > 0 ? ` (${selectedSeats.length})` : ''}`}
                   </button>
                   <button
                     onClick={() => setMobilePanel('right')}
@@ -940,7 +954,7 @@ export default function CsoPage() {
                     }`}
                     data-testid="mobile-tab-passenger"
                   >
-                    Data & Bayar {totalAmount > 0 && `(${fmtCurrency(totalAmount)})`}
+                    {bookingMode === 'round-trip' && ppStep === 2 ? 'Pilih Kursi Pulang' : `Data & Bayar${totalAmount > 0 ? ` (${fmtCurrency(totalAmount)})` : ''}`}
                   </button>
                 </div>
               </div>
@@ -949,23 +963,9 @@ export default function CsoPage() {
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {bookingMode === 'round-trip' && <RoundTripStepper currentStep={ppStep} />}
 
-        {bookingMode === 'round-trip' && ppStep >= 2 ? (
+        {/* Full-screen PP steps 3-5 (passenger form, review, print) */}
+        {bookingMode === 'round-trip' && ppStep >= 3 ? (
           <div className="flex-1 overflow-hidden">
-            {ppStep === 2 && roundTripFlow.state.outboundOriginStop && roundTripFlow.state.outboundDestinationStop && (
-              <ReturnTripSelector
-                outboundOriginStop={roundTripFlow.state.outboundOriginStop}
-                outboundDestinationStop={roundTripFlow.state.outboundDestinationStop}
-                requiredSeatCount={roundTripFlow.state.outboundSeats.length}
-                selectedDate={selectedDate}
-                onDateChange={setSelectedDate}
-                onTripSelect={handleReturnTripSelect}
-                onSeatsSelect={roundTripFlow.setReturnSeats}
-                selectedTrip={roundTripFlow.state.returnTrip}
-                selectedSeats={roundTripFlow.state.returnSeats}
-                onBack={() => setPpStep(1)}
-                onNext={handleReturnNext}
-              />
-            )}
             {ppStep === 3 && roundTripFlow.state.outboundTrip && roundTripFlow.state.returnTrip && roundTripFlow.state.outboundOriginStop && roundTripFlow.state.outboundDestinationStop && (
               <PassengerFormPP
                 outboundTrip={roundTripFlow.state.outboundTrip}
@@ -1016,8 +1016,23 @@ export default function CsoPage() {
             )}
           </div>
         ) : (
+          /* Two-panel layout: step 1 (outbound seats) and step 2 (return trip+seats) */
           <div className="flex-1 flex overflow-hidden">
-                <div className={`flex-1 border-r border-gray-200 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'left' ? 'block' : 'hidden md:block'}`} data-testid="panel-seat-map">
+
+            {/* LEFT PANEL: SeatMap (step 1) or TripSelector for return (step 2) */}
+            <div className={`flex-1 border-r border-gray-200 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'left' ? 'block' : 'hidden md:block'}`} data-testid="panel-seat-map">
+              {bookingMode === 'round-trip' && ppStep === 2 ? (
+                <TripSelector
+                  selectedOutlet={returnOutlet}
+                  selectedTrip={roundTripFlow.state.returnTrip ?? undefined}
+                  onOutletSelect={setReturnOutlet}
+                  onTripSelect={handleReturnTripSelect}
+                  selectedDate={returnDate}
+                  onDateChange={setReturnDate}
+                  initialOutletId={returnInitialOutletId}
+                />
+              ) : (
+                <>
                   {state.trip?.id && state.originSeq !== undefined && state.destinationSeq !== undefined ? (
                     <SeatMap
                       trip={state.trip}
@@ -1049,57 +1064,132 @@ export default function CsoPage() {
                       <p className="text-sm font-medium text-gray-400">Data kursi tidak tersedia</p>
                     </div>
                   )}
-
                   {selectedSeats.length > 0 && (
                     <button
                       onClick={() => setMobilePanel('right')}
                       className="md:hidden w-full mt-3 h-10 bg-blue-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
                       data-testid="mobile-btn-to-passenger"
                     >
-                      Lanjut Isi Data <ChevronRight className="w-4 h-4" />
+                      {bookingMode === 'round-trip' ? 'Lanjut ke Jadwal Pulang' : 'Lanjut Isi Data'} <ChevronRight className="w-4 h-4" />
                     </button>
                   )}
-                </div>
+                </>
+              )}
+            </div>
 
-                  <div className={`flex-1 overflow-hidden flex-col relative ${mobilePanel === 'right' ? 'flex' : 'hidden md:flex'}`}>
-                    {bookingMode === 'round-trip' && state.selectedSeats.length > 0 && phase === 'book' ? (
-                      <div className="p-4 border-b border-blue-100 bg-blue-50/30 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-blue-700 uppercase">Pergi: {state.selectedSeats.length} Kursi</p>
-                          <p className="text-[10px] text-blue-500">Pilih "Lanjut ke Jadwal Pulang" untuk memilih tiket kembali</p>
+            {/* RIGHT PANEL: return SeatMap (step 2), PP summary/proceed (step 1 RT), or PassengerForm (single) */}
+            <div className={`flex-1 overflow-hidden flex-col relative ${mobilePanel === 'right' ? 'flex' : 'hidden md:flex'}`}>
+              {bookingMode === 'round-trip' && ppStep === 2 ? (
+                /* Step 2 right: seat map for return trip */
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  {roundTripFlow.state.returnTrip ? (
+                    <>
+                      <div className="flex-shrink-0 px-4 py-2.5 border-b border-gray-100 bg-blue-50/40 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-blue-700">Pilih Kursi Pulang</p>
+                          <p className="text-[10px] text-blue-500">Butuh {roundTripFlow.state.outboundSeats.length} kursi</p>
                         </div>
+                        <span className={`text-sm font-black ${roundTripFlow.state.returnSeats.length === roundTripFlow.state.outboundSeats.length ? 'text-emerald-600' : 'text-blue-600'}`}>
+                          {roundTripFlow.state.returnSeats.length}/{roundTripFlow.state.outboundSeats.length} Dipilih
+                        </span>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-3 md:p-4">
+                        <SeatMap
+                          trip={{ id: roundTripFlow.state.returnTrip.tripId, ...roundTripFlow.state.returnTrip } as any}
+                          originSeq={1}
+                          destinationSeq={roundTripFlow.state.returnTrip.stopCount || 10}
+                          selectedSeats={roundTripFlow.state.returnSeats}
+                          onSeatSelect={(seat) => {
+                            if (roundTripFlow.state.returnSeats.length < roundTripFlow.state.outboundSeats.length) {
+                              roundTripFlow.setReturnSeats([...roundTripFlow.state.returnSeats, seat]);
+                            }
+                          }}
+                          onSeatDeselect={(seat) => roundTripFlow.setReturnSeats(roundTripFlow.state.returnSeats.filter(s => s !== seat))}
+                          originStopId={roundTripFlow.state.outboundDestinationStop?.id}
+                          destinationStopId={roundTripFlow.state.outboundOriginStop?.id}
+                        />
+                      </div>
+                      <div className="flex-shrink-0 p-3 border-t border-gray-100 flex gap-2">
                         <button
-                          onClick={handleProceedToReturnTrip}
-                          disabled={isProcessing}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-100 disabled:opacity-50"
-                          data-testid="btn-proceed-to-return"
+                          onClick={() => { setPpStep(1); setMobilePanel('left'); }}
+                          className="h-10 px-4 bg-gray-100 text-gray-600 rounded-xl font-semibold text-sm flex items-center gap-1.5 hover:bg-gray-200"
+                          data-testid="btn-return-back"
                         >
-                          {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                          Lanjut ke Jadwal Pulang
+                          <ChevronLeft className="w-4 h-4" /> Kembali
+                        </button>
+                        <button
+                          onClick={handleReturnNext}
+                          disabled={roundTripFlow.state.returnSeats.length !== roundTripFlow.state.outboundSeats.length || isProcessing}
+                          className="flex-1 h-10 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 disabled:opacity-50 shadow-sm"
+                          data-testid="btn-return-next"
+                        >
+                          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+                          Lanjut ke Penumpang
                         </button>
                       </div>
-                    ) : null}
-                    <div className="flex-1 overflow-y-auto p-3 md:p-5">
-                      <PassengerForm
-                        selectedSeats={selectedSeats}
-                        passengers={state.passengers as any}
-                        onPassengersUpdate={handlePassengersUpdate}
-                        totalAmount={totalAmount}
-                        onBook={handleBookWithData as any}
-                        onPay={handlePayWithData as any}
-                        onPaymentUpdate={handlePaymentUpdate}
-                        payment={state.payment}
-                        onBack={handleBackToSelect}
-                        loading={isProcessing}
-                        promoCode={state.promoCode}
-                        discountAmount={state.discountAmount || 0}
-                        onApplyPromo={applyPromoCode}
-                        onClearPromo={clearPromoCode}
-                      />
+                    </>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-300 p-6">
+                      <Armchair className="w-10 h-10 mb-2" />
+                      <p className="text-sm text-gray-400 text-center">Pilih jadwal pulang di panel kiri</p>
                     </div>
-                  </div>
-              </div>
-          )}
+                  )}
+                </div>
+              ) : bookingMode === 'round-trip' ? (
+                /* Step 1 RT right: seat summary + proceed button, no passenger form yet */
+                <div className="flex-1 overflow-y-auto p-3 md:p-5 flex flex-col gap-4">
+                  {state.selectedSeats.length > 0 ? (
+                    <>
+                      <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
+                        <p className="text-xs font-bold text-blue-700 uppercase mb-2">Kursi Pergi Terpilih</p>
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                          {state.selectedSeats.map(seat => (
+                            <span key={seat} className="px-2.5 py-1 bg-blue-600 text-white rounded-lg text-xs font-bold">{seat}</span>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-blue-500">Langkah berikutnya: pilih jadwal & kursi kepulangan</p>
+                      </div>
+                      <button
+                        onClick={handleProceedToReturnTrip}
+                        disabled={isProcessing}
+                        className="w-full h-12 bg-blue-600 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-100 disabled:opacity-50"
+                        data-testid="btn-proceed-to-return"
+                      >
+                        {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+                        Lanjut ke Pilih Jadwal Pulang
+                      </button>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-300">
+                      <Armchair className="w-10 h-10 mb-2" />
+                      <p className="text-sm text-gray-400 text-center">Pilih kursi keberangkatan terlebih dahulu</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Single mode: PassengerForm */
+                <div className="flex-1 overflow-y-auto p-3 md:p-5">
+                  <PassengerForm
+                    selectedSeats={selectedSeats}
+                    passengers={state.passengers as any}
+                    onPassengersUpdate={handlePassengersUpdate}
+                    totalAmount={totalAmount}
+                    onBook={handleBookWithData as any}
+                    onPay={handlePayWithData as any}
+                    onPaymentUpdate={handlePaymentUpdate}
+                    payment={state.payment}
+                    onBack={handleBackToSelect}
+                    loading={isProcessing}
+                    promoCode={state.promoCode}
+                    discountAmount={state.discountAmount || 0}
+                    onApplyPromo={applyPromoCode}
+                    onClearPromo={clearPromoCode}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         </div>
       </>
     )}
