@@ -757,7 +757,7 @@ export class AppService {
   }
 
   async createAppBooking(params: {
-    userId: string;
+    userId: string | null;
     tripId: string;
     originStopId: string;
     destinationStopId: string;
@@ -804,7 +804,7 @@ export class AppService {
         status: 'pending',
         pendingExpiresAt: holdExpiresAt,
         totalAmount: totalAmount.toString(),
-        createdBy: `app:${params.userId}`
+        createdBy: params.userId ? `app:${params.userId}` : 'service-client'
       }).returning({ id: bookings.id });
 
       for (const pax of params.passengers) {

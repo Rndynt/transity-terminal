@@ -31,14 +31,20 @@ import { registerMaintenanceRoutes } from "./modules/maintenance/maintenance.rou
 import { registerCustomersRoutes } from "./modules/customers/customers.routes";
 import { registerSettingsRoutes } from "./modules/settings/settings.routes";
 
+const TERMINAL_SERVICE_KEY = process.env.TERMINAL_SERVICE_KEY || '';
+
 export async function registerRoutes(app: FastifyInstance): Promise<FastifyInstance> {
-  app.get('/api/health', async (_req, reply) => {
-    reply.send({
-      status: 'ok',
-      service: 'transity-terminal',
-      tenantId: process.env.REALMIO_TENANT_ID || 'transity',
-      timestamp: new Date().toISOString(),
-    });
+  app.get('/api/health', async (req, reply) => {
+    const incomingKey = req.headers['x-service-key'] as string | undefined;
+    if (incomingKey) {
+      if (!TERMINAL_SERVICE_KEY) {
+        return reply.code(401).send({ error: 'Service key not configured on this terminal' });
+      }
+      if (incomingKey !== TERMINAL_SERVICE_KEY) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+    }
+    reply.send({ status: 'ok' });
   });
 
   registerAuthRoutes(app);

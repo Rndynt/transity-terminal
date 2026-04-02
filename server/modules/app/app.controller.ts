@@ -176,11 +176,14 @@ export class AppController {
   }
 
   async createBooking(req: FastifyRequest, reply: FastifyReply) {
+    const isServiceClient = (req as any).isServiceClient === true;
     const parsed = createBookingSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
+    const userId = isServiceClient ? null : (req.appUser?.userId ?? null);
+    if (!isServiceClient && !userId) return reply.code(401).send({ error: "Unauthorized" });
     try {
       const result = await this.service.createAppBooking({
-        userId: req.appUser!.userId,
+        userId,
         ...parsed.data
       });
       reply.code(201).send(result);

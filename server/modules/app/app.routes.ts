@@ -68,7 +68,22 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
   app.get('/api/app/trips/:id/seatmap', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getSeatmap(req, reply));
   app.get('/api/app/trips/:tripId/reviews', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getTripReviews(req, reply));
 
-  app.post('/api/app/bookings', { preHandler: [appAuthMiddleware] }, async (req, reply) => appController.createBooking(req, reply));
+  async function bookingAuthMiddleware(req: FastifyRequest, reply: FastifyReply) {
+    const incomingKey = req.headers['x-service-key'] as string | undefined;
+    if (incomingKey) {
+      if (!TERMINAL_SERVICE_KEY) {
+        return reply.code(401).send({ error: 'Service key not configured on this terminal', code: 'SERVICE_KEY_NOT_CONFIGURED' });
+      }
+      if (incomingKey !== TERMINAL_SERVICE_KEY) {
+        return reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
+      }
+      (req as any).isServiceClient = true;
+    } else {
+      await appAuthMiddleware(req, reply);
+    }
+  }
+
+  app.post('/api/app/bookings', { preHandler: [bookingAuthMiddleware] }, async (req, reply) => appController.createBooking(req, reply));
   app.get('/api/app/bookings', { preHandler: [appAuthMiddleware] }, async (req, reply) => appController.getMyBookings(req, reply));
   app.get('/api/app/bookings/:id', { preHandler: [appAuthMiddleware] }, async (req, reply) => appController.getBookingDetail(req, reply));
   app.get('/api/app/bookings/:id/payment-status', { preHandler: [appAuthMiddleware] }, async (req, reply) => appController.getPaymentStatus(req, reply));
