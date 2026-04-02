@@ -181,7 +181,7 @@ export default function ReturnTripSelector({
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col">
                         <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Harga Mulai</span>
-                        <span className="text-xs font-bold text-emerald-600">{fmtCurrency(trip.minFare || 0)}</span>
+                        <span className="text-xs font-bold text-emerald-600">{trip.hasPriceRule ? 'Ada harga' : '-'}</span>
                       </div>
                       <div className="flex flex-col text-right">
                         <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Kursi</span>
@@ -218,7 +218,7 @@ export default function ReturnTripSelector({
               <SeatMap
                 trip={{ id: selectedTrip.tripId } as any}
                 originSeq={1} // In RT flow, simplified to full route for return
-                destinationSeq={selectedTrip.totalLegs || 10}
+                destinationSeq={selectedTrip.stopCount || 10}
                 selectedSeats={selectedSeats}
                 onSeatSelect={handleSeatSelect}
                 onSeatDeselect={handleSeatDeselect}

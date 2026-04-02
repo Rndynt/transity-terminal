@@ -21,6 +21,7 @@ import CargoWaybillPreview from '@/components/cso/CargoWaybillPreview';
 import CsoCargoPanel from './CsoCargoPanel';
 import ManifestDialog from '@/components/manifest/ManifestDialog';
 import BatchRescheduleDialog from '@/components/cso/BatchRescheduleDialog';
+import PrintPreview from '@/components/cso/PrintPreview';
 
 import { useBookingFlow } from '@/hooks/useBookingFlow';
 import { useSeatHold } from '@/hooks/useSeatHold';
@@ -171,7 +172,7 @@ export default function CsoPage() {
     setIsProcessing(true);
     try {
       const fare = await pricingApi.quoteFare(
-        selectedCsoTrip.tripId,
+        selectedCsoTrip.tripId!,
         state.originSeq,
         state.destinationSeq,
         state.selectedSeats.length
@@ -197,7 +198,7 @@ export default function CsoPage() {
   };
 
   const handleReturnTripSelect = async (trip: CsoAvailableTrip) => {
-    roundTripFlow.setReturnTrip(trip, state.destinationStop, state.originStop, 1, trip.totalLegs || 10);
+    roundTripFlow.setReturnTrip(trip, state.destinationStop, state.originStop, 1, trip.stopCount || 10);
   };
 
   const handleReturnNext = async () => {
@@ -206,9 +207,9 @@ export default function CsoPage() {
     setIsProcessing(true);
     try {
       const fare = await pricingApi.quoteFare(
-        roundTripFlow.state.returnTrip.tripId,
+        roundTripFlow.state.returnTrip.tripId!,
         1,
-        roundTripFlow.state.returnTrip.totalLegs || 10,
+        roundTripFlow.state.returnTrip.stopCount || 10,
         roundTripFlow.state.returnSeats.length
       );
       setPpFares(prev => ({ ...prev, return: fare.perPassenger }));
@@ -280,9 +281,15 @@ export default function CsoPage() {
         layoutId: null,
         channelFlags: {},
         createdAt: null,
+        deletedAt: null,
+        driverId: null,
+        manifestFirstPrintedAt: null,
+        snapRouteName: null,
+        snapVehiclePlate: null,
+        snapDriverName: null,
         baseId: csoTrip.baseId || null,
         originDepartHHMM: null
-      },
+      } as any,
       originStop: undefined,
       destinationStop: undefined,
       originSeq: undefined,
@@ -619,7 +626,7 @@ export default function CsoPage() {
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-lg mx-auto">
             <CargoWaybillPreview
-              shipment={cargoResult}
+              shipment={cargoResult!}
               onNewShipment={handleNewCargo}
               onPrint={() => window.print()}
             />
@@ -682,7 +689,7 @@ export default function CsoPage() {
                   </button>
                 </div>
                 <button
-                  onClick={() => setManifestDialogTripId(selectedCsoTrip.tripId)}
+                  onClick={() => setManifestDialogTripId(selectedCsoTrip.tripId ?? null)}
                   className="px-2 md:px-3 py-1.5 bg-white border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap"
                   data-testid="btn-cetak-manifest"
                 >
@@ -1075,11 +1082,11 @@ export default function CsoPage() {
                     <div className="flex-1 overflow-hidden">
                       <PassengerForm
                         selectedSeats={selectedSeats}
-                        passengers={state.passengers}
+                        passengers={state.passengers as any}
                         onPassengersUpdate={handlePassengersUpdate}
                         totalAmount={totalAmount}
-                        onBook={handleBookWithData}
-                        onPay={handlePayWithData}
+                        onBook={handleBookWithData as any}
+                        onPay={handlePayWithData as any}
                         onPaymentUpdate={handlePaymentUpdate}
                         payment={state.payment}
                         onBack={handleBackToSelect}
@@ -1099,7 +1106,7 @@ export default function CsoPage() {
 
     {phase === 'book' && csoMode === 'kargo' && (
             <CsoCargoPanel
-              state={state}
+              state={state as any}
               selectedCsoTrip={selectedCsoTrip}
               mobileCargoPanel={mobileCargoPanel}
               onMobileCargoPanelChange={setMobileCargoPanel}
