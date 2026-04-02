@@ -789,7 +789,7 @@ export default function TripSelector({
                         <Hash className="w-2.5 h-2.5" />{group.code}
                       </span>
                     )}
-                    {group.trips.some(t => t.outletStopSequence > 1) && (
+                    {group.trips.some(t => t.outletStopSequence > 1 && t.outletStopSequence < t.stopCount) && (
                       <span className="inline-flex items-center text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded flex-shrink-0">
                         Transit
                       </span>
@@ -900,7 +900,7 @@ export default function TripSelector({
                                 <Armchair className="w-3 h-3" />{seatCount}/{totalSeats}
                               </span>
                               {(() => { const dur = formatDuration(trip); return dur ? <span className="flex items-center gap-0.5 text-gray-400">⏱ {dur}</span> : null; })()}
-                              {trip.outletStopSequence > 1 && (
+                              {trip.outletStopSequence > 1 && trip.outletStopSequence < trip.stopCount && (
                                 <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-semibold">Transit</span>
                               )}
                             </div>
