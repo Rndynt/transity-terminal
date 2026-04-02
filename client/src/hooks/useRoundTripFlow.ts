@@ -126,7 +126,7 @@ export function useRoundTripFlow() {
         destinationSeq: state.outboundDestinationSeq,
         outletId: state.outboundOutlet?.id,
         passengers: state.passengers.map(p => ({
-          fullName: p.name,
+          name: p.name,
           seatNo: p.seatNoOutbound
         }))
       },
@@ -137,7 +137,7 @@ export function useRoundTripFlow() {
         originSeq: state.returnOriginSeq,
         destinationSeq: state.returnDestinationSeq,
         passengers: state.passengers.map(p => ({
-          fullName: p.name,
+          name: p.name,
           seatNo: p.seatNoReturn
         }))
       },
