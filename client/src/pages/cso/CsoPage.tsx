@@ -12,7 +12,6 @@ import SeatMap, { type AssignModeState, type RescheduleModeState } from '@/compo
 import PassengerForm from '@/components/cso/PassengerForm';
 import { useRoundTripFlow } from '@/hooks/useRoundTripFlow';
 import RoundTripStepper from '@/components/cso/RoundTripStepper';
-import ReturnTripSelector from '@/components/cso/ReturnTripSelector';
 import PassengerFormPP from '@/components/cso/PassengerFormPP';
 import RoundTripReview from '@/components/cso/RoundTripReview';
 import RoundTripPrintPreview from '@/components/cso/RoundTripPrintPreview';
@@ -814,120 +813,52 @@ export default function CsoPage() {
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {bookingMode === 'round-trip' && <RoundTripStepper currentStep={ppStep} />}
 
-        {bookingMode === 'round-trip' && ppStep >= 2 ? (
-          <div className="flex-1 overflow-hidden">
-            {ppStep === 2 && roundTripFlow.state.outboundOriginStop && roundTripFlow.state.outboundDestinationStop && (
-              <ReturnTripSelector
-                outboundOriginStop={roundTripFlow.state.outboundOriginStop}
-                outboundDestinationStop={roundTripFlow.state.outboundDestinationStop}
-                requiredSeatCount={roundTripFlow.state.outboundSeats.length}
-                selectedDate={selectedDate}
-                onDateChange={setSelectedDate}
-                onTripSelect={handleReturnTripSelect}
-                onSeatsSelect={roundTripFlow.setReturnSeats}
-                selectedTrip={roundTripFlow.state.returnTrip}
-                selectedSeats={roundTripFlow.state.returnSeats}
-                onBack={() => setPpStep(1)}
-                onNext={handleReturnNext}
-              />
-            )}
-            {ppStep === 3 && roundTripFlow.state.outboundTrip && roundTripFlow.state.returnTrip && roundTripFlow.state.outboundOriginStop && roundTripFlow.state.outboundDestinationStop && (
-              <PassengerFormPP
-                outboundTrip={roundTripFlow.state.outboundTrip}
-                outboundSeats={roundTripFlow.state.outboundSeats}
-                outboundOriginStop={roundTripFlow.state.outboundOriginStop}
-                outboundDestinationStop={roundTripFlow.state.outboundDestinationStop}
-                returnTrip={roundTripFlow.state.returnTrip}
-                returnSeats={roundTripFlow.state.returnSeats}
-                returnOriginStop={roundTripFlow.state.outboundDestinationStop}
-                returnDestinationStop={roundTripFlow.state.outboundOriginStop}
-                passengers={roundTripFlow.state.passengers}
-                onPassengersChange={roundTripFlow.setPassengers}
-                onBack={() => setPpStep(2)}
-                onNext={() => setPpStep(4)}
-              />
-            )}
-            {ppStep === 4 && roundTripFlow.state.outboundTrip && roundTripFlow.state.returnTrip && roundTripFlow.state.outboundOriginStop && roundTripFlow.state.outboundDestinationStop && (
-              <RoundTripReview
-                outboundTrip={roundTripFlow.state.outboundTrip}
-                outboundOriginStop={roundTripFlow.state.outboundOriginStop}
-                outboundDestinationStop={roundTripFlow.state.outboundDestinationStop}
-                outboundSeats={roundTripFlow.state.outboundSeats}
-                returnTrip={roundTripFlow.state.returnTrip}
-                returnOriginStop={roundTripFlow.state.outboundDestinationStop}
-                returnDestinationStop={roundTripFlow.state.outboundOriginStop}
-                returnSeats={roundTripFlow.state.returnSeats}
-                passengers={roundTripFlow.state.passengers}
-                outboundFarePerSeat={ppFares.outbound}
-                returnFarePerSeat={ppFares.return}
-                payment={roundTripFlow.state.payment}
-                onPaymentChange={roundTripFlow.setPayment}
-                onBack={() => setPpStep(3)}
-                onConfirm={handleRoundTripComplete}
-                isLoading={isProcessing}
-              />
-            )}
-            {ppStep === 5 && ppResult && (
-              <div className="h-full overflow-y-auto p-4 md:p-6 bg-gray-50">
-                <RoundTripPrintPreview
-                  group={ppResult}
-                  outboundBooking={ppResult.outboundBooking}
-                  returnBooking={ppResult.returnBooking}
-                  printPayloads={ppResult.printPayloads || []}
-                  onNewBooking={handleNewRoundTrip}
-                  onPrint={() => window.print()}
-                />
-              </div>
-            )}
+        <div className="flex-1 flex overflow-hidden">
+          <div className={`flex-1 border-r border-gray-200 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'left' ? 'block' : 'hidden md:block'}`} data-testid="panel-trip-selector">
+            <TripSelector
+              selectedOutlet={state.outlet}
+              selectedTrip={selectedCsoTrip}
+              onOutletSelect={handleOutletSelect}
+              onTripSelect={handleTripSelect}
+              selectedDate={selectedDate}
+              onDateChange={setSelectedDate}
+              initialOutletId={initialOutletId || (can('action.cso.cross_outlet') ? scopedOutletId ?? undefined : undefined)}
+              lockedOutletId={scopedOutletId && !can('action.cso.cross_outlet') ? scopedOutletId : undefined}
+              initialTripId={initialTripId}
+              onInitialConsumed={() => navigate('/cso', { replace: true })}
+              canViewClosed={can('page.cso.view_closed')}
+            />
           </div>
-        ) : (
-          <div className="flex-1 flex overflow-hidden">
-                <div className={`flex-1 border-r border-gray-200 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'left' ? 'block' : 'hidden md:block'}`} data-testid="panel-trip-selector">
-                  <TripSelector
-                    selectedOutlet={state.outlet}
-                    selectedTrip={selectedCsoTrip}
-                    onOutletSelect={handleOutletSelect}
-                    onTripSelect={handleTripSelect}
-                    selectedDate={selectedDate}
-                    onDateChange={setSelectedDate}
-                    initialOutletId={initialOutletId || (can('action.cso.cross_outlet') ? scopedOutletId ?? undefined : undefined)}
-                    lockedOutletId={scopedOutletId && !can('action.cso.cross_outlet') ? scopedOutletId : undefined}
-                    initialTripId={initialTripId}
-                    onInitialConsumed={() => navigate('/cso', { replace: true })}
-                    canViewClosed={can('page.cso.view_closed')}
-                  />
-                </div>
 
-                <div className={`flex-1 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'right' ? 'block' : 'hidden md:block'}`} data-testid="panel-route-timeline">
-                  {state.trip?.id ? (
-                    <RouteTimeline
-                      trip={state.trip}
-                      selectedOrigin={state.originStop}
-                      selectedDestination={state.destinationStop}
-                      onOriginSelect={handleOriginSelect}
-                      onDestinationSelect={handleDestinationSelect}
-                      onProceed={handleProceedToBook}
-                      initialOriginStopId={pendingRouteAutoSelect?.originStopId}
-                      initialDestinationStopId={pendingRouteAutoSelect?.destinationStopId}
-                      onInitialRouteConsumed={() => {
-                        setPendingRouteAutoSelect(null);
-                        setTimeout(() => {
-                          setPhase('book');
-                          setCurrentStep(3);
-                          setMobilePanel('left');
-                        }, 100);
-                      }}
-                    />
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-300 py-12 md:py-0">
-                      <MapPin className="w-8 h-8 text-gray-300 mb-1.5" />
-                      <p className="text-xs text-gray-400">Pilih jadwal terlebih dahulu</p>
-                    </div>
-                  )}
-                </div>
+          <div className={`flex-1 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'right' ? 'block' : 'hidden md:block'}`} data-testid="panel-route-timeline">
+            {state.trip?.id ? (
+              <RouteTimeline
+                trip={state.trip}
+                selectedOrigin={state.originStop}
+                selectedDestination={state.destinationStop}
+                onOriginSelect={handleOriginSelect}
+                onDestinationSelect={handleDestinationSelect}
+                onProceed={handleProceedToBook}
+                initialOriginStopId={pendingRouteAutoSelect?.originStopId}
+                initialDestinationStopId={pendingRouteAutoSelect?.destinationStopId}
+                onInitialRouteConsumed={() => {
+                  setPendingRouteAutoSelect(null);
+                  setTimeout(() => {
+                    setPhase('book');
+                    setCurrentStep(3);
+                    setMobilePanel('left');
+                  }, 100);
+                }}
+              />
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-gray-300 py-12 md:py-0">
+                <MapPin className="w-8 h-8 text-gray-300 mb-1.5" />
+                <p className="text-xs text-gray-400">Pilih jadwal terlebih dahulu</p>
               </div>
             )}
           </div>
+        </div>
+      </div>
         </>
       )}
 
