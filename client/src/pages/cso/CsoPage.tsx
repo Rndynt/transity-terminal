@@ -10,9 +10,9 @@ import TripSelector from '@/components/cso/TripSelector';
 import RouteTimeline from '@/components/cso/RouteTimeline';
 import SeatMap, { type AssignModeState, type RescheduleModeState } from '@/components/cso/SeatMap';
 import PassengerForm from '@/components/cso/PassengerForm';
+import type { PassengerData } from '@/components/cso/PassengerForm';
 import { useRoundTripFlow } from '@/hooks/useRoundTripFlow';
 import RoundTripStepper from '@/components/cso/RoundTripStepper';
-import PassengerFormPP from '@/components/cso/PassengerFormPP';
 import RoundTripReview from '@/components/cso/RoundTripReview';
 import RoundTripPrintPreview from '@/components/cso/RoundTripPrintPreview';
 import { pricingApi, outletsApi } from '@/lib/api';
@@ -31,7 +31,7 @@ import {
   Armchair, ArrowRight, Ticket, Package, Clock,
   FileText, Lock, CalendarClock, User, X, Menu
 } from 'lucide-react';
-import type { Stop, Outlet, CsoAvailableTrip, CargoShipmentWithStops, PassengerInput } from '@/types';
+import type { Stop, Outlet, CsoAvailableTrip, CargoShipmentWithStops } from '@/types';
 
 
 type Phase = 'select' | 'book';
@@ -337,7 +337,7 @@ export default function CsoPage() {
 
   const handleSeatSelect = (seatNo: string) => addSeat(seatNo);
   const handleSeatDeselect = (seatNo: string) => removeSeat(seatNo);
-  const handlePassengersUpdate = (passengers: PassengerInput[]) => updatePassengers(passengers);
+  const handlePassengersUpdate = (passengers: PassengerData[]) => updatePassengers(passengers as any);
 
   const handleProceedToBook = () => {
     if (state.originStop && state.destinationStop) {
@@ -357,11 +357,11 @@ export default function CsoPage() {
     setPpStep(1);
   };
 
-  const handleBookWithData = async (passengers: PassengerInput[]) => {
-    updatePassengers(passengers);
+  const handleBookWithData = async (passengers: PassengerData[]) => {
+    updatePassengers(passengers as any);
     setIsProcessing(true);
     try {
-      const result = await createPendingBooking({ passengers });
+      const result = await createPendingBooking({ passengers: passengers as any });
       setBookingResult(result);
       setShowPrint(true);
     } catch (error) {
@@ -373,12 +373,12 @@ export default function CsoPage() {
 
   const handlePaymentUpdate = (payment: any) => updateState({ payment });
 
-  const handlePayWithData = async (passengers: PassengerInput[], payment: { method: 'cash' | 'qr' | 'ewallet' | 'bank'; amount: number }) => {
-    updatePassengers(passengers);
+  const handlePayWithData = async (passengers: PassengerData[], payment: { method: 'cash' | 'qr' | 'ewallet' | 'bank'; amount: number }) => {
+    updatePassengers(passengers as any);
     updateState({ payment });
     setIsProcessing(true);
     try {
-      const result = await createBooking({ passengers, payment });
+      const result = await createBooking({ passengers: passengers as any, payment });
       setBookingResult(result);
       setShowPrint(true);
     } catch (error) {
@@ -901,17 +901,32 @@ export default function CsoPage() {
         {bookingMode === 'round-trip' && ppStep >= 3 ? (
           <div className="flex-1 overflow-hidden">
             {ppStep === 3 && roundTripFlow.state.outboundTrip && roundTripFlow.state.returnTrip && roundTripFlow.state.outboundOriginStop && roundTripFlow.state.outboundDestinationStop && (
-              <PassengerFormPP
-                outboundTrip={roundTripFlow.state.outboundTrip}
-                outboundSeats={roundTripFlow.state.outboundSeats}
-                outboundOriginStop={roundTripFlow.state.outboundOriginStop}
-                outboundDestinationStop={roundTripFlow.state.outboundDestinationStop}
-                returnTrip={roundTripFlow.state.returnTrip}
+              <PassengerForm
+                selectedSeats={roundTripFlow.state.outboundSeats}
                 returnSeats={roundTripFlow.state.returnSeats}
-                returnOriginStop={roundTripFlow.state.outboundDestinationStop}
-                returnDestinationStop={roundTripFlow.state.outboundOriginStop}
-                passengers={roundTripFlow.state.passengers}
-                onPassengersChange={roundTripFlow.setPassengers}
+                passengers={roundTripFlow.state.outboundSeats.map((seatNo, i) => ({
+                  fullName: roundTripFlow.state.passengers[i]?.name || '',
+                  phone: '',
+                  idNumber: '',
+                  seatNo,
+                }))}
+                onPassengersUpdate={(updated: PassengerData[]) => {
+                  roundTripFlow.setPassengers(updated.map((p, i) => ({
+                    name: p.fullName,
+                    seatNoOutbound: p.seatNo,
+                    seatNoReturn: roundTripFlow.state.returnSeats[i] || '',
+                  })));
+                }}
+                outboundContext={{
+                  trip: roundTripFlow.state.outboundTrip,
+                  originStop: roundTripFlow.state.outboundOriginStop,
+                  destinationStop: roundTripFlow.state.outboundDestinationStop,
+                }}
+                returnContext={{
+                  trip: roundTripFlow.state.returnTrip,
+                  originStop: roundTripFlow.state.outboundDestinationStop,
+                  destinationStop: roundTripFlow.state.outboundOriginStop,
+                }}
                 onBack={() => setPpStep(2)}
                 onNext={() => setPpStep(4)}
               />
@@ -1145,11 +1160,16 @@ export default function CsoPage() {
                 <div className="flex-1 overflow-y-auto p-3 md:p-5">
                   <PassengerForm
                     selectedSeats={selectedSeats}
-                    passengers={state.passengers as any}
+                    passengers={selectedSeats.map(seatNo => ({
+                      fullName: (state.passengers as any[]).find((p: any) => p.seatNo === seatNo)?.fullName || '',
+                      phone: (state.passengers as any[]).find((p: any) => p.seatNo === seatNo)?.phone || '',
+                      idNumber: (state.passengers as any[]).find((p: any) => p.seatNo === seatNo)?.idNumber || '',
+                      seatNo,
+                    }))}
                     onPassengersUpdate={handlePassengersUpdate}
                     totalAmount={totalAmount}
-                    onBook={handleBookWithData as any}
-                    onPay={handlePayWithData as any}
+                    onBook={handleBookWithData}
+                    onPay={handlePayWithData}
                     onPaymentUpdate={handlePaymentUpdate}
                     payment={state.payment}
                     onBack={handleBackToSelect}
