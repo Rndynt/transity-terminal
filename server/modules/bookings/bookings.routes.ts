@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { BookingsController } from "./bookings.controller";
+import { RoundTripController } from "./roundTrip.controller";
 import { IStorage } from "../../storage.interface";
 import { requireFlag, requireOutletScope } from "../rbac/rbac.middleware";
 import { webSocketService } from "../../realtime/ws";
@@ -12,6 +13,7 @@ import { trips } from "@shared/schema";
 
 export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) {
   const bookingsController = new BookingsController(storage);
+  const roundTripController = new RoundTripController(storage);
 
   app.post('/api/holds', async (req, reply) => bookingsController.createHold(req, reply));
   app.delete('/api/holds/:holdRef', async (req, reply) => bookingsController.releaseHold(req, reply));
@@ -177,4 +179,7 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
     if (!passenger) return reply.code(404).send({ message: 'Tiket tidak ditemukan' });
     reply.send(passenger);
   });
+
+  app.post('/api/bookings/round-trip', { preHandler: [requireFlag('action.booking.create')] }, async (req, reply) => roundTripController.createRoundTrip(req, reply));
+  app.get('/api/booking-groups/:groupCode', async (req, reply) => roundTripController.getGroupByCode(req, reply));
 }

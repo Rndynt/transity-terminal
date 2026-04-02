@@ -28,3 +28,7 @@ export function generateBookingCode(date: Date = new Date()): string {
 export function generateTicketNumber(date: Date = new Date()): string {
   return `TKT-${datePart(date)}-${randomChars(5)}`;
 }
+
+export function generateGroupCode(date: Date = new Date()): string {
+  return `PP-${datePart(date)}-${randomChars(5)}`;
+}

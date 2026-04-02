@@ -7,10 +7,29 @@ import { trips } from "./scheduling";
 import { stops, outlets } from "./network";
 import { appUsers } from "./app-users";
 
+export const bookingGroups = pgTable("booking_groups", {
+  id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupCode:   text("group_code").notNull().unique(),
+  type:        text("type").notNull().default("round_trip"),
+  channel:     channelEnum("channel").notNull().default("CSO"),
+  totalAmount: integer("total_amount").notNull(),
+  outletId:    uuid("outlet_id").references(() => outlets.id),
+  createdBy:   text("created_by"),
+  createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertBookingGroupSchema = createInsertSchema(bookingGroups).omit({
+  id: true, createdAt: true,
+});
+export type BookingGroup = typeof bookingGroups.$inferSelect;
+export type InsertBookingGroup = z.infer<typeof insertBookingGroupSchema>;
+
 export const bookings = pgTable("bookings", {
   id:                 uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   bookingCode:        text("booking_code").unique(),
   status:             bookingStatusEnum("status").default('pending'),
+  groupId:            uuid("group_id").references(() => bookingGroups.id),
+  legType:            text("leg_type").notNull().default("single"),
   tripId:             uuid("trip_id").notNull().references(() => trips.id),
   originStopId:       uuid("origin_stop_id").notNull().references(() => stops.id),
   destinationStopId:  uuid("destination_stop_id").notNull().references(() => stops.id),
