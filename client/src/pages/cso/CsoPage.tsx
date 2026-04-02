@@ -79,10 +79,6 @@ export default function CsoPage() {
   const [returnOutlet, setReturnOutlet] = useState<Outlet | undefined>();
   const [returnDate, setReturnDate] = useState<string>('');
   const { data: allOutlets = [] } = useQuery({ queryKey: ['/api/outlets'], queryFn: outletsApi.getAll });
-  const returnInitialOutletId = useMemo(() => {
-    if (!state.destinationStop) return undefined;
-    return allOutlets.find((o: Outlet) => o.stopId === state.destinationStop!.id)?.id;
-  }, [allOutlets, state.destinationStop]);
 
   const [assignModeInfo, setAssignModeInfo] = useState<AssignModeState | null>(
     initialAssignPassengerId && initialAssignPassengerName
@@ -156,6 +152,11 @@ export default function CsoPage() {
   } = useBookingFlow();
 
   const { releaseAllHolds } = useSeatHold();
+
+  const returnInitialOutletId = useMemo(() => {
+    if (!state.destinationStop) return undefined;
+    return allOutlets.find((o: Outlet) => o.stopId === state.destinationStop!.id)?.id;
+  }, [allOutlets, state.destinationStop]);
 
   useEffect(() => {
     if (state.selectedSeats.length === 0) {
