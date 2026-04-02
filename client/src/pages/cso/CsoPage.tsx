@@ -353,6 +353,8 @@ export default function CsoPage() {
     clearPromoCode();
     updateState({ selectedSeats: [], passengers: [], payment: undefined });
     releaseAllHolds();
+    roundTripFlow.reset();
+    setPpStep(1);
   };
 
   const handleBookWithData = async (passengers: PassengerInput[]) => {
@@ -932,6 +934,10 @@ export default function CsoPage() {
                 onBack={() => setPpStep(3)}
                 onConfirm={handleRoundTripComplete}
                 isLoading={isProcessing}
+                promoCode={state.promoCode}
+                discountAmount={state.discountAmount || 0}
+                onApplyPromo={applyPromoCode}
+                onClearPromo={clearPromoCode}
               />
             )}
             {ppStep === 5 && ppResult && (
