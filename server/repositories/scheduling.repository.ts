@@ -288,15 +288,9 @@ export class SchedulingRepository {
         WHERE tst.stop_id = ${outletStopId}
           AND tst.deleted_at IS NULL
           AND tst.trip_id IN (SELECT id FROM eligible_trips)
-          AND (
-            (COALESCE(tst.boarding_allowed, ps.boarding_allowed, true) = true
-             AND tst.depart_at IS NOT NULL
-             AND tst.stop_sequence < tb.max_seq)
-            OR
-            (COALESCE(tst.alighting_allowed, ps.alighting_allowed, true) = true
-             AND tst.arrive_at IS NOT NULL
-             AND tst.stop_sequence > tb.min_seq)
-          )
+          AND COALESCE(tst.boarding_allowed, ps.boarding_allowed, true) = true
+          AND tst.depart_at IS NOT NULL
+          AND tst.stop_sequence < tb.max_seq
       ),
       booked_counts AS (
         SELECT b.trip_id, COUNT(p.id) AS cnt
