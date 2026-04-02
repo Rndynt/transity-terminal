@@ -1061,7 +1061,7 @@ export default function CsoPage() {
                   )}
                 </div>
 
-                  <div className="flex-1 overflow-hidden flex flex-col relative">
+                  <div className={`flex-1 overflow-hidden flex-col relative ${mobilePanel === 'right' ? 'flex' : 'hidden md:flex'}`}>
                     {bookingMode === 'round-trip' && state.selectedSeats.length > 0 && phase === 'book' ? (
                       <div className="p-4 border-b border-blue-100 bg-blue-50/30 flex items-center justify-between">
                         <div>
