@@ -1079,7 +1079,7 @@ export default function CsoPage() {
                         </button>
                       </div>
                     ) : null}
-                    <div className="flex-1 overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-3 md:p-5">
                       <PassengerForm
                         selectedSeats={selectedSeats}
                         passengers={state.passengers as any}
