@@ -1,5 +1,5 @@
 import { Switch, Route } from "wouter";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -49,9 +49,28 @@ function PageLoader() {
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
-  const [location] = useLocation();
+  const [setupChecked, setSetupChecked] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [, navigate] = useLocation();
 
-  if (isLoading) {
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      fetch("/api/setup/status")
+        .then(r => r.json())
+        .then(data => {
+          if (data.needsSetup) {
+            setNeedsSetup(true);
+            navigate("/setup");
+          }
+        })
+        .catch(() => {})
+        .finally(() => setSetupChecked(true));
+    } else if (!isLoading) {
+      setSetupChecked(true);
+    }
+  }, [isLoading, isAuthenticated, navigate]);
+
+  if (isLoading || (isAuthenticated && !setupChecked)) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="flex flex-col items-center gap-3">
@@ -64,6 +83,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) {
     return <Redirect to="/login" />;
+  }
+
+  if (needsSetup) {
+    return <Redirect to="/setup" />;
   }
 
   return <>{children}</>;
