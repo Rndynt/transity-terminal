@@ -99,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     queryClient.clear();
     setState({ user: null, isLoading: false, isAuthenticated: false });
-    window.location.href = "/auth";
+    window.location.href = "/login";
   }, []);
 
   return (
