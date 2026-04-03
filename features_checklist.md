@@ -299,15 +299,55 @@ curl -X POST http://localhost:5000/api/seed
   - *Location: server/seed.ts*
   - *Gap: Need to add trip bases with proper time slots*
 
-### Summary Status
-- ✅ **Core backend infrastructure**: 80% complete
-- 🔁 **Frontend integration**: 60% complete  
-- ❌ **Realtime functionality**: 0% complete
-- ❌ **Complete seed data**: 30% complete
+### Summary Status (Updated)
+- ✅ **Core backend infrastructure**: 100% complete
+- ✅ **Frontend integration**: 95% complete
+- ✅ **Realtime functionality**: Done (Socket.IO WebSocket + rooms)
+- ❌ **Complete seed data**: 30% complete (belum ada trip bases dan pickup-only config di seed)
 
-### Immediate Actions Required
-1. Add complete seed data with trip bases and proper pickup-only configuration
-2. Implement WebSocket realtime events system
-3. Add Virtual/Closed badges to CSO TripSelector
-4. Test and fix materialize flow integration
-5. Add seatmap realtime locking on trip closure
+---
+
+## ✅ Fitur Phase 2
+
+### Booking PP / Pulang Pergi (Round-Trip)
+- [x] **`booking_groups` table** — menyimpan `groupCode`, `outboundBookingId`, `returnBookingId`
+  - *Location: shared/schema/booking.ts*
+
+- [x] **`POST /api/bookings/round-trip`** — endpoint atomik dua booking dalam satu DB transaction
+  - *Location: server/modules/bookings/roundTrip.controller.ts + roundTrip.service.ts*
+
+- [x] **`useRoundTripFlow` hook** — state machine 4 step (Pergi → Pulang → Penumpang → Selesai)
+  - *Location: client/src/hooks/useRoundTripFlow.ts*
+
+- [x] **`RoundTripStepper` component** — stepper UI untuk flow PP di CSO
+  - *Location: client/src/components/cso/*
+
+- [x] **`PrintService` round-trip payload** — generate print payload untuk dua tiket sekaligus
+  - *Location: server/modules/printing/*
+
+### Dashboard
+- [x] **Ringkasan operasional harian** — total trip, booking, revenue, kargo, load factor, recent bookings
+  - *Location: server/modules/dashboard/, client/src/pages/dashboard/DashboardPage.tsx*
+
+### Kasir
+- [x] **Sesi kasir harian** — open/close/approve, breakdown settlement, live auto-refresh 30s
+  - *Location: server/modules/cashier/, client/src/pages/cashier/CashierPage.tsx*
+
+### Refund
+- [x] **Manajemen refund** — create (CSO), approve + process (manager/finance), reject
+  - *Location: server/modules/refunds/, client/src/pages/refunds/RefundsPage.tsx*
+
+### Pelanggan (CRM)
+- [x] **Profil pelanggan** — tag (regular/vip/frequent/blacklist), riwayat booking
+  - *Location: server/modules/customers/, client/src/pages/customers/CustomersPage.tsx*
+
+### Auth & Setup
+- [x] **Setup page** — onboarding owner pertama (redirect dari ProtectedRoute jika DB kosong)
+  - *Location: client/src/pages/auth/SetupPage.tsx*
+- [x] **Logout cookie fix** — sign-out explicitly clear semua cookie di domain agar sesi tidak stale
+  - *Location: server/modules/auth/auth.routes.ts*
+
+### Immediate Actions Remaining
+1. Lengkapi seed data dengan trip bases dan pickup-only config
+2. Verifikasi end-to-end booking PP di staging/production
+3. Lanjutkan Mobile B2C (Expo React Native) — booking, tracking kargo

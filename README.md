@@ -57,11 +57,16 @@ Dokumentasi teknis lengkap dengan penjelasan cara kerja, teknologi, dan logika p
 ## Fitur Utama
 
 ### Operasional
-- **Terminal Reservasi CSO** — 2-phase booking (select trip → book seat), seat map real-time, passenger form, inline payment
+- **Terminal Reservasi CSO** — Dua mode booking: *Sekali Jalan* (one-way, 7-step flow) dan *Pulang Pergi/PP* (round-trip, satu transaksi dengan dua trip terhubung via `booking_groups`). Seat map real-time, passenger form, inline payment, print ticket.
+- **Pulang Pergi (PP)** — Booking dua arah dalam satu transaksi. Flow 4-step (Pergi → Pulang → Penumpang → Selesai). Outbound dan return seat hold harus aktif sebelum submit. Menghasilkan `groupCode` yang menghubungkan kedua booking.
 - **Jadwal Harian** — Unified daily schedule dengan driver assignment, manifest access, SPJ creation
 - **Kargo** — Waybill generation (TRN-YYYYMMDD-XXXXX), tariff calculation, status lifecycle tracking
 - **SPJ (Surat Perintah Jalan)** — Trip work orders dengan cost lines, settlement, profit calculation
 - **Manifest Perjalanan** — Trip manifest dengan dukungan thermal printer 80mm
+- **Dashboard** — Ringkasan operasional: total trip, booking, revenue, kargo, load factor, alert, dan recent bookings
+- **Kasir** — Buka/tutup sesi kasir harian, approval sesi, breakdown settlement, live transaction summary (auto-refresh 30s)
+- **Refund** — Buat/approve/proses refund dengan pencarian booking code. CSO buat, manager/finance approve & proses
+- **Pelanggan (CRM)** — Profil pelanggan dengan tag (regular/vip/frequent/blacklist) dan riwayat booking
 
 ### Master Data
 - **Halte (Stops)** — Titik berhenti/terminal dengan koordinat GPS
@@ -153,9 +158,10 @@ Dokumentasi teknis lengkap dengan penjelasan cara kerja, teknologi, dan logika p
 │  pattern_stops │ trip_bases │ trips │ trip_stop_times │        │
 │  trip_legs │ seat_inventory │ seat_holds │ price_rules │       │
 │  bookings │ passengers │ payments │ print_jobs │               │
-│  staff │ feature_flags │ booking_history │ drivers │           │
-│  spj │ spj_cost_lines │ promotions │ vouchers │               │
-│  cargo_types │ cargo_rates │ cargo_shipments                   │
+│  booking_groups │ staff_members │ feature_flags │ drivers │   │
+│  booking_history │ spj │ spj_cost_lines │ promotions │        │
+│  vouchers │ cargo_types │ cargo_rates │ cargo_shipments │      │
+│  refunds │ cashier_sessions │ customers │ notifications │      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -273,11 +279,12 @@ Dokumentasi teknis lengkap dengan penjelasan cara kerja, teknologi, dan logika p
 | `seat_holds` | Reservasi kursi sementara (TTL-based) |
 | `price_rules` | Aturan harga dinamis |
 | `bookings` | Data pemesanan |
+| `booking_groups` | Pengelompokan booking PP (round-trip) — menyimpan `groupCode`, `outboundBookingId`, `returnBookingId` |
 | `passengers` | Data penumpang |
 | `payments` | Data pembayaran |
 | `booking_history` | Audit trail (unseat/reassign/reschedule/cancel) |
 | `print_jobs` | Antrian cetak tiket |
-| `staff` | Staff users dengan role & outlet scope |
+| `staff_members` | Staff users dengan role & outlet scope |
 | `feature_flags` | Feature flag toggles |
 | `spj` | Surat Perintah Jalan |
 | `spj_cost_lines` | Detail biaya SPJ |
@@ -286,6 +293,11 @@ Dokumentasi teknis lengkap dengan penjelasan cara kerja, teknologi, dan logika p
 | `cargo_types` | Jenis kargo |
 | `cargo_rates` | Tarif kargo |
 | `cargo_shipments` | Data pengiriman kargo |
+| `refunds` | Permintaan refund (create → approve → process) |
+| `cashier_sessions` | Sesi kasir harian (open → closing → closed) |
+| `customers` | Profil pelanggan B2C dengan tag CRM |
+| `notifications` | Notifikasi in-app per staff member |
+| `operator_settings` | Pengaturan branding per operator (nama, logo, warna) |
 
 ---
 
@@ -487,8 +499,10 @@ DELETE /api/holds/:holdRef                      # Release hold
 # Bookings
 GET    /api/bookings
 GET    /api/bookings/:id
-POST   /api/bookings
+POST   /api/bookings                           # Booking sekali jalan
+POST   /api/bookings/round-trip                # Booking PP (pulang pergi) — atomik, 2 trip 1 transaksi
 GET    /api/bookings/:bookingId/history         # Audit trail
+GET    /api/bookings/search?q=CODE              # Pencarian booking code (untuk refund autocomplete)
 
 # Unseat / Reassign / Reschedule
 POST   /api/passengers/:passengerId/unseat
@@ -504,6 +518,41 @@ POST   /api/payments
 
 # Pricing
 GET    /api/pricing/quote-fare?tripId=X&originSeq=N&destinationSeq=M
+```
+
+### Dashboard, Kasir, Refund, Pelanggan
+
+```http
+# Dashboard
+GET    /api/dashboard/summary                  # Ringkasan operasional harian
+
+# Kasir
+GET    /api/cashier/sessions                   # List sesi kasir
+POST   /api/cashier/open                       # Buka sesi kasir
+POST   /api/cashier/close                      # Ajukan penutupan sesi
+POST   /api/cashier/approve/:sessionId         # Approve penutupan sesi
+GET    /api/cashier/sessions/:id               # Detail sesi + transaksi
+
+# Refund
+GET    /api/refunds                            # List refund
+POST   /api/refunds                            # Buat permintaan refund
+POST   /api/refunds/:id/approve                # Approve refund
+POST   /api/refunds/:id/process                # Proses/bayar refund
+POST   /api/refunds/:id/reject                 # Tolak refund
+
+# Pelanggan
+GET    /api/customers                          # List pelanggan
+GET    /api/customers/:id                      # Detail + riwayat booking
+PATCH  /api/customers/:id/tag                  # Update tag pelanggan
+
+# Notifikasi
+GET    /api/notifications                      # List notifikasi
+PATCH  /api/notifications/:id/read             # Tandai dibaca
+POST   /api/notifications/read-all             # Tandai semua dibaca
+
+# Operator Settings
+GET    /api/settings                           # Baca pengaturan branding
+PUT    /api/settings                           # Update pengaturan branding
 ```
 
 ### SPJ (Surat Perintah Jalan)
@@ -563,6 +612,8 @@ GET    /api/app/cargo/track/:waybillNumber      # Track kargo
 
 ## Alur Booking
 
+### Sekali Jalan (One-Way)
+
 ```
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
 │  1. Outlet   │───>│  2. Trip     │───>│  3. Route    │
@@ -583,8 +634,6 @@ GET    /api/app/cargo/track/:waybillNumber      # Track kargo
 └──────────────┘
 ```
 
-### Detail Alur
-
 1. **Outlet Selection** — Pilih lokasi penjualan
 2. **Trip Selection** — Pilih perjalanan dari daftar (real + virtual trips)
 3. **Route Selection** — Pilih asal (Naik) dan tujuan (Turun) dari RouteTimeline
@@ -592,6 +641,28 @@ GET    /api/app/cargo/track/:waybillNumber      # Track kargo
 5. **Passenger Details** — Isi data penumpang + promo code (opsional)
 6. **Payment** — Proses pembayaran (cash, QR, e-wallet, bank transfer)
 7. **Print** — Cetak tiket thermal
+
+### Pulang Pergi / PP (Round-Trip)
+
+```
+┌──────────────────────────────┐    ┌──────────────────────────────┐
+│  STEP 1: Pergi               │    │  STEP 2: Pulang              │
+│  Pilih trip + rute + kursi   │───>│  Pilih trip + rute + kursi   │
+│  (Outbound seat hold aktif)  │    │  (Return seat hold aktif)    │
+└──────────────────────────────┘    └──────────────┬───────────────┘
+                                                   │
+                    ┌──────────────────────────────┘
+                    ▼
+┌──────────────────────────────┐    ┌──────────────────────────────┐
+│  STEP 3: Penumpang + Payment │───>│  STEP 4: Selesai             │
+│  Isi nama per kursi, bayar   │    │  Print 2 tiket + groupCode   │
+└──────────────────────────────┘    └──────────────────────────────┘
+```
+
+- Kedua booking dibuat atomik dalam satu DB transaction via `POST /api/bookings/round-trip`
+- Hasil: `groupCode` (penghubung), `outboundBookingCode`, `returnBookingCode`
+- Jumlah penumpang outbound dan return harus sama
+- Boarding/alighting rules divalidasi untuk kedua trip
 
 ### Seat Hold Mechanism
 
@@ -771,6 +842,7 @@ server/
     rbac/                    RBAC + Feature Flags (rbac.middleware.ts, rbac.service.ts, rbac.admin.routes.ts)
     app/                     Mobile B2C API auth + controllers
     bookings/                BookingsService + BookingsController + UnseatService
+                             roundTrip.controller.ts + roundTrip.service.ts (PP booking)
     pricing/                 PricingService + PricingController
     cargo/                   CargoService + CargoController
     seatInventory/           SeatInventoryService
@@ -781,7 +853,7 @@ server/
     promos/                  PromosService + PromosController (promo & voucher)
     payments/                PaymentsController
     holds/                   HoldsService (seat hold management)
-    drivers/                 DriversController + DriversService
+    drivers/                 DriversController + DriversService + performance endpoint
     vehicles/                VehiclesController + VehiclesService
     stops/                   StopsController + StopsService
     outlets/                 OutletsController
@@ -791,22 +863,34 @@ server/
     patternStops/            PatternStopsController
     tripStopTimes/           TripStopTimesController
     priceRules/              PriceRulesController
-    printing/                PrintService
+    printing/                PrintService (single & round-trip ticket payload generator)
+    dashboard/               DashboardController (ringkasan operasional harian)
+    cashier/                 CashierController + CashierService (sesi kasir, open/close/approve)
+    refunds/                 RefundsController + RefundsService (create/approve/process/reject)
+    customers/               CustomersController + CustomersService (CRM, tag pelanggan)
+    notifications/           NotificationsController (bell icon, mark read, delete)
+    maintenance/             MaintenanceController (rekam servis kendaraan, alert)
+    scheduler/               Background cleanup (expired holds + pending bookings, 1 menit interval)
+    settings/                OperatorSettingsController (branding: nama, logo, warna)
 
 client/src/
   App.tsx                    Root router (wouter) + React.lazy page imports
   pages/
-    cso/                     CsoPage — terminal reservasi CSO utama
-    cargo/                   CargoListPage — daftar pengiriman kargo
+    cso/                     CsoPage — terminal reservasi CSO (mode: sekali jalan + PP/round-trip)
+    cargo/                   CargoListPage + CargoTerminalPage
     bookings/                AllBookingsPage — daftar semua booking
     schedule/                SchedulePage — jadwal harian + assign driver + buat SPJ
+    scheduler/               SchedulerPage — manajemen jadwal template
     manifest/                ManifestPage
     spj/                     SpjPage — manajemen Surat Perintah Jalan
     masters/                 MastersPage — CRUD master data
     reports/                 8 report pages (Revenue, Sales, Profitability, Commercial Fee, dll)
-    admin/                   StaffManagement + FeatureFlagManagement
-    auth/                    LoginPage
+    admin/                   AdminStaffPage + AdminFlagsPage + SettingsPage (branding)
+    auth/                    LoginPage + SetupPage (onboarding owner pertama)
     dashboard/               DashboardPage
+    cashier/                 CashierPage — sesi kasir harian
+    refunds/                 RefundsPage — manajemen refund
+    customers/               CustomersPage — CRM pelanggan
   components/
     cso/                     Komponen terminal CSO
       TripSelector.tsx       Pilih outlet + tanggal + trip
@@ -837,7 +921,8 @@ client/src/
     rbac/                    RequireFlag + CanAccess permission components
     ui/                      shadcn/ui components
   hooks/
-    useBookingFlow.ts        State machine booking flow CSO
+    useBookingFlow.ts        State machine booking flow CSO (one-way, 7 step)
+    useRoundTripFlow.ts      State machine PP (round-trip, 4 step) — orchestrasi dua seat hold + submit atomik
     useSeatHold.ts           Seat hold timer + auto-release
     useWebSocket.ts          Socket.io connection management
     use-toast.ts             Toast notifications
@@ -976,7 +1061,9 @@ Gunakan `requireFlag("master.myFeature")` di route preHandler, dan `usePermissio
 |-------|--------|
 | Master Data (Stops, Outlets, Vehicles, Layouts, Patterns) | Done |
 | Trip Bases & Virtual Scheduling | Done |
-| CSO Booking Terminal (SeatMap, PassengerForm, Payment) | Done |
+| CSO Booking Terminal — Sekali Jalan (SeatMap, PassengerForm, Payment, Print) | Done |
+| CSO Booking PP / Round-Trip (`useRoundTripFlow`, `RoundTripStepper`, `POST /api/bookings/round-trip`) | Done |
+| `booking_groups` Table (penghubung outbound+return via `groupCode`) | Done |
 | Seat Inventory & Hold System | Done |
 | Pricing Engine (per-leg, flat, scope-based) | Done |
 | Promo & Voucher | Done |
@@ -987,15 +1074,22 @@ Gunakan `requireFlag("master.myFeature")` di route preHandler, dan `usePermissio
 | Unseat / Reassign / Reschedule | Done |
 | Booking History (Audit Trail) | Done |
 | Reports (8 jenis laporan termasuk Commercial Fee) | Done |
-| Authentication (Realmio) | Done |
+| Authentication (Realmio) + Setup onboarding | Done |
 | RBAC + ABAC + Feature Flags (33+ flags) | Done |
 | Admin UI (Staff & Flag Management) | Done |
 | Hybrid Refactor (Schema split, Repository pattern, Route decentralization) | Done |
 | Data Integrity — Snapshot System | Done |
 | Batch Reschedule on Trip Close | Done |
 | Security Hardening (rate limit, CORS, webhook, redaction) | Done |
-| Mobile B2C (Expo React Native) | In Progress |
+| Dashboard (ringkasan operasional harian) | Done |
+| Kasir (sesi kasir open/close/approve, settlement breakdown) | Done |
+| Refund (create/approve/process/reject, RBAC per role) | Done |
+| Pelanggan / CRM (profil, tag, riwayat booking) | Done |
+| Notifikasi in-app (bell icon, mark read) | Done |
+| Operator Settings (branding: nama, logo, warna) | Done |
+| Logout fix (clear cookie domain mismatch) | Done |
 | Backend: Fastify 5 Migration | Done |
+| Mobile B2C (Expo React Native) | In Progress |
 
 ---
 
