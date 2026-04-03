@@ -88,6 +88,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
       return reply.send({ success: true });
     }
 
+    const clearExpiry = "Expires=Thu, 01 Jan 1970 00:00:00 GMT";
+
     try {
       const upstream = await fetch(`${REALMIO_BASE_URL}/api/auth/sign-out`, {
         method: "POST",
@@ -102,10 +104,32 @@ export function registerAuthRoutes(app: FastifyInstance) {
         reply.header("Set-Cookie", c);
       }
 
-      const data = await upstream.json();
-      return reply.code(upstream.status).send(data);
+      // Explicitly clear all cookies sent by the browser on our own domain,
+      // since Realmio's Set-Cookie targets its own domain and won't clear ours.
+      const incomingCookieNames = (req.headers.cookie ?? "")
+        .split(";")
+        .map((c) => c.trim().split("=")[0])
+        .filter(Boolean);
+
+      for (const name of incomingCookieNames) {
+        reply.header("Set-Cookie", `${name}=; Path=/; ${clearExpiry}; HttpOnly; SameSite=Lax`);
+        reply.header("Set-Cookie", `${name}=; Path=/; ${clearExpiry}; HttpOnly; SameSite=None; Secure`);
+      }
+
+      const data = await upstream.json().catch(() => ({ success: true }));
+      return reply.code(upstream.ok ? upstream.status : 200).send(data);
     } catch (err) {
-      return reply.code(502).send({ message: "Auth service unavailable" });
+      // Even if Realmio is unreachable, clear cookies so the user is logged out locally
+      const incomingCookieNames = (req.headers.cookie ?? "")
+        .split(";")
+        .map((c) => c.trim().split("=")[0])
+        .filter(Boolean);
+
+      for (const name of incomingCookieNames) {
+        reply.header("Set-Cookie", `${name}=; Path=/; ${clearExpiry}; HttpOnly; SameSite=Lax`);
+      }
+
+      return reply.code(200).send({ success: true });
     }
   });
 
