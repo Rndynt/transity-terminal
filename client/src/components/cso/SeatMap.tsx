@@ -9,6 +9,7 @@ import { queryClient } from '@/lib/queryClient';
 import type { Trip, SeatmapResponse } from '@/types';
 import PassengerDetailModal from './PassengerDetailModal';
 import { apiRequest } from '@/lib/queryClient';
+import { usePermissions } from '@/lib/permissions';
 
 
 export interface AssignModeState {
@@ -77,6 +78,7 @@ export default function SeatMap({
     setInternalAssignMode(mode);
   };
   const { toast } = useToast();
+  const { can } = usePermissions();
   const refetchRef = useRef<() => void>(() => {});
 
   const assignSeatMutation = useMutation({
@@ -431,17 +433,19 @@ export default function SeatMap({
           <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-amber-800">Inventori kursi belum disiapkan</p>
-            <p className="text-[11px] text-amber-700 mt-0.5">Kursi tidak bisa dipilih sebelum inventori diinisialisasi.</p>
+            <p className="text-[11px] text-amber-700 mt-0.5">Hubungi administrator untuk mengaktifkan kursi pada jadwal ini.</p>
           </div>
-          <button
-            onClick={handlePrecompute}
-            disabled={precomputing}
-            data-testid="btn-precompute-inventory"
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-600 text-white text-[11px] font-semibold rounded-lg hover:bg-amber-700 transition-colors flex-shrink-0 disabled:opacity-60"
-          >
-            {precomputing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Settings2 className="w-3 h-3" />}
-            {precomputing ? 'Memproses...' : 'Inisialisasi'}
-          </button>
+          {can('action.inventory.initialize') && (
+            <button
+              onClick={handlePrecompute}
+              disabled={precomputing}
+              data-testid="btn-precompute-inventory"
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-600 text-white text-[11px] font-semibold rounded-lg hover:bg-amber-700 transition-colors flex-shrink-0 disabled:opacity-60"
+            >
+              {precomputing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Settings2 className="w-3 h-3" />}
+              {precomputing ? 'Memproses...' : 'Inisialisasi'}
+            </button>
+          )}
         </div>
       )}
 
