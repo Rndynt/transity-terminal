@@ -951,7 +951,7 @@ export default function CsoPage() {
                     data-testid="mobile-tab-passenger"
                   >
                     {bookingMode === 'round-trip' && ppStep === 2
-                      ? (returnSubStep === 'seat' ? 'Ringkasan Kursi' : 'Pilih Rute Pulang')
+                      ? 'Pilih Rute Pulang'
                       : bookingMode === 'round-trip' ? 'Penumpang & Bayar' : `Data & Bayar${totalAmount > 0 ? ` (${fmtCurrency(totalAmount)})` : ''}`}
                   </button>
                 </div>
@@ -1138,7 +1138,7 @@ export default function CsoPage() {
                     </div>
                   </div>
                 ) : (
-                  /* Sub-step kursi: kanan = status pilih kursi */
+                  /* Sub-step kursi: kanan = loading saja, langsung lanjut ke form penumpang */
                   <div className="flex-1 flex flex-col overflow-hidden">
                     <div className="flex-1 flex flex-col items-center justify-center p-6 gap-4">
                       {isProcessing ? (
@@ -1147,20 +1147,10 @@ export default function CsoPage() {
                           <p className="text-sm text-gray-500 font-medium">Memuat harga...</p>
                         </>
                       ) : (
-                        <>
-                          <div className="text-center">
-                            <p className="text-2xl font-black text-gray-700">
-                              {roundTripFlow.state.returnSeats.length}
-                              <span className="text-gray-300">/{roundTripFlow.state.outboundSeats.length}</span>
-                            </p>
-                            <p className="text-xs text-gray-400 mt-0.5">kursi pulang dipilih</p>
-                          </div>
-                          {roundTripFlow.state.returnSeats.length < roundTripFlow.state.outboundSeats.length && (
-                            <p className="text-xs text-gray-400 text-center">
-                              Pilih kursi dari peta di sebelah kiri
-                            </p>
-                          )}
-                        </>
+                        <div className="flex flex-col items-center gap-2 text-gray-300">
+                          <Armchair className="w-10 h-10" />
+                          <p className="text-sm text-gray-400 text-center">Pilih kursi di panel kiri</p>
+                        </div>
                       )}
                     </div>
                     <div className="flex-shrink-0 p-3 border-t border-gray-100">
