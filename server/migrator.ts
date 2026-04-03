@@ -58,8 +58,8 @@ export async function runSchemaMigrations(migrationsFolder = "./migrations") {
         const journalPath = `${migrationsFolder}/meta/_journal.json`;
         const journal = JSON.parse(fs.readFileSync(journalPath).toString());
 
-        // Semua migration sampai sebelum idx 6 dianggap sudah diterapkan
-        const NEW_MIGRATION_IDX = 6;
+        // Semua migration sampai sebelum idx 7 dianggap sudah diterapkan
+        const NEW_MIGRATION_IDX = 7;
         const existingEntries = journal.entries.filter((e: any) => e.idx < NEW_MIGRATION_IDX);
 
         for (const entry of existingEntries) {
