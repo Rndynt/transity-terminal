@@ -17,17 +17,23 @@ export default function RoundTripPrintPreview({
   onNewBooking,
   onPrint
 }: RoundTripPrintPreviewProps) {
-  const formatDate = (date: string) => {
+  const formatDate = (date: string | null | undefined) => {
+    if (!date) return '-';
     try {
-      return new Date(date).toLocaleDateString('id-ID', {
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return '-';
+      return d.toLocaleDateString('id-ID', {
         weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta'
       });
     } catch { return '-'; }
   };
 
-  const formatTime = (iso: string) => {
+  const formatTime = (iso: string | null | undefined) => {
+    if (!iso) return '--:--';
     try {
-      return new Date(iso).toLocaleTimeString('id-ID', {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '--:--';
+      return d.toLocaleTimeString('id-ID', {
         hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta'
       });
     } catch { return '--:--'; }
