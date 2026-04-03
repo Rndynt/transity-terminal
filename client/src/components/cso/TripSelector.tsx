@@ -652,10 +652,6 @@ export default function TripSelector({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block flex items-center gap-1">
-              <Store className="w-3 h-3" /> Outlet
-              {lockedOutletId && <Lock className="w-3 h-3 text-orange-400 ml-0.5" />}
-            </label>
             {lockedOutletId ? (
               <div className="h-9 px-3 flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 text-sm text-gray-700">
                 <Lock className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
@@ -674,16 +670,8 @@ export default function TripSelector({
                 testId="select-outlet"
               />
             )}
-            {selectedOutlet && (
-              <div className="mt-1 text-[10px] text-gray-400 truncate">
-                {stops.find(s => s.id === selectedOutlet.stopId)?.city || ''}
-              </div>
-            )}
           </div>
           <div>
-            <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block flex items-center gap-1">
-              <Calendar className="w-3 h-3" /> Tanggal
-            </label>
             <div className="flex items-center gap-1">
               <button
                 type="button"
