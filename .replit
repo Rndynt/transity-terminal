@@ -9,7 +9,7 @@ packages = ["chromium"]
 [deployment]
 deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
-run = ["node", "./dist/index.js"]
+run = ["node", "./dist/index.cjs"]
 
 [[ports]]
 localPort = 3000
