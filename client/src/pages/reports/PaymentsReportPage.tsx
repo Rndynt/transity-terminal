@@ -12,6 +12,7 @@ import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
 import ReportPageLayout from '@/components/reports/ReportPageLayout';
 import { fmtCurrency, getPaymentLabel } from '@/lib/constants';
 import { ChannelBadge } from '@/components/shared/StatusBadges';
+import { todayStr, daysAgoStr } from '@/lib/date';
 
 const DATE_MODES: DateModeOption[] = [
   { value: 'paid', label: 'Tanggal Bayar' },
@@ -38,9 +39,7 @@ const PAYMENT_STATUS_MAP: Record<string, { label: string; variant: 'default' | '
 export default function PaymentsReportPage() {
   usePageTitle("Laporan Pembayaran", "Detail metode & status pembayaran");
   const { outletId: scopedOutletId } = usePermissions();
-  const today = new Date().toISOString().split('T')[0];
-  const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
-  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'paid' });
+  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: daysAgoStr(29), dateTo: todayStr(), dateMode: 'paid' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['/api/reports/payments', buildQuery(filters)],

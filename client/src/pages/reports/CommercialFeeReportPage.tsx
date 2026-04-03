@@ -10,6 +10,7 @@ import ReportFilters, { type ReportFilterValues, type DateModeOption } from '@/c
 import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
 import ReportPageLayout from '@/components/reports/ReportPageLayout';
 import { fmtCurrency } from '@/lib/constants';
+import { todayStr, localDateStr } from '@/lib/date';
 
 const DATE_MODES: DateModeOption[] = [
   { value: 'paid', label: 'Tanggal Bayar' },
@@ -40,9 +41,7 @@ function fmtTierRange(min: number, tiers: any[], idx: number) {
 export default function CommercialFeeReportPage() {
   usePageTitle("Laporan Commercial Fee", "Rekap fee per agen & tier");
   const { outletId: scopedOutletId } = usePermissions();
-  const today = new Date().toISOString().split('T')[0];
-  const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: firstOfMonth, dateTo: today, dateMode: 'paid' });
+  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: localDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), 1)), dateTo: todayStr(), dateMode: 'paid' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['/api/reports/commercial-fee', buildQuery(filters)],

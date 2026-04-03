@@ -7,6 +7,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { X, SlidersHorizontal, ChevronDown, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { localDateStr, daysAgoStr } from '@/lib/date';
 
 interface FilterOptions {
   outlets: { id: string; name: string }[];
@@ -41,10 +42,10 @@ interface ReportFiltersProps {
 }
 
 const PRESETS = [
-  { label: 'Hari Ini', getValue: () => { const d = new Date().toISOString().split('T')[0]; return { dateFrom: d, dateTo: d }; } },
-  { label: '7 Hari', getValue: () => { const t = new Date(); const f = new Date(t); f.setDate(f.getDate() - 6); return { dateFrom: f.toISOString().split('T')[0], dateTo: t.toISOString().split('T')[0] }; } },
-  { label: '30 Hari', getValue: () => { const t = new Date(); const f = new Date(t); f.setDate(f.getDate() - 29); return { dateFrom: f.toISOString().split('T')[0], dateTo: t.toISOString().split('T')[0] }; } },
-  { label: 'Bulan Ini', getValue: () => { const t = new Date(); const f = new Date(t.getFullYear(), t.getMonth(), 1); return { dateFrom: f.toISOString().split('T')[0], dateTo: t.toISOString().split('T')[0] }; } },
+  { label: 'Hari Ini', getValue: () => { const d = localDateStr(); return { dateFrom: d, dateTo: d }; } },
+  { label: '7 Hari',   getValue: () => ({ dateFrom: daysAgoStr(6),  dateTo: localDateStr() }) },
+  { label: '30 Hari',  getValue: () => ({ dateFrom: daysAgoStr(29), dateTo: localDateStr() }) },
+  { label: 'Bulan Ini', getValue: () => { const now = new Date(); return { dateFrom: localDateStr(new Date(now.getFullYear(), now.getMonth(), 1)), dateTo: localDateStr() }; } },
 ];
 
 export default function ReportFilters({ value, onChange, showOutlet = true, showChannel = true, showRoute = true, lockedOutletId, dateModeOptions }: ReportFiltersProps) {

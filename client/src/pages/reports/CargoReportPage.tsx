@@ -11,6 +11,7 @@ import ReportFilters, { type ReportFilterValues, type DateModeOption } from '@/c
 import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
 import ReportPageLayout from '@/components/reports/ReportPageLayout';
 import { fmtCurrency, CARGO_STATUS_MAP, type CargoStatus } from '@/lib/constants';
+import { todayStr, daysAgoStr } from '@/lib/date';
 import { CargoStatusBadge } from '@/components/shared/StatusBadges';
 
 const DATE_MODES: DateModeOption[] = [
@@ -29,9 +30,7 @@ function buildQuery(f: ReportFilterValues) {
 export default function CargoReportPage() {
   usePageTitle("Laporan Kargo", "Statistik pengiriman & pendapatan kargo");
   const { outletId: scopedOutletId } = usePermissions();
-  const today = new Date().toISOString().split('T')[0];
-  const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
-  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'created' });
+  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: daysAgoStr(29), dateTo: todayStr(), dateMode: 'created' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['/api/reports/cargo', buildQuery(filters)],

@@ -10,6 +10,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import ReportFilters, { type ReportFilterValues } from '@/components/reports/ReportFilters';
 import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
 import ReportPageLayout from '@/components/reports/ReportPageLayout';
+import { todayStr, daysAgoStr } from '@/lib/date';
 
 function buildQuery(f: ReportFilterValues) {
   const params = new URLSearchParams({ dateFrom: f.dateFrom, dateTo: f.dateTo });
@@ -27,9 +28,7 @@ function getLoadFactorColor(pct: number) {
 export default function LoadFactorPage() {
   usePageTitle("Load Factor", "Tingkat okupansi per rute & trip");
   const { outletId: scopedOutletId } = usePermissions();
-  const today = new Date().toISOString().split('T')[0];
-  const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
-  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today });
+  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: daysAgoStr(29), dateTo: todayStr() });
 
   const { data, isLoading } = useQuery({
     queryKey: ['/api/reports/load-factor', buildQuery(filters)],

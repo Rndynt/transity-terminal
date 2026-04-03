@@ -11,6 +11,7 @@ import ReportFilters, { type ReportFilterValues, type DateModeOption } from '@/c
 import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
 import ReportPageLayout from '@/components/reports/ReportPageLayout';
 import { HISTORY_ACTION_MAP, fmtDate } from '@/lib/constants';
+import { todayStr, daysAgoStr } from '@/lib/date';
 
 const DATE_MODES: DateModeOption[] = [
   { value: 'paid', label: 'Tanggal Batal' },
@@ -55,9 +56,7 @@ function extractReason(details: any): string {
 export default function CancellationsReportPage() {
   usePageTitle("Laporan Pembatalan", "Data pembatalan & unseat booking");
   const { outletId: scopedOutletId } = usePermissions();
-  const today = new Date().toISOString().split('T')[0];
-  const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
-  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'paid' });
+  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: daysAgoStr(29), dateTo: todayStr(), dateMode: 'paid' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['/api/reports/cancellations', buildQuery(filters)],

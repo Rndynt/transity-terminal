@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Ticket, CheckCircle, XCircle, DollarSign } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import ReportFilters, { type ReportFilterValues, type DateModeOption } from '@/components/reports/ReportFilters';
+import { todayStr, daysAgoStr } from '@/lib/date';
 import { SummaryCardsGrid } from '@/components/reports/SummaryCards';
 import ReportPageLayout from '@/components/reports/ReportPageLayout';
 import { fmtCurrency } from '@/lib/constants';
@@ -29,9 +30,7 @@ function buildQuery(f: ReportFilterValues) {
 export default function SalesReportPage() {
   usePageTitle("Laporan Penjualan", "Analisis penjualan tiket & kargo");
   const { outletId: scopedOutletId } = usePermissions();
-  const today = new Date().toISOString().split('T')[0];
-  const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
-  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: thirtyDaysAgo, dateTo: today, dateMode: 'created' });
+  const [filters, setFilters] = useState<ReportFilterValues>({ dateFrom: daysAgoStr(29), dateTo: todayStr(), dateMode: 'created' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['/api/reports/sales', buildQuery(filters)],

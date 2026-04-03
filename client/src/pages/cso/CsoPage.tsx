@@ -6,6 +6,7 @@ import { usePermissions } from '@/lib/permissions';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
 import { fmtCurrency } from '@/lib/constants';
+import { localDateStr } from '@/lib/date';
 import TripSelector from '@/components/cso/TripSelector';
 import RouteTimeline from '@/components/cso/RouteTimeline';
 import SeatMap, { type AssignModeState, type RescheduleModeState } from '@/components/cso/SeatMap';
@@ -205,7 +206,7 @@ export default function CsoPage() {
       if (!returnDate) {
         const d = new Date(selectedDate);
         d.setDate(d.getDate() + 1);
-        setReturnDate(d.toISOString().split('T')[0]);
+        setReturnDate(localDateStr(d));
       }
       setPpStep(2);
       setMobilePanel('left');

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { todayStr } from '@/lib/date';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -155,7 +156,7 @@ export default function VehicleMaintenanceTab({ vehicleId, vehiclePlate }: Vehic
     setStatusDialog(record);
     setStatusForm({
       status: newStatus,
-      completedDate: newStatus === 'completed' ? new Date().toISOString().split('T')[0] : '',
+      completedDate: newStatus === 'completed' ? todayStr() : '',
       odometerKm: record.odometerKm?.toString() || '',
     });
   };

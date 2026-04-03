@@ -21,6 +21,7 @@ import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterFormDialog from './MasterFormDialog';
 import TripsFilterPanel from './TripsFilterPanel';
 import type { Trip, TripPattern, Vehicle, Layout, Driver } from '@/types';
+import { todayStr } from '@/lib/date';
 import { TripStatusBadge } from '@/components/shared/StatusBadges';
 import TripScheduleEditor from './TripScheduleEditor';
 import ManifestDialog from '@/components/manifest/ManifestDialog';
@@ -53,7 +54,7 @@ export default function TripsManager() {
   const [manifestTripId, setManifestTripId] = useState<string | null>(null);
   const [formData, setFormData] = useState<TripFormData>({
     patternId: '',
-    serviceDate: new Date().toISOString().split('T')[0],
+    serviceDate: todayStr(),
     vehicleId: '',
     layoutId: '',
     capacity: '',
@@ -168,7 +169,7 @@ export default function TripsManager() {
   });
 
   const resetForm = () => {
-    setFormData({ patternId: '', serviceDate: new Date().toISOString().split('T')[0], vehicleId: '', layoutId: '', capacity: '', driverId: '', status: 'scheduled' });
+    setFormData({ patternId: '', serviceDate: todayStr(), vehicleId: '', layoutId: '', capacity: '', driverId: '', status: 'scheduled' });
   };
 
   const handleCreate = () => { setEditingTrip(null); resetForm(); setIsDialogOpen(true); };
