@@ -6,6 +6,7 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
+import { queryClient } from "./queryClient";
 
 export interface AuthUser {
   id: string;
@@ -96,7 +97,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
+    queryClient.clear();
     setState({ user: null, isLoading: false, isAuthenticated: false });
+    window.location.href = "/auth";
   }, []);
 
   return (
