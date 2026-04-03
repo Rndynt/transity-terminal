@@ -4,7 +4,7 @@ import { useSearch, useLocation } from 'wouter';
 import { CanAccess } from '@/components/rbac/CanAccess';
 import { usePermissions } from '@/lib/permissions';
 import { useToast } from '@/hooks/use-toast';
-import { queryClient } from '@/lib/queryClient';
+import { queryClient, apiRequest } from '@/lib/queryClient';
 import { fmtCurrency } from '@/lib/constants';
 import { localDateStr } from '@/lib/date';
 import TripSelector from '@/components/cso/TripSelector';
