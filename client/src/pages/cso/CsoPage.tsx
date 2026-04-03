@@ -600,9 +600,7 @@ export default function CsoPage() {
                 <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5 flex-shrink-0" />
                 <span className="text-xs text-gray-500 whitespace-nowrap">Kursi & Penumpang</span>
               </>
-            ) : (
-              <span className="text-xs text-gray-500 whitespace-nowrap">Jadwal & Rute</span>
-            )}
+            ) : null}
           </div>
 
           <div className="flex items-center gap-2 md:gap-4 flex-shrink-0 ml-2">
