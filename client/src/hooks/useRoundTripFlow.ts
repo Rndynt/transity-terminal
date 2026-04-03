@@ -3,7 +3,7 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import type { CsoAvailableTrip, Stop, Outlet } from '@/types';
 
-export type RoundTripStep = 1 | 2 | 3 | 4 | 5;
+export type RoundTripStep = 1 | 2 | 3 | 4;
 
 export interface RoundTripFlowState {
   step: RoundTripStep;

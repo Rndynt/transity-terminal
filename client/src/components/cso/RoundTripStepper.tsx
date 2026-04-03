@@ -1,15 +1,14 @@
 import { Check } from 'lucide-react';
 
 interface RoundTripStepperProps {
-  currentStep: 1 | 2 | 3 | 4 | 5;
+  currentStep: 1 | 2 | 3 | 4;
 }
 
 const STEPS = [
   { id: 1, label: 'Pergi' },
   { id: 2, label: 'Pulang' },
   { id: 3, label: 'Penumpang' },
-  { id: 4, label: 'Bayar' },
-  { id: 5, label: 'Selesai' },
+  { id: 4, label: 'Selesai' },
 ];
 
 export default function RoundTripStepper({ currentStep }: RoundTripStepperProps) {
