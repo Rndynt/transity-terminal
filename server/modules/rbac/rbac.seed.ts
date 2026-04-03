@@ -146,41 +146,38 @@ const DEFAULT_MATRIX: Record<string, FlagMatrix> = {
 
 export async function seedRbac() {
   console.log("[RBAC] Seeding roles...");
-  for (const role of ROLES) {
-    await db.execute(sql`
-      INSERT INTO roles (id, name, description)
-      VALUES (${role.id}, ${role.name}, ${role.description})
-      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description
-    `);
-  }
+  const roleValues = ROLES.map(r => sql`(${r.id}, ${r.name}, ${r.description})`);
+  await db.execute(sql`
+    INSERT INTO roles (id, name, description)
+    VALUES ${sql.join(roleValues, sql`, `)}
+    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description
+  `);
   console.log(`  ✓ ${ROLES.length} roles`);
 
   console.log("[RBAC] Seeding feature flags...");
-  for (const flag of FEATURE_FLAGS) {
-    await db.execute(sql`
-      INSERT INTO feature_flags (id, name, description, category)
-      VALUES (${flag.id}, ${flag.name}, ${flag.description}, ${flag.category})
-      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, category = EXCLUDED.category
-    `);
-  }
+  const flagValues = FEATURE_FLAGS.map(f => sql`(${f.id}, ${f.name}, ${f.description}, ${f.category})`);
+  await db.execute(sql`
+    INSERT INTO feature_flags (id, name, description, category)
+    VALUES ${sql.join(flagValues, sql`, `)}
+    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, category = EXCLUDED.category
+  `);
   console.log(`  ✓ ${FEATURE_FLAGS.length} feature flags`);
 
   console.log("[RBAC] Seeding role_flags (default matrix)...");
-  let count = 0;
-  let skipped = 0;
+  const roleFlagRows: ReturnType<typeof sql>[] = [];
   for (const [flagId, matrix] of Object.entries(DEFAULT_MATRIX)) {
     for (const roleId of Object.keys(matrix) as RoleId[]) {
-      const enabled = matrix[roleId];
-      const result = await db.execute(sql`
-        INSERT INTO role_flags (role_id, flag_id, enabled)
-        VALUES (${roleId}, ${flagId}, ${enabled})
-        ON CONFLICT (role_id, flag_id) DO NOTHING
-      `);
-      if ((result as any).rowCount === 0) skipped++;
-      else count++;
+      roleFlagRows.push(sql`(${roleId}, ${flagId}, ${matrix[roleId]})`);
     }
   }
-  console.log(`  ✓ ${count} role-flag mappings inserted, ${skipped} already exist (preserved)`);
+  const result = await db.execute(sql`
+    INSERT INTO role_flags (role_id, flag_id, enabled)
+    VALUES ${sql.join(roleFlagRows, sql`, `)}
+    ON CONFLICT (role_id, flag_id) DO NOTHING
+  `);
+  const inserted = (result as any).rowCount ?? 0;
+  const skipped = roleFlagRows.length - inserted;
+  console.log(`  ✓ ${inserted} role-flag mappings inserted, ${skipped} already exist (preserved)`);
 
   if (process.env.NODE_ENV !== 'production') {
     console.log("[RBAC] Seeding dev staff member...");
