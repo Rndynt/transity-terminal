@@ -871,10 +871,15 @@ export default function CsoPage() {
                 </div>
               </div>
 
+              {/* Round-trip stepper — sits between tabs and panels */}
+              {bookingMode === 'round-trip' && (
+                <div className="flex-shrink-0">
+                  <RoundTripStepper currentStep={ppStep} />
+                </div>
+              )}
+
               {/* Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
-        {bookingMode === 'round-trip' && <RoundTripStepper currentStep={ppStep} />}
-
         <div className="flex-1 flex overflow-hidden">
           <div className={`flex-1 border-r border-gray-200 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'left' ? 'block' : 'hidden md:block'}`} data-testid="panel-trip-selector">
             <TripSelector
@@ -957,10 +962,15 @@ export default function CsoPage() {
                 </div>
               </div>
 
+              {/* Round-trip stepper — sits between tabs and panels */}
+              {bookingMode === 'round-trip' && (
+                <div className="flex-shrink-0">
+                  <RoundTripStepper currentStep={ppStep} />
+                </div>
+              )}
+
               {/* Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
-        {bookingMode === 'round-trip' && <RoundTripStepper currentStep={ppStep} />}
-
           <div className="flex-1 flex overflow-hidden">
 
             {/* LEFT PANEL */}
