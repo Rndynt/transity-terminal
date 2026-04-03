@@ -244,8 +244,9 @@ export default function CsoPage() {
     setMobilePanel('left');
   };
 
-  const handleReturnNext = async () => {
-    if (!roundTripFlow.state.returnTrip || roundTripFlow.state.returnSeats.length === 0 ||
+  const handleReturnNext = async (overrideSeats?: string[]) => {
+    const seats = overrideSeats ?? roundTripFlow.state.returnSeats;
+    if (!roundTripFlow.state.returnTrip || seats.length === 0 ||
         roundTripFlow.state.returnOriginSeq === undefined || roundTripFlow.state.returnDestinationSeq === undefined) return;
     
     setIsProcessing(true);
@@ -254,7 +255,7 @@ export default function CsoPage() {
         roundTripFlow.state.returnTrip.tripId!,
         roundTripFlow.state.returnOriginSeq,
         roundTripFlow.state.returnDestinationSeq,
-        roundTripFlow.state.returnSeats.length
+        seats.length
       );
       setPpFares(prev => ({ ...prev, return: fare.perPassenger }));
       setPpStep(3);
@@ -1041,8 +1042,14 @@ export default function CsoPage() {
                       destinationSeq={roundTripFlow.state.returnDestinationSeq}
                       selectedSeats={roundTripFlow.state.returnSeats}
                       onSeatSelect={(seat) => {
-                        if (roundTripFlow.state.returnSeats.length < roundTripFlow.state.outboundSeats.length) {
-                          roundTripFlow.setReturnSeats([...roundTripFlow.state.returnSeats, seat]);
+                        const needed = roundTripFlow.state.outboundSeats.length;
+                        const current = roundTripFlow.state.returnSeats;
+                        if (current.length < needed) {
+                          const updated = [...current, seat];
+                          roundTripFlow.setReturnSeats(updated);
+                          if (updated.length === needed) {
+                            handleReturnNext(updated);
+                          }
                         }
                       }}
                       onSeatDeselect={(seat) => roundTripFlow.setReturnSeats(roundTripFlow.state.returnSeats.filter(s => s !== seat))}
@@ -1131,60 +1138,38 @@ export default function CsoPage() {
                     </div>
                   </div>
                 ) : (
-                  /* Sub-step kursi: kanan = ringkasan + tombol lanjut */
+                  /* Sub-step kursi: kanan = status pilih kursi */
                   <div className="flex-1 flex flex-col overflow-hidden">
-                    <div className="flex-shrink-0 px-4 py-2.5 border-b border-gray-100 bg-emerald-50/40 flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-emerald-700">Pilih Kursi Pulang</p>
-                        <p className="text-[10px] text-emerald-500">
-                          {returnOriginStopSel?.code} → {returnDestStopSel?.code} · Butuh {roundTripFlow.state.outboundSeats.length} kursi
-                        </p>
-                      </div>
-                      <span className={`text-sm font-black ${roundTripFlow.state.returnSeats.length === roundTripFlow.state.outboundSeats.length ? 'text-emerald-600' : 'text-gray-500'}`}>
-                        {roundTripFlow.state.returnSeats.length}/{roundTripFlow.state.outboundSeats.length} Dipilih
-                      </span>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                      {/* Kursi pergi ringkasan */}
-                      <div className="bg-blue-50 rounded-2xl border border-blue-100 p-3">
-                        <p className="text-[10px] font-black text-blue-600 uppercase mb-2">Kursi Pergi Terpilih</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {roundTripFlow.state.outboundSeats.map(seat => (
-                            <span key={seat} className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold font-mono">{seat}</span>
-                          ))}
-                        </div>
-                      </div>
-                      {/* Kursi pulang terpilih */}
-                      {roundTripFlow.state.returnSeats.length > 0 && (
-                        <div className="bg-emerald-50 rounded-2xl border border-emerald-100 p-3">
-                          <p className="text-[10px] font-black text-emerald-600 uppercase mb-2">Kursi Pulang Terpilih</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {roundTripFlow.state.returnSeats.map(seat => (
-                              <span key={seat} className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold font-mono">{seat}</span>
-                            ))}
+                    <div className="flex-1 flex flex-col items-center justify-center p-6 gap-4">
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                          <p className="text-sm text-gray-500 font-medium">Memuat harga...</p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-center">
+                            <p className="text-2xl font-black text-gray-700">
+                              {roundTripFlow.state.returnSeats.length}
+                              <span className="text-gray-300">/{roundTripFlow.state.outboundSeats.length}</span>
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">kursi pulang dipilih</p>
                           </div>
-                        </div>
-                      )}
-                      {roundTripFlow.state.returnSeats.length < roundTripFlow.state.outboundSeats.length && (
-                        <p className="text-xs text-gray-400 text-center">Pilih kursi dari peta di panel kiri</p>
+                          {roundTripFlow.state.returnSeats.length < roundTripFlow.state.outboundSeats.length && (
+                            <p className="text-xs text-gray-400 text-center">
+                              Pilih kursi dari peta di sebelah kiri
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
-                    <div className="flex-shrink-0 p-3 border-t border-gray-100 flex gap-2">
+                    <div className="flex-shrink-0 p-3 border-t border-gray-100">
                       <button
                         onClick={() => { setReturnSubStep('route'); setMobilePanel('right'); roundTripFlow.setReturnSeats([]); }}
                         className="h-10 px-4 bg-gray-100 text-gray-600 rounded-xl font-semibold text-sm flex items-center gap-1.5 hover:bg-gray-200"
                         data-testid="btn-return-back-to-route"
                       >
                         <ChevronLeft className="w-4 h-4" /> Ganti Rute
-                      </button>
-                      <button
-                        onClick={handleReturnNext}
-                        disabled={roundTripFlow.state.returnSeats.length !== roundTripFlow.state.outboundSeats.length || isProcessing}
-                        className="flex-1 h-10 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 disabled:opacity-50 shadow-sm"
-                        data-testid="btn-return-next"
-                      >
-                        {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-                        Lanjut ke Penumpang
                       </button>
                     </div>
                   </div>
