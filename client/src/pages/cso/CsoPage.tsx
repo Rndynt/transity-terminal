@@ -299,7 +299,36 @@ export default function CsoPage() {
       };
       const res = await apiRequest('POST', '/api/bookings/round-trip', payload);
       const result = await res.json();
-      setPpResult(result);
+      // Enrich raw DB rows with local state so the print preview has all display fields
+      const rt = roundTripFlow.state;
+      const enrichedResult = {
+        ...result,
+        outboundBooking: {
+          ...result.outboundBooking,
+          originStop: rt.outboundOriginStop,
+          destinationStop: rt.outboundDestinationStop,
+          departAt: rt.outboundTrip?.departAtAtOutlet,
+          vehicle: { plate: rt.outboundTrip?.vehiclePlate || '' },
+          passengers: (result.printPayloads?.[0]?.content?.tickets || []).map((t: any) => ({
+            fullName: t.passengerName,
+            seatNo: t.seatNo,
+            ticketNumber: t.ticketNumber,
+          })),
+        },
+        returnBooking: {
+          ...result.returnBooking,
+          originStop: rt.returnOriginStop,
+          destinationStop: rt.returnDestinationStop,
+          departAt: rt.returnTrip?.departAtAtOutlet,
+          vehicle: { plate: rt.returnTrip?.vehiclePlate || '' },
+          passengers: (result.printPayloads?.[1]?.content?.tickets || []).map((t: any) => ({
+            fullName: t.passengerName,
+            seatNo: t.seatNo,
+            ticketNumber: t.ticketNumber,
+          })),
+        },
+      };
+      setPpResult(enrichedResult);
       setPpStep(4);
     } catch (e: any) {
       toast({ title: 'Gagal membuat PP', description: e.message, variant: 'destructive' });
@@ -1146,7 +1175,7 @@ export default function CsoPage() {
                 ppResult ? (
                   <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50">
                     <RoundTripPrintPreview
-                      group={ppResult}
+                      group={ppResult.group}
                       outboundBooking={ppResult.outboundBooking}
                       returnBooking={ppResult.returnBooking}
                       printPayloads={ppResult.printPayloads || []}
