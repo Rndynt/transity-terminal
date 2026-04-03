@@ -961,67 +961,49 @@ export default function CsoPage() {
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {bookingMode === 'round-trip' && <RoundTripStepper currentStep={ppStep} />}
 
-        {/* Full-screen PP steps 3-4 (passenger+payment, print) */}
-        {bookingMode === 'round-trip' && ppStep >= 3 ? (
-          <div className="flex-1 overflow-hidden">
-            {ppStep === 3 && roundTripFlow.state.outboundTrip && roundTripFlow.state.returnTrip && roundTripFlow.state.outboundOriginStop && roundTripFlow.state.outboundDestinationStop && (
-              <PassengerForm
-                selectedSeats={roundTripFlow.state.outboundSeats}
-                returnSeats={roundTripFlow.state.returnSeats}
-                passengers={roundTripFlow.state.outboundSeats.map((seatNo, i) => ({
-                  fullName: roundTripFlow.state.passengers[i]?.name || '',
-                  phone: '',
-                  idNumber: '',
-                  seatNo,
-                }))}
-                onPassengersUpdate={(updated: PassengerData[]) => {
-                  roundTripFlow.setPassengers(updated.map((p, i) => ({
-                    name: p.fullName,
-                    seatNoOutbound: p.seatNo,
-                    seatNoReturn: roundTripFlow.state.returnSeats[i] || '',
-                  })));
-                }}
-                outboundContext={{
-                  trip: roundTripFlow.state.outboundTrip,
-                  originStop: roundTripFlow.state.outboundOriginStop,
-                  destinationStop: roundTripFlow.state.outboundDestinationStop,
-                }}
-                returnContext={{
-                  trip: roundTripFlow.state.returnTrip,
-                  originStop: roundTripFlow.state.returnOriginStop ?? roundTripFlow.state.outboundDestinationStop,
-                  destinationStop: roundTripFlow.state.returnDestinationStop ?? roundTripFlow.state.outboundOriginStop,
-                }}
-                totalAmount={(ppFares.outbound + ppFares.return) * roundTripFlow.state.outboundSeats.length}
-                onPay={handleRoundTripPayAndBook}
-                onPaymentUpdate={() => {}}
-                onBack={() => setPpStep(2)}
-                loading={isProcessing}
-                promoCode={state.promoCode}
-                discountAmount={state.discountAmount || 0}
-                onApplyPromo={applyPromoCode}
-                onClearPromo={clearPromoCode}
-              />
-            )}
-            {ppStep === 4 && ppResult && (
-              <div className="h-full overflow-y-auto p-4 md:p-6 bg-gray-50">
-                <RoundTripPrintPreview
-                  group={ppResult}
-                  outboundBooking={ppResult.outboundBooking}
-                  returnBooking={ppResult.returnBooking}
-                  printPayloads={ppResult.printPayloads || []}
-                  onNewBooking={handleNewRoundTrip}
-                  onPrint={() => window.print()}
-                />
-              </div>
-            )}
-          </div>
-        ) : (
-          /* Two-panel layout: step 1 (outbound seats) and step 2 (return trip+seats) */
           <div className="flex-1 flex overflow-hidden">
 
-            {/* LEFT PANEL: SeatMap (step 1 / return seat sub-step) or TripSelector (return route sub-step) */}
+            {/* LEFT PANEL */}
             <div className={`flex-1 border-r border-gray-200 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'left' ? 'block' : 'hidden md:block'}`} data-testid="panel-seat-map">
-              {bookingMode === 'round-trip' && ppStep === 2 ? (
+              {bookingMode === 'round-trip' && ppStep >= 3 ? (
+                /* Steps 3-4: ringkasan pergi & pulang */
+                <div className="flex flex-col gap-3 h-full">
+                  {roundTripFlow.state.outboundTrip && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                      <p className="text-[10px] text-blue-500 uppercase tracking-wider font-bold mb-2">Pergi</p>
+                      <p className="text-sm font-semibold text-gray-800">{roundTripFlow.state.outboundTrip.patternPath}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {formatTime(roundTripFlow.state.outboundTrip.departAtAtOutlet)}
+                        {roundTripFlow.state.outboundOriginStop && roundTripFlow.state.outboundDestinationStop && (
+                          <> &mdash; {roundTripFlow.state.outboundOriginStop.name} <ArrowRight className="w-3 h-3 inline" /> {roundTripFlow.state.outboundDestinationStop.name}</>
+                        )}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {roundTripFlow.state.outboundSeats.map(s => (
+                          <span key={s} className="px-2 py-0.5 bg-blue-600 text-white rounded text-xs font-bold">{s}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {roundTripFlow.state.returnTrip && (
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                      <p className="text-[10px] text-emerald-500 uppercase tracking-wider font-bold mb-2">Pulang</p>
+                      <p className="text-sm font-semibold text-gray-800">{roundTripFlow.state.returnTrip.patternPath}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {formatTime(roundTripFlow.state.returnTrip.departAtAtOutlet)}
+                        {roundTripFlow.state.returnOriginStop && roundTripFlow.state.returnDestinationStop && (
+                          <> &mdash; {roundTripFlow.state.returnOriginStop.name} <ArrowRight className="w-3 h-3 inline" /> {roundTripFlow.state.returnDestinationStop.name}</>
+                        )}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {roundTripFlow.state.returnSeats.map(s => (
+                          <span key={s} className="px-2 py-0.5 bg-emerald-600 text-white rounded text-xs font-bold">{s}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : bookingMode === 'round-trip' && ppStep === 2 ? (
                 returnSubStep === 'route' ? (
                   /* Sub-step rute: kiri = pilih jadwal pulang */
                   <TripSelector
@@ -1104,9 +1086,66 @@ export default function CsoPage() {
               )}
             </div>
 
-            {/* RIGHT PANEL: RouteTimeline/seat-proceed (step 2), PP summary/proceed (step 1 RT), or PassengerForm (single) */}
+            {/* RIGHT PANEL */}
             <div className={`flex-1 overflow-hidden flex-col relative ${mobilePanel === 'right' ? 'flex' : 'hidden md:flex'}`}>
-              {bookingMode === 'round-trip' && ppStep === 2 ? (
+              {bookingMode === 'round-trip' && ppStep === 3 ? (
+                /* Step 3: form penumpang & bayar */
+                roundTripFlow.state.outboundTrip && roundTripFlow.state.returnTrip &&
+                roundTripFlow.state.outboundOriginStop && roundTripFlow.state.outboundDestinationStop ? (
+                  <div className="flex-1 overflow-y-auto">
+                    <PassengerForm
+                      selectedSeats={roundTripFlow.state.outboundSeats}
+                      returnSeats={roundTripFlow.state.returnSeats}
+                      passengers={roundTripFlow.state.outboundSeats.map((seatNo, i) => ({
+                        fullName: roundTripFlow.state.passengers[i]?.name || '',
+                        phone: '',
+                        idNumber: '',
+                        seatNo,
+                      }))}
+                      onPassengersUpdate={(updated: PassengerData[]) => {
+                        roundTripFlow.setPassengers(updated.map((p, i) => ({
+                          name: p.fullName,
+                          seatNoOutbound: p.seatNo,
+                          seatNoReturn: roundTripFlow.state.returnSeats[i] || '',
+                        })));
+                      }}
+                      outboundContext={{
+                        trip: roundTripFlow.state.outboundTrip,
+                        originStop: roundTripFlow.state.outboundOriginStop,
+                        destinationStop: roundTripFlow.state.outboundDestinationStop,
+                      }}
+                      returnContext={{
+                        trip: roundTripFlow.state.returnTrip,
+                        originStop: roundTripFlow.state.returnOriginStop ?? roundTripFlow.state.outboundDestinationStop,
+                        destinationStop: roundTripFlow.state.returnDestinationStop ?? roundTripFlow.state.outboundOriginStop,
+                      }}
+                      totalAmount={(ppFares.outbound + ppFares.return) * roundTripFlow.state.outboundSeats.length}
+                      onPay={handleRoundTripPayAndBook}
+                      onPaymentUpdate={() => {}}
+                      onBack={() => setPpStep(2)}
+                      loading={isProcessing}
+                      promoCode={state.promoCode}
+                      discountAmount={state.discountAmount || 0}
+                      onApplyPromo={applyPromoCode}
+                      onClearPromo={clearPromoCode}
+                    />
+                  </div>
+                ) : null
+              ) : bookingMode === 'round-trip' && ppStep === 4 ? (
+                /* Step 4: print preview */
+                ppResult ? (
+                  <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50">
+                    <RoundTripPrintPreview
+                      group={ppResult}
+                      outboundBooking={ppResult.outboundBooking}
+                      returnBooking={ppResult.returnBooking}
+                      printPayloads={ppResult.printPayloads || []}
+                      onNewBooking={handleNewRoundTrip}
+                      onPrint={() => window.print()}
+                    />
+                  </div>
+                ) : null
+              ) : bookingMode === 'round-trip' && ppStep === 2 ? (
                 returnSubStep === 'route' ? (
                   /* Sub-step rute: kanan = RouteTimeline pilih rute pulang */
                   <div className="flex-1 flex flex-col overflow-hidden">
@@ -1229,7 +1268,6 @@ export default function CsoPage() {
               )}
             </div>
           </div>
-        )}
         </div>
       </>
     )}
