@@ -58,7 +58,9 @@ Help: `npx tsx server/seeds/index.ts --help`
 Legacy `server/seed.ts` still works (delegates to `server/seeds/index.ts`).
 
 ### Feature Specifications
-- **CSO Booking Terminal**: Interactive seat map with real-time updates, multi-phase booking flow, unseat/reschedule/cancel functionalities, promo code support.
+- **CSO Booking Terminal**: Interactive seat map with real-time updates, multi-phase booking flow, unseat/reschedule/cancel functionalities, promo code support. Supports two booking modes:
+  - **Sekali Jalan (Single)**: Standard one-way booking flow — Outlet → Trip → Route → Seats → Passengers → Payment → Print.
+  - **Pulang Pergi / PP (Round Trip)**: Two-trip booking in a single transaction. Uses `useRoundTripFlow` hook and `RoundTripStepper` (4 steps: Pergi → Pulang → Penumpang → Selesai). Both outbound and return seat holds must be active before submission. Submits to `POST /api/bookings/round-trip`, which validates equal passenger counts, validates boarding/alighting rules for both trips, and creates two linked bookings in a `booking_groups` record with a shared `groupCode`. Prints via `RoundTripPrintPreview` showing both booking codes and group code.
 - **Cargo Management**: Tracks cargo types, rates, and shipments; generates waybills; calculates tariffs. Cargo Terminal uses own `/api/cargo/available-trips` endpoint (origin+destination stop-based) with pattern_stops fallback for trip_stop_times, filters virtual trips (only real/materialized shown), and listens to WebSocket events for real-time schedule updates.
 - **Daily Schedule**: Displays all trips for a given date, allows inline driver assignment, and provides access to manifests and SPJ creation.
 - **SPJ (Surat Perintah Jalan)**: Manages trip manifests with auto-populated cost lines from templates and a Draft → Issued → Settled workflow.
@@ -126,6 +128,9 @@ The following modules were added with Controller-Service-Routes pattern:
 - Frontend: `lib/api.ts` has domain API helpers (`customersApi`, `cashierApi`, etc.); `lib/constants.ts` has status maps (`REFUND_STATUS_MAP`, etc.)
 - `payments` table uses `paid_at` (NOT `created_at`) — all queries referencing payment time must use `paid_at`
 - `db.execute(sql)` returns `{rows:[]}` — always extract with: `Array.isArray(result) ? result : (result as any).rows || []`
+- **booking_groups** table links round-trip (PP) booking pairs. Each group has a unique `groupCode` and references `outboundBookingId` + `returnBookingId`. Created atomically inside a DB transaction in `RoundTripService.createRoundTripBooking`.
+- **PrintService** (`server/modules/printing/print.service.ts`) generates print job payloads for both single and round-trip tickets. Round-trip prints use `RoundTripPrintPreview` component on the frontend.
+- **Scheduler** (`server/modules/scheduler/`): background cleanup job that runs every 1 minute — releases expired seat holds and cancels expired pending bookings. Registered at app startup. Not a cron dependency; uses `setInterval` internally.
 
 ## Security Audit Fixes (Sprint 0 — Completed)
 Based on the Blink AI audit report (174 issues), the following critical/high security fixes have been applied:
