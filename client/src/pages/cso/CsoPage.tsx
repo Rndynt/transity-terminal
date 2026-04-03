@@ -873,6 +873,13 @@ export default function CsoPage() {
 
           {phase === 'select' && (
             <>
+              {/* Round-trip stepper — above the mobile tabs */}
+              {bookingMode === 'round-trip' && (
+                <div className="flex-shrink-0">
+                  <RoundTripStepper currentStep={ppStep} />
+                </div>
+              )}
+
               <div className="md:hidden flex-shrink-0 bg-white border-b border-gray-200">
                 <div className="flex">
                   <button
@@ -899,13 +906,6 @@ export default function CsoPage() {
                   </button>
                 </div>
               </div>
-
-              {/* Round-trip stepper — sits between tabs and panels */}
-              {bookingMode === 'round-trip' && (
-                <div className="flex-shrink-0">
-                  <RoundTripStepper currentStep={ppStep} />
-                </div>
-              )}
 
               {/* Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
@@ -960,6 +960,13 @@ export default function CsoPage() {
 
       {phase === 'book' && csoMode === 'penumpang' && (
             <>
+              {/* Round-trip stepper — above the mobile tabs */}
+              {bookingMode === 'round-trip' && (
+                <div className="flex-shrink-0">
+                  <RoundTripStepper currentStep={ppStep} />
+                </div>
+              )}
+
               <div className="md:hidden flex-shrink-0 bg-white border-b border-gray-200">
                 <div className="flex">
                   <button
@@ -990,13 +997,6 @@ export default function CsoPage() {
                   </button>
                 </div>
               </div>
-
-              {/* Round-trip stepper — sits between tabs and panels */}
-              {bookingMode === 'round-trip' && (
-                <div className="flex-shrink-0">
-                  <RoundTripStepper currentStep={ppStep} />
-                </div>
-              )}
 
               {/* Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
