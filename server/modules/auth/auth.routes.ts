@@ -30,6 +30,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
           "Content-Type": "application/json",
           "X-Tenant-Id": REALMIO_TENANT_ID,
           ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}),
+          ...(req.headers.origin ? { Origin: req.headers.origin } : {}),
         },
         body: JSON.stringify(req.body),
       });
@@ -65,6 +66,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
         headers: {
           "Content-Type": "application/json",
           "X-Tenant-Id": REALMIO_TENANT_ID,
+          ...(req.headers.origin ? { Origin: req.headers.origin } : {}),
         },
         body: JSON.stringify(req.body),
       });
