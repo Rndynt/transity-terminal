@@ -243,7 +243,7 @@ export class AppService {
     return safeUser;
   }
 
-  async getOperators(): Promise<OperatorSummary[]> {
+  async getServiceLines(): Promise<OperatorSummary[]> {
     const result = await db.select({
       id: tripPatterns.id,
       code: tripPatterns.code,
@@ -656,13 +656,27 @@ export class AppService {
     }
   }
 
-  async getTripDetail(tripId: string): Promise<TripDetailResponse> {
-    const trip = await this.storage.getTripById(tripId);
+  async getTripDetail(tripId: string, serviceDate?: string): Promise<TripDetailResponse> {
+    let resolvedId = tripId;
+    if (tripId.startsWith('virtual-')) {
+      const baseId = tripId.replace('virtual-', '');
+      if (!serviceDate) {
+        throw new Error("serviceDate query parameter is required for virtual trip IDs. Use ?serviceDate=YYYY-MM-DD");
+      }
+      const existingTrip = await this.storage.getTripByBaseAndDate(baseId, serviceDate);
+      if (existingTrip) {
+        resolvedId = existingTrip.id;
+      } else {
+        throw new Error("Virtual trip has not been materialized yet for this date. Book the trip first to trigger materialization.");
+      }
+    }
+
+    const trip = await this.storage.getTripById(resolvedId);
     if (!trip) throw new Error("Trip not found");
 
     const [pattern, stopTimes] = await Promise.all([
       this.storage.getTripPatternById(trip.patternId),
-      this.storage.getTripStopTimesWithEffectiveFlags(tripId)
+      this.storage.getTripStopTimesWithEffectiveFlags(resolvedId)
     ]);
 
     const stopsData: TripDetailResponse['stops'] = await Promise.all(
@@ -684,7 +698,7 @@ export class AppService {
 
     const reviewStats = await db.execute(sql`
       SELECT COUNT(*)::int as count, COALESCE(AVG(rating), 0)::numeric(3,1) as avg_rating
-      FROM reviews WHERE trip_id = ${tripId}
+      FROM reviews WHERE trip_id = ${resolvedId}
     `);
 
     const totalSeats = trip.capacity || 0;
@@ -693,7 +707,7 @@ export class AppService {
       const soldResult = await db.execute(sql`
         SELECT COUNT(DISTINCT seat_no)::int as sold
         FROM seat_inventory
-        WHERE trip_id = ${tripId} AND booked = true
+        WHERE trip_id = ${resolvedId} AND booked = true
       `);
       seatsSold = Number(soldResult.rows[0]?.sold || 0);
     } catch {}
@@ -756,6 +770,25 @@ export class AppService {
     };
   }
 
+  private async resolveTripId(tripId: string, serviceDate?: string): Promise<string> {
+    if (!tripId.startsWith('virtual-')) return tripId;
+
+    const baseId = tripId.replace('virtual-', '');
+
+    const existingTrip = serviceDate
+      ? await this.storage.getTripByBaseAndDate(baseId, serviceDate)
+      : null;
+    if (existingTrip) return existingTrip.id;
+
+    if (!serviceDate) {
+      throw new Error("serviceDate is required when booking a virtual trip. Please include serviceDate in the request body.");
+    }
+
+    const { TripBasesService } = await import("../tripBases/tripBases.service");
+    const tripBasesService = new TripBasesService(this.storage);
+    return tripBasesService.ensureMaterializedTrip(baseId, serviceDate);
+  }
+
   async createAppBooking(params: {
     userId: string | null;
     tripId: string;
@@ -765,10 +798,13 @@ export class AppService {
     destinationSeq: number;
     passengers: { fullName: string; phone?: string; idNumber?: string; seatNo: string }[];
     paymentMethod: 'qr' | 'ewallet' | 'bank';
+    serviceDate?: string;
   }): Promise<BookingDetailResponse> {
+    const resolvedTripId = await this.resolveTripId(params.tripId, params.serviceDate);
+
     const { PricingService } = await import("../pricing/pricing.service");
     const pricingService = new PricingService(this.storage);
-    const fareQuote = await pricingService.quoteFare(params.tripId, params.originSeq, params.destinationSeq);
+    const fareQuote = await pricingService.quoteFare(resolvedTripId, params.originSeq, params.destinationSeq);
 
     const totalAmount = Number(fareQuote.total) * params.passengers.length;
 
@@ -782,7 +818,7 @@ export class AppService {
       for (const pax of params.passengers) {
         const inv = await tx.execute(sql`
           SELECT seat_no, booked, hold_ref FROM seat_inventory
-          WHERE trip_id = ${params.tripId}
+          WHERE trip_id = ${resolvedTripId}
             AND seat_no = ${pax.seatNo}
             AND leg_index = ANY(${legIndexes})
           FOR UPDATE
@@ -794,7 +830,7 @@ export class AppService {
       }
 
       const [booking] = await tx.insert(bookings).values({
-        tripId: params.tripId,
+        tripId: resolvedTripId,
         originStopId: params.originStopId,
         destinationStopId: params.destinationStopId,
         originSeq: params.originSeq,
@@ -822,7 +858,7 @@ export class AppService {
 
         await tx.insert(seatHolds).values({
           holdRef,
-          tripId: params.tripId,
+          tripId: resolvedTripId,
           seatNo: pax.seatNo,
           legIndexes: legIndexes,
           ttlClass: 'short',
@@ -834,7 +870,7 @@ export class AppService {
         await tx.update(seatInventory)
           .set({ holdRef })
           .where(and(
-            eq(seatInventory.tripId, params.tripId),
+            eq(seatInventory.tripId, resolvedTripId),
             eq(seatInventory.seatNo, pax.seatNo),
             inArray(seatInventory.legIndex, legIndexes)
           ));
@@ -1135,17 +1171,27 @@ export class AppService {
     const legIndexes: number[] = [];
     for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
 
-    for (const p of pax) {
-      await db.update(seatInventory)
-        .set({ booked: false, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, booking.tripId),
-          eq(seatInventory.seatNo, p.seatNo),
-          inArray(seatInventory.legIndex, legIndexes)
-        ));
-    }
+    await db.transaction(async (tx) => {
+      for (const p of pax) {
+        await tx.update(seatInventory)
+          .set({ booked: false, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, booking.tripId),
+            eq(seatInventory.seatNo, p.seatNo),
+            inArray(seatInventory.legIndex, legIndexes)
+          ));
 
-    await this.storage.updateBooking(bookingId, { status: 'canceled' });
+        await tx.delete(seatHolds).where(and(
+          eq(seatHolds.tripId, booking.tripId),
+          eq(seatHolds.seatNo, p.seatNo),
+          eq(seatHolds.bookingId, bookingId)
+        ));
+      }
+
+      await tx.update(bookings)
+        .set({ status: 'canceled' })
+        .where(eq(bookings.id, bookingId));
+    });
   }
 
   async createReview(data: { userId: string; tripId: string; bookingId?: string; rating: number; comment?: string }): Promise<Review> {

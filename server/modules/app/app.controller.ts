@@ -25,7 +25,7 @@ const searchSchema = z.object({
 });
 
 const createBookingSchema = z.object({
-  tripId: z.string().uuid(),
+  tripId: z.string().min(1),
   originStopId: z.string().uuid(),
   destinationStopId: z.string().uuid(),
   originSeq: z.number().int().min(1),
@@ -36,7 +36,8 @@ const createBookingSchema = z.object({
     idNumber: z.string().optional(),
     seatNo: z.string().min(1)
   })).min(1),
-  paymentMethod: z.enum(['qr', 'ewallet', 'bank'])
+  paymentMethod: z.enum(['qr', 'ewallet', 'bank']),
+  serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
 });
 
 const createReviewSchema = z.object({
@@ -130,13 +131,21 @@ export class AppController {
   }
 
   async getCities(_req: FastifyRequest, reply: FastifyReply) {
-    const cities = await this.service.getCities();
-    reply.send(cities);
+    try {
+      const cities = await this.service.getCities();
+      reply.send(cities);
+    } catch (e: unknown) {
+      reply.code(500).send({ error: errMsg(e) });
+    }
   }
 
-  async getOperators(_req: FastifyRequest, reply: FastifyReply) {
-    const operators = await this.service.getOperators();
-    reply.send(operators);
+  async getServiceLines(_req: FastifyRequest, reply: FastifyReply) {
+    try {
+      const lines = await this.service.getServiceLines();
+      reply.send(lines);
+    } catch (e: unknown) {
+      reply.code(500).send({ error: errMsg(e) });
+    }
   }
 
   async getOperatorInfo(_req: FastifyRequest, reply: FastifyReply) {
@@ -157,10 +166,16 @@ export class AppController {
 
   async getTripDetail(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const detail = await this.service.getTripDetail(req.params.id);
+      const { serviceDate } = (req.query || {}) as { serviceDate?: string };
+      const detail = await this.service.getTripDetail(req.params.id, serviceDate);
       reply.send(detail);
     } catch (e: unknown) {
-      reply.code(404).send({ error: errMsg(e) });
+      const msg = errMsg(e);
+      if (msg.includes('serviceDate')) {
+        reply.code(400).send({ error: msg });
+      } else {
+        reply.code(404).send({ error: msg });
+      }
     }
   }
 

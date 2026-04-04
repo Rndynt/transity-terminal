@@ -395,11 +395,11 @@ Daftar kota/stop yang tersedia.
 
 ---
 
-#### `GET /api/app/operators`
+#### `GET /api/app/service-lines`
 
 **Auth:** 🔐 Service Key.
 
-Daftar operator bus.
+Daftar layanan/rute aktif.
 
 ---
 

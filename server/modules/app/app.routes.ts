@@ -14,17 +14,24 @@ function getAppCorsOrigin(reqOrigin: string | undefined): string {
 
 function serviceKeyMiddleware(req: FastifyRequest, reply: FastifyReply, done: () => void) {
   const incomingKey = req.headers['x-service-key'] as string | undefined;
-  if (incomingKey) {
-    if (!TERMINAL_SERVICE_KEY) {
-      reply.code(401).send({ error: 'Service key not configured on this terminal', code: 'SERVICE_KEY_NOT_CONFIGURED' });
-      return;
-    }
-    if (incomingKey !== TERMINAL_SERVICE_KEY) {
-      reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
+  if (!incomingKey) {
+    if (TERMINAL_SERVICE_KEY) {
+      reply.code(401).send({ error: 'Missing X-Service-Key header', code: 'MISSING_SERVICE_KEY' });
       return;
     }
     (req as any).isServiceClient = true;
+    done();
+    return;
   }
+  if (!TERMINAL_SERVICE_KEY) {
+    reply.code(401).send({ error: 'Service key not configured on this terminal', code: 'SERVICE_KEY_NOT_CONFIGURED' });
+    return;
+  }
+  if (incomingKey !== TERMINAL_SERVICE_KEY) {
+    reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
+    return;
+  }
+  (req as any).isServiceClient = true;
   done();
 }
 
@@ -62,7 +69,7 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
 
   app.get('/api/app/operator-info', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getOperatorInfo(req, reply));
   app.get('/api/app/cities', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getCities(req, reply));
-  app.get('/api/app/operators', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getOperators(req, reply));
+  app.get('/api/app/service-lines', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getServiceLines(req, reply));
   app.get('/api/app/trips/search', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.searchTrips(req, reply));
   app.get('/api/app/trips/:id', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getTripDetail(req, reply));
   app.get('/api/app/trips/:id/seatmap', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getSeatmap(req, reply));

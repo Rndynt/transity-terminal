@@ -13,7 +13,7 @@ Dokumentasi ini ditujukan untuk **pengembang third-party** yang mengintegrasikan
 - [Endpoint Referensi (Read-only)](#endpoint-referensi-read-only)
   - [GET /api/app/operator-info](#get-apiappoperator-info)
   - [GET /api/app/cities](#get-apiappcities)
-  - [GET /api/app/operators](#get-apiappoperators)
+  - [GET /api/app/service-lines](#get-apiappservice-lines)
 - [Pencarian Trip](#pencarian-trip)
   - [GET /api/app/trips/search](#get-apiapptripssearch)
   - [GET /api/app/trips/:id](#get-apiapptripsid)
@@ -190,7 +190,7 @@ X-Service-Key: sk_live_xxx
 
 ---
 
-### `GET /api/app/operators`
+### `GET /api/app/service-lines`
 
 Daftar layanan/rute aktif yang disediakan oleh operator shuttle yang menggunakan TransityTerminal. Setiap item mewakili satu **rute layanan** yang dioperasikan (misalnya Jakarta — Bandung Eksekutif, Jakarta — Bandung Bisnis, dll). Gunakan endpoint ini untuk menampilkan pilihan layanan yang tersedia kepada calon penumpang.
 
@@ -198,7 +198,7 @@ Daftar layanan/rute aktif yang disediakan oleh operator shuttle yang menggunakan
 
 **Request:**
 ```http
-GET /api/app/operators
+GET /api/app/service-lines
 X-Service-Key: sk_live_xxx
 ```
 
@@ -367,11 +367,23 @@ Detail lengkap satu trip termasuk semua stop, status, ketersediaan kursi, dan st
 **Path Parameter:**
 | Parameter | Keterangan |
 |-----------|------------|
-| `id` | UUID trip (dari hasil pencarian `tripId`) |
+| `id` | UUID trip atau `virtual-<uuid>` (dari hasil pencarian `tripId`) |
+
+**Query Parameters:**
+
+| Parameter | Tipe | Wajib | Keterangan |
+|-----------|------|-------|------------|
+| `serviceDate` | `string` | ⚠️ | Format `YYYY-MM-DD`. **Wajib jika `id` berformat `virtual-*`** |
 
 **Request:**
 ```http
 GET /api/app/trips/550e8400-e29b-41d4-a716-446655440000
+X-Service-Key: sk_live_xxx
+```
+
+Untuk trip virtual:
+```http
+GET /api/app/trips/virtual-550e8400-e29b-41d4-a716-446655440000?serviceDate=2026-04-10
 X-Service-Key: sk_live_xxx
 ```
 
@@ -605,6 +617,7 @@ Setelah booking dibuat:
 ```json
 {
   "tripId": "550e8400-e29b-41d4-a716-446655440000",
+  "serviceDate": "2026-04-10",
   "originStopId": "550e8400-e29b-41d4-a716-111111111111",
   "destinationStopId": "550e8400-e29b-41d4-a716-222222222222",
   "originSeq": 1,
@@ -627,11 +640,14 @@ Setelah booking dibuat:
 }
 ```
 
+> **Catatan `serviceDate`:** Field ini **wajib** jika `tripId` berformat `virtual-<uuid>`. Sistem akan otomatis mematerialize trip untuk tanggal tersebut sebelum memproses booking. Untuk trip biasa (UUID standar), field ini opsional.
+
 **Skema Validasi Request Body:**
 
 | Field | Tipe | Wajib | Validasi |
 |-------|------|-------|---------|
-| `tripId` | `string` | ✅ | UUID valid |
+| `tripId` | `string` | ✅ | UUID valid atau `virtual-<uuid>` dari hasil pencarian |
+| `serviceDate` | `string` | ⚠️ | Tanggal layanan format `YYYY-MM-DD`. **Wajib jika `tripId` berformat `virtual-*`** |
 | `originStopId` | `string` | ✅ | UUID valid — ID stop asal |
 | `destinationStopId` | `string` | ✅ | UUID valid — ID stop tujuan |
 | `originSeq` | `integer` | ✅ | `≥ 1` — Nomor urut stop asal |
