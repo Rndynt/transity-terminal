@@ -64,6 +64,7 @@ export default function SeatMap({
   destinationStopId
 }: SeatMapProps) {
   const [localSelectedSeats, setLocalSelectedSeats] = useState<Set<string>>(new Set());
+  const [pendingReleases, setPendingReleases] = useState<Set<string>>(new Set());
   const [showPassengerModal, setShowPassengerModal] = useState(false);
   const [selectedSeatForDetails, setSelectedSeatForDetails] = useState<string | null>(null);
   const [seatLoading, setSeatLoading] = useState<Set<string>>(new Set());
@@ -128,7 +129,6 @@ export default function SeatMap({
       return n;
     });
     onSeatDeselect(seatNo);
-    setTimeout(() => refetchRef.current(), 100);
   }, [onSeatDeselect]);
 
   const { createHold, releaseHold, getHoldTTL, isHeld } = useSeatHold(handleHoldExpired);
@@ -163,6 +163,24 @@ export default function SeatMap({
   useEffect(() => { setLocalSelectedSeats(new Set(selectedSeats)); }, [selectedSeats]);
 
   useEffect(() => {
+    setPendingReleases(new Set());
+    setSeatLoading(new Set());
+  }, [trip.id, originSeq, destinationSeq]);
+
+  useEffect(() => {
+    if (!seatmap) return;
+    setPendingReleases(prev => {
+      if (prev.size === 0) return prev;
+      const stillPending = new Set<string>();
+      prev.forEach(seatNo => {
+        const sa = seatmap.seatAvailability[seatNo];
+        if (sa?.held) stillPending.add(seatNo);
+      });
+      return stillPending.size === prev.size ? prev : stillPending;
+    });
+  }, [seatmap]);
+
+  useEffect(() => {
     if (!autoRefreshEnabled || isConnected) return;
     const interval = setInterval(() => refetch(), 30000);
     return () => clearInterval(interval);
@@ -180,7 +198,7 @@ export default function SeatMap({
     debouncedRefetchRef.current = setTimeout(() => {
       refetchRef.current?.();
       debouncedRefetchRef.current = null;
-    }, 150);
+    }, 500);
   }, []);
 
   useEffect(() => {
@@ -212,7 +230,6 @@ export default function SeatMap({
     try {
       await holdsApi.release(holdRef);
       toast({ title: "Hold Dilepas", description: `Kursi ${seatNo} sekarang tersedia` });
-      setTimeout(() => refetch(), 100);
       return true;
     } catch (error) {
       toast({ title: "Gagal Melepas Hold", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
@@ -256,7 +273,7 @@ export default function SeatMap({
       return;
     }
 
-    if (!seatAvailability.available && !seatAvailability.held) {
+    if (!seatAvailability.available && !seatAvailability.held && !pendingReleases.has(seatNo)) {
       setSelectedSeatForDetails(seatNo);
       setShowPassengerModal(true);
       passengerDetailsMutation.mutate({ tripId: trip.id, seatNo, originSeq, destinationSeq });
@@ -267,25 +284,41 @@ export default function SeatMap({
       return;
     }
 
-    if (seatAvailability.held) {
+    if (seatAvailability.held && !pendingReleases.has(seatNo)) {
       if (localSelectedSeats.has(seatNo)) {
         startSeatLoading(seatNo);
+        setLocalSelectedSeats(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
+        setPendingReleases(prev => new Set(prev).add(seatNo));
+        onSeatDeselect(seatNo);
         try {
-          await releaseHold(seatNo);
-          setLocalSelectedSeats(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
-          onSeatDeselect(seatNo);
-          setTimeout(() => refetch(), 100);
-        } catch (error) { console.error('Failed to release hold:', error); }
+          const success = await releaseHold(seatNo);
+          if (!success) {
+            setPendingReleases(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
+            setLocalSelectedSeats(prev => new Set(prev).add(seatNo));
+            onSeatSelect(seatNo);
+          } else {
+            debouncedRefetch();
+          }
+        } catch (error) {
+          console.error('Failed to release hold:', error);
+          setPendingReleases(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
+          setLocalSelectedSeats(prev => new Set(prev).add(seatNo));
+          onSeatSelect(seatNo);
+        }
         finally { stopSeatLoading(seatNo); }
         return;
       }
       if (seatAvailability.holdRef) {
         startSeatLoading(seatNo);
+        setPendingReleases(prev => new Set(prev).add(seatNo));
         try {
           const success = await releaseHoldDirectly(seatAvailability.holdRef, seatNo);
           if (success) {
             setLocalSelectedSeats(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
             onSeatDeselect(seatNo);
+            debouncedRefetch();
+          } else {
+            setPendingReleases(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
           }
         } finally { stopSeatLoading(seatNo); }
         return;
@@ -297,12 +330,24 @@ export default function SeatMap({
 
     if (localSelectedSeats.has(seatNo)) {
       startSeatLoading(seatNo);
+      setLocalSelectedSeats(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
+      setPendingReleases(prev => new Set(prev).add(seatNo));
+      onSeatDeselect(seatNo);
       try {
-        await releaseHold(seatNo);
-        setLocalSelectedSeats(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
-        onSeatDeselect(seatNo);
-        setTimeout(() => refetch(), 100);
-      } catch (error) { console.error('Failed to release hold:', error); }
+        const success = await releaseHold(seatNo);
+        if (!success) {
+          setPendingReleases(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
+          setLocalSelectedSeats(prev => new Set(prev).add(seatNo));
+          onSeatSelect(seatNo);
+        } else {
+          debouncedRefetch();
+        }
+      } catch (error) {
+        console.error('Failed to release hold:', error);
+        setPendingReleases(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
+        setLocalSelectedSeats(prev => new Set(prev).add(seatNo));
+        onSeatSelect(seatNo);
+      }
       finally { stopSeatLoading(seatNo); }
       return;
     }
@@ -315,15 +360,15 @@ export default function SeatMap({
 
     startSeatLoading(seatNo);
     setLocalSelectedSeats(prev => new Set(prev).add(seatNo));
+    setPendingReleases(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
     onSeatSelect(seatNo);
     try {
       await createHold(trip.id, seatNo, originSeq, destinationSeq, 300);
-      setTimeout(() => refetch(), 100);
+      debouncedRefetch();
     } catch (error) {
       console.error('Failed to hold seat:', error);
       setLocalSelectedSeats(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
       onSeatDeselect(seatNo);
-      refetch();
     } finally { stopSeatLoading(seatNo); }
   };
 
@@ -332,6 +377,10 @@ export default function SeatMap({
   const getSeatStatus = (seatNo: string) => {
     if (!seatmap) return 'available';
     if (localSelectedSeats.has(seatNo)) return isPickingMode ? 'blocked' : 'selected';
+    if (pendingReleases.has(seatNo)) {
+      if (isPickingMode) return rescheduleMode ? 'reschedule-available' : 'assign-available';
+      return isPastTrip ? 'past-locked' : 'available';
+    }
     const sa = seatmap.seatAvailability[seatNo];
     if (sa.held) return isPastTrip ? 'past-locked' : (isPickingMode ? 'blocked' : 'held');
     if (!sa.available) return isPickingMode ? 'blocked' : 'booked';
