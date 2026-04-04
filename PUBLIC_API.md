@@ -1001,6 +1001,7 @@ Content-Type: application/json
 
 {
   "tripId": "550e8400-e29b-41d4-a716-446655440000",
+  "serviceDate": "2026-04-10",
   "originStopId": "550e8400-e29b-41d4-a716-111111111111",
   "destinationStopId": "550e8400-e29b-41d4-a716-222222222222",
   "originSeq": 1,

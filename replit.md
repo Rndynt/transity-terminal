@@ -195,6 +195,27 @@ Following Sprint 0 security fixes, these data integrity issues from the Blink AI
 - **S-4**: React `ErrorBoundary` component created (`shared/ErrorBoundary.tsx`) and integrated in `App.tsx` wrapping Router
 - **S-6/R-7**: `LoadingState` and `EmptyState` shared components exist at `components/ui/loading-state.tsx` and `components/ui/empty-state.tsx`
 
+## Public API (TransityConsole Integration)
+The `/api/app/*` endpoints serve external systems (TransityConsole, third-party OTA). Auth via `X-Service-Key` header (env `TERMINAL_SERVICE_KEY`). Booking also accepts JWT Bearer for mobile users.
+
+Key docs:
+- `PUBLIC_API.md` — full endpoint reference for third-party developers
+- `TRANSITY_CONSOLE_INTEGRATION.md` — step-by-step guide for TransityConsole integration
+
+Endpoints verified end-to-end (search → seatmap → booking → payment webhook):
+- `GET /api/app/operator-info` — brand info
+- `GET /api/app/cities` — city list
+- `GET /api/app/service-lines` — active routes
+- `GET /api/app/trips/search` — trip search (real + virtual)
+- `GET /api/app/trips/:id` — trip detail
+- `GET /api/app/trips/:id/seatmap` — seat availability
+- `POST /api/app/bookings` — create booking (supports virtual trip auto-materialization)
+- `POST /api/app/payments/webhook` — payment confirmation (HMAC-SHA256)
+
+Environment variables required:
+- `TERMINAL_SERVICE_KEY` — service key for X-Service-Key auth
+- `PAYMENT_WEBHOOK_SECRET` — HMAC secret for webhook verification
+
 ## Performance Optimizations
 - **`getActiveBookingsForTrip`**: Filters bookings at DB level (WHERE status IN active statuses) instead of fetching all then filtering in memory. Used by getSeatmap and getSeatPassengerDetails.
 - **Virtual trip price rules**: Uses targeted `SELECT WHERE pattern_id IN (...)` + Set membership check instead of loading ALL price rules.

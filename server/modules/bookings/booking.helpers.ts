@@ -212,11 +212,12 @@ export async function checkSeatsAvailable(
   legIndexes: number[]
 ) {
   for (const seatNo of seatNos) {
+    const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
     const inv = await tx.execute(sql`
       SELECT seat_no, booked, hold_ref FROM seat_inventory
       WHERE trip_id = ${tripId}
         AND seat_no = ${seatNo}
-        AND leg_index = ANY(${legIndexes})
+        AND leg_index = ANY(${legArr})
       FOR UPDATE
     `);
     const booked = inv.rows.some((r: Record<string, unknown>) => r.booked === true);
@@ -244,7 +245,7 @@ export async function createSeatHoldsForBooking(
       seatNo,
       legIndexes,
       ttlClass: 'short',
-      operatorId: holderId,
+      operatorId: holderId || 'service-client',
       bookingId,
       expiresAt,
     });

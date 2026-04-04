@@ -930,11 +930,12 @@ export class AppService {
       }
 
       for (const p of pax) {
+        const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
         const seatRows = await tx.execute(sql`
           SELECT seat_no, booked FROM seat_inventory
           WHERE trip_id = ${booking.tripId}
             AND seat_no = ${p.seatNo}
-            AND leg_index = ANY(${legIndexes})
+            AND leg_index = ANY(${legArr})
           FOR UPDATE
         `);
         const alreadyBooked = seatRows.rows.some((r: Record<string, unknown>) => r.booked === true);
@@ -1088,8 +1089,8 @@ export class AppService {
       patternName: pattern?.name,
       origin: origin ? { stopId: origin.id, name: origin.name, code: origin.code, city: origin.city } : null,
       destination: dest ? { stopId: dest.id, name: dest.name, code: dest.code, city: dest.city } : null,
-      departAt: departAt ? String(departAt) : null,
-      arriveAt: arriveAt ? String(arriveAt) : null,
+      departAt: departAt instanceof Date ? departAt.toISOString() : (departAt ? String(departAt) : null),
+      arriveAt: arriveAt instanceof Date ? arriveAt.toISOString() : (arriveAt ? String(arriveAt) : null),
       status: booking.status,
       totalAmount: booking.totalAmount,
       channel: booking.channel,

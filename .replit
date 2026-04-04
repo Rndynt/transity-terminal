@@ -77,6 +77,7 @@ PENDING_BOOKING_AUTO_RELEASE = "true"
 [userenv.development]
 NODE_ENV = "development"
 DEV_BYPASS_AUTH = "true"
+TERMINAL_SERVICE_KEY = "sk_dev_test_key_12345"
 
 [userenv.production]
 NODE_ENV = "production"
