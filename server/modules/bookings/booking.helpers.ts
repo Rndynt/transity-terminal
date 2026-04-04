@@ -147,6 +147,37 @@ export async function validateBoardingAlighting(
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+export async function validateHoldOwnership(
+  tripId: string,
+  seatNos: string[],
+  legIndexes: number[],
+  operatorId: string
+) {
+  const holdRecords = await db
+    .select()
+    .from(seatHolds)
+    .where(and(
+      eq(seatHolds.tripId, tripId),
+      inArray(seatHolds.seatNo, seatNos),
+      gt(seatHolds.expiresAt, new Date()),
+      eq(seatHolds.operatorId, operatorId)
+    ));
+  const holdsBySeat = new Map(holdRecords.map(h => [h.seatNo, h]));
+
+  for (const seatNo of seatNos) {
+    const holdRecord = holdsBySeat.get(seatNo);
+    if (!holdRecord) {
+      throw new Error(`Seat ${seatNo} is not held or hold has expired`);
+    }
+
+    const holdLegs = holdRecord.legIndexes as number[];
+    const allLegsCovered = legIndexes.every(leg => holdLegs.includes(leg));
+    if (!allLegsCovered) {
+      throw new Error(`Seat ${seatNo} hold does not cover all required legs`);
+    }
+  }
+}
+
 export async function confirmSeatsBooked(
   tx: Tx,
   tripId: string,

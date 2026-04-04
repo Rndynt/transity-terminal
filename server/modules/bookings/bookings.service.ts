@@ -12,6 +12,7 @@ import {
   fetchBookingSnapshots,
   insertPassengerRows,
   validateBoardingAlighting,
+  validateHoldOwnership,
   confirmSeatsBooked,
   calculateBookingTotal,
   generateBookingCode,
@@ -99,31 +100,9 @@ export class BookingsService {
 
     const legIndexes = computeLegIndexes(bookingData.originSeq, bookingData.destinationSeq);
     const operatorId = bookingData.createdBy || 'default-operator';
-
     const seatNos = passengers.map(p => p.seatNo);
-    const holdRecords = await db
-      .select()
-      .from(seatHolds)
-      .where(and(
-        eq(seatHolds.tripId, bookingData.tripId),
-        inArray(seatHolds.seatNo, seatNos),
-        gt(seatHolds.expiresAt, new Date()),
-        eq(seatHolds.operatorId, operatorId)
-      ));
-    const holdsBySeat = new Map(holdRecords.map(h => [h.seatNo, h]));
 
-    for (const passenger of passengers) {
-      const holdRecord = holdsBySeat.get(passenger.seatNo);
-      if (!holdRecord) {
-        throw new Error(`Seat ${passenger.seatNo} is not held or hold has expired`);
-      }
-
-      const holdLegs = holdRecord.legIndexes as number[];
-      const allLegsCovered = legIndexes.every(leg => holdLegs.includes(leg));
-      if (!allLegsCovered) {
-        throw new Error(`Seat ${passenger.seatNo} hold does not cover all required legs`);
-      }
-    }
+    await validateHoldOwnership(bookingData.tripId, seatNos, legIndexes, operatorId);
 
     const { fareQuote, total: expectedTotal, promo } = await calculateBookingTotal(
       this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq,
@@ -262,22 +241,7 @@ export class BookingsService {
     const legIndexes = computeLegIndexes(bookingData.originSeq, bookingData.destinationSeq);
     const seatNos = passengers.map(p => p.seatNo);
 
-    for (const passenger of passengers) {
-      const [holdRecord] = await db
-        .select()
-        .from(seatHolds)
-        .where(and(
-          eq(seatHolds.tripId, bookingData.tripId),
-          eq(seatHolds.seatNo, passenger.seatNo),
-          gt(seatHolds.expiresAt, new Date()),
-          eq(seatHolds.operatorId, operatorId)
-        ))
-        .limit(1);
-
-      if (!holdRecord) {
-        throw new Error(`Seat ${passenger.seatNo} is not held or hold has expired`);
-      }
-    }
+    await validateHoldOwnership(bookingData.tripId, seatNos, legIndexes, operatorId);
 
     const { fareQuote, total: expectedTotal } = await calculateBookingTotal(
       this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq,
