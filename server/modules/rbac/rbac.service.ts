@@ -1,5 +1,5 @@
-import { db } from "../../db";
-import { roleFlags, staffMembers } from "../../../shared/schema";
+import { db } from "@server/db";
+import { roleFlags, staffMembers } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 
 export interface EffectivePermissions {

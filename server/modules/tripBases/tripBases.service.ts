@@ -1,11 +1,11 @@
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { InsertTripBase, TripBase, Trip, InsertTrip } from "@shared/schema";
 import { TripLegsService } from "../tripLegs/tripLegs.service";
 import { SeatInventoryService } from "../seatInventory/seatInventory.service";
 import { format, parseISO } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
-import { fromZonedHHMMToUtc, getDayInTZ, formatTimeInTZ, ensureDefaultTimezone, normalizeTimeFormat } from "../../utils/timezone";
-import { webSocketService } from "../../realtime/ws";
+import { fromZonedHHMMToUtc, getDayInTZ, formatTimeInTZ, ensureDefaultTimezone, normalizeTimeFormat } from "@server/utils/timezone";
+import { webSocketService } from "@server/realtime/ws";
 
 export class TripBasesService {
   private tripLegsService: TripLegsService;

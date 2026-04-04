@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { PriceRulesService } from "./priceRules.service";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { insertPriceRuleSchema } from "@shared/schema";
 
 export class PriceRulesController {

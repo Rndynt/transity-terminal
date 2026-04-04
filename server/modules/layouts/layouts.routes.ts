@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { LayoutsController } from "./layouts.controller";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { requireFlag } from "../rbac/rbac.middleware";
 
 export function registerLayoutsRoutes(app: FastifyInstance, storage: IStorage, cacheHook: any) {

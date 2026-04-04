@@ -1,4 +1,4 @@
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { type Promotion, type Voucher, type InsertPromotion, type InsertVoucher } from "@shared/schema";
 import crypto from "crypto";
 

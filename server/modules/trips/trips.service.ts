@@ -1,4 +1,4 @@
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { InsertTrip, Trip } from "@shared/schema";
 import { TripLegsService } from "../tripLegs/tripLegs.service";
 import { SeatInventoryService } from "../seatInventory/seatInventory.service";

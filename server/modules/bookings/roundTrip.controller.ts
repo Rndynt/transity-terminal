@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { RoundTripService } from "./roundTrip.service";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { z } from "zod";
 
 const roundTripSchema = z.object({

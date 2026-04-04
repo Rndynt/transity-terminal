@@ -1,6 +1,6 @@
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { Trip, SeatInventory } from "@shared/schema";
-import { db } from "../../db";
+import { db } from "@server/db";
 import { seatInventory, seatHolds } from "@shared/schema";
 import { eq, and, gt, sql, notInArray } from "drizzle-orm";
 

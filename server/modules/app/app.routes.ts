@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { AppController } from "./app.controller";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { appAuthMiddleware } from "./app.auth";
 
 const ALLOWED_APP_ORIGINS = (process.env.APP_CORS_ORIGINS || '*').split(',').map(s => s.trim());

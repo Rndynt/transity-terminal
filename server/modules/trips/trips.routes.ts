@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { TripsController } from "./trips.controller";
 import { TripStopTimesController } from "../tripStopTimes/tripStopTimes.controller";
 import { TripLegsController } from "../tripLegs/tripLegs.controller";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { requireFlag, requireOutletScope } from "../rbac/rbac.middleware";
 
 export function registerTripsRoutes(app: FastifyInstance, storage: IStorage) {

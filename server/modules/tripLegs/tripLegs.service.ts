@@ -1,4 +1,4 @@
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { Trip, TripLeg } from "@shared/schema";
 
 export class TripLegsService {

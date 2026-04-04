@@ -1,10 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { BookingsController } from "./bookings.controller";
 import { RoundTripController } from "./roundTrip.controller";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { requireFlag, requireOutletScope } from "../rbac/rbac.middleware";
-import { webSocketService } from "../../realtime/ws";
-import { db } from "../../db";
+import { webSocketService } from "@server/realtime/ws";
+import { db } from "@server/db";
 import { eq, and, inArray, sql, ilike } from "drizzle-orm";
 import {
   bookingHistory, passengers as passengersTable, seatInventory, bookings as bookingsTable

@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { db } from "@server/db";
 import { notifications } from "@shared/schema";
 import { eq, and, desc, sql, isNull, or } from "drizzle-orm";
 

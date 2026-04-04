@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { TripLegsService } from "./tripLegs.service";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 
 export class TripLegsController {
   private tripLegsService: TripLegsService;

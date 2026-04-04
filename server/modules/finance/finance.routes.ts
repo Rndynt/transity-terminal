@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { insertTripCostTemplateSchema, insertTripCostItemSchema } from "@shared/schema";
 import { requireFlag } from "../rbac/rbac.middleware";
 

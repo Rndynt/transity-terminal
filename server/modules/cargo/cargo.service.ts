@@ -1,4 +1,4 @@
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { InsertCargoShipment, CargoShipment, CargoAvailableTrip, cargoStatusEnum } from "@shared/schema";
 
 const VALID_STATUSES = cargoStatusEnum.enumValues;

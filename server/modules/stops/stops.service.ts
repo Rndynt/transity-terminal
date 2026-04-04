@@ -1,4 +1,4 @@
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { InsertStop, Stop } from "@shared/schema";
 
 export class StopsService {

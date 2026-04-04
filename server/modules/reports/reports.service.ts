@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ReportsRepository, type ReportFilters } from "../../repositories/reports.repository";
+import { ReportsRepository, type ReportFilters } from "@server/repositories/reports.repository";
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

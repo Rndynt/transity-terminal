@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { PromosService } from "./promos.service";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { insertPromotionSchema } from "@shared/schema";
 import { z } from "zod";
 

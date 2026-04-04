@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { PatternStopsService } from "./patternStops.service";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { insertPatternStopSchema } from "@shared/schema";
 import { z } from "zod";
 

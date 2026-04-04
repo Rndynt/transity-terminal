@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { TripPatternsController } from "./tripPatterns.controller";
 import { PatternStopsController } from "../patternStops/patternStops.controller";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { requireFlag } from "../rbac/rbac.middleware";
 
 export function registerTripPatternsRoutes(app: FastifyInstance, storage: IStorage, cacheHook: any) {

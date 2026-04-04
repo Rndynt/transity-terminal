@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { TripBasesController } from "./tripBases.controller";
 import { TripBasesService } from "./tripBases.service";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { requireFlag, requireAnyFlag } from "../rbac/rbac.middleware";
 import { RescheduleService } from "../bookings/reschedule.service";
-import { webSocketService } from "../../realtime/ws";
+import { webSocketService } from "@server/realtime/ws";
 
 export function registerTripBasesRoutes(app: FastifyInstance, storage: IStorage) {
   const service = new TripBasesService(storage);

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { DriversController } from "./drivers.controller";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { requireFlag } from "../rbac/rbac.middleware";
 
 export function registerDriversRoutes(app: FastifyInstance, storage: IStorage, cacheHook: any) {

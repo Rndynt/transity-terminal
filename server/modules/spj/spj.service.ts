@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { db } from "@server/db";
 import { spj, spjCostLines, trips, drivers, vehicles, tripPatterns, tripCostTemplates, tripCostItems } from "@shared/schema";
 import type { Spj, SpjCostLine, SpjWithDetails } from "@shared/schema";
 import { eq, sql, desc } from "drizzle-orm";

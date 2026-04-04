@@ -1,9 +1,9 @@
 import { randomUUID } from "crypto";
-import { getConfig } from "../../config";
-import { db } from "../../db";
+import { getConfig } from "@server/config";
+import { db } from "@server/db";
 import { seatHolds, seatInventory } from "@shared/schema";
 import { eq, and, lt, inArray } from "drizzle-orm";
-import { webSocketService } from "../../realtime/ws";
+import { webSocketService } from "@server/realtime/ws";
 
 interface SeatHoldOwner {
   operatorId: string;

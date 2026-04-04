@@ -1,10 +1,10 @@
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { PricingService } from "../pricing/pricing.service";
 import { PromosService } from "../promos/promos.service";
 import { passengers as passengersTable, seatInventory, seatHolds } from "@shared/schema";
 import { scheduleStopExceptions } from "@shared/schema/scheduling";
-import { generateBookingCode, generateTicketNumber } from "../../utils/codeGenerator";
-import { db } from "../../db";
+import { generateBookingCode, generateTicketNumber } from "@server/utils/codeGenerator";
+import { db } from "@server/db";
 import { eq, and, inArray, gt, sql } from "drizzle-orm";
 
 export { generateBookingCode, generateTicketNumber };

@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { LayoutsService } from "./layouts.service";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { insertLayoutSchema } from "@shared/schema";
 
 export class LayoutsController {

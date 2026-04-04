@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { db } from "@server/db";
 import { 
   bookingGroups as bookingGroupsTable, 
   bookings as bookingsTable, 
@@ -10,11 +10,11 @@ import {
   scheduleStopExceptions 
 } from "@shared/schema";
 import { eq, and, inArray, gt } from "drizzle-orm";
-import { generateBookingCode, generateTicketNumber, generateGroupCode } from "../../utils/codeGenerator";
-import { webSocketService } from "../../realtime/ws";
+import { generateBookingCode, generateTicketNumber, generateGroupCode } from "@server/utils/codeGenerator";
+import { webSocketService } from "@server/realtime/ws";
 import { PricingService } from "../pricing/pricing.service";
 import { PrintService } from "../printing/print.service";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { Booking, BookingGroup } from "@shared/schema";
 
 export class RoundTripService {

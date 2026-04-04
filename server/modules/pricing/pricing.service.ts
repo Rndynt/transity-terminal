@@ -1,4 +1,4 @@
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 
 export class PricingService {
   constructor(private storage: IStorage) {}

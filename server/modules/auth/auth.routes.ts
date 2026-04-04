@@ -6,8 +6,8 @@ import {
   DEV_USER,
   createRealmioUser,
 } from "./realmio";
-import { db } from "../../db";
-import { staffMembers, users } from "../../../shared/schema";
+import { db } from "@server/db";
+import { staffMembers, users } from "@shared/schema";
 
 export function registerAuthRoutes(app: FastifyInstance) {
   app.post("/api/auth/sign-in/email", { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {

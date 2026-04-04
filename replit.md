@@ -105,6 +105,20 @@ See `DEPLOY.md` for full VPS deployment guide. Key points:
 - **bcryptjs**: For password hashing in the mobile API.
 - **Payment Gateway**: Webhook integration for payment verification (requires `PAYMENT_WEBHOOK_SECRET`).
 
+## Import Path Aliases
+The project uses TypeScript path aliases (configured in `tsconfig.json`, resolved by tsx at runtime and esbuild for production build via `esbuild.config.js`):
+- `@shared/*` → `./shared/*` (shared schema, types)
+- `@server/*` → `./server/*` (server modules, utils, db, config, realtime)
+- `@/*` → `./client/src/*` (frontend components, hooks, lib)
+
+Server module files use `@server/db`, `@server/storage.interface`, `@server/realtime/ws`, `@server/utils/*`, etc. instead of relative `../../` paths.
+
+## Booking Module Structure
+- `bookings.service.ts` — `createBooking` (CSO paid), `createPendingBooking` (CSO pending), `createHold`, `releaseHold`
+- `atomicHold.service.ts` — `AtomicHoldService`: `atomicHold()` (SELECT FOR UPDATE locking) and `releaseHoldByRef()`
+- `booking.helpers.ts` — shared helpers used by CSO + App booking flows
+- `app.service.ts` (in `/modules/app/`) — `createAppBooking` (Public API / third-party)
+
 ## Shared Booking Helpers
 `server/modules/bookings/booking.helpers.ts` contains shared logic used by both CSO (`BookingsService`) and Public API (`AppService`) booking flows:
 - `computeLegIndexes(originSeq, destSeq)` — computes seat-leg range

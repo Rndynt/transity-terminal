@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { db } from "../../db";
+import { db } from "@server/db";
 import { eq, and } from "drizzle-orm";
 import { requireFlag, requireAnyFlag } from "./rbac.middleware";
 import { createRealmioUser } from "../auth/realmio";
-import { staffMembers, users } from "../../../shared/schema";
+import { staffMembers, users } from "@shared/schema";
 
 export function registerAdminRoutes(app: FastifyInstance) {
   app.get('/api/admin/roles', { preHandler: [requireAnyFlag('admin.flags.manage', 'admin.staff.manage')] }, async (_req: any, reply: any) => {

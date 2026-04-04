@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { OutletsService } from "./outlets.service";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { insertOutletSchema } from "@shared/schema";
 
 export class OutletsController {

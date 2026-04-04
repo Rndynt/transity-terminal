@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { db } from "@server/db";
 import { sql } from "drizzle-orm";
 
 function getRow(result: any, index = 0) {

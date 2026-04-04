@@ -1,9 +1,9 @@
-import { IStorage } from "../../storage.interface";
-import { db } from "../../db";
+import { IStorage } from "@server/storage.interface";
+import { db } from "@server/db";
 import { seatInventory, seatHolds } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { webSocketService } from "../../realtime/ws";
+import { webSocketService } from "@server/realtime/ws";
 
 export interface SeatHoldRequest {
   tripId: string;

@@ -1,12 +1,12 @@
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { InsertBooking, Booking } from "@shared/schema";
 import { HoldsService } from "../holds/holds.service";
 import { AtomicHoldService } from "./atomicHold.service";
 import { PrintService } from "../printing/print.service";
-import { db } from "../../db";
+import { db } from "@server/db";
 import { bookings as bookingsTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable } from "@shared/schema";
 import { eq, and, inArray, gt, lt, sql } from "drizzle-orm";
-import { webSocketService } from "../../realtime/ws";
+import { webSocketService } from "@server/realtime/ws";
 import {
   computeLegIndexes,
   fetchBookingSnapshots,

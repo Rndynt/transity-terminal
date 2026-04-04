@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { db } from "@server/db";
 import { vehicleMaintenances } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
 

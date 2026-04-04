@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { db } from "@server/db";
 import { customerProfiles } from "@shared/schema";
 import { eq, desc, ilike, or, sql } from "drizzle-orm";
 

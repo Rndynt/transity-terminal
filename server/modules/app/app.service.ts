@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { db } from "@server/db";
 import { 
   appUsers, reviews, bookings, payments, trips, tripPatterns, 
   tripStopTimes, stops, patternStops, vehicles, cargoShipments, cargoTypes,
@@ -9,8 +9,8 @@ import {
 import { eq, and, desc, sql, gte, lte, inArray, gt, isNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { signToken, type AppUserPayload } from "./app.auth";
-import { IStorage } from "../../storage.interface";
-import { fromZonedHHMMToUtc } from "../../utils/timezone";
+import { IStorage } from "@server/storage.interface";
+import { fromZonedHHMMToUtc } from "@server/utils/timezone";
 import {
   computeLegIndexes,
   calculateBookingTotal,

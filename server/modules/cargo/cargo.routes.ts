@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { CargoController } from "./cargo.controller";
-import { IStorage } from "../../storage.interface";
+import { IStorage } from "@server/storage.interface";
 import { requireFlag, requireOutletScope } from "../rbac/rbac.middleware";
 
 export function registerCargoRoutes(app: FastifyInstance, storage: IStorage) {
