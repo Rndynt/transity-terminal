@@ -192,9 +192,7 @@ X-Service-Key: sk_live_xxx
 
 ### `GET /api/app/operators`
 
-Daftar rute/layanan aktif yang dioperasikan terminal ini.
-
-> **Catatan:** Dalam TransityTerminal, "operator" merujuk ke **trip patterns** (rute) yang aktif, bukan perusahaan terpisah. Setiap terminal adalah satu operator.
+Daftar layanan/rute aktif yang disediakan oleh operator shuttle yang menggunakan TransityTerminal. Setiap item mewakili satu **rute layanan** yang dioperasikan (misalnya Jakarta — Bandung Eksekutif, Jakarta — Bandung Bisnis, dll). Gunakan endpoint ini untuk menampilkan pilihan layanan yang tersedia kepada calon penumpang.
 
 **Auth:** `X-Service-Key`
 
@@ -226,11 +224,11 @@ X-Service-Key: sk_live_xxx
 
 | Field | Tipe | Keterangan |
 |-------|------|------------|
-| `id` | `string (uuid)` | ID pattern (digunakan di filter pencarian lanjutan) |
-| `code` | `string` | Kode rute singkat |
-| `name` | `string` | Nama lengkap rute |
-| `vehicleClass` | `string \| null` | Kelas armada (Eksekutif, Bisnis, Ekonomi, dll) |
-| `active` | `boolean` | Status aktif |
+| `id` | `string (uuid)` | ID layanan/rute (dapat digunakan sebagai filter tambahan di pencarian trip) |
+| `code` | `string` | Kode singkat layanan (contoh: `JKT-BDG-EKS`) |
+| `name` | `string` | Nama lengkap layanan (contoh: `Jakarta — Bandung Eksekutif`) |
+| `vehicleClass` | `string \| null` | Kelas armada: `Eksekutif`, `Bisnis`, `Ekonomi`, dll |
+| `active` | `boolean` | `true` = layanan sedang aktif beroperasi |
 
 ---
 
