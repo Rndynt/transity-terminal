@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db } from "@server/db";
 import { eq, desc } from "drizzle-orm";
 import {
   tripCostTemplates, tripCostItems, promotions, vouchers,

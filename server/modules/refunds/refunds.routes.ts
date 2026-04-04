@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { RefundsController } from "./refunds.controller";
-import { requireFlag } from "../rbac/rbac.middleware";
+import { requireFlag } from "@server/modules/rbac/rbac.middleware";
 
 export function registerRefundsRoutes(app: FastifyInstance) {
   const controller = new RefundsController();

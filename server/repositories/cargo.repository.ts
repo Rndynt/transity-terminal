@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db } from "@server/db";
 import { eq, and, desc, sql, isNull } from "drizzle-orm";
 import {
   cargoShipments, cargoTypes, cargoRates, stops, trips,

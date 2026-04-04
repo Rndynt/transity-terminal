@@ -12,8 +12,8 @@ import {
 import { eq, and, inArray, gt } from "drizzle-orm";
 import { generateBookingCode, generateTicketNumber, generateGroupCode } from "@server/utils/codeGenerator";
 import { webSocketService } from "@server/realtime/ws";
-import { PricingService } from "../pricing/pricing.service";
-import { PrintService } from "../printing/print.service";
+import { PricingService } from "@server/modules/pricing/pricing.service";
+import { PrintService } from "@server/modules/printing/print.service";
 import { IStorage } from "@server/storage.interface";
 import { Booking, BookingGroup } from "@shared/schema";
 

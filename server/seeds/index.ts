@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db } from "@server/db";
 import { sql } from "drizzle-orm";
 import { createSeedContext, type SeedContext } from "./context";
 import { seedStops, seedOutlets } from "./01-stops";

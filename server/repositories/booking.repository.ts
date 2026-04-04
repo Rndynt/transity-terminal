@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db } from "@server/db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import {
   bookings, passengers, payments, printJobs, stops,

@@ -1,9 +1,9 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { IStorage } from "@server/storage.interface";
 import { SchedulerService } from "./scheduler.service";
-import { TripsService } from "../trips/trips.service";
+import { TripsService } from "@server/modules/trips/trips.service";
 import { z } from "zod";
-import { requireFlag } from "../rbac/rbac.middleware";
+import { requireFlag } from "@server/modules/rbac/rbac.middleware";
 import { webSocketService } from "@server/realtime/ws";
 
 export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage) {

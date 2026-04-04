@@ -1,4 +1,4 @@
-import { storage } from "../storage";
+import { storage } from "@server/storage";
 import type { SeedContext } from "./context";
 
 export async function seedLayouts(ctx: SeedContext) {

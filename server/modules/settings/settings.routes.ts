@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import { requireFlag } from "../rbac/rbac.middleware";
+import { requireFlag } from "@server/modules/rbac/rbac.middleware";
 import { db } from "@server/db";
 import { operatorSettings } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";

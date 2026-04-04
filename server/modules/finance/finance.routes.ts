@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { IStorage } from "@server/storage.interface";
 import { insertTripCostTemplateSchema, insertTripCostItemSchema } from "@shared/schema";
-import { requireFlag } from "../rbac/rbac.middleware";
+import { requireFlag } from "@server/modules/rbac/rbac.middleware";
 
 export function registerFinanceRoutes(app: FastifyInstance, storage: IStorage) {
   app.get('/api/cost-templates', async (req: any, reply: any) => {

@@ -1,4 +1,4 @@
-import { storage } from "../storage";
+import { storage } from "@server/storage";
 
 export async function seedCargo() {
   console.log("\n[9] Creating cargo types...");

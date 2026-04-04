@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { PriceRulesController } from "./priceRules.controller";
 import { IStorage } from "@server/storage.interface";
-import { requireFlag } from "../rbac/rbac.middleware";
+import { requireFlag } from "@server/modules/rbac/rbac.middleware";
 
 export async function registerPriceRulesRoutes(app: FastifyInstance, storage: IStorage) {
   const priceRulesController = new PriceRulesController(storage);

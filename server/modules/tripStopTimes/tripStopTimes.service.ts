@@ -1,7 +1,7 @@
 import { IStorage } from "@server/storage.interface";
 import { InsertTripStopTime, TripStopTime, Trip } from "@shared/schema";
-import { TripLegsService } from "../tripLegs/tripLegs.service";
-import { SeatInventoryService } from "../seatInventory/seatInventory.service";
+import { TripLegsService } from "@server/modules/tripLegs/tripLegs.service";
+import { SeatInventoryService } from "@server/modules/seatInventory/seatInventory.service";
 
 export class TripStopTimesService {
   public storage: IStorage; // Make public so controller can access it

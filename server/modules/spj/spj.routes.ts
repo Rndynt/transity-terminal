@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { SpjController } from "./spj.controller";
-import { requireFlag } from "../rbac/rbac.middleware";
+import { requireFlag } from "@server/modules/rbac/rbac.middleware";
 
 export function registerSpjRoutes(app: FastifyInstance) {
   const spjController = new SpjController();

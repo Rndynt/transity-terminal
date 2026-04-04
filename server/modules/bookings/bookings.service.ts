@@ -1,8 +1,8 @@
 import { IStorage } from "@server/storage.interface";
 import { InsertBooking, Booking } from "@shared/schema";
-import { HoldsService } from "../holds/holds.service";
+import { HoldsService } from "@server/modules/holds/holds.service";
 import { AtomicHoldService } from "./atomicHold.service";
-import { PrintService } from "../printing/print.service";
+import { PrintService } from "@server/modules/printing/print.service";
 import { db } from "@server/db";
 import { bookings as bookingsTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable } from "@shared/schema";
 import { eq, and, inArray, gt, lt, sql } from "drizzle-orm";

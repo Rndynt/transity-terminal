@@ -1,5 +1,5 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { getEffectivePermissions, type EffectivePermissions } from "../rbac/rbac.service";
+import { getEffectivePermissions, type EffectivePermissions } from "@server/modules/rbac/rbac.service";
 
 export interface RealmioUser {
   id: string;

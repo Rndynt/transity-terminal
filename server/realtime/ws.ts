@@ -1,6 +1,6 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { log } from '../vite';
+import { log } from '@server/vite';
 
 // WebSocket event types
 export interface WSEvents {

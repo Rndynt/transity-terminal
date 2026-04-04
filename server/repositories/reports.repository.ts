@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db } from "@server/db";
 import { sql, type SQL } from "drizzle-orm";
 
 const PAID_STATUSES_SQL = sql.raw(`('paid','confirmed','checked_in')`);

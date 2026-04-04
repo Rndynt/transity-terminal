@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { PromosController } from "./promos.controller";
 import { IStorage } from "@server/storage.interface";
-import { requireFlag } from "../rbac/rbac.middleware";
+import { requireFlag } from "@server/modules/rbac/rbac.middleware";
 
 export function registerPromosRoutes(app: FastifyInstance, storage: IStorage) {
   const promosController = new PromosController(storage);

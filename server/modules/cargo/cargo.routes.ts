@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { CargoController } from "./cargo.controller";
 import { IStorage } from "@server/storage.interface";
-import { requireFlag, requireOutletScope } from "../rbac/rbac.middleware";
+import { requireFlag, requireOutletScope } from "@server/modules/rbac/rbac.middleware";
 
 export function registerCargoRoutes(app: FastifyInstance, storage: IStorage) {
   const cargoController = new CargoController(storage);
