@@ -66,7 +66,7 @@ export default function SeatMap({
   const [localSelectedSeats, setLocalSelectedSeats] = useState<Set<string>>(new Set());
   const [showPassengerModal, setShowPassengerModal] = useState(false);
   const [selectedSeatForDetails, setSelectedSeatForDetails] = useState<string | null>(null);
-  const [seatLoading, setSeatLoading] = useState<string | null>(null);
+  const [seatLoading, setSeatLoading] = useState<Set<string>>(new Set());
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [precomputing, setPrecomputing] = useState(false);
   const [internalAssignMode, setInternalAssignMode] = useState<AssignModeState | null>(null);
@@ -220,8 +220,12 @@ export default function SeatMap({
     }
   };
 
+  const isSeatLoading = useCallback((seatNo: string) => seatLoading.has(seatNo), [seatLoading]);
+  const startSeatLoading = useCallback((seatNo: string) => setSeatLoading(prev => new Set(prev).add(seatNo)), []);
+  const stopSeatLoading = useCallback((seatNo: string) => setSeatLoading(prev => { const n = new Set(prev); n.delete(seatNo); return n; }), []);
+
   const handleSeatClick = async (seatNo: string) => {
-    if (!seatmap || seatLoading) return;
+    if (!seatmap || seatLoading.has(seatNo)) return;
     const seatAvailability = seatmap.seatAvailability[seatNo];
     const isHeldByMe = isHeld(seatNo);
 
@@ -265,25 +269,25 @@ export default function SeatMap({
 
     if (seatAvailability.held) {
       if (localSelectedSeats.has(seatNo)) {
-        setSeatLoading(seatNo);
+        startSeatLoading(seatNo);
         try {
           await releaseHold(seatNo);
           setLocalSelectedSeats(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
           onSeatDeselect(seatNo);
           setTimeout(() => refetch(), 100);
         } catch (error) { console.error('Failed to release hold:', error); }
-        finally { setSeatLoading(null); }
+        finally { stopSeatLoading(seatNo); }
         return;
       }
       if (seatAvailability.holdRef) {
-        setSeatLoading(seatNo);
+        startSeatLoading(seatNo);
         try {
           const success = await releaseHoldDirectly(seatAvailability.holdRef, seatNo);
           if (success) {
             setLocalSelectedSeats(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
             onSeatDeselect(seatNo);
           }
-        } finally { setSeatLoading(null); }
+        } finally { stopSeatLoading(seatNo); }
         return;
       }
       toast({ title: "Tidak Dapat Melepas", description: "Hold tidak valid, memuat ulang...", variant: "destructive" });
@@ -292,14 +296,14 @@ export default function SeatMap({
     }
 
     if (localSelectedSeats.has(seatNo)) {
-      setSeatLoading(seatNo);
+      startSeatLoading(seatNo);
       try {
         await releaseHold(seatNo);
         setLocalSelectedSeats(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
         onSeatDeselect(seatNo);
         setTimeout(() => refetch(), 100);
       } catch (error) { console.error('Failed to release hold:', error); }
-      finally { setSeatLoading(null); }
+      finally { stopSeatLoading(seatNo); }
       return;
     }
 
@@ -309,16 +313,18 @@ export default function SeatMap({
       return;
     }
 
-    setSeatLoading(seatNo);
+    startSeatLoading(seatNo);
+    setLocalSelectedSeats(prev => new Set(prev).add(seatNo));
+    onSeatSelect(seatNo);
     try {
       await createHold(trip.id, seatNo, originSeq, destinationSeq, 300);
-      setLocalSelectedSeats(prev => new Set(prev).add(seatNo));
-      onSeatSelect(seatNo);
       setTimeout(() => refetch(), 100);
     } catch (error) {
       console.error('Failed to hold seat:', error);
+      setLocalSelectedSeats(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
+      onSeatDeselect(seatNo);
       refetch();
-    } finally { setSeatLoading(null); }
+    } finally { stopSeatLoading(seatNo); }
   };
 
   const isPickingMode = !!(assignMode || rescheduleMode);
@@ -513,17 +519,16 @@ export default function SeatMap({
                 if (seat === null) return <div key={`gap-${ri}-${ci}`} className="w-9 h-9" />;
                 const status = getSeatStatus(seat.seat_no);
                 const holdTTL = getHoldTTL(seat.seat_no);
-                const isLoading = seatLoading === seat.seat_no;
                 const isMultiSeat = !!(seatmap?.seatAvailability[seat.seat_no]?.isMultiSeat);
                 return (
                   <div key={seat.seat_no} className="relative w-9 h-9">
                     <button
-                      onClick={() => !isLoading && !assignSeatMutation.isPending && !rescheduleMutation.isPending && handleSeatClick(seat.seat_no)}
-                      disabled={isLoading || assignSeatMutation.isPending || rescheduleMutation.isPending || status === 'blocked'}
+                      onClick={() => !isSeatLoading(seat.seat_no) && !assignSeatMutation.isPending && !rescheduleMutation.isPending && handleSeatClick(seat.seat_no)}
+                      disabled={isSeatLoading(seat.seat_no) || assignSeatMutation.isPending || rescheduleMutation.isPending || status === 'blocked'}
                       data-testid={`seat-${seat.seat_no}`}
-                      className={`w-9 h-9 rounded-lg border text-[10px] font-bold font-mono transition-all duration-100 flex items-center justify-center ${seatColors[status]} ${isLoading ? 'opacity-50' : ''}`}
+                      className={`w-9 h-9 rounded-lg border text-[10px] font-bold font-mono transition-all duration-100 flex items-center justify-center ${seatColors[status]} ${isSeatLoading(seat.seat_no) ? 'opacity-50' : ''}`}
                     >
-                      {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : seat.seat_no}
+                      {isSeatLoading(seat.seat_no) ? <Loader2 className="w-3 h-3 animate-spin" /> : seat.seat_no}
                     </button>
                     {status === 'held' && holdTTL > 0 && (
                       <span className={`absolute -top-1.5 -right-1.5 px-1 py-px rounded text-[7px] font-mono font-bold z-10 ${

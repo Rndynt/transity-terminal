@@ -13,7 +13,7 @@ interface SeatHold {
 
 export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
   const [holds, setHolds] = useState<Map<string, SeatHold>>(new Map());
-  const [loading, setLoading] = useState(false);
+  const [loadingSeats, setLoadingSeats] = useState<Set<string>>(new Set());
   const [tick, setTick] = useState(0);
   const { toast } = useToast();
   const intervalRef = useRef<NodeJS.Timeout>();
@@ -70,7 +70,7 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
     destinationSeq: number,
     ttlSeconds: number = 300
   ) => {
-    setLoading(true);
+    setLoadingSeats(prev => new Set(prev).add(seatNo));
     try {
       const response = await holdsApi.create({
         tripId,
@@ -82,7 +82,6 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
 
       // Handle idempotent response
       if (response.holdRef) {
-        // New hold created successfully
         const hold: SeatHold = {
           holdRef: response.holdRef,
           seatNo,
@@ -92,26 +91,11 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
           destinationSeq
         };
 
-        // Update both state and ref immediately
         holdsRef.current.set(seatNo, hold);
         setHolds(current => new Map(current.set(seatNo, hold)));
 
-        const minutes = Math.floor(ttlSeconds / 60);
-        const seconds = ttlSeconds % 60;
-        const durationLabel = seconds > 0 ? `${minutes} menit ${seconds} detik` : `${minutes} menit`;
-        toast({
-          title: "Kursi Dipegang",
-          description: `Kursi ${seatNo} dipegang selama ${durationLabel}`
-        });
-
         return response.holdRef;
       } else if (response.ownedByYou) {
-        // Seat already held by this operator (idempotent success)
-        toast({
-          title: "Kursi Sudah Dipegang",
-          description: `Kursi ${seatNo} sudah dipegang oleh Anda`,
-          variant: "default"
-        });
         return null;
       }
 
@@ -125,7 +109,7 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
       });
       throw error;
     } finally {
-      setLoading(false);
+      setLoadingSeats(prev => { const n = new Set(prev); n.delete(seatNo); return n; });
     }
   }, [toast]);
 
@@ -146,7 +130,6 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
     try {
       await holdsApi.release(hold.holdRef);
       
-      // Update both ref and state
       holdsRef.current.delete(seatNo);
       setHolds(current => {
         const newHolds = new Map(current);
@@ -154,11 +137,6 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
         return newHolds;
       });
 
-      toast({
-        title: "Kursi Dilepas",
-        description: `Kursi ${seatNo} sekarang tersedia`
-      });
-      
       return true;
     } catch (error) {
       console.error('[useSeatHold] Failed to release hold:', error);
@@ -201,7 +179,7 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
 
   return {
     holds: Array.from(holds.values()),
-    loading,
+    loading: loadingSeats.size > 0,
     createHold,
     releaseHold,
     releaseAllHolds,
