@@ -108,14 +108,14 @@ export class AtomicHoldService {
 
   async releaseHoldByRef(holdRef: string): Promise<{ success: boolean }> {
     try {
-      const result = await db.transaction(async (tx) => {
+      const releasedHold = await db.transaction(async (tx) => {
         const [hold] = await tx
           .select()
           .from(seatHolds)
           .where(eq(seatHolds.holdRef, holdRef));
 
         if (!hold) {
-          return { success: false, reason: 'HOLD_NOT_FOUND' };
+          return null;
         }
 
         await tx
@@ -127,17 +127,20 @@ export class AtomicHoldService {
           .delete(seatHolds)
           .where(eq(seatHolds.holdRef, holdRef));
 
-        webSocketService.emitInventoryUpdated(
-          hold.tripId,
-          hold.seatNo,
-          hold.legIndexes as number[]
-        );
-        webSocketService.emitHoldsReleased(hold.tripId, [hold.seatNo]);
-
-        return { success: true };
+        return hold;
       });
 
-      return result;
+      if (releasedHold) {
+        webSocketService.emitInventoryUpdated(
+          releasedHold.tripId,
+          releasedHold.seatNo,
+          releasedHold.legIndexes as number[]
+        );
+        webSocketService.emitHoldsReleased(releasedHold.tripId, [releasedHold.seatNo]);
+        return { success: true };
+      }
+
+      return { success: false };
     } catch (error) {
       console.error(`[ATOMIC_HOLD] Hold release failed:`, error);
       return { success: false };

@@ -16,7 +16,10 @@ export const cashierSessions = pgTable("cashier_sessions", {
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => ({
+  idxCashierSessionsOutletStatus: sql`CREATE INDEX IF NOT EXISTS idx_cashier_sessions_outlet_status ON ${table} (outlet_id, status)`,
+  idxCashierSessionsStaffId: sql`CREATE INDEX IF NOT EXISTS idx_cashier_sessions_staff_id ON ${table} (staff_id)`
+}));
 
 export const cashierSettlements = pgTable("cashier_settlements", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),

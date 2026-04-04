@@ -43,23 +43,17 @@ export class BookingsService {
       throw new Error(`Booking with id ${id} not found`);
     }
     
-    const [passengers, payments, trip, tripStopTimes] = await Promise.all([
+    const [passengers, payments, trip, tripStopTimes, originStop, destinationStop, outlet] = await Promise.all([
       this.storage.getPassengers(booking.id),
       this.storage.getPayments(booking.id),
       this.storage.getTripById(booking.tripId),
-      this.storage.getTripStopTimes(booking.tripId)
-    ]);
-    
-    const secondaryFetches = await Promise.all([
+      this.storage.getTripStopTimes(booking.tripId),
       booking.originStopId ? this.storage.getStopById(booking.originStopId) : null,
       booking.destinationStopId ? this.storage.getStopById(booking.destinationStopId) : null,
       booking.outletId ? this.storage.getOutletById(booking.outletId) : null,
-      trip?.vehicleId ? this.storage.getVehicleById(trip.vehicleId) : null
     ]);
-    const originStop = secondaryFetches[0];
-    const destinationStop = secondaryFetches[1];
-    const outlet = secondaryFetches[2];
-    const vehicle = secondaryFetches[3];
+    
+    const vehicle = trip?.vehicleId ? await this.storage.getVehicleById(trip.vehicleId) : null;
 
     let departAt = null;
     let arriveAt = null;
@@ -96,25 +90,24 @@ export class BookingsService {
     promoCode?: string
   ): Promise<{ booking: Booking; printPayload: any }> {
     
-    await validateBoardingAlighting(this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq);
-
     const legIndexes = computeLegIndexes(bookingData.originSeq, bookingData.destinationSeq);
     const operatorId = bookingData.createdBy || 'default-operator';
     const seatNos = passengers.map(p => p.seatNo);
 
-    await validateHoldOwnership(bookingData.tripId, seatNos, legIndexes, operatorId);
-
-    const { fareQuote, total: expectedTotal, promo } = await calculateBookingTotal(
-      this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq,
-      passengers.length, bookingData.channel || undefined, promoCode
-    );
+    const [,, { fareQuote, total: expectedTotal, promo }, snapshots] = await Promise.all([
+      validateBoardingAlighting(this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq),
+      validateHoldOwnership(bookingData.tripId, seatNos, legIndexes, operatorId),
+      calculateBookingTotal(
+        this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq,
+        passengers.length, bookingData.channel || undefined, promoCode
+      ),
+      fetchBookingSnapshots(this.storage, bookingData.tripId, bookingData.originStopId, bookingData.destinationStopId, bookingData.outletId, bookingData.originSeq),
+    ]);
 
     const paymentAmount = Number(payment.amount);
     if (Math.round(paymentAmount) !== Math.round(expectedTotal)) {
       throw new Error(`Payment amount ${paymentAmount} does not match expected total ${expectedTotal}`);
     }
-
-    const snapshots = await fetchBookingSnapshots(this.storage, bookingData.tripId, bookingData.originStopId, bookingData.destinationStopId, bookingData.outletId, bookingData.originSeq);
 
     const booking = await db.transaction(async (tx) => {
       const [newBooking] = await tx.insert(bookingsTable).values({
@@ -301,19 +294,17 @@ export class BookingsService {
     }
 
     const passengers = await this.storage.getPassengers(bookingId);
-    const legIndexes: number[] = [];
-    for (let i = booking.originSeq; i < booking.destinationSeq; i++) {
-      legIndexes.push(i);
-    }
+    const seatNos = passengers.map(p => p.seatNo);
+    const legIndexes = computeLegIndexes(booking.originSeq, booking.destinationSeq);
 
     await db.transaction(async (tx) => {
-      for (const passenger of passengers) {
+      if (seatNos.length > 0) {
         await tx
           .update(seatInventory)
           .set({ booked: false, holdRef: null })
           .where(and(
             eq(seatInventory.tripId, booking.tripId),
-            eq(seatInventory.seatNo, passenger.seatNo),
+            inArray(seatInventory.seatNo, seatNos),
             inArray(seatInventory.legIndex, legIndexes)
           ));
       }
@@ -356,19 +347,17 @@ export class BookingsService {
     for (const booking of expiredPendingBookings) {
       try {
         const bookingPassengers = passengersByBooking.get(booking.id) || [];
-        const legIndexes: number[] = [];
-        for (let i = booking.originSeq; i < booking.destinationSeq; i++) {
-          legIndexes.push(i);
-        }
+        const seatNos = bookingPassengers.map(p => p.seatNo);
+        const legIndexes = computeLegIndexes(booking.originSeq, booking.destinationSeq);
 
         await db.transaction(async (tx) => {
-          for (const passenger of bookingPassengers) {
+          if (seatNos.length > 0) {
             await tx
               .update(seatInventory)
               .set({ booked: false, holdRef: null })
               .where(and(
                 eq(seatInventory.tripId, booking.tripId),
-                eq(seatInventory.seatNo, passenger.seatNo),
+                inArray(seatInventory.seatNo, seatNos),
                 inArray(seatInventory.legIndex, legIndexes)
               ));
           }

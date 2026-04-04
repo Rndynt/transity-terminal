@@ -16,7 +16,9 @@ export const bookingGroups = pgTable("booking_groups", {
   outletId:    uuid("outlet_id").references(() => outlets.id),
   createdBy:   text("created_by"),
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  idxBookingGroupsCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_booking_groups_created_at ON ${table} (created_at)`
+}));
 
 export const insertBookingGroupSchema = createInsertSchema(bookingGroups).omit({
   id: true, createdAt: true,
@@ -92,7 +94,9 @@ export const payments = pgTable("payments", {
   providerRef: text("provider_ref"),
   paidAt:      timestamp("paid_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
-  idxPaymentsBookingId: sql`CREATE INDEX IF NOT EXISTS idx_payments_booking_id ON ${table} (booking_id)`
+  idxPaymentsBookingId: sql`CREATE INDEX IF NOT EXISTS idx_payments_booking_id ON ${table} (booking_id)`,
+  idxPaymentsProviderRef: sql`CREATE INDEX IF NOT EXISTS idx_payments_provider_ref ON ${table} (provider_ref) WHERE provider_ref IS NOT NULL`,
+  idxPaymentsPaidAt: sql`CREATE INDEX IF NOT EXISTS idx_payments_paid_at ON ${table} (paid_at)`
 }));
 
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, paidAt: true });
@@ -106,7 +110,9 @@ export const printJobs = pgTable("print_jobs", {
   attempts:  integer("attempts").default(0),
   lastError: text("last_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxPrintJobsBookingId: sql`CREATE INDEX IF NOT EXISTS idx_print_jobs_booking_id ON ${table} (booking_id)`
+}));
 
 export const insertPrintJobSchema = createInsertSchema(printJobs).omit({ id: true, createdAt: true });
 export type PrintJob = typeof printJobs.$inferSelect;

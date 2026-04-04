@@ -9,7 +9,7 @@ import {
   seatInventory,
   scheduleStopExceptions 
 } from "@shared/schema";
-import { eq, and, inArray, gt } from "drizzle-orm";
+import { eq, and, inArray, gt, sql } from "drizzle-orm";
 import { generateBookingCode, generateTicketNumber, generateGroupCode } from "@server/utils/codeGenerator";
 import { webSocketService } from "@server/realtime/ws";
 import { PricingService } from "@modules/pricing/pricing.service";
@@ -78,9 +78,31 @@ export class RoundTripService {
     // 5. Generate groupCode
     const groupCode = generateGroupCode();
 
-    // 6. DB Transaction
+    const allStopIds = [...new Set([outbound.originStopId, outbound.destinationStopId, returnData.originStopId, returnData.destinationStopId])];
+    const allTripIds = [...new Set([outbound.tripId, returnData.tripId])];
+    const [allStopsData, allTripsData, outletData] = await Promise.all([
+      this.storage.getStopsByIds(allStopIds),
+      Promise.all(allTripIds.map(id => this.storage.getTripById(id))),
+      outbound.outletId ? this.storage.getOutletById(outbound.outletId) : null,
+    ]);
+    const stopsMap = new Map(allStopsData.map(s => [s.id, s]));
+    const tripsMap = new Map(allTripsData.filter(Boolean).map(t => [t!.id, t!]));
+
+    const outboundLegIndexes = [];
+    for (let i = outbound.originSeq; i < outbound.destinationSeq; i++) outboundLegIndexes.push(i);
+    const returnLegIndexes = [];
+    for (let i = returnData.originSeq; i < returnData.destinationSeq; i++) returnLegIndexes.push(i);
+
+    const outboundSeatNosArr = outbound.passengers.map((p: any) => p.seatNo);
+    const returnSeatNosArr = returnData.passengers.map((p: any) => p.seatNo);
+
+    // 6. DB Transaction with advisory lock to prevent deadlocks
     const result = await db.transaction(async (tx) => {
-      // a. INSERT booking_groups
+      const sortedTripIds = [outbound.tripId, returnData.tripId].sort();
+      for (const tid of sortedTripIds) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${tid}))`);
+      }
+
       const [group] = await tx.insert(bookingGroupsTable).values({
         groupCode,
         type: 'round_trip',
@@ -90,15 +112,10 @@ export class RoundTripService {
         createdBy: operatorId
       }).returning();
 
-      // b. Outbound snapshots
-      const [outOriginStop, outDestStop, outTrip, outOutlet] = await Promise.all([
-        this.storage.getStopById(outbound.originStopId),
-        this.storage.getStopById(outbound.destinationStopId),
-        this.storage.getTripById(outbound.tripId),
-        outbound.outletId ? this.storage.getOutletById(outbound.outletId) : null,
-      ]);
+      const outOriginStop = stopsMap.get(outbound.originStopId);
+      const outDestStop = stopsMap.get(outbound.destinationStopId);
+      const outTrip = tripsMap.get(outbound.tripId);
 
-      // c. INSERT outbound booking
       const [outboundBooking] = await tx.insert(bookingsTable).values({
         bookingCode: generateBookingCode(),
         status: 'paid',
@@ -115,48 +132,38 @@ export class RoundTripService {
         snapOriginStopName: outOriginStop?.name || null,
         snapDestinationStopName: outDestStop?.name || null,
         snapDepartureHHMM: outTrip?.originDepartHHMM || null,
-        snapOutletName: outOutlet?.name || null,
+        snapOutletName: outletData?.name || null,
       }).returning();
 
-      // d. INSERT outbound passengers & update inventory
-      const outboundLegIndexes = [];
-      for (let i = outbound.originSeq; i < outbound.destinationSeq; i++) outboundLegIndexes.push(i);
+      const outboundPaxValues = outbound.passengers.map((p: any) => ({
+        bookingId: outboundBooking.id,
+        fullName: p.name,
+        seatNo: p.seatNo,
+        ticketNumber: generateTicketNumber(),
+        fareAmount: outboundFare.perPassenger.toString(),
+        fareBreakdown: outboundFare.breakdown
+      }));
+      await tx.insert(passengersTable).values(outboundPaxValues);
 
-      for (const p of outbound.passengers) {
-        await tx.insert(passengersTable).values({
-          bookingId: outboundBooking.id,
-          fullName: p.name,
-          seatNo: p.seatNo,
-          ticketNumber: generateTicketNumber(),
-          fareAmount: outboundFare.perPassenger.toString(),
-          fareBreakdown: outboundFare.breakdown
-        });
+      await tx.update(seatInventory)
+        .set({ booked: true, holdRef: null })
+        .where(and(
+          eq(seatInventory.tripId, outbound.tripId),
+          inArray(seatInventory.seatNo, outboundSeatNosArr),
+          inArray(seatInventory.legIndex, outboundLegIndexes)
+        ));
 
-        await tx.update(seatInventory)
-          .set({ booked: true, holdRef: null })
-          .where(and(
-            eq(seatInventory.tripId, outbound.tripId),
-            eq(seatInventory.seatNo, p.seatNo),
-            inArray(seatInventory.legIndex, outboundLegIndexes)
-          ));
+      await tx.delete(seatHolds)
+        .where(and(
+          eq(seatHolds.tripId, outbound.tripId),
+          inArray(seatHolds.seatNo, outboundSeatNosArr),
+          eq(seatHolds.operatorId, operatorId)
+        ));
 
-        await tx.delete(seatHolds)
-          .where(and(
-            eq(seatHolds.tripId, outbound.tripId),
-            eq(seatHolds.seatNo, p.seatNo),
-            eq(seatHolds.operatorId, operatorId)
-          ));
-      }
+      const retOriginStop = stopsMap.get(returnData.originStopId);
+      const retDestStop = stopsMap.get(returnData.destinationStopId);
+      const retTrip = tripsMap.get(returnData.tripId);
 
-      // g. Return snapshots
-      const [retOriginStop, retDestStop, retTrip, retOutlet] = await Promise.all([
-        this.storage.getStopById(returnData.originStopId),
-        this.storage.getStopById(returnData.destinationStopId),
-        this.storage.getTripById(returnData.tripId),
-        outbound.outletId ? this.storage.getOutletById(outbound.outletId) : null, // Use same outlet
-      ]);
-
-      // h. INSERT return booking
       const [returnBooking] = await tx.insert(bookingsTable).values({
         bookingCode: generateBookingCode(),
         status: 'paid',
@@ -173,65 +180,51 @@ export class RoundTripService {
         snapOriginStopName: retOriginStop?.name || null,
         snapDestinationStopName: retDestStop?.name || null,
         snapDepartureHHMM: retTrip?.originDepartHHMM || null,
-        snapOutletName: retOutlet?.name || null,
+        snapOutletName: outletData?.name || null,
       }).returning();
 
-      // i. INSERT return passengers & update inventory
-      const returnLegIndexes = [];
-      for (let i = returnData.originSeq; i < returnData.destinationSeq; i++) returnLegIndexes.push(i);
+      const returnPaxValues = returnData.passengers.map((retP: any, i: number) => ({
+        bookingId: returnBooking.id,
+        fullName: outbound.passengers[i].name,
+        seatNo: retP.seatNo,
+        ticketNumber: generateTicketNumber(),
+        fareAmount: returnFare.perPassenger.toString(),
+        fareBreakdown: returnFare.breakdown
+      }));
+      await tx.insert(passengersTable).values(returnPaxValues);
 
-      for (let i = 0; i < returnData.passengers.length; i++) {
-        const outP = outbound.passengers[i];
-        const retP = returnData.passengers[i];
-        
-        await tx.insert(passengersTable).values({
-          bookingId: returnBooking.id,
-          fullName: outP.name, // Nama sama dengan outbound
-          seatNo: retP.seatNo,
-          ticketNumber: generateTicketNumber(),
-          fareAmount: returnFare.perPassenger.toString(),
-          fareBreakdown: returnFare.breakdown
-        });
+      await tx.update(seatInventory)
+        .set({ booked: true, holdRef: null })
+        .where(and(
+          eq(seatInventory.tripId, returnData.tripId),
+          inArray(seatInventory.seatNo, returnSeatNosArr),
+          inArray(seatInventory.legIndex, returnLegIndexes)
+        ));
 
-        await tx.update(seatInventory)
-          .set({ booked: true, holdRef: null })
-          .where(and(
-            eq(seatInventory.tripId, returnData.tripId),
-            eq(seatInventory.seatNo, retP.seatNo),
-            inArray(seatInventory.legIndex, returnLegIndexes)
-          ));
+      await tx.delete(seatHolds)
+        .where(and(
+          eq(seatHolds.tripId, returnData.tripId),
+          inArray(seatHolds.seatNo, returnSeatNosArr),
+          eq(seatHolds.operatorId, operatorId)
+        ));
 
-        await tx.delete(seatHolds)
-          .where(and(
-            eq(seatHolds.tripId, returnData.tripId),
-            eq(seatHolds.seatNo, retP.seatNo),
-            eq(seatHolds.operatorId, operatorId)
-          ));
-      }
-
-      // l. INSERT payments (associated with outbound booking as primary)
       await tx.insert(paymentsTable).values({
         bookingId: outboundBooking.id,
         method: payment.method,
         amount: totalAmount.toString()
       });
 
-      // m/n. INSERT print_jobs
-      await tx.insert(printJobsTable).values({ bookingId: outboundBooking.id, status: 'queued' });
-      await tx.insert(printJobsTable).values({ bookingId: returnBooking.id, status: 'queued' });
+      await tx.insert(printJobsTable).values([
+        { bookingId: outboundBooking.id, status: 'queued' as const },
+        { bookingId: returnBooking.id, status: 'queued' as const },
+      ]);
 
       return { group, outboundBooking, returnBooking };
     });
 
-    // 8. Emit WebSocket
-    const outboundLegIndexes = [];
-    for (let i = outbound.originSeq; i < outbound.destinationSeq; i++) outboundLegIndexes.push(i);
     for (const p of outbound.passengers) {
       webSocketService.emitInventoryUpdated(outbound.tripId, p.seatNo, outboundLegIndexes);
     }
-
-    const returnLegIndexes = [];
-    for (let i = returnData.originSeq; i < returnData.destinationSeq; i++) returnLegIndexes.push(i);
     for (const p of returnData.passengers) {
       webSocketService.emitInventoryUpdated(returnData.tripId, p.seatNo, returnLegIndexes);
     }

@@ -185,24 +185,22 @@ export async function confirmSeatsBooked(
   legIndexes: number[],
   operatorId: string
 ) {
-  for (const seatNo of seatNos) {
-    await tx
-      .update(seatInventory)
-      .set({ booked: true, holdRef: null })
-      .where(and(
-        eq(seatInventory.tripId, tripId),
-        eq(seatInventory.seatNo, seatNo),
-        inArray(seatInventory.legIndex, legIndexes)
-      ));
+  await tx
+    .update(seatInventory)
+    .set({ booked: true, holdRef: null })
+    .where(and(
+      eq(seatInventory.tripId, tripId),
+      inArray(seatInventory.seatNo, seatNos),
+      inArray(seatInventory.legIndex, legIndexes)
+    ));
 
-    await tx
-      .delete(seatHolds)
-      .where(and(
-        eq(seatHolds.tripId, tripId),
-        eq(seatHolds.seatNo, seatNo),
-        eq(seatHolds.operatorId, operatorId)
-      ));
-  }
+  await tx
+    .delete(seatHolds)
+    .where(and(
+      eq(seatHolds.tripId, tripId),
+      inArray(seatHolds.seatNo, seatNos),
+      eq(seatHolds.operatorId, operatorId)
+    ));
 }
 
 export async function checkSeatsAvailable(
@@ -211,19 +209,18 @@ export async function checkSeatsAvailable(
   seatNos: string[],
   legIndexes: number[]
 ) {
-  for (const seatNo of seatNos) {
-    const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
-    const inv = await tx.execute(sql`
-      SELECT seat_no, booked, hold_ref FROM seat_inventory
-      WHERE trip_id = ${tripId}
-        AND seat_no = ${seatNo}
-        AND leg_index = ANY(${legArr})
-      FOR UPDATE
-    `);
-    const booked = inv.rows.some((r: Record<string, unknown>) => r.booked === true);
-    const held = inv.rows.some((r: Record<string, unknown>) => !!r.hold_ref);
-    if (booked) throw new Error(`Seat ${seatNo} is already booked`);
-    if (held) throw new Error(`Seat ${seatNo} is currently held by another user`);
+  const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
+  const seatArr = sql`ARRAY[${sql.join(seatNos.map(s => sql`${s}`), sql`, `)}]`;
+  const inv = await tx.execute(sql`
+    SELECT seat_no, booked, hold_ref FROM seat_inventory
+    WHERE trip_id = ${tripId}
+      AND seat_no = ANY(${seatArr})
+      AND leg_index = ANY(${legArr})
+    FOR UPDATE
+  `);
+  for (const row of inv.rows as Record<string, unknown>[]) {
+    if (row.booked === true) throw new Error(`Seat ${row.seat_no} is already booked`);
+    if (!!row.hold_ref) throw new Error(`Seat ${row.seat_no} is currently held by another user`);
   }
 }
 
@@ -236,22 +233,22 @@ export async function createSeatHoldsForBooking(
   holderId: string | null,
   expiresAt: Date
 ) {
+  const holdValues = seatNos.map(seatNo => ({
+    holdRef: `app-hold:${bookingId}:${seatNo}`,
+    tripId,
+    seatNo,
+    legIndexes,
+    ttlClass: 'short' as const,
+    operatorId: holderId || 'service-client',
+    bookingId,
+    expiresAt,
+  }));
+
+  await tx.insert(seatHolds).values(holdValues);
+
   for (const seatNo of seatNos) {
-    const holdRef = `app-hold:${bookingId}:${seatNo}`;
-
-    await tx.insert(seatHolds).values({
-      holdRef,
-      tripId,
-      seatNo,
-      legIndexes,
-      ttlClass: 'short',
-      operatorId: holderId || 'service-client',
-      bookingId,
-      expiresAt,
-    });
-
     await tx.update(seatInventory)
-      .set({ holdRef })
+      .set({ holdRef: `app-hold:${bookingId}:${seatNo}` })
       .where(and(
         eq(seatInventory.tripId, tripId),
         eq(seatInventory.seatNo, seatNo),

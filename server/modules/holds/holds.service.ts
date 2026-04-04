@@ -22,39 +22,6 @@ interface SeatHold {
 
 export class HoldsService {
   constructor() {
-    setInterval(() => this.cleanupExpiredHolds(), 30000);
-  }
-
-  private async cleanupExpiredHolds(): Promise<void> {
-    try {
-      const now = new Date();
-
-      const expiredHolds = await db.transaction(async (tx) => {
-        const holds = await tx.select()
-          .from(seatHolds)
-          .where(lt(seatHolds.expiresAt, now));
-
-        if (holds.length === 0) return [];
-
-        const expiredRefs = holds.map(h => h.holdRef);
-
-        await tx.update(seatInventory)
-          .set({ holdRef: null })
-          .where(inArray(seatInventory.holdRef, expiredRefs));
-
-        await tx.delete(seatHolds)
-          .where(inArray(seatHolds.holdRef, expiredRefs));
-
-        return holds;
-      });
-
-      for (const tid of [...new Set(expiredHolds.map(h => h.tripId))]) {
-        const seats = expiredHolds.filter(h => h.tripId === tid).map(h => h.seatNo);
-        webSocketService.emitHoldsReleased(tid, seats);
-      }
-    } catch (error) {
-      console.error('[HOLDS] Cleanup error:', error);
-    }
   }
 
   async createSeatHold(
@@ -268,23 +235,35 @@ export class HoldsService {
   }
 
   async releaseHoldsByOwner(operatorId: string, bookingId?: string): Promise<void> {
-    let holdsToRelease;
+    const condition = bookingId
+      ? and(eq(seatHolds.operatorId, operatorId), eq(seatHolds.bookingId, bookingId))
+      : eq(seatHolds.operatorId, operatorId);
 
-    if (bookingId) {
-      holdsToRelease = await db.select()
-        .from(seatHolds)
-        .where(and(
-          eq(seatHolds.operatorId, operatorId),
-          eq(seatHolds.bookingId, bookingId)
-        ));
-    } else {
-      holdsToRelease = await db.select()
-        .from(seatHolds)
-        .where(eq(seatHolds.operatorId, operatorId));
-    }
+    const holdsToRelease = await db.select().from(seatHolds).where(condition);
+    if (holdsToRelease.length === 0) return;
 
+    const holdRefs = holdsToRelease.map(h => h.holdRef);
+
+    await db.transaction(async (tx) => {
+      await tx.update(seatInventory)
+        .set({ holdRef: null })
+        .where(inArray(seatInventory.holdRef, holdRefs));
+
+      await tx.delete(seatHolds)
+        .where(inArray(seatHolds.holdRef, holdRefs));
+    });
+
+    const tripGroups = new Map<string, string[]>();
     for (const hold of holdsToRelease) {
-      await this.releaseHoldByRef(hold.holdRef);
+      const seats = tripGroups.get(hold.tripId) || [];
+      seats.push(hold.seatNo);
+      tripGroups.set(hold.tripId, seats);
+    }
+    for (const [tripId, seats] of tripGroups) {
+      webSocketService.emitHoldsReleased(tripId, seats);
+    }
+    for (const hold of holdsToRelease) {
+      webSocketService.emitInventoryUpdated(hold.tripId, hold.seatNo, hold.legIndexes as number[]);
     }
   }
 }

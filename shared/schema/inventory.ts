@@ -16,7 +16,8 @@ export const seatInventory = pgTable("seat_inventory", {
   idxSeatInvTripSeat: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_trip_seat ON ${table} (trip_id, seat_no)`,
   idxSeatInvTripId: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_trip_id ON ${table} (trip_id)`,
   idxSeatInvTripLeg: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_trip_leg ON ${table} (trip_id, leg_index)`,
-  uniqTripSeatLeg: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_seat_inv_trip_seat_leg ON ${table} (trip_id, seat_no, leg_index)`
+  uniqTripSeatLeg: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_seat_inv_trip_seat_leg ON ${table} (trip_id, seat_no, leg_index)`,
+  idxSeatInvHoldRef: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_hold_ref ON ${table} (hold_ref) WHERE hold_ref IS NOT NULL`
 }));
 
 export const insertSeatInventorySchema = createInsertSchema(seatInventory).omit({ id: true });
@@ -37,7 +38,9 @@ export const seatHolds = pgTable("seat_holds", {
 }, (table) => ({
   idxSeatHoldsTripId: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_trip_id ON ${table} (trip_id)`,
   idxSeatHoldsExpiresAt: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_expires_at ON ${table} (expires_at)`,
-  idxSeatHoldsActive: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_active ON ${table} (trip_id, expires_at) WHERE booking_id IS NULL`
+  idxSeatHoldsActive: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_active ON ${table} (trip_id, expires_at) WHERE booking_id IS NULL`,
+  idxSeatHoldsBookingId: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_booking_id ON ${table} (booking_id) WHERE booking_id IS NOT NULL`,
+  idxSeatHoldsTripSeat: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_trip_seat ON ${table} (trip_id, seat_no)`
 }));
 
 export const priceRules = pgTable("price_rules", {

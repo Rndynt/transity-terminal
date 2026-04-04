@@ -3,7 +3,8 @@ import { storage } from './storage';
 import { getConfig } from './config';
 import { db } from './db';
 import { seatHolds, seatInventory } from '@shared/schema';
-import { lt, eq, and, isNotNull, notInArray, sql } from 'drizzle-orm';
+import { lt, inArray, sql, and } from 'drizzle-orm';
+import { webSocketService } from './realtime/ws';
 
 export class Scheduler {
   private bookingsService: BookingsService;
@@ -17,34 +18,48 @@ export class Scheduler {
     console.log('[SCHEDULER] Running expired holds cleanup...');
     
     try {
-      await db.transaction(async (tx) => {
-        // Get expired holds
-        const expiredHolds = await tx
+      const now = new Date();
+      const expiredHolds = await db.transaction(async (tx) => {
+        const holds = await tx
           .select()
           .from(seatHolds)
-          .where(lt(seatHolds.expiresAt, new Date()));
+          .where(lt(seatHolds.expiresAt, now))
+          .for('update', { skipLocked: true });
 
-        if (expiredHolds.length === 0) {
+        if (holds.length === 0) {
           console.log('[SCHEDULER] No expired holds to clean up');
-          return;
+          return [];
         }
 
-        // Clear hold references from seat inventory
-        for (const hold of expiredHolds) {
-          await tx
-            .update(seatInventory)
-            .set({ holdRef: null })
-            .where(eq(seatInventory.holdRef, hold.holdRef));
-        }
+        const expiredRefs = holds.map(h => h.holdRef);
 
-        // Delete expired holds
-        const deleted = await tx
+        await tx
+          .update(seatInventory)
+          .set({ holdRef: null })
+          .where(inArray(seatInventory.holdRef, expiredRefs));
+
+        await tx
           .delete(seatHolds)
-          .where(lt(seatHolds.expiresAt, new Date()))
-          .returning();
+          .where(and(
+            inArray(seatHolds.holdRef, expiredRefs),
+            lt(seatHolds.expiresAt, now)
+          ));
 
-        console.log(`[SCHEDULER] Cleaned up ${deleted.length} expired holds`);
+        console.log(`[SCHEDULER] Cleaned up ${holds.length} expired holds`);
+        return holds;
       });
+
+      if (expiredHolds.length > 0) {
+        const tripGroups = new Map<string, string[]>();
+        for (const hold of expiredHolds) {
+          const seats = tripGroups.get(hold.tripId) || [];
+          seats.push(hold.seatNo);
+          tripGroups.set(hold.tripId, seats);
+        }
+        for (const [tripId, seats] of tripGroups) {
+          webSocketService.emitHoldsReleased(tripId, seats);
+        }
+      }
     } catch (error) {
       console.error('[SCHEDULER] Error cleaning up expired holds:', error);
     }
@@ -52,18 +67,20 @@ export class Scheduler {
 
   async cleanupOrphanHoldRefs(): Promise<void> {
     try {
-      const validHoldRefs = db.select({ holdRef: seatHolds.holdRef }).from(seatHolds);
-      const result = await db
-        .update(seatInventory)
-        .set({ holdRef: null })
-        .where(and(
-          isNotNull(seatInventory.holdRef),
-          notInArray(seatInventory.holdRef, validHoldRefs)
-        ))
-        .returning({ id: seatInventory.id });
+      const result = await db.execute(sql`
+        UPDATE seat_inventory
+        SET hold_ref = NULL
+        WHERE hold_ref IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM seat_holds
+            WHERE seat_holds.hold_ref = seat_inventory.hold_ref
+          )
+        RETURNING id
+      `);
 
-      if (result.length > 0) {
-        console.log(`[SCHEDULER] Cleaned up ${result.length} orphan holdRefs in seat_inventory`);
+      const count = result.rows?.length || 0;
+      if (count > 0) {
+        console.log(`[SCHEDULER] Cleaned up ${count} orphan holdRefs in seat_inventory`);
       }
     } catch (error) {
       console.error('[SCHEDULER] Error cleaning up orphan holdRefs:', error);

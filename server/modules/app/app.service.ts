@@ -408,31 +408,67 @@ export class AppService {
       )
     );
 
-    const enriched = await Promise.all(result.map(async (trip) => {
-      const stopTimes = await db.select({
-        stopId: tripStopTimes.stopId,
-        stopSequence: tripStopTimes.stopSequence,
-        arriveAt: tripStopTimes.arriveAt,
-        departAt: tripStopTimes.departAt,
-        stopName: stops.name,
-        stopCode: stops.code,
-        stopCity: stops.city,
-      })
-      .from(tripStopTimes)
-      .innerJoin(stops, eq(tripStopTimes.stopId, stops.id))
-      .where(eq(tripStopTimes.tripId, trip.tripId))
-      .orderBy(tripStopTimes.stopSequence);
+    if (result.length === 0) return [];
 
-      const originST = stopTimes.find(st => originStopIds.includes(st.stopId));
-      const destSTList = stopTimes.filter(st => destStopIds.includes(st.stopId) && st.stopSequence > (originST?.stopSequence ?? 0));
+    const tripIds = result.map(t => t.tripId);
+
+    const allStopTimes = await db.select({
+      tripId: tripStopTimes.tripId,
+      stopId: tripStopTimes.stopId,
+      stopSequence: tripStopTimes.stopSequence,
+      arriveAt: tripStopTimes.arriveAt,
+      departAt: tripStopTimes.departAt,
+      stopName: stops.name,
+      stopCode: stops.code,
+      stopCity: stops.city,
+    })
+    .from(tripStopTimes)
+    .innerJoin(stops, eq(tripStopTimes.stopId, stops.id))
+    .where(inArray(tripStopTimes.tripId, tripIds))
+    .orderBy(tripStopTimes.stopSequence);
+
+    const stopTimesByTrip = new Map<string, typeof allStopTimes>();
+    for (const st of allStopTimes) {
+      const list = stopTimesByTrip.get(st.tripId) || [];
+      list.push(st);
+      stopTimesByTrip.set(st.tripId, list);
+    }
+
+    const allInventory = await db.select()
+      .from(seatInventory)
+      .where(inArray(seatInventory.tripId, tripIds));
+
+    const inventoryByTrip = new Map<string, typeof allInventory>();
+    for (const row of allInventory) {
+      const list = inventoryByTrip.get(row.tripId) || [];
+      list.push(row);
+      inventoryByTrip.set(row.tripId, list);
+    }
+
+    const enrichedWithFares = await Promise.all(result.map(async (trip) => {
+      const stopTimesForTrip = stopTimesByTrip.get(trip.tripId) || [];
+
+      const originST = stopTimesForTrip.find(st => originStopIds.includes(st.stopId));
+      const destSTList = stopTimesForTrip.filter(st => destStopIds.includes(st.stopId) && st.stopSequence > (originST?.stopSequence ?? 0));
       const destST = destSTList.length > 0 ? destSTList[destSTList.length - 1] : null;
 
       if (!originST || !destST) return null;
 
-      const [availableSeats, fareQuote] = await Promise.all([
-        this.getAvailableSeatsCount(trip.tripId, originST.stopSequence, destST.stopSequence),
-        this.getBaseFare(trip.tripId, originST.stopSequence, destST.stopSequence)
-      ]);
+      const tripInventory = inventoryByTrip.get(trip.tripId) || [];
+      const legIndexes: number[] = [];
+      for (let i = originST.stopSequence; i < destST.stopSequence; i++) legIndexes.push(i);
+      const relevantInv = tripInventory.filter(r => legIndexes.includes(r.legIndex));
+      const seatMap = new Map<string, boolean>();
+      for (const row of relevantInv) {
+        if (row.booked || row.holdRef) {
+          seatMap.set(row.seatNo, false);
+        } else if (!seatMap.has(row.seatNo)) {
+          seatMap.set(row.seatNo, true);
+        }
+      }
+      const availableSeats = Array.from(seatMap.values()).filter(Boolean).length;
+
+      const fareQuote = await this.getBaseFare(trip.tripId, originST.stopSequence, destST.stopSequence);
 
       return {
         _baseId: trip.baseId ?? undefined,
@@ -448,7 +484,7 @@ export class AppService {
         destination: { stopId: destST.stopId, name: destST.stopName, code: destST.stopCode, sequence: destST.stopSequence, arriveAt: destST.arriveAt },
         availableSeats,
         farePerPerson: fareQuote,
-        stops: stopTimes.map(st => ({
+        stops: stopTimesForTrip.map(st => ({
           stopId: st.stopId,
           name: st.stopName,
           code: st.stopCode,
@@ -460,7 +496,7 @@ export class AppService {
       };
     }));
 
-    return enriched.filter((t) => t !== null) as (TripSearchResult & { _baseId?: string })[];
+    return enrichedWithFares.filter((t) => t !== null) as (TripSearchResult & { _baseId?: string })[];
   }
 
   private async searchVirtualTrips(
@@ -519,6 +555,19 @@ export class AppService {
       patternStopsMap.set(ps.patternId, list);
     }
 
+    const allPriceRulesResult = await db.execute(sql`
+      SELECT DISTINCT ON (pattern_id) pattern_id, rule
+      FROM price_rules
+      WHERE pattern_id IN (${sql.join(uniquePatternIds.map(id => sql`${id}`), sql`, `)})
+        AND trip_id IS NULL
+        AND deleted_at IS NULL
+      ORDER BY pattern_id, priority ASC
+    `);
+    const priceRulesByPattern = new Map<string, any>();
+    for (const row of allPriceRulesResult.rows as Record<string, unknown>[]) {
+      priceRulesByPattern.set(row.pattern_id as string, row.rule);
+    }
+
     const results: (TripSearchResult & { _baseId?: string })[] = [];
 
     for (const base of bases) {
@@ -551,7 +600,20 @@ export class AppService {
         destArriveUtc.setDate(destArriveUtc.getDate() + 1);
       }
 
-      const fareQuote = await this.getPatternFare(base.patternId, originPS.stopSequence, destPS.stopSequence);
+      let fareQuote = 0;
+      const cachedRule = priceRulesByPattern.get(base.patternId);
+      if (cachedRule) {
+        const ruleData = cachedRule as any;
+        const basePricePerLeg: number = ruleData?.basePricePerLeg ?? 0;
+        const multiplier: number = ruleData?.multiplier ?? 1;
+        const pricingMode: string = ruleData?.pricingMode ?? 'per_leg';
+        if (pricingMode === 'flat') {
+          fareQuote = Math.round(basePricePerLeg * multiplier);
+        } else {
+          const legCount = Math.max(destPS.stopSequence - originPS.stopSequence, 1);
+          fareQuote = Math.round(legCount * basePricePerLeg * multiplier);
+        }
+      }
 
       const stopsData: TripStopPointWithCity[] = pStops.map(ps => {
         const t = defaultTimes.find((dt: any) => dt.stopSequence === ps.stopSequence);
@@ -689,9 +751,13 @@ export class AppService {
       this.storage.getTripStopTimesWithEffectiveFlags(resolvedId)
     ]);
 
-    const stopsData: TripDetailResponse['stops'] = await Promise.all(
-      stopTimes.map(async (st: { stopId: string; stopName?: string; stopCode?: string; stopSequence: number; arriveAt: string | null; departAt: string | null; effectiveBoardingAllowed: boolean; effectiveAlightingAllowed: boolean }) => {
-        const stop = await this.storage.getStopById(st.stopId);
+    const stopIdsForDetail = [...new Set(stopTimes.map((st: any) => st.stopId))];
+    const allStopsForDetail = await this.storage.getStopsByIds(stopIdsForDetail);
+    const stopsDetailMap = new Map(allStopsForDetail.map(s => [s.id, s]));
+
+    const stopsData: TripDetailResponse['stops'] = stopTimes.map(
+      (st: { stopId: string; stopName?: string; stopCode?: string; stopSequence: number; arriveAt: string | null; departAt: string | null; effectiveBoardingAllowed: boolean; effectiveAlightingAllowed: boolean }) => {
+        const stop = stopsDetailMap.get(st.stopId);
         return {
           stopId: st.stopId as string,
           name: (stop?.name || st.stopName || '') as string,
@@ -703,7 +769,7 @@ export class AppService {
           boardingAllowed: Boolean(st.effectiveBoardingAllowed),
           alightingAllowed: Boolean(st.effectiveAlightingAllowed)
         };
-      })
+      }
     );
 
     const reviewStats = await db.execute(sql`
@@ -881,24 +947,24 @@ export class AppService {
     const legIndexes: number[] = [];
     for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
 
+    const seatNos = pax.map(p => p.seatNo);
+
     if (gatewayStatus === 'failed') {
       await db.transaction(async (tx) => {
         await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
         await tx.update(bookings).set({ status: 'canceled' }).where(eq(bookings.id, booking.id));
 
-        for (const p of pax) {
-          await tx.update(seatInventory)
-            .set({ holdRef: null })
-            .where(and(
-              eq(seatInventory.tripId, booking.tripId),
-              eq(seatInventory.seatNo, p.seatNo),
-              inArray(seatInventory.legIndex, legIndexes)
-            ));
-          await tx.delete(seatHolds).where(and(
-            eq(seatHolds.tripId, booking.tripId),
-            eq(seatHolds.seatNo, p.seatNo)
+        await tx.update(seatInventory)
+          .set({ holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, booking.tripId),
+            inArray(seatInventory.seatNo, seatNos),
+            inArray(seatInventory.legIndex, legIndexes)
           ));
-        }
+        await tx.delete(seatHolds).where(and(
+          eq(seatHolds.tripId, booking.tripId),
+          inArray(seatHolds.seatNo, seatNos)
+        ));
       });
       return { status: 'failed', bookingId: booking.id };
     }
@@ -911,73 +977,66 @@ export class AppService {
         ));
 
       if (activeHolds.length === 0) {
-        for (const p of pax) {
-          await tx.update(seatInventory)
-            .set({ holdRef: null })
-            .where(and(
-              eq(seatInventory.tripId, booking.tripId),
-              eq(seatInventory.seatNo, p.seatNo),
-              inArray(seatInventory.legIndex, legIndexes)
-            ));
-          await tx.delete(seatHolds).where(and(
-            eq(seatHolds.tripId, booking.tripId),
-            eq(seatHolds.seatNo, p.seatNo)
+        await tx.update(seatInventory)
+          .set({ holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, booking.tripId),
+            inArray(seatInventory.seatNo, seatNos),
+            inArray(seatInventory.legIndex, legIndexes)
           ));
-        }
+        await tx.delete(seatHolds).where(and(
+          eq(seatHolds.tripId, booking.tripId),
+          inArray(seatHolds.seatNo, seatNos)
+        ));
         await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
         await tx.update(bookings).set({ status: 'canceled' }).where(eq(bookings.id, booking.id));
         throw new Error("Seat holds have expired. Booking cannot be confirmed.");
       }
 
-      for (const p of pax) {
-        const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
-        const seatRows = await tx.execute(sql`
-          SELECT seat_no, booked FROM seat_inventory
-          WHERE trip_id = ${booking.tripId}
-            AND seat_no = ${p.seatNo}
-            AND leg_index = ANY(${legArr})
-          FOR UPDATE
-        `);
-        const alreadyBooked = seatRows.rows.some((r: Record<string, unknown>) => r.booked === true);
-        if (alreadyBooked) {
-          await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
-          await tx.update(bookings).set({ status: 'canceled' }).where(eq(bookings.id, booking.id));
-          for (const px of pax) {
-            await tx.update(seatInventory)
-              .set({ holdRef: null })
-              .where(and(
-                eq(seatInventory.tripId, booking.tripId),
-                eq(seatInventory.seatNo, px.seatNo),
-                inArray(seatInventory.legIndex, legIndexes)
-              ));
-            await tx.delete(seatHolds).where(and(
-              eq(seatHolds.tripId, booking.tripId),
-              eq(seatHolds.seatNo, px.seatNo)
-            ));
-          }
-          throw new Error(`Seat ${p.seatNo} is no longer available. Booking canceled.`);
-        }
+      const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
+      const seatArr = sql`ARRAY[${sql.join(seatNos.map(s => sql`${s}`), sql`, `)}]`;
+      const seatRows = await tx.execute(sql`
+        SELECT seat_no, booked FROM seat_inventory
+        WHERE trip_id = ${booking.tripId}
+          AND seat_no = ANY(${seatArr})
+          AND leg_index = ANY(${legArr})
+        FOR UPDATE
+      `);
+      const bookedSeat = (seatRows.rows as Record<string, unknown>[]).find(r => r.booked === true);
+      if (bookedSeat) {
+        await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
+        await tx.update(bookings).set({ status: 'canceled' }).where(eq(bookings.id, booking.id));
+        await tx.update(seatInventory)
+          .set({ holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, booking.tripId),
+            inArray(seatInventory.seatNo, seatNos),
+            inArray(seatInventory.legIndex, legIndexes)
+          ));
+        await tx.delete(seatHolds).where(and(
+          eq(seatHolds.tripId, booking.tripId),
+          inArray(seatHolds.seatNo, seatNos)
+        ));
+        throw new Error(`Seat ${bookedSeat.seat_no} is no longer available. Booking canceled.`);
       }
 
       await tx.update(bookings)
         .set({ status: 'confirmed' })
         .where(eq(bookings.id, booking.id));
 
-      for (const p of pax) {
-        await tx.update(seatInventory)
-          .set({ booked: true, holdRef: null })
-          .where(and(
-            eq(seatInventory.tripId, booking.tripId),
-            eq(seatInventory.seatNo, p.seatNo),
-            inArray(seatInventory.legIndex, legIndexes)
-          ));
+      await tx.update(seatInventory)
+        .set({ booked: true, holdRef: null })
+        .where(and(
+          eq(seatInventory.tripId, booking.tripId),
+          inArray(seatInventory.seatNo, seatNos),
+          inArray(seatInventory.legIndex, legIndexes)
+        ));
 
-        await tx.delete(seatHolds)
-          .where(and(
-            eq(seatHolds.tripId, booking.tripId),
-            eq(seatHolds.seatNo, p.seatNo)
-          ));
-      }
+      await tx.delete(seatHolds)
+        .where(and(
+          eq(seatHolds.tripId, booking.tripId),
+          inArray(seatHolds.seatNo, seatNos)
+        ));
 
       await tx.update(payments)
         .set({ status: 'success', paidAt: new Date() })
@@ -1029,21 +1088,32 @@ export class AppService {
     .where(eq(bookings.appUserId, userId))
     .orderBy(desc(bookings.createdAt));
 
-    const enriched = await Promise.all(result.map(async (b) => {
-      const [origin, dest, pax] = await Promise.all([
-        this.storage.getStopById(b.originStopId),
-        this.storage.getStopById(b.destinationStopId),
-        this.storage.getPassengers(b.id)
-      ]);
+    if (result.length === 0) return [];
+
+    const stopIds = [...new Set(result.flatMap(b => [b.originStopId, b.destinationStopId]))];
+    const bookingIds = result.map(b => b.id);
+
+    const [allStops, allPassengers] = await Promise.all([
+      this.storage.getStopsByIds(stopIds),
+      this.storage.getPassengersByBookingIds(bookingIds),
+    ]);
+
+    const stopsMap = new Map(allStops.map(s => [s.id, s]));
+    const paxCountMap = new Map<string, number>();
+    for (const p of allPassengers) {
+      paxCountMap.set(p.bookingId, (paxCountMap.get(p.bookingId) || 0) + 1);
+    }
+
+    return result.map(b => {
+      const origin = stopsMap.get(b.originStopId);
+      const dest = stopsMap.get(b.destinationStopId);
       return {
         ...b,
         origin: origin ? { name: origin.name, code: origin.code, city: origin.city } : null,
         destination: dest ? { name: dest.name, code: dest.code, city: dest.city } : null,
-        passengerCount: pax.length
+        passengerCount: paxCountMap.get(b.id) || 0
       };
-    }));
-
-    return enriched;
+    });
   }
 
   async getBookingDetail(bookingId: string, userId?: string): Promise<BookingDetailResponse> {
@@ -1143,22 +1213,22 @@ export class AppService {
     }
 
     const pax = await this.storage.getPassengers(bookingId);
-    const legIndexes: number[] = [];
-    for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
+    const seatNos = pax.map(p => p.seatNo);
+    const legIndexes = computeLegIndexes(booking.originSeq, booking.destinationSeq);
 
     await db.transaction(async (tx) => {
-      for (const p of pax) {
+      if (seatNos.length > 0) {
         await tx.update(seatInventory)
           .set({ booked: false, holdRef: null })
           .where(and(
             eq(seatInventory.tripId, booking.tripId),
-            eq(seatInventory.seatNo, p.seatNo),
+            inArray(seatInventory.seatNo, seatNos),
             inArray(seatInventory.legIndex, legIndexes)
           ));
 
         await tx.delete(seatHolds).where(and(
           eq(seatHolds.tripId, booking.tripId),
-          eq(seatHolds.seatNo, p.seatNo),
+          inArray(seatHolds.seatNo, seatNos),
           eq(seatHolds.bookingId, bookingId)
         ));
       }
