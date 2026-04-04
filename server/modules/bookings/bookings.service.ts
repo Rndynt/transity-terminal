@@ -2,7 +2,6 @@ import { IStorage } from "../../storage.interface";
 import { InsertBooking, Booking } from "@shared/schema";
 import { HoldsService } from "../holds/holds.service";
 import { DeterministicBookingService } from "./deterministicBooking.service";
-import { PromosService } from "../promos/promos.service";
 import { PrintService } from "../printing/print.service";
 import { db } from "../../db";
 import { bookings as bookingsTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable } from "@shared/schema";
@@ -10,23 +9,22 @@ import { eq, and, inArray, gt, lt, sql } from "drizzle-orm";
 import { webSocketService } from "../../realtime/ws";
 import {
   computeLegIndexes,
-  quoteFareForBooking,
   fetchBookingSnapshots,
   insertPassengerRows,
   validateBoardingAlighting,
+  confirmSeatsBooked,
+  calculateBookingTotal,
   generateBookingCode,
 } from "./booking.helpers";
 
 export class BookingsService {
   private holdsService: HoldsService;
   private deterministicService: DeterministicBookingService;
-  private promosService: PromosService;
   private printService: PrintService;
 
   constructor(private storage: IStorage) {
     this.holdsService = new HoldsService();
     this.deterministicService = new DeterministicBookingService(storage);
-    this.promosService = new PromosService(storage);
     this.printService = new PrintService();
   }
 
@@ -127,34 +125,11 @@ export class BookingsService {
       }
     }
 
-    const fareQuote = await quoteFareForBooking(this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq);
-    const subtotal = Number(fareQuote.total) * passengers.length;
+    const { fareQuote, total: expectedTotal, promo } = await calculateBookingTotal(
+      this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq,
+      passengers.length, bookingData.channel || undefined, promoCode
+    );
 
-    let discountAmount = 0;
-    let promoId: string | undefined;
-    let voucherCode: string | undefined;
-    let promoValidation: any;
-
-    if (promoCode) {
-      const trip = await this.storage.getTripById(bookingData.tripId);
-      promoValidation = await this.promosService.validateAndCalculateDiscount(
-        promoCode,
-        subtotal,
-        bookingData.channel || undefined,
-        bookingData.tripId,
-        trip?.patternId || undefined
-      );
-      if (!promoValidation.valid) {
-        throw new Error(promoValidation.error || 'Kode promo tidak valid');
-      }
-      discountAmount = promoValidation.discountAmount;
-      promoId = promoValidation.promotion?.id;
-      if (promoValidation.voucher) {
-        voucherCode = promoValidation.voucher.code;
-      }
-    }
-
-    const expectedTotal = subtotal - discountAmount;
     const paymentAmount = Number(payment.amount);
     if (Math.round(paymentAmount) !== Math.round(expectedTotal)) {
       throw new Error(`Payment amount ${paymentAmount} does not match expected total ${expectedTotal}`);
@@ -168,32 +143,14 @@ export class BookingsService {
         bookingCode: generateBookingCode(),
         status: 'paid',
         totalAmount: expectedTotal.toString(),
-        discountAmount: discountAmount.toString(),
-        promoId: promoId || null,
-        voucherCode: voucherCode || null,
+        discountAmount: promo.discountAmount.toString(),
+        promoId: promo.promoId || null,
+        voucherCode: promo.voucherCode || null,
         ...snapshots,
       }).returning();
 
       await insertPassengerRows(tx, newBooking.id, passengers, fareQuote);
-
-      for (const passengerData of passengers) {
-        await tx
-          .update(seatInventory)
-          .set({ booked: true, holdRef: null })
-          .where(and(
-            eq(seatInventory.tripId, bookingData.tripId),
-            eq(seatInventory.seatNo, passengerData.seatNo),
-            inArray(seatInventory.legIndex, legIndexes)
-          ));
-
-        await tx
-          .delete(seatHolds)
-          .where(and(
-            eq(seatHolds.tripId, bookingData.tripId),
-            eq(seatHolds.seatNo, passengerData.seatNo),
-            eq(seatHolds.operatorId, operatorId)
-          ));
-      }
+      await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);
 
       await tx.insert(paymentsTable).values({
         method: payment.method,
@@ -206,11 +163,11 @@ export class BookingsService {
         status: 'queued'
       });
 
-      if (promoId && promoValidation) {
+      if (promo.promoId && promo.promoValidation) {
         const [promoUpdate] = await tx.update(promotionsTable)
           .set({ usageCount: sql`${promotionsTable.usageCount} + 1` })
           .where(and(
-            eq(promotionsTable.id, promoId),
+            eq(promotionsTable.id, promo.promoId),
             eq(promotionsTable.isActive, true),
             sql`(${promotionsTable.usageLimit} IS NULL OR ${promotionsTable.usageCount} < ${promotionsTable.usageLimit})`
           ))
@@ -218,11 +175,11 @@ export class BookingsService {
         if (!promoUpdate) {
           throw new Error('Promo is no longer available or usage limit reached');
         }
-        if (promoValidation.voucher?.id) {
+        if (promo.promoValidation.voucher?.id) {
           const [voucherUpdate] = await tx.update(vouchersTable)
             .set({ status: 'used', usedAt: new Date(), usedByBookingId: newBooking.id })
             .where(and(
-              eq(vouchersTable.id, promoValidation.voucher.id),
+              eq(vouchersTable.id, promo.promoValidation.voucher.id),
               eq(vouchersTable.status, 'active')
             ))
             .returning({ id: vouchersTable.id });
@@ -303,6 +260,7 @@ export class BookingsService {
     const config = getConfig();
     
     const legIndexes = computeLegIndexes(bookingData.originSeq, bookingData.destinationSeq);
+    const seatNos = passengers.map(p => p.seatNo);
 
     for (const passenger of passengers) {
       const [holdRecord] = await db
@@ -321,13 +279,15 @@ export class BookingsService {
       }
     }
 
-    const fareQuote = await quoteFareForBooking(this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq);
+    const { fareQuote, total: expectedTotal } = await calculateBookingTotal(
+      this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq,
+      passengers.length
+    );
 
     const now = new Date();
     const pendingExpiresAt = new Date(now.getTime() + (config.holdTtlLongSeconds * 1000));
 
     const snapshots = await fetchBookingSnapshots(this.storage, bookingData.tripId, bookingData.originStopId, bookingData.destinationStopId, bookingData.outletId, bookingData.originSeq);
-    const expectedTotal = Number(fareQuote.total) * passengers.length;
 
     const booking = await db.transaction(async (tx) => {
       const [newBooking] = await tx.insert(bookingsTable).values({
@@ -340,25 +300,7 @@ export class BookingsService {
       }).returning();
 
       await insertPassengerRows(tx, newBooking.id, passengers, fareQuote);
-
-      for (const passengerData of passengers) {
-        await tx
-          .update(seatInventory)
-          .set({ booked: true, holdRef: null })
-          .where(and(
-            eq(seatInventory.tripId, bookingData.tripId),
-            eq(seatInventory.seatNo, passengerData.seatNo),
-            inArray(seatInventory.legIndex, legIndexes)
-          ));
-
-        await tx
-          .delete(seatHolds)
-          .where(and(
-            eq(seatHolds.tripId, bookingData.tripId),
-            eq(seatHolds.seatNo, passengerData.seatNo),
-            eq(seatHolds.operatorId, operatorId)
-          ));
-      }
+      await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);
 
       return newBooking;
     });

@@ -1,10 +1,11 @@
 import { IStorage } from "../../storage.interface";
 import { PricingService } from "../pricing/pricing.service";
-import { passengers as passengersTable } from "@shared/schema";
+import { PromosService } from "../promos/promos.service";
+import { passengers as passengersTable, seatInventory, seatHolds } from "@shared/schema";
 import { scheduleStopExceptions } from "@shared/schema/scheduling";
 import { generateBookingCode, generateTicketNumber } from "../../utils/codeGenerator";
 import { db } from "../../db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray, gt, sql } from "drizzle-orm";
 
 export { generateBookingCode, generateTicketNumber };
 
@@ -142,4 +143,139 @@ export async function validateBoardingAlighting(
       }
     }
   }
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export async function confirmSeatsBooked(
+  tx: Tx,
+  tripId: string,
+  seatNos: string[],
+  legIndexes: number[],
+  operatorId: string
+) {
+  for (const seatNo of seatNos) {
+    await tx
+      .update(seatInventory)
+      .set({ booked: true, holdRef: null })
+      .where(and(
+        eq(seatInventory.tripId, tripId),
+        eq(seatInventory.seatNo, seatNo),
+        inArray(seatInventory.legIndex, legIndexes)
+      ));
+
+    await tx
+      .delete(seatHolds)
+      .where(and(
+        eq(seatHolds.tripId, tripId),
+        eq(seatHolds.seatNo, seatNo),
+        eq(seatHolds.operatorId, operatorId)
+      ));
+  }
+}
+
+export async function checkSeatsAvailable(
+  tx: Tx,
+  tripId: string,
+  seatNos: string[],
+  legIndexes: number[]
+) {
+  for (const seatNo of seatNos) {
+    const inv = await tx.execute(sql`
+      SELECT seat_no, booked, hold_ref FROM seat_inventory
+      WHERE trip_id = ${tripId}
+        AND seat_no = ${seatNo}
+        AND leg_index = ANY(${legIndexes})
+      FOR UPDATE
+    `);
+    const booked = inv.rows.some((r: Record<string, unknown>) => r.booked === true);
+    const held = inv.rows.some((r: Record<string, unknown>) => !!r.hold_ref);
+    if (booked) throw new Error(`Seat ${seatNo} is already booked`);
+    if (held) throw new Error(`Seat ${seatNo} is currently held by another user`);
+  }
+}
+
+export async function createSeatHoldsForBooking(
+  tx: Tx,
+  tripId: string,
+  bookingId: string,
+  seatNos: string[],
+  legIndexes: number[],
+  holderId: string | null,
+  expiresAt: Date
+) {
+  for (const seatNo of seatNos) {
+    const holdRef = `app-hold:${bookingId}:${seatNo}`;
+
+    await tx.insert(seatHolds).values({
+      holdRef,
+      tripId,
+      seatNo,
+      legIndexes,
+      ttlClass: 'short',
+      operatorId: holderId,
+      bookingId,
+      expiresAt,
+    });
+
+    await tx.update(seatInventory)
+      .set({ holdRef })
+      .where(and(
+        eq(seatInventory.tripId, tripId),
+        eq(seatInventory.seatNo, seatNo),
+        inArray(seatInventory.legIndex, legIndexes)
+      ));
+  }
+}
+
+export interface PromoResult {
+  discountAmount: number;
+  promoId: string | undefined;
+  voucherCode: string | undefined;
+  promoValidation: any;
+}
+
+export async function calculateBookingTotal(
+  storage: IStorage,
+  tripId: string,
+  originSeq: number,
+  destinationSeq: number,
+  passengerCount: number,
+  channel?: string,
+  promoCode?: string
+): Promise<{ fareQuote: Awaited<ReturnType<PricingService['quoteFare']>>; subtotal: number; total: number; promo: PromoResult }> {
+  const fareQuote = await quoteFareForBooking(storage, tripId, originSeq, destinationSeq);
+  const subtotal = Number(fareQuote.total) * passengerCount;
+
+  let discountAmount = 0;
+  let promoId: string | undefined;
+  let voucherCode: string | undefined;
+  let promoValidation: any;
+
+  if (promoCode) {
+    const promosService = new PromosService(storage);
+    const trip = await storage.getTripById(tripId);
+    promoValidation = await promosService.validateAndCalculateDiscount(
+      promoCode,
+      subtotal,
+      channel,
+      tripId,
+      trip?.patternId || undefined
+    );
+    if (!promoValidation.valid) {
+      throw new Error(promoValidation.error || 'Kode promo tidak valid');
+    }
+    discountAmount = promoValidation.discountAmount;
+    promoId = promoValidation.promotion?.id;
+    if (promoValidation.voucher) {
+      voucherCode = promoValidation.voucher.code;
+    }
+  }
+
+  return {
+    fareQuote,
+    subtotal,
+    total: subtotal - discountAmount,
+    promo: { discountAmount, promoId, voucherCode, promoValidation },
+  };
 }

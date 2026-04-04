@@ -13,10 +13,12 @@ import { IStorage } from "../../storage.interface";
 import { fromZonedHHMMToUtc } from "../../utils/timezone";
 import {
   computeLegIndexes,
-  quoteFareForBooking,
+  calculateBookingTotal,
   fetchBookingSnapshots,
   insertPassengerRows,
   validateBoardingAlighting,
+  checkSeatsAvailable,
+  createSeatHoldsForBooking,
   generateBookingCode,
 } from "../bookings/booking.helpers";
 
@@ -812,10 +814,13 @@ export class AppService {
 
     await validateBoardingAlighting(this.storage, resolvedTripId, params.originSeq, params.destinationSeq);
 
-    const fareQuote = await quoteFareForBooking(this.storage, resolvedTripId, params.originSeq, params.destinationSeq);
-    const totalAmount = Number(fareQuote.total) * params.passengers.length;
+    const { fareQuote, total: totalAmount } = await calculateBookingTotal(
+      this.storage, resolvedTripId, params.originSeq, params.destinationSeq,
+      params.passengers.length
+    );
 
     const legIndexes = computeLegIndexes(params.originSeq, params.destinationSeq);
+    const seatNos = params.passengers.map(p => p.seatNo);
 
     const HOLD_TTL_MINUTES = 15;
     const holdExpiresAt = new Date(Date.now() + HOLD_TTL_MINUTES * 60 * 1000);
@@ -823,19 +828,7 @@ export class AppService {
     const snapshots = await fetchBookingSnapshots(this.storage, resolvedTripId, params.originStopId, params.destinationStopId, null, params.originSeq);
 
     const bookingId = await db.transaction(async (tx) => {
-      for (const pax of params.passengers) {
-        const inv = await tx.execute(sql`
-          SELECT seat_no, booked, hold_ref FROM seat_inventory
-          WHERE trip_id = ${resolvedTripId}
-            AND seat_no = ${pax.seatNo}
-            AND leg_index = ANY(${legIndexes})
-          FOR UPDATE
-        `);
-        const booked = inv.rows.some((r: Record<string, unknown>) => r.booked === true);
-        const held = inv.rows.some((r: Record<string, unknown>) => !!r.hold_ref);
-        if (booked) throw new Error(`Seat ${pax.seatNo} is already booked`);
-        if (held) throw new Error(`Seat ${pax.seatNo} is currently held by another user`);
-      }
+      await checkSeatsAvailable(tx, resolvedTripId, seatNos, legIndexes);
 
       const [booking] = await tx.insert(bookings).values({
         tripId: resolvedTripId,
@@ -855,29 +848,7 @@ export class AppService {
       }).returning({ id: bookings.id });
 
       await insertPassengerRows(tx, booking.id, params.passengers, fareQuote);
-
-      for (const pax of params.passengers) {
-        const holdRef = `app-hold:${booking.id}:${pax.seatNo}`;
-
-        await tx.insert(seatHolds).values({
-          holdRef,
-          tripId: resolvedTripId,
-          seatNo: pax.seatNo,
-          legIndexes: legIndexes,
-          ttlClass: 'short',
-          operatorId: params.userId,
-          bookingId: booking.id,
-          expiresAt: holdExpiresAt,
-        });
-
-        await tx.update(seatInventory)
-          .set({ holdRef })
-          .where(and(
-            eq(seatInventory.tripId, resolvedTripId),
-            eq(seatInventory.seatNo, pax.seatNo),
-            inArray(seatInventory.legIndex, legIndexes)
-          ));
-      }
+      await createSeatHoldsForBooking(tx, resolvedTripId, booking.id, seatNos, legIndexes, params.userId, holdExpiresAt);
 
       const { randomBytes } = await import('crypto');
       const paymentRef = `PAY-${randomBytes(12).toString('hex').toUpperCase()}`;

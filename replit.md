@@ -109,9 +109,13 @@ See `DEPLOY.md` for full VPS deployment guide. Key points:
 `server/modules/bookings/booking.helpers.ts` contains shared logic used by both CSO (`BookingsService`) and Public API (`AppService`) booking flows:
 - `computeLegIndexes(originSeq, destSeq)` — computes seat-leg range
 - `quoteFareForBooking(storage, tripId, originSeq, destSeq)` — pricing with error handling
+- `calculateBookingTotal(storage, tripId, originSeq, destSeq, paxCount, channel?, promoCode?)` — full total calculation including promo/voucher validation and discount
 - `fetchBookingSnapshots(storage, tripId, originStopId, destStopId, outletId?, originSeq?)` — fetches snapshot data (stop names, departure time, outlet name) with fallback to stop-time when `originDepartHHMM` is null
 - `insertPassengerRows(tx, bookingId, passengers, fareQuote)` — inserts passengers with auto-generated ticket numbers
 - `validateBoardingAlighting(storage, tripId, originSeq, destSeq)` — validates boarding/alighting rules including schedule exceptions
+- `confirmSeatsBooked(tx, tripId, seatNos, legIndexes, operatorId)` — marks seats as booked in inventory and clears holds (CSO flow)
+- `checkSeatsAvailable(tx, tripId, seatNos, legIndexes)` — checks seat availability with `FOR UPDATE` lock (App flow)
+- `createSeatHoldsForBooking(tx, tripId, bookingId, seatNos, legIndexes, holderId, expiresAt)` — creates holds and sets holdRef on inventory (App flow)
 - Re-exports `generateBookingCode` and `generateTicketNumber` from `utils/codeGenerator`
 
 ## Real-time WebSocket Architecture
