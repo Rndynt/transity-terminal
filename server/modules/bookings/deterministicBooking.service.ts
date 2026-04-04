@@ -6,6 +6,15 @@ import { randomUUID } from "crypto";
 import { PricingService } from "../pricing/pricing.service";
 import { PrintService } from "../printing/print.service";
 import { webSocketService } from "../../realtime/ws";
+import {
+  computeLegIndexes,
+  calculateBookingTotal,
+  fetchBookingSnapshots,
+  insertPassengerRows,
+  confirmSeatsBooked,
+  generateBookingCode,
+  validateBoardingAlighting,
+} from "./booking.helpers";
 
 export interface SeatHoldRequest {
   tripId: string;
