@@ -562,26 +562,29 @@ export default function SeatMap({
         </div>
 
         <div className="w-full flex justify-center">
-          <div className="inline-grid gap-1" style={{ gridTemplateColumns: `repeat(${gridCols}, 2.25rem)` }}>
+          <div className="inline-grid gap-1.5" style={{ gridTemplateColumns: `repeat(${gridCols}, 2.75rem)` }}>
             {seatGrid.flatMap((row, ri) =>
               row.map((seat, ci) => {
-                if (seat === null) return <div key={`gap-${ri}-${ci}`} className="w-9 h-9" />;
+                if (seat === null) return <div key={`gap-${ri}-${ci}`} className="w-11 h-11" />;
                 const status = getSeatStatus(seat.seat_no);
                 const holdTTL = getHoldTTL(seat.seat_no);
                 const isMultiSeat = !!(seatmap?.seatAvailability[seat.seat_no]?.isMultiSeat);
+                const showTTL = holdTTL > 0 && (status === 'held' || status === 'selected');
                 return (
-                  <div key={seat.seat_no} className="relative w-9 h-9">
+                  <div key={seat.seat_no} className="relative w-11 h-11">
                     <button
                       onClick={() => !isSeatLoading(seat.seat_no) && !assignSeatMutation.isPending && !rescheduleMutation.isPending && handleSeatClick(seat.seat_no)}
                       disabled={isSeatLoading(seat.seat_no) || assignSeatMutation.isPending || rescheduleMutation.isPending || status === 'blocked'}
                       data-testid={`seat-${seat.seat_no}`}
-                      className={`w-9 h-9 rounded-lg border text-[10px] font-bold font-mono transition-all duration-100 flex items-center justify-center ${seatColors[status]} ${isSeatLoading(seat.seat_no) ? 'opacity-50' : ''}`}
+                      className={`w-11 h-11 rounded-lg border text-xs font-bold font-mono transition-all duration-100 flex items-center justify-center ${seatColors[status]} ${isSeatLoading(seat.seat_no) ? 'opacity-50' : ''}`}
                     >
-                      {isSeatLoading(seat.seat_no) ? <Loader2 className="w-3 h-3 animate-spin" /> : seat.seat_no}
+                      {isSeatLoading(seat.seat_no) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : seat.seat_no}
                     </button>
-                    {status === 'held' && holdTTL > 0 && (
+                    {showTTL && (
                       <span className={`absolute -top-1.5 -right-1.5 px-1 py-px rounded text-[7px] font-mono font-bold z-10 ${
-                        holdTTL < 60 ? 'bg-red-500 text-white animate-pulse' : 'bg-amber-400 text-amber-900'
+                        status === 'selected'
+                          ? (holdTTL < 60 ? 'bg-red-500 text-white animate-pulse' : 'bg-blue-700 text-white')
+                          : (holdTTL < 60 ? 'bg-red-500 text-white animate-pulse' : 'bg-amber-400 text-amber-900')
                       }`}>{formatTTL(holdTTL)}</span>
                     )}
                     {isMultiSeat && status === 'booked' && (
