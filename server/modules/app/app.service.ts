@@ -1,6 +1,6 @@
 import { db } from "../../db";
 import { 
-  appUsers, reviews, bookings, passengers, payments, trips, tripPatterns, 
+  appUsers, reviews, bookings, payments, trips, tripPatterns, 
   tripStopTimes, stops, patternStops, vehicles, cargoShipments, cargoTypes,
   seatInventory, tripLegs, seatHolds, tripBases, scheduleExceptions,
   operatorSettings,
@@ -11,7 +11,14 @@ import bcrypt from "bcryptjs";
 import { signToken, type AppUserPayload } from "./app.auth";
 import { IStorage } from "../../storage.interface";
 import { fromZonedHHMMToUtc } from "../../utils/timezone";
-import { generateBookingCode, generateTicketNumber } from "../../utils/codeGenerator";
+import {
+  computeLegIndexes,
+  quoteFareForBooking,
+  fetchBookingSnapshots,
+  insertPassengerRows,
+  validateBoardingAlighting,
+  generateBookingCode,
+} from "../bookings/booking.helpers";
 
 interface OperatorSummary {
   id: string;
@@ -803,26 +810,17 @@ export class AppService {
   }): Promise<BookingDetailResponse> {
     const resolvedTripId = await this.resolveTripId(params.tripId, params.serviceDate);
 
-    const { PricingService } = await import("../pricing/pricing.service");
-    const pricingService = new PricingService(this.storage);
-    const fareQuote = await pricingService.quoteFare(resolvedTripId, params.originSeq, params.destinationSeq);
+    await validateBoardingAlighting(this.storage, resolvedTripId, params.originSeq, params.destinationSeq);
 
+    const fareQuote = await quoteFareForBooking(this.storage, resolvedTripId, params.originSeq, params.destinationSeq);
     const totalAmount = Number(fareQuote.total) * params.passengers.length;
 
-    const legIndexes: number[] = [];
-    for (let i = params.originSeq; i < params.destinationSeq; i++) legIndexes.push(i);
+    const legIndexes = computeLegIndexes(params.originSeq, params.destinationSeq);
 
     const HOLD_TTL_MINUTES = 15;
     const holdExpiresAt = new Date(Date.now() + HOLD_TTL_MINUTES * 60 * 1000);
 
-    const [originStop, destinationStop, trip] = await Promise.all([
-      this.storage.getStopById(params.originStopId),
-      this.storage.getStopById(params.destinationStopId),
-      this.storage.getTripById(resolvedTripId),
-    ]);
-
-    const tripStopTimesData = trip ? await this.storage.getTripStopTimes(resolvedTripId) : [];
-    const originST = tripStopTimesData.find(st => st.stopSequence === params.originSeq);
+    const snapshots = await fetchBookingSnapshots(this.storage, resolvedTripId, params.originStopId, params.destinationStopId, null, params.originSeq);
 
     const bookingId = await db.transaction(async (tx) => {
       for (const pax of params.passengers) {
@@ -852,25 +850,14 @@ export class AppService {
         pendingExpiresAt: holdExpiresAt,
         totalAmount: totalAmount.toString(),
         discountAmount: '0',
-        snapOriginStopName: originStop?.name || null,
-        snapDestinationStopName: destinationStop?.name || null,
-        snapDepartureHHMM: trip?.originDepartHHMM || (originST?.departAt ? String(originST.departAt).slice(11, 16) : null),
+        ...snapshots,
         createdBy: params.userId ? `app:${params.userId}` : 'service-client'
       }).returning({ id: bookings.id });
 
+      await insertPassengerRows(tx, booking.id, params.passengers, fareQuote);
+
       for (const pax of params.passengers) {
         const holdRef = `app-hold:${booking.id}:${pax.seatNo}`;
-
-        await tx.insert(passengers).values({
-          bookingId: booking.id,
-          ticketNumber: generateTicketNumber(),
-          fullName: pax.fullName,
-          phone: pax.phone,
-          idNumber: pax.idNumber,
-          seatNo: pax.seatNo,
-          fareAmount: fareQuote.perPassenger.toString(),
-          fareBreakdown: fareQuote.breakdown
-        });
 
         await tx.insert(seatHolds).values({
           holdRef,

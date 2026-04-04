@@ -1,28 +1,31 @@
 import { IStorage } from "../../storage.interface";
-import { InsertBooking, Booking, InsertPassenger, InsertPayment, InsertPrintJob } from "@shared/schema";
+import { InsertBooking, Booking } from "@shared/schema";
 import { HoldsService } from "../holds/holds.service";
 import { DeterministicBookingService } from "./deterministicBooking.service";
-import { PricingService } from "../pricing/pricing.service";
 import { PromosService } from "../promos/promos.service";
 import { PrintService } from "../printing/print.service";
 import { db } from "../../db";
-import { bookings as bookingsTable, passengers as passengersTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable } from "@shared/schema";
-import { scheduleStopExceptions } from "@shared/schema/scheduling";
+import { bookings as bookingsTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable } from "@shared/schema";
 import { eq, and, inArray, gt, lt, sql } from "drizzle-orm";
 import { webSocketService } from "../../realtime/ws";
-import { generateBookingCode, generateTicketNumber } from "../../utils/codeGenerator";
+import {
+  computeLegIndexes,
+  quoteFareForBooking,
+  fetchBookingSnapshots,
+  insertPassengerRows,
+  validateBoardingAlighting,
+  generateBookingCode,
+} from "./booking.helpers";
 
 export class BookingsService {
   private holdsService: HoldsService;
   private deterministicService: DeterministicBookingService;
-  private pricingService: PricingService;
   private promosService: PromosService;
   private printService: PrintService;
 
   constructor(private storage: IStorage) {
     this.holdsService = new HoldsService();
     this.deterministicService = new DeterministicBookingService(storage);
-    this.pricingService = new PricingService(storage);
     this.promosService = new PromosService(storage);
     this.printService = new PrintService();
   }
@@ -94,17 +97,9 @@ export class BookingsService {
     promoCode?: string
   ): Promise<{ booking: Booking; printPayload: any }> {
     
-    await this.validateBoardingAlightingRules(
-      bookingData.tripId,
-      bookingData.originSeq,
-      bookingData.destinationSeq
-    );
-    
-    const legIndexes = [];
-    for (let i = bookingData.originSeq; i < bookingData.destinationSeq; i++) {
-      legIndexes.push(i);
-    }
+    await validateBoardingAlighting(this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq);
 
+    const legIndexes = computeLegIndexes(bookingData.originSeq, bookingData.destinationSeq);
     const operatorId = bookingData.createdBy || 'default-operator';
 
     const seatNos = passengers.map(p => p.seatNo);
@@ -132,20 +127,7 @@ export class BookingsService {
       }
     }
 
-    let fareQuote: Awaited<ReturnType<typeof this.pricingService.quoteFare>>;
-    try {
-      fareQuote = await this.pricingService.quoteFare(
-        bookingData.tripId,
-        bookingData.originSeq,
-        bookingData.destinationSeq
-      );
-    } catch (err: any) {
-      if (err.message === 'NO_PRICE_RULE') {
-        throw new Error('Trip ini belum memiliki aturan harga. Hubungi admin untuk mengatur harga sebelum memesan tiket.');
-      }
-      throw err;
-    }
-
+    const fareQuote = await quoteFareForBooking(this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq);
     const subtotal = Number(fareQuote.total) * passengers.length;
 
     let discountAmount = 0;
@@ -178,12 +160,7 @@ export class BookingsService {
       throw new Error(`Payment amount ${paymentAmount} does not match expected total ${expectedTotal}`);
     }
 
-    const [originStop, destinationStop, trip, outlet] = await Promise.all([
-      this.storage.getStopById(bookingData.originStopId),
-      this.storage.getStopById(bookingData.destinationStopId),
-      this.storage.getTripById(bookingData.tripId),
-      bookingData.outletId ? this.storage.getOutletById(bookingData.outletId) : null,
-    ]);
+    const snapshots = await fetchBookingSnapshots(this.storage, bookingData.tripId, bookingData.originStopId, bookingData.destinationStopId, bookingData.outletId, bookingData.originSeq);
 
     const booking = await db.transaction(async (tx) => {
       const [newBooking] = await tx.insert(bookingsTable).values({
@@ -194,21 +171,12 @@ export class BookingsService {
         discountAmount: discountAmount.toString(),
         promoId: promoId || null,
         voucherCode: voucherCode || null,
-        snapOriginStopName: originStop?.name || null,
-        snapDestinationStopName: destinationStop?.name || null,
-        snapDepartureHHMM: trip?.originDepartHHMM || null,
-        snapOutletName: outlet?.name || null,
+        ...snapshots,
       }).returning();
 
-      for (const passengerData of passengers) {
-        await tx.insert(passengersTable).values({
-          ...passengerData,
-          ticketNumber: generateTicketNumber(),
-          bookingId: newBooking.id,
-          fareAmount: fareQuote.perPassenger.toString(),
-          fareBreakdown: fareQuote.breakdown
-        });
+      await insertPassengerRows(tx, newBooking.id, passengers, fareQuote);
 
+      for (const passengerData of passengers) {
         await tx
           .update(seatInventory)
           .set({ booked: true, holdRef: null })
@@ -273,60 +241,6 @@ export class BookingsService {
     return { booking: bookingWithRelations, printPayload };
   }
 
-  private async validateBoardingAlightingRules(
-    tripId: string,
-    originSeq: number,
-    destinationSeq: number
-  ): Promise<void> {
-    const stopTimes = await this.storage.getTripStopTimesWithEffectiveFlags(tripId);
-    
-    const originStop = stopTimes.find(st => st.stopSequence === originSeq);
-    const destinationStop = stopTimes.find(st => st.stopSequence === destinationSeq);
-    
-    if (!originStop) {
-      throw new Error(`Origin stop at sequence ${originSeq} not found`);
-    }
-    
-    if (!destinationStop) {
-      throw new Error(`Destination stop at sequence ${destinationSeq} not found`);
-    }
-    
-    if (!originStop.effectiveBoardingAllowed) {
-      const error = new Error('Boarding not allowed at this stop');
-      (error as any).code = 'boarding-not-allowed';
-      throw error;
-    }
-    
-    if (!destinationStop.effectiveAlightingAllowed) {
-      const error = new Error('Alighting not allowed at this stop');
-      (error as any).code = 'alighting-not-allowed';
-      throw error;
-    }
-
-    const trip = await this.storage.getTripById(tripId);
-    if (trip?.baseId && trip?.serviceDate) {
-      const stopExceptions = await db.select()
-        .from(scheduleStopExceptions)
-        .where(and(
-          eq(scheduleStopExceptions.baseId, trip.baseId),
-          eq(scheduleStopExceptions.exceptionDate, trip.serviceDate),
-        ));
-
-      for (const ex of stopExceptions) {
-        if (ex.stopId === originStop.stopId && ex.disableBoarding) {
-          const error = new Error('Titik naik ini ditutup sementara oleh operasional');
-          (error as any).code = 'stop-closed-by-ops';
-          throw error;
-        }
-        if (ex.stopId === destinationStop.stopId && ex.disableAlighting) {
-          const error = new Error('Titik turun ini ditutup sementara oleh operasional');
-          (error as any).code = 'stop-closed-by-ops';
-          throw error;
-        }
-      }
-    }
-  }
-
   async createHold(
     tripId: string, 
     seatNo: string, 
@@ -388,13 +302,8 @@ export class BookingsService {
     const { getConfig } = await import("../../config");
     const config = getConfig();
     
-    // Validate that all required seats are held by this operator
-    const legIndexes = [];
-    for (let i = bookingData.originSeq; i < bookingData.destinationSeq; i++) {
-      legIndexes.push(i);
-    }
+    const legIndexes = computeLegIndexes(bookingData.originSeq, bookingData.destinationSeq);
 
-    // Check seat holds from DATABASE for all passengers
     for (const passenger of passengers) {
       const [holdRecord] = await db
         .select()
@@ -406,38 +315,18 @@ export class BookingsService {
           eq(seatHolds.operatorId, operatorId)
         ))
         .limit(1);
-      
+
       if (!holdRecord) {
         throw new Error(`Seat ${passenger.seatNo} is not held or hold has expired`);
       }
     }
 
-    // Calculate pricing
-    let fareQuote: Awaited<ReturnType<typeof this.pricingService.quoteFare>>;
-    try {
-      fareQuote = await this.pricingService.quoteFare(
-        bookingData.tripId,
-        bookingData.originSeq,
-        bookingData.destinationSeq
-      );
-    } catch (err: any) {
-      if (err.message === 'NO_PRICE_RULE') {
-        throw new Error('Trip ini belum memiliki aturan harga. Hubungi admin untuk mengatur harga sebelum memesan tiket.');
-      }
-      throw err;
-    }
+    const fareQuote = await quoteFareForBooking(this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq);
 
-    // Set pending expiration
     const now = new Date();
     const pendingExpiresAt = new Date(now.getTime() + (config.holdTtlLongSeconds * 1000));
 
-    const [originStop, destinationStop, tripForSnap, outlet] = await Promise.all([
-      this.storage.getStopById(bookingData.originStopId),
-      this.storage.getStopById(bookingData.destinationStopId),
-      this.storage.getTripById(bookingData.tripId),
-      bookingData.outletId ? this.storage.getOutletById(bookingData.outletId) : null,
-    ]);
-
+    const snapshots = await fetchBookingSnapshots(this.storage, bookingData.tripId, bookingData.originStopId, bookingData.destinationStopId, bookingData.outletId, bookingData.originSeq);
     const expectedTotal = Number(fareQuote.total) * passengers.length;
 
     const booking = await db.transaction(async (tx) => {
@@ -447,21 +336,12 @@ export class BookingsService {
         status: 'pending',
         totalAmount: expectedTotal.toString(),
         pendingExpiresAt,
-        snapOriginStopName: originStop?.name || null,
-        snapDestinationStopName: destinationStop?.name || null,
-        snapDepartureHHMM: tripForSnap?.originDepartHHMM || null,
-        snapOutletName: outlet?.name || null,
+        ...snapshots,
       }).returning();
 
-      for (const passengerData of passengers) {
-        await tx.insert(passengersTable).values({
-          ...passengerData,
-          ticketNumber: generateTicketNumber(),
-          bookingId: newBooking.id,
-          fareAmount: fareQuote.perPassenger.toString(),
-          fareBreakdown: fareQuote.breakdown
-        });
+      await insertPassengerRows(tx, newBooking.id, passengers, fareQuote);
 
+      for (const passengerData of passengers) {
         await tx
           .update(seatInventory)
           .set({ booked: true, holdRef: null })

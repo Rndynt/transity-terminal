@@ -105,6 +105,15 @@ See `DEPLOY.md` for full VPS deployment guide. Key points:
 - **bcryptjs**: For password hashing in the mobile API.
 - **Payment Gateway**: Webhook integration for payment verification (requires `PAYMENT_WEBHOOK_SECRET`).
 
+## Shared Booking Helpers
+`server/modules/bookings/booking.helpers.ts` contains shared logic used by both CSO (`BookingsService`) and Public API (`AppService`) booking flows:
+- `computeLegIndexes(originSeq, destSeq)` — computes seat-leg range
+- `quoteFareForBooking(storage, tripId, originSeq, destSeq)` — pricing with error handling
+- `fetchBookingSnapshots(storage, tripId, originStopId, destStopId, outletId?, originSeq?)` — fetches snapshot data (stop names, departure time, outlet name) with fallback to stop-time when `originDepartHHMM` is null
+- `insertPassengerRows(tx, bookingId, passengers, fareQuote)` — inserts passengers with auto-generated ticket numbers
+- `validateBoardingAlighting(storage, tripId, originSeq, destSeq)` — validates boarding/alighting rules including schedule exceptions
+- Re-exports `generateBookingCode` and `generateTicketNumber` from `utils/codeGenerator`
+
 ## Real-time WebSocket Architecture
 The system uses Socket.io with room-based subscriptions for efficient event targeting:
 - **Rooms**: `trip:{tripId}` (seat-level updates), `base:{baseId}` (materialization/status), `cso:{outletId}:{serviceDate}` (outlet-scoped CSO terminal updates).
