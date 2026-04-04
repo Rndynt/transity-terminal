@@ -240,16 +240,16 @@ export default function PassengerForm({
         </div>
       )}
 
-      {/* ── Scrollable passenger list ── */}
+      {/* ── Single scrollable area: passengers + payment ── */}
       <div className="flex-1 overflow-y-auto px-3 md:px-5 py-2 min-h-0">
-        <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
+        <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2">
             <h3 className="text-xs font-bold text-gray-800">Data Penumpang</h3>
             <span className="text-[10px] text-gray-400">{filledCount}/{selectedSeats.length} terisi</span>
           </div>
         </div>
 
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 mb-3">
           {formData.map((passenger, index) => {
             const nameKey = `name-${passenger.seatNo}`;
             const phoneKey = `phone-${passenger.seatNo}`;
@@ -260,23 +260,25 @@ export default function PassengerForm({
             return (
               <div
                 key={passenger.seatNo}
-                className={`border rounded-lg px-2.5 py-1.5 transition-colors ${
+                className={`border rounded-lg p-2 transition-colors ${
                   isFilled ? 'bg-emerald-50/50 border-emerald-200' : 'bg-gray-50 border-gray-200'
                 }`}
                 data-testid={`passenger-form-${index}`}
               >
-                <div className="flex items-center gap-2">
-                  <div className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center ${
-                    isFilled ? 'bg-emerald-100' : 'bg-blue-100'
-                  }`}>
-                    {isFilled
-                      ? <Check className="w-2.5 h-2.5 text-emerald-600" />
-                      : <span className="text-[8px] font-bold text-blue-600">{index + 1}</span>
-                    }
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <div className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center ${
+                      isFilled ? 'bg-emerald-100' : 'bg-blue-100'
+                    }`}>
+                      {isFilled
+                        ? <Check className="w-2.5 h-2.5 text-emerald-600" />
+                        : <span className="text-[8px] font-bold text-blue-600">{index + 1}</span>
+                      }
+                    </div>
+                    <span className="text-[11px] font-semibold text-gray-600">Penumpang {index + 1}</span>
                   </div>
-
                   {isRoundTrip && returnSeats ? (
-                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                    <div className="flex items-center gap-0.5">
                       <span className="px-1 py-px bg-blue-100 text-blue-700 rounded text-[9px] font-mono font-bold">
                         {passenger.seatNo}
                       </span>
@@ -286,59 +288,57 @@ export default function PassengerForm({
                       </span>
                     </div>
                   ) : (
-                    <span className="px-1 py-px bg-blue-100 text-blue-700 rounded text-[9px] font-mono font-bold flex-shrink-0">
+                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[9px] font-mono font-bold">
                       {passenger.seatNo}
                     </span>
                   )}
-
-                  <div className="flex gap-1.5 flex-1 min-w-0">
-                    <div className="flex-[2] min-w-0">
-                      <input
-                        value={passenger.fullName}
-                        onChange={(e) => handleInputChange(index, 'fullName', e.target.value)}
-                        onBlur={() => markTouched(nameKey)}
-                        placeholder="Nama *"
-                        className={`w-full h-7 px-2 bg-white border rounded text-xs text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 ${
-                          nameError ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-200 focus:border-blue-300'
-                        }`}
-                        data-testid={`input-name-${index}`}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0 hidden sm:block">
-                      <input
-                        type="tel"
-                        inputMode="numeric"
-                        value={passenger.phone}
-                        onChange={(e) => handleInputChange(index, 'phone', e.target.value.replace(/[^0-9]/g, ''))}
-                        onBlur={() => markTouched(phoneKey)}
-                        placeholder="Telepon"
-                        className={`w-full h-7 px-2 bg-white border rounded text-xs text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 ${
-                          phoneError ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-200 focus:border-blue-300'
-                        }`}
-                        data-testid={`input-phone-${index}`}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0 hidden md:block">
-                      <input
-                        value={passenger.idNumber}
-                        onChange={(e) => handleInputChange(index, 'idNumber', e.target.value)}
-                        placeholder="KTP/Paspor"
-                        className="w-full h-7 px-2 bg-white border border-gray-200 rounded text-xs text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
-                        data-testid={`input-id-${index}`}
-                      />
-                    </div>
+                </div>
+                <div className="flex gap-1.5">
+                  <div className="flex-[2] min-w-0">
+                    <input
+                      value={passenger.fullName}
+                      onChange={(e) => handleInputChange(index, 'fullName', e.target.value)}
+                      onBlur={() => markTouched(nameKey)}
+                      placeholder="Nama lengkap *"
+                      className={`w-full h-7 px-2 bg-white border rounded text-xs text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 ${
+                        nameError ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-200 focus:border-blue-300'
+                      }`}
+                      data-testid={`input-name-${index}`}
+                    />
+                    {nameError && <p className="text-[9px] text-red-500 mt-0.5">{nameError}</p>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={passenger.phone}
+                      onChange={(e) => handleInputChange(index, 'phone', e.target.value.replace(/[^0-9]/g, ''))}
+                      onBlur={() => markTouched(phoneKey)}
+                      placeholder="Telepon"
+                      className={`w-full h-7 px-2 bg-white border rounded text-xs text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 ${
+                        phoneError ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-200 focus:border-blue-300'
+                      }`}
+                      data-testid={`input-phone-${index}`}
+                    />
+                    {phoneError && <p className="text-[9px] text-red-500 mt-0.5">{phoneError}</p>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <input
+                      value={passenger.idNumber}
+                      onChange={(e) => handleInputChange(index, 'idNumber', e.target.value)}
+                      placeholder="KTP/Paspor"
+                      className="w-full h-7 px-2 bg-white border border-gray-200 rounded text-xs text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
+                      data-testid={`input-id-${index}`}
+                    />
                   </div>
                 </div>
-                {nameError && <p className="text-[9px] text-red-500 mt-0.5 ml-6">{nameError}</p>}
-                {phoneError && <p className="text-[9px] text-red-500 mt-0.5 ml-6 hidden sm:block">{phoneError}</p>}
               </div>
             );
           })}
         </div>
-      </div>
 
-      {/* ── Sticky payment + actions ── */}
-      <div className="flex-shrink-0 border-t border-gray-200 px-3 md:px-5 py-2 space-y-2 bg-white">
+        {/* ── Payment section (flows after passengers) ── */}
+        <div className="border-t border-gray-200 pt-2 space-y-2.5">
           {onApplyPromo && (
             <div className="flex items-center gap-1.5">
               {promoCode ? (
@@ -493,6 +493,7 @@ export default function PassengerForm({
             </button>
           </div>
         </div>
+      </div>
     </div>
   );
 }
