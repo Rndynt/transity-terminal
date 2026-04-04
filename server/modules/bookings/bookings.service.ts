@@ -1,7 +1,7 @@
 import { IStorage } from "../../storage.interface";
 import { InsertBooking, Booking } from "@shared/schema";
 import { HoldsService } from "../holds/holds.service";
-import { DeterministicBookingService } from "./deterministicBooking.service";
+import { AtomicHoldService } from "./atomicHold.service";
 import { PrintService } from "../printing/print.service";
 import { db } from "../../db";
 import { bookings as bookingsTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable } from "@shared/schema";
@@ -20,12 +20,12 @@ import {
 
 export class BookingsService {
   private holdsService: HoldsService;
-  private deterministicService: DeterministicBookingService;
+  private atomicHoldService: AtomicHoldService;
   private printService: PrintService;
 
   constructor(private storage: IStorage) {
     this.holdsService = new HoldsService();
-    this.deterministicService = new DeterministicBookingService(storage);
+    this.atomicHoldService = new AtomicHoldService(storage);
     this.printService = new PrintService();
   }
 
@@ -192,7 +192,7 @@ export class BookingsService {
 
     const ttlClass: 'short' | 'long' = ttlSeconds <= 600 ? 'short' : 'long';
     
-    const result = await this.deterministicService.atomicHold({
+    const result = await this.atomicHoldService.atomicHold({
       tripId,
       seatNo,
       legIndexes,
@@ -227,7 +227,7 @@ export class BookingsService {
   }
 
   async releaseHold(holdRef: string): Promise<void> {
-    await this.deterministicService.releaseHoldByRef(holdRef);
+    await this.atomicHoldService.releaseHoldByRef(holdRef);
   }
 
   async createPendingBooking(

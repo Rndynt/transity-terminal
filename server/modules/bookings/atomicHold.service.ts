@@ -21,7 +21,7 @@ export interface AtomicHoldResult {
   expiresAt?: Date;
 }
 
-export class DeterministicBookingService {
+export class AtomicHoldService {
   constructor(private storage: IStorage) {}
 
   async atomicHold(request: SeatHoldRequest): Promise<AtomicHoldResult> {
@@ -97,7 +97,7 @@ export class DeterministicBookingService {
 
       return result;
     } catch (error) {
-      console.error(`[DETERMINISTIC] Hold creation failed:`, error);
+      console.error(`[ATOMIC_HOLD] Hold creation failed:`, error);
       return {
         success: false,
         reason: 'TRANSACTION_ERROR',
@@ -139,7 +139,7 @@ export class DeterministicBookingService {
 
       return result;
     } catch (error) {
-      console.error(`[DETERMINISTIC] Hold release failed:`, error);
+      console.error(`[ATOMIC_HOLD] Hold release failed:`, error);
       return { success: false };
     }
   }
