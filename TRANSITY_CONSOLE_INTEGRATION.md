@@ -92,6 +92,8 @@ X-Service-Key: sk_live_xxx
 - Saat booking, kirim `tripId` apa adanya (termasuk prefix `virtual-`) bersama `serviceDate`
 - Sistem otomatis membuat trip nyata (materialize) saat booking pertama untuk tanggal tersebut
 - Setelah dimaterialize, trip selanjutnya akan muncul sebagai real trip di pencarian
+- **Concurrent booking aman** — jika dua booking masuk bersamaan untuk virtual trip yang sama, sistem menggunakan database unique constraint untuk memastikan trip hanya dibuat sekali. Booking kedua otomatis mendapatkan trip ID yang sama dengan booking pertama
+- **Trip ID di response booking selalu berupa UUID real** (bukan `virtual-*` lagi) — simpan trip ID dari response booking untuk tracking selanjutnya
 
 ### Step 2: Ambil Seatmap
 
