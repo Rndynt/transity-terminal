@@ -108,10 +108,11 @@ See `DEPLOY.md` for full VPS deployment guide. Key points:
 ## Import Path Aliases
 The project uses TypeScript path aliases (configured in `tsconfig.json`, resolved by tsx at runtime and esbuild for production build via `esbuild.config.js`):
 - `@shared/*` → `./shared/*` (shared schema, types)
-- `@server/*` → `./server/*` (server modules, utils, db, config, realtime)
+- `@server/*` → `./server/*` (db, config, storage, realtime, utils, repositories)
+- `@modules/*` → `./server/modules/*` (business domain modules)
 - `@/*` → `./client/src/*` (frontend components, hooks, lib)
 
-Server module files use `@server/db`, `@server/storage.interface`, `@server/realtime/ws`, `@server/utils/*`, etc. instead of relative `../../` paths.
+Examples: `@server/db`, `@server/config`, `@modules/rbac/rbac.middleware`, `@modules/bookings/booking.helpers`. No relative `../` or `../../` paths in server code.
 
 ## Booking Module Structure
 - `bookings.service.ts` — `createBooking` (CSO paid), `createPendingBooking` (CSO pending), `createHold`, `releaseHold`

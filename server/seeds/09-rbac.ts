@@ -1,1 +1,1 @@
-export { seedRbac } from "@server/modules/rbac/rbac.seed";
+export { seedRbac } from "@modules/rbac/rbac.seed";

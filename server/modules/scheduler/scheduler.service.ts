@@ -1,5 +1,5 @@
 import { IStorage } from "@server/storage.interface";
-import { TripBasesService } from "@server/modules/tripBases/tripBases.service";
+import { TripBasesService } from "@modules/tripBases/tripBases.service";
 import { TripBase, TripWithDetails } from "@shared/schema";
 import { ensureDefaultTimezone } from "@server/utils/timezone";
 import { db } from "@server/db";

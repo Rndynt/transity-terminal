@@ -14,5 +14,6 @@ await build({
   alias: {
     "@shared": path.resolve(__dirname, "shared"),
     "@server": path.resolve(__dirname, "server"),
+    "@modules": path.resolve(__dirname, "server", "modules"),
   },
 });

@@ -1,6 +1,6 @@
-import type { RealmioUser } from "@server/modules/auth/realmio";
-import type { EffectivePermissions } from "@server/modules/rbac/rbac.service";
-import type { AppUserPayload } from "@server/modules/app/app.auth";
+import type { RealmioUser } from "@modules/auth/realmio";
+import type { EffectivePermissions } from "@modules/rbac/rbac.service";
+import type { AppUserPayload } from "@modules/app/app.auth";
 
 declare module "fastify" {
   interface FastifyRequest {

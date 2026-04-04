@@ -1,5 +1,5 @@
 import { storage } from "@server/storage";
-import { TripBasesService } from "@server/modules/tripBases/tripBases.service";
+import { TripBasesService } from "@modules/tripBases/tripBases.service";
 import type { SeedContext } from "./context";
 
 function nextNDays(n: number): string[] {

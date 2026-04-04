@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { VehiclesController } from "./vehicles.controller";
 import { IStorage } from "@server/storage.interface";
-import { requireFlag } from "@server/modules/rbac/rbac.middleware";
+import { requireFlag } from "@modules/rbac/rbac.middleware";
 
 export function registerVehiclesRoutes(app: FastifyInstance, storage: IStorage, cacheHook: any) {
   const controller = new VehiclesController(storage);

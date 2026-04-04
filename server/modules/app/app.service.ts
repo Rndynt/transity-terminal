@@ -20,7 +20,7 @@ import {
   checkSeatsAvailable,
   createSeatHoldsForBooking,
   generateBookingCode,
-} from "@server/modules/bookings/booking.helpers";
+} from "@modules/bookings/booking.helpers";
 
 interface OperatorSummary {
   id: string;

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { PaymentsController } from "./payments.controller";
 import { IStorage } from "@server/storage.interface";
-import { requireFlag } from "@server/modules/rbac/rbac.middleware";
+import { requireFlag } from "@modules/rbac/rbac.middleware";
 
 export function registerPaymentsRoutes(app: FastifyInstance, storage: IStorage) {
   const paymentsController = new PaymentsController(storage);

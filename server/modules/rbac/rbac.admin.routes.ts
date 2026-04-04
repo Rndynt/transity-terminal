@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "@server/db";
 import { eq, and } from "drizzle-orm";
 import { requireFlag, requireAnyFlag } from "./rbac.middleware";
-import { createRealmioUser } from "@server/modules/auth/realmio";
+import { createRealmioUser } from "@modules/auth/realmio";
 import { staffMembers, users } from "@shared/schema";
 
 export function registerAdminRoutes(app: FastifyInstance) {

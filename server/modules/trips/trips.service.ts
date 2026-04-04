@@ -1,7 +1,7 @@
 import { IStorage } from "@server/storage.interface";
 import { InsertTrip, Trip } from "@shared/schema";
-import { TripLegsService } from "@server/modules/tripLegs/tripLegs.service";
-import { SeatInventoryService } from "@server/modules/seatInventory/seatInventory.service";
+import { TripLegsService } from "@modules/tripLegs/tripLegs.service";
+import { SeatInventoryService } from "@modules/seatInventory/seatInventory.service";
 
 export class TripsService {
   private tripLegsService: TripLegsService;

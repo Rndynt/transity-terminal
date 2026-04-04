@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { TripsController } from "./trips.controller";
-import { TripStopTimesController } from "@server/modules/tripStopTimes/tripStopTimes.controller";
-import { TripLegsController } from "@server/modules/tripLegs/tripLegs.controller";
+import { TripStopTimesController } from "@modules/tripStopTimes/tripStopTimes.controller";
+import { TripLegsController } from "@modules/tripLegs/tripLegs.controller";
 import { IStorage } from "@server/storage.interface";
-import { requireFlag, requireOutletScope } from "@server/modules/rbac/rbac.middleware";
+import { requireFlag, requireOutletScope } from "@modules/rbac/rbac.middleware";
 
 export function registerTripsRoutes(app: FastifyInstance, storage: IStorage) {
   const tripsController = new TripsController(storage);

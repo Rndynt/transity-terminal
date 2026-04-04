@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { DashboardController } from "./dashboard.controller";
-import { requireFlag } from "@server/modules/rbac/rbac.middleware";
+import { requireFlag } from "@modules/rbac/rbac.middleware";
 
 export function registerDashboardRoutes(app: FastifyInstance) {
   const controller = new DashboardController();

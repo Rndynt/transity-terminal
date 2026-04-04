@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { MaintenanceController } from "./maintenance.controller";
-import { requireFlag } from "@server/modules/rbac/rbac.middleware";
+import { requireFlag } from "@modules/rbac/rbac.middleware";
 
 export function registerMaintenanceRoutes(app: FastifyInstance) {
   const controller = new MaintenanceController();

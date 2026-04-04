@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { ReportsController } from "./reports.controller";
-import { requireFlag, requireAnyFlag } from "@server/modules/rbac/rbac.middleware";
+import { requireFlag, requireAnyFlag } from "@modules/rbac/rbac.middleware";
 
 export function registerReportsRoutes(app: FastifyInstance) {
   const reportsController = new ReportsController();

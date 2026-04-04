@@ -1,7 +1,7 @@
 import { IStorage } from "@server/storage.interface";
 import { InsertTripBase, TripBase, Trip, InsertTrip } from "@shared/schema";
-import { TripLegsService } from "@server/modules/tripLegs/tripLegs.service";
-import { SeatInventoryService } from "@server/modules/seatInventory/seatInventory.service";
+import { TripLegsService } from "@modules/tripLegs/tripLegs.service";
+import { SeatInventoryService } from "@modules/seatInventory/seatInventory.service";
 import { format, parseISO } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { fromZonedHHMMToUtc, getDayInTZ, formatTimeInTZ, ensureDefaultTimezone, normalizeTimeFormat } from "@server/utils/timezone";

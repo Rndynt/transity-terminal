@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { BookingsController } from "./bookings.controller";
 import { RoundTripController } from "./roundTrip.controller";
 import { IStorage } from "@server/storage.interface";
-import { requireFlag, requireOutletScope } from "@server/modules/rbac/rbac.middleware";
+import { requireFlag, requireOutletScope } from "@modules/rbac/rbac.middleware";
 import { webSocketService } from "@server/realtime/ws";
 import { db } from "@server/db";
 import { eq, and, inArray, sql, ilike } from "drizzle-orm";

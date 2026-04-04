@@ -1,6 +1,6 @@
 import { IStorage } from "@server/storage.interface";
-import { PricingService } from "@server/modules/pricing/pricing.service";
-import { PromosService } from "@server/modules/promos/promos.service";
+import { PricingService } from "@modules/pricing/pricing.service";
+import { PromosService } from "@modules/promos/promos.service";
 import { passengers as passengersTable, seatInventory, seatHolds } from "@shared/schema";
 import { scheduleStopExceptions } from "@shared/schema/scheduling";
 import { generateBookingCode, generateTicketNumber } from "@server/utils/codeGenerator";

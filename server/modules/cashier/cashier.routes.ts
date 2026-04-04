@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { CashierController } from "./cashier.controller";
-import { requireFlag } from "@server/modules/rbac/rbac.middleware";
+import { requireFlag } from "@modules/rbac/rbac.middleware";
 
 export function registerCashierRoutes(app: FastifyInstance) {
   const controller = new CashierController();
