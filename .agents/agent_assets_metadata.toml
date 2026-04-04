@@ -42,3 +42,9 @@ id = "h1SLaDUuqTHE1oMnmIRia"
 uri = "file://apps/transityweb/ROADMAP.md"
 type = "text"
 title = "TransityWeb & TransityConsole — Product Roadmap"
+
+[[outputs]]
+id = "b_dWskE_dhX_qPFGIRjZC"
+uri = "file://PERFORMANCE_AUDIT.md"
+type = "text"
+title = "Performance Audit — TransityTerminal"
