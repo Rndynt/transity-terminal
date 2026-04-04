@@ -11,6 +11,7 @@ import bcrypt from "bcryptjs";
 import { signToken, type AppUserPayload } from "./app.auth";
 import { IStorage } from "../../storage.interface";
 import { fromZonedHHMMToUtc } from "../../utils/timezone";
+import { generateBookingCode, generateTicketNumber } from "../../utils/codeGenerator";
 
 interface OperatorSummary {
   id: string;
@@ -814,6 +815,15 @@ export class AppService {
     const HOLD_TTL_MINUTES = 15;
     const holdExpiresAt = new Date(Date.now() + HOLD_TTL_MINUTES * 60 * 1000);
 
+    const [originStop, destinationStop, trip] = await Promise.all([
+      this.storage.getStopById(params.originStopId),
+      this.storage.getStopById(params.destinationStopId),
+      this.storage.getTripById(resolvedTripId),
+    ]);
+
+    const tripStopTimesData = trip ? await this.storage.getTripStopTimes(resolvedTripId) : [];
+    const originST = tripStopTimesData.find(st => st.stopSequence === params.originSeq);
+
     const bookingId = await db.transaction(async (tx) => {
       for (const pax of params.passengers) {
         const inv = await tx.execute(sql`
@@ -831,6 +841,7 @@ export class AppService {
 
       const [booking] = await tx.insert(bookings).values({
         tripId: resolvedTripId,
+        bookingCode: generateBookingCode(),
         originStopId: params.originStopId,
         destinationStopId: params.destinationStopId,
         originSeq: params.originSeq,
@@ -840,6 +851,10 @@ export class AppService {
         status: 'pending',
         pendingExpiresAt: holdExpiresAt,
         totalAmount: totalAmount.toString(),
+        discountAmount: '0',
+        snapOriginStopName: originStop?.name || null,
+        snapDestinationStopName: destinationStop?.name || null,
+        snapDepartureHHMM: trip?.originDepartHHMM || (originST?.departAt ? String(originST.departAt).slice(11, 16) : null),
         createdBy: params.userId ? `app:${params.userId}` : 'service-client'
       }).returning({ id: bookings.id });
 
@@ -848,6 +863,7 @@ export class AppService {
 
         await tx.insert(passengers).values({
           bookingId: booking.id,
+          ticketNumber: generateTicketNumber(),
           fullName: pax.fullName,
           phone: pax.phone,
           idNumber: pax.idNumber,
