@@ -1,11 +1,13 @@
 import { IStorage } from "@server/storage.interface";
-import { InsertTripBase, TripBase, Trip, InsertTrip } from "@shared/schema";
+import { InsertTripBase, TripBase, Trip, InsertTrip, scheduleExceptions } from "@shared/schema";
 import { TripLegsService } from "@modules/tripLegs/tripLegs.service";
 import { SeatInventoryService } from "@modules/seatInventory/seatInventory.service";
 import { format, parseISO } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { fromZonedHHMMToUtc, getDayInTZ, formatTimeInTZ, ensureDefaultTimezone, normalizeTimeFormat } from "@server/utils/timezone";
 import { webSocketService } from "@server/realtime/ws";
+import { db } from "@server/db";
+import { eq, and } from "drizzle-orm";
 
 export class TripBasesService {
   private tripLegsService: TripLegsService;
@@ -74,7 +76,22 @@ export class TripBasesService {
     const dayOfWeek = getDayInTZ(serviceDate, timezone);
     const dayFlags = [base.sun, base.mon, base.tue, base.wed, base.thu, base.fri, base.sat];
     
-    return dayFlags[dayOfWeek];
+    if (!dayFlags[dayOfWeek]) {
+      return false;
+    }
+
+    const exceptions = await db.select({ baseId: scheduleExceptions.baseId })
+      .from(scheduleExceptions)
+      .where(and(
+        eq(scheduleExceptions.baseId, base.id),
+        eq(scheduleExceptions.exceptionDate, serviceDate),
+      ));
+
+    if (exceptions.length > 0) {
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -181,18 +198,18 @@ export class TripBasesService {
    * Ensure a trip is materialized for the given base and service date (idempotent and race-safe)
    */
   async ensureMaterializedTrip(baseId: string, serviceDate: string): Promise<string> {
-    // 1. Load base and validate eligibility
+    // 1. Check if trip already exists (idempotency — always return existing trip regardless of eligibility changes)
+    const existingTrip = await this.storage.getTripByBaseAndDate(baseId, serviceDate);
+    if (existingTrip) {
+      return existingTrip.id;
+    }
+
+    // 2. Load base and validate eligibility only when creating new trip
     const base = await this.getTripBaseById(baseId);
     const isEligible = await this.isBaseEligible(base, serviceDate);
     
     if (!isEligible) {
       throw new Error('base-not-eligible');
-    }
-
-    // 2. Check if trip already exists
-    const existingTrip = await this.storage.getTripByBaseAndDate(baseId, serviceDate);
-    if (existingTrip) {
-      return existingTrip.id;
     }
 
     // 3. Begin transaction to create trip

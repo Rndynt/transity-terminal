@@ -218,6 +218,7 @@ Endpoints verified end-to-end (search → seatmap → booking → payment webhoo
 - `GET /api/app/trips/search` — trip search (real + virtual)
 - `GET /api/app/trips/:id` — trip detail
 - `GET /api/app/trips/:id/seatmap` — seat availability
+- `POST /api/app/trips/materialize` — materialize virtual trip (service key auth, idempotent, race-safe)
 - `POST /api/app/bookings` — create booking (supports virtual trip auto-materialization)
 - `POST /api/app/payments/webhook` — payment confirmation (HMAC-SHA256)
 

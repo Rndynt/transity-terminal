@@ -846,6 +846,12 @@ export class AppService {
     };
   }
 
+  async materializeTrip(baseId: string, serviceDate: string): Promise<string> {
+    const { TripBasesService } = await import("../tripBases/tripBases.service");
+    const tripBasesService = new TripBasesService(this.storage);
+    return tripBasesService.ensureMaterializedTrip(baseId, serviceDate);
+  }
+
   private async resolveTripId(tripId: string, serviceDate?: string): Promise<string> {
     if (!tripId.startsWith('virtual-')) return tripId;
 

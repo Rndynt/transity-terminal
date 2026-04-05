@@ -47,6 +47,11 @@ const createReviewSchema = z.object({
   comment: z.string().optional()
 });
 
+const materializeSchema = z.object({
+  baseId: z.string().uuid(),
+  serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
 const createCargoSchema = z.object({
   tripId: z.string().uuid(),
   originStopId: z.string().uuid(),
@@ -175,6 +180,24 @@ export class AppController {
         reply.code(400).send({ error: msg });
       } else {
         reply.code(404).send({ error: msg });
+      }
+    }
+  }
+
+  async materializeTrip(req: FastifyRequest, reply: FastifyReply) {
+    const parsed = materializeSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
+    try {
+      const tripId = await this.service.materializeTrip(parsed.data.baseId, parsed.data.serviceDate);
+      reply.send({ tripId });
+    } catch (e: unknown) {
+      const msg = errMsg(e);
+      if (msg === 'base-not-eligible') {
+        reply.code(422).send({ error: "Trip base is not eligible for this date" });
+      } else if (msg.includes('not found')) {
+        reply.code(404).send({ error: msg });
+      } else {
+        reply.code(500).send({ error: msg });
       }
     }
   }

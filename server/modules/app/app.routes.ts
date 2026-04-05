@@ -73,6 +73,7 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
   app.get('/api/app/trips/search', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.searchTrips(req, reply));
   app.get('/api/app/trips/:id', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getTripDetail(req, reply));
   app.get('/api/app/trips/:id/seatmap', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getSeatmap(req, reply));
+  app.post('/api/app/trips/materialize', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.materializeTrip(req, reply));
   app.get('/api/app/trips/:tripId/reviews', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getTripReviews(req, reply));
 
   async function bookingAuthMiddleware(req: FastifyRequest, reply: FastifyReply) {

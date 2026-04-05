@@ -48,3 +48,9 @@ id = "b_dWskE_dhX_qPFGIRjZC"
 uri = "file://PERFORMANCE_AUDIT.md"
 type = "text"
 title = "Performance Audit — TransityTerminal"
+
+[[outputs]]
+id = "gVC0oD5YpDXIIXgeD6s5_"
+uri = "file://docs/REQ_UPDATE_CONSOLE_SEATMAP_CACHE.md"
+type = "text"
+title = "Requirement Update: Console Seatmap Caching & Trip Materialization"
