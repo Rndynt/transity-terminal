@@ -125,17 +125,72 @@ Karena seatmap di-cache, ada kemungkinan user memilih kursi yang sudah diambil C
 
 ---
 
-## 4. Ringkasan Perubahan yang Diperlukan
+## 4. Requirement: Error Translation di Gateway
+
+### Prinsip Utama
+Error teknis dari terminal **tidak boleh diteruskan langsung** ke TransityApp. User TransityApp adalah pelanggan/penumpang biasa yang tidak mengerti istilah teknis. Gateway (TransityConsole) bertanggung jawab menerjemahkan semua error ke bahasa yang ramah pelanggan.
+
+### Contoh Error dari Terminal & Terjemahan yang Diharapkan
+
+| Error Teknis dari Terminal | Pesan untuk TransityApp |
+|---------------------------|------------------------|
+| `Trip base with id ... not found` | `"Perjalanan tidak ditemukan. Silakan cari ulang."` |
+| `Trip base is not eligible for this date` | `"Jadwal tidak tersedia untuk tanggal ini. Silakan pilih tanggal lain."` |
+| `Missing X-Service-Key header` | `"Terjadi gangguan koneksi. Silakan coba lagi."` |
+| `Invalid service key` | `"Terjadi gangguan koneksi. Silakan coba lagi."` |
+| `Seat ... is not available` | `"Kursi {seatNo} sudah tidak tersedia. Silakan pilih kursi lain."` |
+| `No suitable vehicle found` | `"Perjalanan ini sedang dalam persiapan. Silakan coba beberapa saat lagi."` |
+| `TRIP_HAS_ACTIVE_BOOKINGS` | `"Perjalanan ini tidak bisa dibatalkan karena sudah ada pemesanan aktif."` |
+| `unique constraint violation` / `duplicate` | `"Pemesanan sedang diproses. Silakan tunggu sebentar."` |
+| `The operation was aborted due to timeout` | `"Server sedang sibuk. Silakan coba beberapa saat lagi."` |
+| `ECONNREFUSED` / `ECONNRESET` / network error | `"Layanan operator sedang tidak tersedia. Silakan coba lagi nanti."` |
+| HTTP 500 / Internal Server Error | `"Terjadi kesalahan sistem. Silakan coba lagi nanti."` |
+| HTTP 429 / Rate Limit | `"Terlalu banyak permintaan. Silakan tunggu sebentar."` |
+
+### Panduan Implementasi
+
+#### 4a. Error Mapping Layer di Gateway
+Buat middleware/helper di gateway yang menangkap semua error dari terminal dan menerjemahkannya:
+
+```
+Terminal response error
+→ Log error teknis lengkap di server gateway (untuk debugging)
+→ Map ke pesan user-friendly berdasarkan error code/message
+→ Return pesan terjemahan ke TransityApp
+```
+
+#### 4b. Kategori Error & Handling
+
+| Kategori | Contoh | Aksi Gateway | Pesan ke User |
+|----------|--------|-------------|---------------|
+| **Not Found** (404) | Trip/seatmap tidak ada | Log + return pesan ramah | "... tidak ditemukan. Silakan cari ulang." |
+| **Validation** (400/422) | Tanggal salah, base tidak eligible | Log + return pesan spesifik | "Jadwal tidak tersedia untuk tanggal ini." |
+| **Conflict** (409) | Duplikat booking, kursi diambil | Log + invalidate cache | "Kursi sudah tidak tersedia." |
+| **Auth** (401) | Service key salah | Log + alert admin | "Terjadi gangguan koneksi." |
+| **Server Error** (500) | Bug di terminal | Log + alert admin | "Terjadi kesalahan sistem. Coba lagi nanti." |
+| **Timeout/Network** | Terminal tidak merespons | Log + retry 1x, lalu return | "Layanan sedang sibuk. Coba lagi nanti." |
+
+#### 4c. Aturan Penting
+1. **Jangan pernah tampilkan UUID, nama tabel, atau stack trace** ke user
+2. **Jangan tampilkan nama field teknis** (baseId, tripId, patternId) — gunakan istilah umum (perjalanan, jadwal, kursi)
+3. **Bahasa Indonesia** — semua pesan error ke TransityApp harus dalam Bahasa Indonesia
+4. **Log tetap teknis** — error asli dari terminal tetap di-log lengkap di server gateway untuk keperluan debugging
+5. **Konsisten** — gunakan nada yang sama di semua pesan (sopan, informatif, ada saran aksi)
+
+---
+
+## 5. Ringkasan Perubahan yang Diperlukan
 
 ### TransityConsole (Gateway)
 | No | Perubahan | Prioritas |
 |----|-----------|-----------|
 | 1 | Panggil `POST /api/app/trips/materialize` saat user klik trip virtual, sebelum fetch detail/seatmap | **Tinggi** |
 | 2 | Gunakan `tripId` real (dari response materialize) untuk semua request berikutnya (detail, seatmap, booking) | **Tinggi** |
-| 3 | Implementasi cache layer untuk seatmap (TTL 30-60 detik) | **Sedang** |
-| 4 | Invalidate seatmap cache setelah booking berhasil | **Sedang** |
-| 5 | Handle error seat-unavailable dari terminal → invalidate cache → return pesan jelas | **Sedang** |
-| 6 | Cache data jarang berubah (cities, service-lines, operator-info) dengan TTL lebih panjang | **Rendah** |
+| 3 | Error translation layer — semua error teknis dari terminal diterjemahkan ke bahasa pelanggan (lihat bagian 4) | **Tinggi** |
+| 4 | Implementasi cache layer untuk seatmap (TTL 30-60 detik) | **Sedang** |
+| 5 | Invalidate seatmap cache setelah booking berhasil | **Sedang** |
+| 6 | Handle error seat-unavailable dari terminal → invalidate cache → return pesan jelas | **Sedang** |
+| 7 | Cache data jarang berubah (cities, service-lines, operator-info) dengan TTL lebih panjang | **Rendah** |
 
 ### TransityApp (Consumer)
 | No | Perubahan | Prioritas |
