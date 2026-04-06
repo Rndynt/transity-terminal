@@ -1,42 +1,47 @@
 import { db } from "@server/db";
 import { sql } from "drizzle-orm";
-import { createSeedContext, type SeedContext } from "./context";
-import { seedStops, seedOutlets } from "./01-stops";
-import { seedLayouts } from "./02-layouts";
-import { seedVehicles } from "./03-vehicles";
-import { seedPatterns, seedPatternStops } from "./04-patterns";
-import { seedPrices } from "./05-prices";
-import { seedTripBases } from "./06-tripbases";
-import { seedCargo } from "./07-cargo";
-import { seedTrips } from "./08-trips";
-import { seedRbac } from "./09-rbac";
 
-const SEED_REGISTRY: Record<string, {
-  name: string;
-  deps: string[];
-  run: (ctx: SeedContext) => Promise<void>;
-}> = {
-  stops:        { name: "Stops & Outlets",   deps: [],                                          run: async (ctx) => { await seedStops(ctx); await seedOutlets(ctx); } },
-  layouts:      { name: "Seat Layouts",       deps: [],                                          run: async (ctx) => { await seedLayouts(ctx); } },
-  vehicles:     { name: "Vehicles",           deps: ["layouts"],                                 run: async (ctx) => { await seedVehicles(ctx); } },
-  patterns:     { name: "Trip Patterns",      deps: ["stops", "layouts"],                        run: async (ctx) => { await seedPatterns(ctx); await seedPatternStops(ctx); } },
-  prices:       { name: "Price Rules",        deps: ["patterns"],                                run: async (ctx) => { await seedPrices(ctx); } },
-  tripbases:    { name: "Trip Bases",         deps: ["patterns", "vehicles"],                    run: async (ctx) => { await seedTripBases(ctx); } },
-  cargo:        { name: "Cargo Types & Rates",deps: [],                                          run: async (ctx) => { await seedCargo(); } },
-  trips:        { name: "Materialize Trips",  deps: ["tripbases"],                               run: async (ctx) => { await seedTrips(ctx); } },
-  rbac:         { name: "RBAC & Feature Flags",deps: [],                                          run: async (ctx) => { await seedRbac(); } },
-};
+type SeedSet = "nusa" | "buskita";
 
-function resolveDeps(targets: string[]): string[] {
+async function loadSeedModules(set: SeedSet) {
+  const base = set === "nusa" ? "./nusa" : "./buskita";
+  const { createSeedContext } = await import(`${base}/context`);
+  const { seedStops, seedOutlets } = await import(`${base}/01-stops`);
+  const { seedLayouts } = await import(`${base}/02-layouts`);
+  const { seedVehicles } = await import(`${base}/03-vehicles`);
+  const { seedPatterns, seedPatternStops } = await import(`${base}/04-patterns`);
+  const { seedPrices } = await import(`${base}/05-prices`);
+  const { seedTripBases } = await import(`${base}/06-tripbases`);
+  const { seedCargo } = await import(`${base}/07-cargo`);
+  const { seedTrips } = await import(`${base}/08-trips`);
+  const { seedRbac } = await import(`${base}/09-rbac`);
+
+  return {
+    createSeedContext,
+    modules: {
+      stops:     { name: "Stops & Outlets",    deps: [] as string[],                    run: async (ctx: any) => { await seedStops(ctx); await seedOutlets(ctx); } },
+      layouts:   { name: "Seat Layouts",        deps: [] as string[],                    run: async (ctx: any) => { await seedLayouts(ctx); } },
+      vehicles:  { name: "Vehicles",            deps: ["layouts"],                       run: async (ctx: any) => { await seedVehicles(ctx); } },
+      patterns:  { name: "Trip Patterns",       deps: ["stops", "layouts"],              run: async (ctx: any) => { await seedPatterns(ctx); await seedPatternStops(ctx); } },
+      prices:    { name: "Price Rules",         deps: ["patterns"],                      run: async (ctx: any) => { await seedPrices(ctx); } },
+      tripbases: { name: "Trip Bases",          deps: ["patterns", "vehicles"],          run: async (ctx: any) => { await seedTripBases(ctx); } },
+      cargo:     { name: "Cargo Types & Rates", deps: [] as string[],                    run: async (ctx: any) => { await seedCargo(); } },
+      trips:     { name: "Materialize Trips",   deps: ["tripbases"],                     run: async (ctx: any) => { await seedTrips(ctx); } },
+      rbac:      { name: "RBAC & Feature Flags",deps: [] as string[],                    run: async (ctx: any) => { await seedRbac(); } },
+    },
+  };
+}
+
+function resolveDeps(registry: Record<string, { deps: string[] }>, targets: string[]): string[] {
   const resolved: string[] = [];
   const visited = new Set<string>();
 
   function visit(key: string) {
     if (visited.has(key)) return;
     visited.add(key);
-    const entry = SEED_REGISTRY[key];
+    const entry = registry[key];
     if (!entry) {
-      console.error(`Unknown seed: "${key}". Available: ${Object.keys(SEED_REGISTRY).join(", ")}`);
+      console.error(`Unknown seed: "${key}". Available: ${Object.keys(registry).join(", ")}`);
       process.exit(1);
     }
     for (const dep of entry.deps) {
@@ -50,7 +55,7 @@ function resolveDeps(targets: string[]): string[] {
 }
 
 async function cleanDatabase() {
-  console.log("\n[CLEANUP] Clearing all existing data...");
+  console.log("\n[CLEANUP] Clearing all existing data (except users)...");
   await db.execute(sql`
     TRUNCATE TABLE
       reviews,
@@ -73,9 +78,15 @@ async function cleanDatabase() {
       outlets,
       vehicles,
       stops,
-      layouts
+      layouts,
+      role_flags,
+      feature_flags,
+      roles
     RESTART IDENTITY CASCADE
   `);
+  try {
+    await db.execute(sql`TRUNCATE TABLE schedule_exceptions RESTART IDENTITY CASCADE`);
+  } catch (_) {}
   console.log("[CLEANUP] Done.");
 }
 
@@ -84,29 +95,32 @@ async function printSummary() {
   const tripCountDB = await db.execute(sql`SELECT COUNT(*) as c FROM trips`);
   const invCount = await db.execute(sql`SELECT COUNT(*) as c FROM seat_inventory`);
   const cityList = await db.execute(sql`SELECT DISTINCT city FROM stops ORDER BY city`);
+  const baseCount = await db.execute(sql`SELECT COUNT(*) as c FROM trip_bases`);
 
   console.log("\n═══════════════════════════════════════════");
   console.log("  SEED SELESAI");
   console.log("═══════════════════════════════════════════");
   console.log(`  Kota        : ${(cityList.rows as any[]).map((r: any) => r.city).join(', ')}`);
   console.log(`  Stops       : ${(stopCount.rows[0] as any).c}`);
+  console.log(`  Trip Bases  : ${(baseCount.rows[0] as any).c}`);
   console.log(`  Trips       : ${(tripCountDB.rows[0] as any).c}`);
   console.log(`  Seat Inv    : ${(invCount.rows[0] as any).c} baris`);
   console.log("═══════════════════════════════════════════\n");
 }
 
-export async function seedAll() {
+export async function seedAll(set: SeedSet = "buskita") {
   console.log("═══════════════════════════════════════════");
-  console.log("  TRANSITY SHUTTLE — SEED ALL");
+  console.log(`  TRANSITY SHUTTLE — SEED ALL [${set.toUpperCase()}]`);
   console.log("═══════════════════════════════════════════");
 
   await cleanDatabase();
 
+  const { createSeedContext, modules } = await loadSeedModules(set);
   const ctx = createSeedContext();
-  const order = resolveDeps(Object.keys(SEED_REGISTRY));
+  const order = resolveDeps(modules, Object.keys(modules));
 
   for (const key of order) {
-    const entry = SEED_REGISTRY[key];
+    const entry = modules[key as keyof typeof modules];
     console.log(`\n── ${entry.name} ──`);
     await entry.run(ctx);
   }
@@ -114,16 +128,17 @@ export async function seedAll() {
   await printSummary();
 }
 
-export async function seedSpecific(targets: string[]) {
+export async function seedSpecific(set: SeedSet, targets: string[]) {
+  const { createSeedContext, modules } = await loadSeedModules(set);
   const ctx = createSeedContext();
-  const order = resolveDeps(targets);
+  const order = resolveDeps(modules, targets);
 
   console.log("═══════════════════════════════════════════");
-  console.log(`  SEED: ${order.join(" → ")}`);
+  console.log(`  SEED [${set.toUpperCase()}]: ${order.join(" → ")}`);
   console.log("═══════════════════════════════════════════");
 
   for (const key of order) {
-    const entry = SEED_REGISTRY[key];
+    const entry = modules[key as keyof typeof modules];
     console.log(`\n── ${entry.name} ──`);
     await entry.run(ctx);
   }
@@ -133,7 +148,11 @@ export async function seedSpecific(targets: string[]) {
 
 function printHelp() {
   console.log(`
-Usage: npx tsx server/seeds/index.ts [target...]
+Usage: npx tsx server/seeds/index.ts <dataset> [target...]
+
+Datasets:
+  nusa        Nusa Shuttle (Jakarta-Bandung-Semarang-Yogyakarta)
+  buskita     BusKita (Surabaya-Malang-Bali)
 
 Targets:
   (none)      Run ALL seeds (clean + full reseed)
@@ -145,12 +164,12 @@ Targets:
   tripbases   Trip base schedules (depends: patterns, vehicles)
   cargo       Cargo types & rates
   trips       Materialize trips (depends: tripbases)
-  rbac        Roles, feature flags & matrix (depends: stops)
+  rbac        Roles, feature flags & matrix
 
-Dependencies are auto-resolved. Example:
-  npx tsx server/seeds/index.ts rbac        # runs: stops → rbac
-  npx tsx server/seeds/index.ts prices      # runs: stops → layouts → patterns → prices
-  npx tsx server/seeds/index.ts trips       # runs: stops → layouts → vehicles → patterns → tripbases → trips
+Examples:
+  npx tsx server/seeds/index.ts buskita          # Full seed BusKita
+  npx tsx server/seeds/index.ts nusa             # Full seed Nusa
+  npx tsx server/seeds/index.ts buskita trips    # Only materialize trips (BusKita)
 `);
 }
 
@@ -162,6 +181,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(0);
   }
 
-  const run = args.length === 0 ? seedAll() : seedSpecific(args);
+  const validSets = ["nusa", "buskita"];
+  const set = (args[0] && validSets.includes(args[0]) ? args[0] : null) as SeedSet | null;
+
+  if (!set) {
+    console.error(`Error: dataset wajib. Gunakan: nusa | buskita`);
+    printHelp();
+    process.exit(1);
+  }
+
+  const targets = args.slice(1);
+  const run = targets.length === 0 ? seedAll(set) : seedSpecific(set, targets);
   run.catch(console.error).finally(() => process.exit(0));
 }

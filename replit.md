@@ -50,21 +50,19 @@ Pages interact with components, which utilize hooks, API clients, and React Quer
 - **UI/UX**: Utilizes Tailwind CSS and shadcn/ui for consistent styling. All interactive elements and data displays require `data-testid` attributes. Routing is handled by `wouter`, with pages lazy-loaded.
 
 ### Seed Data
-Seed files are split by context in `server/seeds/`:
-- `01-stops` — Stops & outlets
-- `02-layouts` — Seat layouts
-- `03-vehicles` — Vehicles
-- `04-patterns` — Trip patterns & pattern stops
-- `05-prices` — Price rules
-- `06-tripbases` — Trip base schedules
-- `07-cargo` — Cargo types & rates
-- `08-trips` — Materialize trips (30 days)
-- `09-rbac` — Roles, feature flags, matrix
+Two seed datasets available in `server/seeds/`:
+- **`buskita/`** — BusKita (active): SBY↔MLG (Premio Rp85k, Elf Rp55k), SBY↔BLI (Bus Rp250k), BLI↔UBD (Elf Rp65k). 5 cities, 11 stops, 10 vehicles, 8 patterns, 34 bases.
+- **`nusa/`** — Nusa Shuttle (archive): Jakarta↔Bandung, Jakarta↔Semarang, Semarang↔Yogyakarta routes.
 
-Run all: `npx tsx server/seeds/index.ts`
-Run specific: `npx tsx server/seeds/index.ts rbac` (auto-resolves dependencies)
-Help: `npx tsx server/seeds/index.ts --help`
-Legacy `server/seed.ts` still works (delegates to `server/seeds/index.ts`).
+Each dataset has files `01-stops` through `09-rbac` plus a shared `context.ts`.
+
+Run: `npx tsx server/seeds/index.ts <dataset> [target...]`
+- `npx tsx server/seeds/index.ts buskita` — Full BusKita seed (clean + reseed)
+- `npx tsx server/seeds/index.ts nusa` — Full Nusa seed
+- `npx tsx server/seeds/index.ts buskita trips` — Only materialize trips (auto-resolves deps)
+- `npx tsx server/seeds/index.ts --help` — Show all targets
+
+Legacy `server/seed.ts` still works (defaults to `buskita`).
 
 ### Feature Specifications
 - **CSO Booking Terminal**: Interactive seat map with real-time updates, multi-phase booking flow, unseat/reschedule/cancel functionalities, promo code support. Supports two booking modes:
