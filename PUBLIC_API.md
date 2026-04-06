@@ -16,6 +16,7 @@ Dokumentasi ini ditujukan untuk **pengembang third-party** yang mengintegrasikan
   - [GET /api/app/service-lines](#get-apiappservice-lines)
 - [Pencarian Trip](#pencarian-trip)
   - [GET /api/app/trips/search](#get-apiapptripssearch)
+  - [POST /api/app/trips/materialize](#post-apiapptripsmaterialize)
   - [GET /api/app/trips/:id](#get-apiapptripsid)
   - [GET /api/app/trips/:id/seatmap](#get-apiapptripsidseatmap)
   - [GET /api/app/trips/:tripId/reviews](#get-apiapptripstripidreviews)
@@ -352,9 +353,78 @@ X-Service-Key: sk_live_xxx
 | `total` | `integer` | Total hasil (semua halaman) |
 | `hasMore` | `boolean` | Masih ada halaman berikutnya |
 
-> **Penting tentang `tripId` virtual:** Trip dengan `tripId` berformat `"virtual-<uuid>"` adalah trip yang dijadwalkan tapi belum diinput ke database. Saat `POST /api/app/bookings` dikirim dengan `tripId` ini, sistem akan otomatis mematerialize trip tersebut. Gunakan nilai `tripId` dari response pencarian **apa adanya** ke request booking.
+> **Penting tentang `tripId` virtual:** Trip dengan `tripId` berformat `"virtual-<uuid>"` adalah trip yang dijadwalkan tapi belum ada di database. Sebelum bisa mengambil seatmap atau detail trip, trip virtual **harus dimaterialize** terlebih dahulu menggunakan endpoint `POST /api/app/trips/materialize`. Lihat bagian [Materialize Trip](#post-apiapptripsmaterialize) di bawah.
 
 > **Penting tentang `originSeq` dan `destinationSeq`:** Simpan nilai `origin.sequence` dan `destination.sequence` dari hasil pencarian. Kedua nilai ini **wajib** disertakan saat membuat booking dan mengambil seatmap.
+
+---
+
+### `POST /api/app/trips/materialize`
+
+Materialize trip virtual menjadi trip nyata di database. Endpoint ini **wajib dipanggil** sebelum mengambil seatmap atau detail untuk trip yang berstatus `isVirtual: true` dari hasil pencarian.
+
+Endpoint ini **idempoten** — jika trip sudah pernah dimaterialize untuk tanggal yang sama, akan mengembalikan `tripId` yang sudah ada tanpa membuat duplikat.
+
+**Auth:** `X-Service-Key`
+
+**Request Body:**
+
+```json
+{
+  "baseId": "550e8400-e29b-41d4-a716-446655440000",
+  "serviceDate": "2026-04-10"
+}
+```
+
+| Field | Tipe | Wajib | Keterangan |
+|-------|------|-------|------------|
+| `baseId` | `string (uuid)` | ✅ | UUID base trip — didapat dengan menghapus prefix `virtual-` dari `tripId` hasil pencarian. Contoh: `tripId = "virtual-abc123"` → `baseId = "abc123"` |
+| `serviceDate` | `string` | ✅ | Tanggal layanan format `YYYY-MM-DD` (dari `serviceDate` di hasil pencarian) |
+
+**Request:**
+```http
+POST /api/app/trips/materialize
+X-Service-Key: sk_live_xxx
+Content-Type: application/json
+
+{
+  "baseId": "550e8400-e29b-41d4-a716-446655440000",
+  "serviceDate": "2026-04-10"
+}
+```
+
+**Response `200` (Berhasil):**
+```json
+{
+  "tripId": "9f3a7b2e-1c4d-4e5f-8a6b-0d9e8f7c6b5a"
+}
+```
+
+| Field | Tipe | Keterangan |
+|-------|------|------------|
+| `tripId` | `string (uuid)` | UUID trip nyata yang baru dibuat (atau sudah ada). Gunakan ID ini untuk semua request selanjutnya (seatmap, detail, booking) |
+
+**Response `400`:**
+```json
+{ "error": "Validation failed", "details": { ... } }
+```
+
+**Response `422`:**
+```json
+{ "error": "Base trip tidak eligible untuk dimaterialize pada tanggal ini" }
+```
+
+Penyebab: jadwal tidak berlaku di hari tersebut, tanggal di luar periode operasional, atau ada schedule exception (libur/maintenance).
+
+**Proses di Balik Layar:**
+1. Validasi base trip eligible untuk tanggal tersebut (cek jadwal hari, periode operasional, exception)
+2. Buat record `trips` dengan status `scheduled`
+3. Buat `trip_stop_times` berdasarkan pola jadwal
+4. Derive `trip_legs` dari stop times
+5. Precompute `seat_inventory` untuk semua kursi × semua leg
+6. Trip siap digunakan (seatmap, booking, dll)
+
+> **Catatan:** Endpoint `POST /api/app/bookings` juga melakukan materialisasi otomatis jika menerima `tripId` virtual. Namun, **sangat disarankan** untuk memanggil endpoint materialize secara eksplisit agar seatmap dapat ditampilkan ke pengguna sebelum booking.
 
 ---
 
@@ -469,12 +539,14 @@ X-Service-Key: sk_live_xxx
 
 Peta kursi untuk segmen perjalanan tertentu (origin stop → destination stop). Menampilkan status setiap kursi: tersedia, ditahan, atau sudah dipesan.
 
+> **Penting:** Endpoint ini hanya berfungsi untuk trip yang sudah ada di database (UUID nyata). Untuk trip virtual (`isVirtual: true`), **harus** panggil `POST /api/app/trips/materialize` terlebih dahulu, lalu gunakan `tripId` dari response materialize.
+
 **Auth:** `X-Service-Key`
 
 **Path Parameter:**
 | Parameter | Keterangan |
 |-----------|------------|
-| `id` | UUID trip |
+| `id` | UUID trip nyata (bukan `virtual-*`) |
 
 **Query Parameters:**
 
@@ -976,12 +1048,38 @@ Dari response, simpan untuk setiap trip yang ingin dibooking:
 
 ---
 
-### Langkah 3 — Tampilkan Peta Kursi
+### Langkah 3 — Materialize Trip Virtual (Jika Diperlukan)
+
+Jika trip yang dipilih pengguna memiliki `isVirtual: true`, materialize terlebih dahulu:
 
 ```http
-GET /api/app/trips/550e8400-e29b-41d4-a716-446655440000/seatmap?originSeq=1&destinationSeq=3
+POST /api/app/trips/materialize
+X-Service-Key: sk_live_xxx
+Content-Type: application/json
+
+{
+  "baseId": "550e8400-e29b-41d4-a716-446655440000",
+  "serviceDate": "2026-04-10"
+}
+```
+
+> **Cara mendapatkan `baseId`:** Hapus prefix `virtual-` dari `tripId` hasil pencarian.
+> Contoh: `tripId = "virtual-550e8400-..."` → `baseId = "550e8400-..."`
+
+Simpan `tripId` dari response — ini adalah UUID trip nyata yang akan digunakan untuk seatmap dan booking.
+
+Jika trip **bukan** virtual (`isVirtual: false`), langkah ini dilewati. Gunakan `tripId` dari pencarian langsung.
+
+---
+
+### Langkah 4 — Tampilkan Peta Kursi
+
+```http
+GET /api/app/trips/{realTripId}/seatmap?originSeq=1&destinationSeq=3
 X-Service-Key: sk_live_xxx
 ```
+
+> Gunakan `tripId` nyata (UUID, bukan `virtual-*`). Untuk virtual trip, gunakan `tripId` dari response materialize di Langkah 3.
 
 Render layout kursi berdasarkan `layout.seatMap`. Tandai kursi berdasarkan `seatAvailability`:
 - `available: true, held: false` → tampilkan hijau (dapat dipilih)
@@ -990,9 +1088,9 @@ Render layout kursi berdasarkan `layout.seatMap`. Tandai kursi berdasarkan `seat
 
 ---
 
-### Langkah 4 — Buat Booking
+### Langkah 5 — Buat Booking
 
-Setelah pengguna memilih kursi dan mengisi data penumpang:
+Setelah pengguna memilih kursi dan mengisi data penumpang (gunakan `tripId` nyata, bukan `virtual-*`):
 
 ```http
 POST /api/app/bookings
@@ -1022,7 +1120,7 @@ Dari response, simpan:
 
 ---
 
-### Langkah 5 — Proses Pembayaran
+### Langkah 6 — Proses Pembayaran
 
 Arahkan pengguna ke payment gateway Anda. Kirim `providerRef` dari langkah 4 sebagai referensi order di sisi payment gateway.
 
@@ -1030,7 +1128,7 @@ Payment gateway akan memanggil `/api/app/payments/webhook` saat pembayaran seles
 
 ---
 
-### Langkah 6 — Terima Konfirmasi Webhook
+### Langkah 7 — Terima Konfirmasi Webhook
 
 Payment gateway mengirim POST ke `/api/app/payments/webhook`:
 
@@ -1048,7 +1146,7 @@ Saat webhook berhasil diproses, booking otomatis berubah status menjadi `"confir
 
 ---
 
-### Langkah 7 — Tampilkan E-Tiket
+### Langkah 8 — Tampilkan E-Tiket
 
 Gunakan `qrData` dari response booking untuk generate e-tiket:
 
@@ -1074,6 +1172,7 @@ Tiket berlaku sebagai bukti perjalanan. Petugas di bus/terminal dapat memindai Q
 | `401` | `"Invalid webhook signature"` | Signature webhook tidak cocok |
 | `404` | `"Trip not found"` | `tripId` tidak ada di database |
 | `404` | `"Trip has no layout"` | Trip belum dikonfigurasi layout kursi |
+| `422` | `"Base trip tidak eligible..."` | Materialize gagal — jadwal tidak berlaku untuk tanggal ini |
 | `404` | `"Shipment not found"` | Nomor waybill tidak ditemukan |
 | `503` | `"Payment webhook not configured"` | `PAYMENT_WEBHOOK_SECRET` belum diset di server |
 
@@ -1081,9 +1180,17 @@ Tiket berlaku sebagai bukti perjalanan. Petugas di bus/terminal dapat memindai Q
 
 ## Catatan Integrasi
 
-### Tentang Trip Virtual
+### Tentang Trip Virtual dan Materialize
 
-Trip virtual (`tripId` berformat `"virtual-<uuid>"`) adalah trip yang ada di jadwal berkala tapi belum pernah ada booking sebelumnya. Saat Anda membuat booking pertama untuk trip virtual, sistem secara otomatis **mematerialize** trip tersebut menjadi trip nyata di database. Proses ini transparan — Anda tidak perlu melakukan apa pun selain mengirim `tripId` dari hasil pencarian.
+Trip virtual (`tripId` berformat `"virtual-<uuid>"`) adalah trip yang ada di jadwal berkala tapi belum dimaterialize ke database. Untuk menampilkan seatmap dan detail trip ke pengguna, trip virtual harus dimaterialize terlebih dahulu menggunakan `POST /api/app/trips/materialize`.
+
+**Alur yang benar untuk trip virtual:**
+1. Pencarian → dapat trip dengan `isVirtual: true`
+2. Panggil `POST /api/app/trips/materialize` dengan `baseId` (tripId tanpa prefix `virtual-`) dan `serviceDate`
+3. Dapat `tripId` nyata (UUID) dari response
+4. Gunakan `tripId` nyata untuk seatmap, detail, dan booking
+
+**Catatan:** Endpoint booking (`POST /api/app/bookings`) juga melakukan materialize otomatis jika menerima `tripId` virtual. Namun alur di atas lebih baik karena memungkinkan pengguna melihat seatmap sebelum memutuskan booking.
 
 ### Race Condition pada Pemilihan Kursi
 

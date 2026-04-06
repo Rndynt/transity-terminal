@@ -59,8 +59,9 @@ X-Service-Key: <service-key-operator>
 
 | # | Endpoint | Kegunaan |
 |---|----------|----------|
-| 8 | `POST /api/app/bookings` | Buat booking baru |
-| 9 | `POST /api/app/payments/webhook` | Konfirmasi pembayaran (dari payment gateway) |
+| 8 | `POST /api/app/trips/materialize` | Materialize trip virtual → trip nyata (wajib sebelum seatmap untuk virtual trip) |
+| 9 | `POST /api/app/bookings` | Buat booking baru |
+| 10 | `POST /api/app/payments/webhook` | Konfirmasi pembayaran (dari payment gateway) |
 
 ---
 
@@ -88,28 +89,54 @@ X-Service-Key: sk_live_xxx
 | `isVirtual` | Jika `true`, trip belum ada di DB — akan otomatis dibuat saat booking pertama |
 
 **Catatan Virtual Trip:**
-- `tripId` berformat `virtual-<uuid>` artinya trip berasal dari jadwal berkala dan belum pernah ada booking
-- Saat booking, kirim `tripId` apa adanya (termasuk prefix `virtual-`) bersama `serviceDate`
-- Sistem otomatis membuat trip nyata (materialize) saat booking pertama untuk tanggal tersebut
-- Setelah dimaterialize, trip selanjutnya akan muncul sebagai real trip di pencarian
-- **Concurrent booking aman** — jika dua booking masuk bersamaan untuk virtual trip yang sama, sistem menggunakan database unique constraint untuk memastikan trip hanya dibuat sekali. Booking kedua otomatis mendapatkan trip ID yang sama dengan booking pertama
-- **Trip ID di response booking selalu berupa UUID real** (bukan `virtual-*` lagi) — simpan trip ID dari response booking untuk tracking selanjutnya
+- `tripId` berformat `virtual-<uuid>` artinya trip berasal dari jadwal berkala dan belum dimaterialize ke database
+- **Materialize wajib sebelum seatmap** — trip virtual tidak punya data di database, sehingga seatmap endpoint akan error `Trip not found`
+- Setelah dimaterialize, trip selanjutnya akan muncul sebagai real trip di pencarian berikutnya
+- **Concurrent materialize aman** — jika dua request materialize masuk bersamaan untuk base+tanggal yang sama, sistem menggunakan database unique constraint untuk memastikan trip hanya dibuat sekali
+- **Trip ID dari response materialize selalu berupa UUID real** (bukan `virtual-*` lagi) — gunakan UUID ini untuk semua request selanjutnya
 
-### Step 2: Ambil Seatmap
+### Step 2: Materialize Trip Virtual (Jika `isVirtual: true`)
+
+Langkah ini **wajib** jika trip yang dipilih user berstatus virtual. Jika trip sudah real (`isVirtual: false`), langkah ini dilewati.
 
 ```http
-GET /api/app/trips/{tripId}/seatmap?originSeq={originSeq}&destinationSeq={destinationSeq}
+POST /api/app/trips/materialize
+X-Service-Key: sk_live_xxx
+Content-Type: application/json
+
+{
+  "baseId": "550e8400-e29b-41d4-a716-446655440000",
+  "serviceDate": "2026-04-10"
+}
+```
+
+**Cara mendapatkan `baseId`:** Hapus prefix `virtual-` dari `tripId` hasil pencarian.
+```
+tripId = "virtual-550e8400-e29b-41d4-a716-446655440000"
+baseId = "550e8400-e29b-41d4-a716-446655440000"
+```
+
+**Response:**
+```json
+{
+  "tripId": "9f3a7b2e-1c4d-4e5f-8a6b-0d9e8f7c6b5a"
+}
+```
+
+Simpan `tripId` dari response — ini adalah UUID trip nyata. Gunakan untuk seatmap dan booking.
+
+**Endpoint ini idempoten** — memanggil ulang dengan `baseId` + `serviceDate` yang sama akan mengembalikan `tripId` yang sudah ada.
+
+**Error `422`:** Base trip tidak eligible untuk tanggal ini (jadwal tidak berlaku, ada exception libur/maintenance).
+
+### Step 3: Ambil Seatmap
+
+```http
+GET /api/app/trips/{realTripId}/seatmap?originSeq={originSeq}&destinationSeq={destinationSeq}
 X-Service-Key: sk_live_xxx
 ```
 
-**Catatan tentang Virtual Trip dan Seatmap:**
-Virtual trip (`tripId` berformat `virtual-*`) belum dimaterialize ke database, sehingga seatmap endpoint akan mengembalikan error `Trip not found`. Untuk mengatasi ini, TransityConsole harus:
-
-1. **Gunakan layout standar** — ambil daftar kursi dari layout berdasarkan `vehicleClass` (contoh: `premio-14` = 14 kursi). TransityConsole bisa menyimpan mapping `vehicleClass → seatNos` secara statis (misal `["1A","1B","2A","2B","2C",...]`)
-2. **Semua kursi dianggap tersedia** untuk virtual trip (karena belum ada booking)
-3. **`seatNo` tetap wajib** di request booking — sistem tidak auto-assign kursi
-
-Untuk real trip (UUID biasa), seatmap endpoint berfungsi normal dan wajib dipanggil sebelum booking.
+> **Penting:** Gunakan `tripId` nyata (UUID). Untuk trip yang awalnya virtual, gunakan `tripId` dari response materialize di Step 2.
 
 **Status kursi:**
 
@@ -119,7 +146,7 @@ Untuk real trip (UUID biasa), seatmap endpoint berfungsi normal dan wajib dipang
 | `false` | `false` | Sudah dipesan | Merah |
 | `false` | `true` | Sedang diproses orang lain | Kuning |
 
-### Step 3: Buat Booking
+### Step 4: Buat Booking
 
 ```http
 POST /api/app/bookings
@@ -127,11 +154,13 @@ X-Service-Key: sk_live_xxx
 Content-Type: application/json
 ```
 
+> **Penting:** Gunakan `tripId` nyata (UUID) dari response materialize atau dari pencarian (jika trip sudah real). Jangan kirim `tripId` berformat `virtual-*`.
+
 **Request Body:**
 
 ```json
 {
-  "tripId": "8fae9980-dc4c-4807-a098-bd5433c1f51e",
+  "tripId": "9f3a7b2e-1c4d-4e5f-8a6b-0d9e8f7c6b5a",
   "serviceDate": "2026-04-10",
   "originStopId": "a579d349-5434-4a52-a562-e0a82cca26d6",
   "destinationStopId": "5313225b-6ecd-4cbf-9245-3965075db961",
@@ -187,14 +216,14 @@ Content-Type: application/json
 | `passengers[].id` | Passenger ID per penumpang |
 | `passengers[].fareAmount` | Tarif per penumpang (string) |
 
-### Step 4: Proses Pembayaran
+### Step 5: Proses Pembayaran
 
 Setelah booking berhasil:
 1. Simpan `paymentIntent.providerRef`
 2. Arahkan user ke payment gateway TransityConsole
 3. Saat payment selesai, kirim webhook ke TransityTerminal
 
-### Step 5: Konfirmasi via Webhook
+### Step 6: Konfirmasi via Webhook
 
 ```http
 POST /api/app/payments/webhook
@@ -249,8 +278,9 @@ signature = HMAC-SHA256(PAYMENT_WEBHOOK_SECRET, raw_request_body_bytes)
 | `400` | `Seat holds have expired...` | Pembayaran terlambat, booking dibatalkan |
 | `401` | `Missing X-Service-Key header` | Tambahkan header `X-Service-Key` |
 | `401` | `Invalid service key` | Key salah — cek konfigurasi |
-| `404` | `Trip not found` | `tripId` tidak valid |
+| `404` | `Trip not found` | `tripId` tidak valid (atau belum dimaterialize untuk virtual trip) |
 | `404` | `Trip has no layout` | Trip belum dikonfigurasi seatmap oleh operator |
+| `422` | `Base trip tidak eligible...` | Materialize gagal — jadwal tidak berlaku di tanggal ini |
 | `503` | `Payment webhook not configured` | `PAYMENT_WEBHOOK_SECRET` belum diset di terminal |
 
 ---
@@ -276,6 +306,42 @@ signature = HMAC-SHA256(PAYMENT_WEBHOOK_SECRET, raw_request_body_bytes)
 - TransityConsole harus simpan mapping: `operatorId → { baseUrl, serviceKey }`
 - Request paralel ke beberapa operator saat search untuk aggregasi
 
+### Seatmap Caching di TransityConsole
+
+Seatmap **tidak boleh realtime** di TransityApp. Alasannya:
+- CSO (Customer Service Officer) di terminal beroperasi bersamaan dan memiliki akses langsung ke sistem booking
+- Jika seatmap realtime, user TransityApp bisa melihat kursi "tersedia" tapi gagal saat booking karena CSO sudah hold lebih dulu
+- Ini menciptakan pengalaman buruk
+
+**Rekomendasi implementasi di TransityConsole:**
+
+| Aspek | Rekomendasi |
+|-------|-------------|
+| **TTL Cache** | 30–60 detik |
+| **Cache Key** | `seatmap:{operatorId}:{tripId}:{originSeq}:{destinationSeq}` |
+| **Invalidasi** | Setelah booking berhasil dibuat (POST /api/app/bookings return 201) |
+| **Tampilan UI** | Tampilkan pesan "Ketersediaan kursi mungkin berubah. Pilih kursi cadangan jika memungkinkan." |
+| **Fallback** | Jika seatmap error saat booking, minta user refresh dan pilih ulang |
+
+### Error Translation Layer
+
+TransityTerminal mengembalikan error teknis (dalam bahasa Inggris, kadang berisi UUID dan nama tabel). **TransityConsole wajib menerjemahkan** semua error sebelum diteruskan ke TransityApp.
+
+**Jangan pernah forward raw error ke TransityApp.**
+
+Contoh terjemahan:
+
+| Error dari Terminal | Pesan ke TransityApp |
+|---------------------|---------------------|
+| `Seat 2A is already booked` | `Maaf, kursi 2A sudah dipesan. Silakan pilih kursi lain.` |
+| `Seat 2A is currently held by another user` | `Kursi 2A sedang diproses penumpang lain. Silakan pilih kursi lain.` |
+| `Seat holds have expired. Booking cannot be confirmed.` | `Waktu pembayaran habis. Booking Anda dibatalkan. Silakan pesan ulang.` |
+| `Trip not found` | `Perjalanan tidak ditemukan. Silakan cari ulang.` |
+| `Base trip tidak eligible...` | `Jadwal tidak tersedia untuk tanggal ini. Silakan pilih tanggal lain.` |
+| `Payment already processed` | (Anggap sukses — jangan tampilkan error) |
+| `Validation failed` | `Data tidak lengkap. Silakan periksa kembali.` |
+| Internal server error / 500 | `Terjadi gangguan sistem. Silakan coba beberapa saat lagi.` |
+
 ### Environment Variables yang Diperlukan di TransityTerminal
 
 | Variable | Keterangan |
@@ -299,6 +365,7 @@ async function searchAndBookFromConsole(
 ) {
   const headers = { 'X-Service-Key': serviceKey };
 
+  // Step 1: Cari trip
   const searchRes = await fetch(
     `${operatorBaseUrl}/api/app/trips/search?originCity=${origin}&destinationCity=${destination}&date=${date}`,
     { headers }
@@ -306,20 +373,36 @@ async function searchAndBookFromConsole(
   const { data: trips } = await searchRes.json();
   const selectedTrip = trips[0];
 
+  // Step 2: Materialize jika virtual
+  let realTripId = selectedTrip.tripId;
+  if (selectedTrip.isVirtual) {
+    const baseId = selectedTrip.tripId.replace('virtual-', '');
+    const matRes = await fetch(`${operatorBaseUrl}/api/app/trips/materialize`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseId, serviceDate: selectedTrip.serviceDate }),
+    });
+    const matData = await matRes.json();
+    if (!matRes.ok) throw new Error(matData.error);
+    realTripId = matData.tripId;
+  }
+
+  // Step 3: Ambil seatmap (gunakan realTripId, bukan virtual-*)
   const seatmapRes = await fetch(
-    `${operatorBaseUrl}/api/app/trips/${selectedTrip.tripId}/seatmap?originSeq=${selectedTrip.origin.sequence}&destinationSeq=${selectedTrip.destination.sequence}`,
+    `${operatorBaseUrl}/api/app/trips/${realTripId}/seatmap?originSeq=${selectedTrip.origin.sequence}&destinationSeq=${selectedTrip.destination.sequence}`,
     { headers }
   );
   const seatmap = await seatmapRes.json();
   const availableSeats = Object.entries(seatmap.seatAvailability)
-    .filter(([_, v]) => v.available)
+    .filter(([_, v]: any) => v.available)
     .map(([k]) => k);
 
+  // Step 4: Buat booking (gunakan realTripId)
   const bookingRes = await fetch(`${operatorBaseUrl}/api/app/bookings`, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      tripId: selectedTrip.tripId,
+      tripId: realTripId,
       serviceDate: selectedTrip.serviceDate,
       originStopId: selectedTrip.origin.stopId,
       destinationStopId: selectedTrip.destination.stopId,
@@ -334,6 +417,7 @@ async function searchAndBookFromConsole(
     }),
   });
   const booking = await bookingRes.json();
+  if (!bookingRes.ok) throw new Error(translateError(booking.error));
 
   return {
     bookingId: booking.id,
@@ -343,4 +427,49 @@ async function searchAndBookFromConsole(
     qrData: booking.qrData,
   };
 }
+
+// Error translator — WAJIB sebelum forward ke TransityApp
+function translateError(error: string): string {
+  if (error.includes('already booked')) return 'Kursi sudah dipesan. Silakan pilih kursi lain.';
+  if (error.includes('currently held')) return 'Kursi sedang diproses penumpang lain. Silakan pilih kursi lain.';
+  if (error.includes('holds have expired')) return 'Waktu pembayaran habis. Silakan pesan ulang.';
+  if (error.includes('not found')) return 'Data tidak ditemukan. Silakan cari ulang.';
+  if (error.includes('tidak eligible')) return 'Jadwal tidak tersedia untuk tanggal ini.';
+  if (error.includes('already processed')) return 'Pembayaran sudah dikonfirmasi sebelumnya.';
+  return 'Terjadi gangguan sistem. Silakan coba beberapa saat lagi.';
+}
+```
+
+---
+
+## Diagram Alur Lengkap
+
+```
+TransityApp                    TransityConsole                    TransityTerminal
+    |                               |                                    |
+    |--- Cari trip --------------->|                                    |
+    |                               |--- GET /trips/search ----------->|
+    |                               |<-- trips[] (real + virtual) ------|
+    |<-- Tampilkan hasil ----------|                                    |
+    |                               |                                    |
+    |--- Pilih trip (virtual) ---->|                                    |
+    |                               |--- POST /trips/materialize ----->|
+    |                               |<-- { tripId: "real-uuid" } ------|
+    |                               |                                    |
+    |--- Minta seatmap ----------->|                                    |
+    |                               |--- GET /trips/{id}/seatmap ----->|
+    |                               |<-- layout + availability ---------|
+    |                               |    (cache 30-60 detik)           |
+    |<-- Tampilkan seatmap --------|                                    |
+    |                               |                                    |
+    |--- Pilih kursi + booking --->|                                    |
+    |                               |--- POST /bookings -------------->|
+    |                               |<-- booking + paymentIntent ------|
+    |                               |    (invalidasi cache seatmap)    |
+    |<-- Tampilkan countdown ------|                                    |
+    |                               |                                    |
+    |--- Bayar ------------------->|                                    |
+    |                               |--- POST /payments/webhook ------>|
+    |                               |<-- { status: "success" } --------|
+    |<-- Tampilkan e-tiket --------|                                    |
 ```
