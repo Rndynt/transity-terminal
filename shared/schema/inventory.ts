@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, uuid, timestamp, integer, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, timestamp, integer, boolean, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { priceRuleScopeEnum } from "./enums";
@@ -13,11 +13,10 @@ export const seatInventory = pgTable("seat_inventory", {
   booked:   boolean("booked").default(false),
   holdRef:  text("hold_ref")
 }, (table) => ({
-  idxSeatInvTripSeat: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_trip_seat ON ${table} (trip_id, seat_no)`,
-  idxSeatInvTripId: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_trip_id ON ${table} (trip_id)`,
-  idxSeatInvTripLeg: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_trip_leg ON ${table} (trip_id, leg_index)`,
-  uniqTripSeatLeg: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_seat_inv_trip_seat_leg ON ${table} (trip_id, seat_no, leg_index)`,
-  idxSeatInvHoldRef: sql`CREATE INDEX IF NOT EXISTS idx_seat_inv_hold_ref ON ${table} (hold_ref) WHERE hold_ref IS NOT NULL`
+  uniqTripSeatLeg: uniqueIndex("uniq_seat_inv_trip_seat_leg").on(table.tripId, table.seatNo, table.legIndex),
+  idxSeatInvTripSeat: index("idx_seat_inv_trip_seat").on(table.tripId, table.seatNo),
+  idxSeatInvTripId: index("idx_seat_inv_trip_id").on(table.tripId),
+  idxSeatInvTripLeg: index("idx_seat_inv_trip_leg").on(table.tripId, table.legIndex),
 }));
 
 export const insertSeatInventorySchema = createInsertSchema(seatInventory).omit({ id: true });
