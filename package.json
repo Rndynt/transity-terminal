@@ -4,7 +4,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "NODE_ENV=development node --import tsx/esm server/index.ts",
+    "dev": "NODE_ENV=development npx tsx server/index.ts",
     "build": "vite build && node esbuild.config.js",
     "start": "NODE_ENV=production node dist/index.js",
     "start:dev": "NODE_ENV=production DEV_BYPASS_AUTH=true node dist/index.js",
