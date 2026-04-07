@@ -22,6 +22,13 @@ Dokumentasi ini ditujukan untuk **pengembang third-party** yang mengintegrasikan
   - [GET /api/app/trips/:tripId/reviews](#get-apiapptripstripidreviews)
 - [Pembuatan Booking](#pembuatan-booking)
   - [POST /api/app/bookings](#post-apiappbookings)
+  - [GET /api/app/bookings](#get-apiappbookings)
+  - [GET /api/app/bookings/:id](#get-apiappbookingsid)
+  - [POST /api/app/bookings/:id/pay](#post-apiappbookingsidpay)
+  - [POST /api/app/bookings/:id/cancel](#post-apiappbookingsidcancel)
+- [Pembayaran & Voucher](#pembayaran--voucher)
+  - [GET /api/app/payments/methods](#get-apiapppaymentsmethods)
+  - [POST /api/app/vouchers/validate](#post-apiappvouchersvalidate)
 - [Kargo](#kargo)
   - [GET /api/app/cargo/track/:waybillNumber](#get-apiappcargotracknomor-waybill)
   - [GET /api/app/cargo/:waybillNumber](#get-apiappcargonomor-waybill)
@@ -38,7 +45,10 @@ Dokumentasi ini ditujukan untuk **pengembang third-party** yang mengintegrasikan
 Public API TransityTerminal memungkinkan sistem eksternal (platform agregator tiket, website operator, aplikasi pihak ketiga) untuk:
 
 - Mencari jadwal dan ketersediaan kursi
-- Membuat booking atas nama penumpang
+- Membuat booking atas nama penumpang (dengan atau tanpa pembayaran langsung)
+- Membayar booking yang ditahan (held) — dengan dukungan voucher/promo
+- Memvalidasi kode voucher dan melihat metode pembayaran
+- Memonitor dan membatalkan booking
 - Melacak pengiriman kargo
 - Menerima notifikasi status pembayaran via webhook
 
@@ -729,7 +739,7 @@ Setelah booking dibuat:
 | `passengers[].phone` | `string` | ❌ | Nomor telepon penumpang |
 | `passengers[].idNumber` | `string` | ❌ | NIK / nomor identitas |
 | `passengers[].seatNo` | `string` | ✅ | Minimal 1 karakter — harus sesuai `seat_no` dari seatmap |
-| `paymentMethod` | `string` | ✅ | Hanya: `"qr"` \| `"ewallet"` \| `"bank"` |
+| `paymentMethod` | `string` | ❌ | `"qr"` \| `"ewallet"` \| `"bank"`. Jika tidak dikirim, booking dibuat dengan status `pending` tanpa payment record — pembayaran dilakukan kemudian via [`POST /api/app/bookings/:id/pay`](#post-apiappbookingsidpay) |
 
 **Response `201` (Booking Berhasil Dibuat):**
 
@@ -839,9 +849,466 @@ Setelah booking dibuat:
 { "error": "Trip not found" }
 ```
 
+**Response `201` (Booking Tanpa `paymentMethod` — Held Booking):**
+
+Jika `paymentMethod` tidak dikirim, booking tetap dibuat dengan status `pending` dan kursi di-hold selama 15 menit. Namun **tidak ada `payments` atau `paymentIntent`** di response. Pembayaran harus dilakukan via [`POST /api/app/bookings/:id/pay`](#post-apiappbookingsidpay) sebelum hold expired.
+
+```json
+{
+  "id": "booking-uuid-456",
+  "status": "pending",
+  "totalAmount": "170000",
+  "holdExpiresAt": "2026-04-10T00:15:00.000Z",
+  "passengers": [...],
+  "qrData": [...],
+  "payments": [],
+  "paymentIntent": null,
+  "createdAt": "2026-04-10T00:00:00.000Z"
+}
+```
+
 **Response `401` — Tanpa auth:**
 ```json
 { "error": "Unauthorized" }
+```
+
+---
+
+### `GET /api/app/bookings`
+
+Daftar booking. Jika menggunakan **Service Key**, mengembalikan semua booking dengan filter opsional. Endpoint ini digunakan oleh TransityConsole untuk memonitor status booking secara global.
+
+**Auth:** `X-Service-Key`
+
+**Query Parameters:**
+
+| Parameter | Tipe | Wajib | Keterangan |
+|-----------|------|-------|------------|
+| `status` | `string` | ❌ | Filter berdasarkan status booking: `pending`, `confirmed`, `canceled` |
+| `date` | `string` | ❌ | Filter berdasarkan tanggal layanan trip format `YYYY-MM-DD` |
+| `page` | `integer ≥ 1` | ❌ | Nomor halaman (default: 1) |
+| `limit` | `integer 1-50` | ❌ | Jumlah hasil per halaman (default: 20, maks: 50) |
+
+**Request:**
+```http
+GET /api/app/bookings?status=pending&date=2026-04-10&page=1&limit=20
+X-Service-Key: sk_live_xxx
+```
+
+**Response `200`:**
+```json
+{
+  "data": [
+    {
+      "id": "booking-uuid-123",
+      "bookingCode": "TRN-K-00000123",
+      "tripId": "550e8400-e29b-41d4-a716-446655440000",
+      "serviceDate": "2026-04-10",
+      "status": "pending",
+      "totalAmount": "170000",
+      "discountAmount": "0",
+      "voucherCode": null,
+      "channel": "APP",
+      "pendingExpiresAt": "2026-04-10T00:15:00.000Z",
+      "originStopId": "550e8400-e29b-41d4-a716-111111111111",
+      "destinationStopId": "550e8400-e29b-41d4-a716-222222222222",
+      "snapOriginStopName": "Terminal Kampung Rambutan",
+      "snapDestinationStopName": "Terminal Leuwipanjang",
+      "createdAt": "2026-04-10T00:00:00.000Z",
+      "holdExpiresAt": "2026-04-10T00:15:00.000Z",
+      "finalAmount": "170000"
+    }
+  ],
+  "total": 15,
+  "page": 1,
+  "limit": 20,
+  "hasMore": false
+}
+```
+
+**Penjelasan Field Response:**
+
+| Field | Tipe | Keterangan |
+|-------|------|------------|
+| `holdExpiresAt` | `string \| null` | Waktu kadaluarsa hold kursi (hanya untuk status `pending`). Dari seat hold aktif atau `pendingExpiresAt`. `null` jika booking bukan pending |
+| `finalAmount` | `string` | Total setelah diskon: `totalAmount - discountAmount` |
+| `discountAmount` | `string \| null` | Jumlah diskon dari voucher/promo |
+| `voucherCode` | `string \| null` | Kode voucher yang digunakan (jika ada) |
+| `snapOriginStopName` | `string \| null` | Snapshot nama stop asal saat booking dibuat |
+| `snapDestinationStopName` | `string \| null` | Snapshot nama stop tujuan saat booking dibuat |
+
+---
+
+### `GET /api/app/bookings/:id`
+
+Detail lengkap satu booking termasuk penumpang, pembayaran, QR data.
+
+**Auth:** `X-Service-Key` ATAU `Authorization: Bearer <jwt-token>`
+
+Jika menggunakan JWT, hanya bisa melihat booking milik sendiri (`appUserId` harus cocok). Service Key dapat melihat booking siapapun.
+
+**Path Parameter:**
+| Parameter | Keterangan |
+|-----------|------------|
+| `id` | UUID booking |
+
+**Request:**
+```http
+GET /api/app/bookings/booking-uuid-123
+X-Service-Key: sk_live_xxx
+```
+
+**Response `200`:**
+```json
+{
+  "id": "booking-uuid-123",
+  "tripId": "550e8400-e29b-41d4-a716-446655440000",
+  "serviceDate": "2026-04-10",
+  "patternCode": "JKT-BDG-EKS",
+  "patternName": "Jakarta — Bandung Eksekutif",
+  "origin": {
+    "stopId": "550e8400-e29b-41d4-a716-111111111111",
+    "name": "Terminal Kampung Rambutan",
+    "code": "KR",
+    "city": "Jakarta"
+  },
+  "destination": {
+    "stopId": "550e8400-e29b-41d4-a716-222222222222",
+    "name": "Terminal Leuwipanjang",
+    "code": "LWP",
+    "city": "Bandung"
+  },
+  "departAt": "2026-04-10T03:00:00.000Z",
+  "arriveAt": "2026-04-10T07:00:00.000Z",
+  "status": "pending",
+  "totalAmount": "170000",
+  "channel": "APP",
+  "holdExpiresAt": "2026-04-10T00:15:00.000Z",
+  "passengers": [
+    {
+      "id": "pax-uuid-1",
+      "fullName": "Budi Santoso",
+      "phone": "081234567890",
+      "seatNo": "A1",
+      "fareAmount": "85000"
+    }
+  ],
+  "qrData": [
+    {
+      "passengerId": "pax-uuid-1",
+      "seatNo": "A1",
+      "fullName": "Budi Santoso",
+      "qrToken": "TRN-K-00000123-A1",
+      "qrPayload": "{...}"
+    }
+  ],
+  "payments": [
+    {
+      "id": "payment-uuid-1",
+      "method": "qr",
+      "amount": "170000",
+      "status": "success",
+      "paidAt": "2026-04-10T00:05:00.000Z"
+    }
+  ],
+  "paymentIntent": null,
+  "createdAt": "2026-04-10T00:00:00.000Z"
+}
+```
+
+**Response `403`:**
+```json
+{ "error": "Unauthorized" }
+```
+JWT user mencoba mengakses booking milik user lain.
+
+**Response `404`:**
+```json
+{ "error": "Booking not found" }
+```
+
+---
+
+### `POST /api/app/bookings/:id/pay`
+
+Membayar booking yang sedang dalam status `pending` (held). Endpoint ini digunakan saat booking dibuat **tanpa `paymentMethod`** — booking ditahan terlebih dahulu, lalu user memilih metode pembayaran dan menyelesaikan transaksi.
+
+**Auth:** `X-Service-Key` ATAU `Authorization: Bearer <jwt-token>`
+
+Jika menggunakan JWT, hanya bisa membayar booking milik sendiri. Service Key dapat membayar booking siapapun.
+
+**Path Parameter:**
+| Parameter | Keterangan |
+|-----------|------------|
+| `id` | UUID booking yang akan dibayar |
+
+**Request Body:**
+
+```json
+{
+  "paymentMethod": "qr",
+  "voucherCode": "DISKON10"
+}
+```
+
+| Field | Tipe | Wajib | Keterangan |
+|-------|------|-------|------------|
+| `paymentMethod` | `string` | ✅ | `"qr"` \| `"ewallet"` \| `"bank"` |
+| `voucherCode` | `string` | ❌ | Kode voucher untuk mendapatkan diskon. Voucher divalidasi secara otomatis (status, tanggal, limit penggunaan). Jika valid, diskon dihitung dan diterapkan |
+
+**Request:**
+```http
+POST /api/app/bookings/booking-uuid-123/pay
+X-Service-Key: sk_live_xxx
+Content-Type: application/json
+
+{
+  "paymentMethod": "qr",
+  "voucherCode": "DISKON10"
+}
+```
+
+**Response `200` (Berhasil):**
+```json
+{
+  "bookingId": "booking-uuid-123",
+  "status": "confirmed",
+  "totalAmount": "170000",
+  "discountAmount": "17000",
+  "finalAmount": "153000",
+  "paymentIntent": {
+    "paymentId": "payment-uuid-1",
+    "providerRef": "PAY-ABC123DEF456GHI7890ABCD",
+    "method": "qr",
+    "amount": "153000"
+  }
+}
+```
+
+| Field | Tipe | Keterangan |
+|-------|------|------------|
+| `bookingId` | `string (uuid)` | ID booking yang dibayar |
+| `status` | `string` | Selalu `"confirmed"` jika berhasil |
+| `totalAmount` | `string` | Total asli sebelum diskon (dalam Rupiah) |
+| `discountAmount` | `string` | Jumlah diskon yang diterapkan (dalam Rupiah). `"0"` jika tanpa voucher |
+| `finalAmount` | `string` | Jumlah yang benar-benar dibayarkan: `totalAmount - discountAmount` |
+| `paymentIntent.providerRef` | `string` | Referensi pembayaran unik (`PAY-XXXX`) |
+| `paymentIntent.amount` | `string` | Jumlah yang dibayarkan (sama dengan `finalAmount`) |
+
+**Proses di Balik Layar:**
+1. Validasi booking ada dan berstatus `pending`
+2. Validasi seat hold masih aktif (belum expired)
+3. Jika ada `voucherCode`: validasi voucher, hitung diskon
+4. Lock kursi via `SELECT FOR UPDATE` untuk menghindari race condition
+5. Buat payment record dengan status `success`
+6. Update booking status → `confirmed`
+7. Mark semua kursi sebagai `booked = true`
+8. Hapus seat holds
+9. Jika voucher digunakan: tandai voucher sebagai `used`, increment usage count promo
+
+**Response `400` — Booking bukan pending:**
+```json
+{ "error": "Booking is not in held/pending status" }
+```
+
+**Response `400` — Hold expired:**
+```json
+{ "error": "Booking hold has expired" }
+```
+
+**Response `400` — Seat hold expired:**
+```json
+{ "error": "Seat holds have expired. Booking cannot be paid." }
+```
+
+**Response `400` — Kursi sudah diambil orang lain:**
+```json
+{ "error": "Seat A1 is no longer available" }
+```
+
+**Response `400` — Voucher error:**
+```json
+{ "error": "Voucher not found or inactive" }
+{ "error": "Voucher has expired" }
+{ "error": "Promotion usage limit reached" }
+{ "error": "Minimum purchase amount is 100000" }
+```
+
+**Response `403`:**
+```json
+{ "error": "Unauthorized" }
+```
+
+**Response `404`:**
+```json
+{ "error": "Booking not found" }
+```
+
+---
+
+### `POST /api/app/bookings/:id/cancel`
+
+Membatalkan booking yang berstatus `pending` atau `confirmed`. Kursi akan dilepas kembali dan tersedia untuk booking lain.
+
+**Auth:** `X-Service-Key` ATAU `Authorization: Bearer <jwt-token>`
+
+Jika menggunakan JWT, hanya bisa membatalkan booking milik sendiri. Service Key dapat membatalkan booking siapapun.
+
+**Path Parameter:**
+| Parameter | Keterangan |
+|-----------|------------|
+| `id` | UUID booking yang akan dibatalkan |
+
+**Request:**
+```http
+POST /api/app/bookings/booking-uuid-123/cancel
+X-Service-Key: sk_live_xxx
+```
+
+**Response `200`:**
+```json
+{ "status": "cancelled" }
+```
+
+**Proses di Balik Layar:**
+1. Validasi booking ada
+2. Validasi status `pending` atau `confirmed` (tidak bisa membatalkan booking yang sudah dibatalkan)
+3. Reset seat inventory: `booked = false`, `holdRef = null`
+4. Hapus seat holds terkait
+5. Update booking status → `canceled`
+
+**Response `400` — Booking sudah dibatalkan atau status tidak valid:**
+```json
+{ "error": "Booking cannot be canceled" }
+```
+
+**Response `403`:**
+```json
+{ "error": "Unauthorized" }
+```
+
+**Response `404`:**
+```json
+{ "error": "Booking not found" }
+```
+
+---
+
+## Pembayaran & Voucher
+
+### `GET /api/app/payments/methods`
+
+Daftar metode pembayaran yang tersedia di terminal ini. Gunakan data dari endpoint ini untuk menampilkan pilihan pembayaran ke user.
+
+**Auth:** `X-Service-Key`
+
+**Request:**
+```http
+GET /api/app/payments/methods
+X-Service-Key: sk_live_xxx
+```
+
+**Response `200`:**
+```json
+[
+  {
+    "code": "qr",
+    "name": "QRIS",
+    "description": "Pembayaran via QRIS",
+    "active": true
+  },
+  {
+    "code": "ewallet",
+    "name": "E-Wallet",
+    "description": "Pembayaran via e-wallet (GoPay, OVO, DANA)",
+    "active": true
+  },
+  {
+    "code": "bank",
+    "name": "Bank Transfer",
+    "description": "Transfer bank (VA)",
+    "active": true
+  }
+]
+```
+
+| Field | Tipe | Keterangan |
+|-------|------|------------|
+| `code` | `string` | Kode metode pembayaran — gunakan ini di field `paymentMethod` saat booking atau pay |
+| `name` | `string` | Nama tampilan |
+| `description` | `string` | Deskripsi singkat |
+| `active` | `boolean` | `true` = metode pembayaran tersedia |
+
+---
+
+### `POST /api/app/vouchers/validate`
+
+Validasi kode voucher sebelum digunakan. Berguna untuk menampilkan informasi diskon ke user sebelum melakukan pembayaran.
+
+**Auth:** `X-Service-Key`
+
+**Request Body:**
+
+```json
+{
+  "code": "DISKON10",
+  "amount": 170000
+}
+```
+
+| Field | Tipe | Wajib | Keterangan |
+|-------|------|-------|------------|
+| `code` | `string` | ✅ | Kode voucher (case-insensitive, disimpan uppercase) |
+| `amount` | `number` | ❌ | Jumlah pembelian (dalam Rupiah). Jika dikirim, sistem menghitung `calculatedDiscount` dan memeriksa `minPurchase` |
+
+**Request:**
+```http
+POST /api/app/vouchers/validate
+X-Service-Key: sk_live_xxx
+Content-Type: application/json
+
+{
+  "code": "DISKON10",
+  "amount": 170000
+}
+```
+
+**Response `200` (Valid):**
+```json
+{
+  "valid": true,
+  "code": "DISKON10",
+  "discountType": "percentage",
+  "discountValue": "10",
+  "minPurchase": "50000",
+  "maxDiscount": "25000",
+  "calculatedDiscount": 17000
+}
+```
+
+| Field | Tipe | Keterangan |
+|-------|------|------------|
+| `valid` | `boolean` | Selalu `true` jika response 200 |
+| `code` | `string` | Kode voucher (uppercase) |
+| `discountType` | `string` | `"percentage"` (%) atau `"fixed"` (nominal tetap) |
+| `discountValue` | `string` | Nilai diskon: persentase (contoh `"10"` = 10%) atau nominal rupiah (contoh `"15000"`) |
+| `minPurchase` | `string \| null` | Minimal pembelian untuk menggunakan voucher. `null` = tidak ada minimal |
+| `maxDiscount` | `string \| null` | Batas maksimal diskon (hanya berlaku untuk tipe `percentage`). `null` = tidak ada batas |
+| `calculatedDiscount` | `number \| null` | Jumlah diskon yang dihitung berdasarkan `amount`. `null` jika `amount` tidak dikirim |
+
+**Cara Menghitung Diskon:**
+- **Tipe `percentage`:** `diskon = amount × discountValue / 100`, kemudian dicap oleh `maxDiscount` (jika ada)
+- **Tipe `fixed`:** `diskon = discountValue` (tidak terpengaruh `amount`)
+
+**Response `400` — Voucher tidak valid:**
+```json
+{ "error": "Voucher not found or inactive" }
+{ "error": "Voucher is not yet valid" }
+{ "error": "Voucher has expired" }
+{ "error": "Associated promotion is inactive" }
+{ "error": "Promotion has expired" }
+{ "error": "Promotion usage limit reached" }
+{ "error": "Minimum purchase amount is 50000" }
 ```
 
 ---
@@ -1088,9 +1555,9 @@ Render layout kursi berdasarkan `layout.seatMap`. Tandai kursi berdasarkan `seat
 
 ---
 
-### Langkah 5 — Buat Booking
+### Langkah 5 — Buat Booking (Held)
 
-Setelah pengguna memilih kursi dan mengisi data penumpang (gunakan `tripId` nyata, bukan `virtual-*`):
+Setelah pengguna memilih kursi dan mengisi data penumpang. **Jangan sertakan `paymentMethod`** agar booking ditahan (held) — pembayaran dilakukan di langkah berikutnya.
 
 ```http
 POST /api/app/bookings
@@ -1107,30 +1574,67 @@ Content-Type: application/json
   "passengers": [
     { "fullName": "Budi Santoso", "seatNo": "A1", "phone": "081234567890" },
     { "fullName": "Siti Rahayu",  "seatNo": "A2", "phone": "089987654321" }
-  ],
-  "paymentMethod": "qr"
+  ]
 }
 ```
 
 Dari response, simpan:
-- `id` (bookingId)
-- `paymentIntent.providerRef` → kirim ke payment gateway sebagai referensi eksternal
-- `paymentIntent.expiresAt` → tampilkan countdown ke user
+- `id` (bookingId) — digunakan untuk membayar dan memonitor status
 - `totalAmount` → jumlah yang harus dibayar
+- `holdExpiresAt` → tampilkan countdown ke user (15 menit)
 
 ---
 
-### Langkah 6 — Proses Pembayaran
+### Langkah 5.5 — Validasi Voucher (Opsional)
 
-Arahkan pengguna ke payment gateway Anda. Kirim `providerRef` dari langkah 4 sebagai referensi order di sisi payment gateway.
+Jika user memasukkan kode voucher:
 
-Payment gateway akan memanggil `/api/app/payments/webhook` saat pembayaran selesai.
+```http
+POST /api/app/vouchers/validate
+X-Service-Key: sk_live_xxx
+Content-Type: application/json
+
+{
+  "code": "DISKON10",
+  "amount": 170000
+}
+```
+
+Tampilkan `calculatedDiscount` ke user sebagai preview potongan harga.
 
 ---
 
-### Langkah 7 — Terima Konfirmasi Webhook
+### Langkah 6 — Ambil Metode Pembayaran & Bayar
 
-Payment gateway mengirim POST ke `/api/app/payments/webhook`:
+Ambil daftar metode pembayaran:
+
+```http
+GET /api/app/payments/methods
+X-Service-Key: sk_live_xxx
+```
+
+Setelah user memilih metode pembayaran, bayar booking:
+
+```http
+POST /api/app/bookings/{bookingId}/pay
+X-Service-Key: sk_live_xxx
+Content-Type: application/json
+
+{
+  "paymentMethod": "qr",
+  "voucherCode": "DISKON10"
+}
+```
+
+Response berisi `status: "confirmed"`, `finalAmount`, dan `paymentIntent.providerRef`.
+
+> **Catatan:** Endpoint `/pay` langsung mengkonfirmasi booking (pembayaran instant). Tidak perlu webhook terpisah.
+
+---
+
+### Langkah 6 (Alternatif) — Alur Webhook
+
+Jika menggunakan payment gateway eksternal, kirim `paymentMethod` saat booking di Langkah 5, lalu konfirmasi via webhook:
 
 ```http
 POST /api/app/payments/webhook
@@ -1142,11 +1646,9 @@ X-Webhook-Signature: <hmac-hex>
 }
 ```
 
-Saat webhook berhasil diproses, booking otomatis berubah status menjadi `"confirmed"` dan kursi terkunci permanen.
-
 ---
 
-### Langkah 8 — Tampilkan E-Tiket
+### Langkah 7 — Tampilkan E-Tiket
 
 Gunakan `qrData` dari response booking untuk generate e-tiket:
 
@@ -1154,6 +1656,37 @@ Gunakan `qrData` dari response booking untuk generate e-tiket:
 - `qrPayload` → JSON string untuk generate gambar QR code (gunakan library QR code di sisi klien)
 
 Tiket berlaku sebagai bukti perjalanan. Petugas di bus/terminal dapat memindai QR code atau memasukkan `qrToken` secara manual.
+
+---
+
+### Langkah 8 — Pembatalan (Opsional)
+
+Untuk membatalkan booking:
+
+```http
+POST /api/app/bookings/{bookingId}/cancel
+X-Service-Key: sk_live_xxx
+```
+
+Response: `{ "status": "cancelled" }`. Hanya booking dengan status `pending` atau `confirmed` yang dapat dibatalkan.
+
+---
+
+### Langkah 9 — Monitor Booking
+
+Untuk dashboard atau monitoring:
+
+```http
+GET /api/app/bookings?status=pending&date=2026-04-10&page=1&limit=20
+X-Service-Key: sk_live_xxx
+```
+
+Detail per booking:
+
+```http
+GET /api/app/bookings/{bookingId}
+X-Service-Key: sk_live_xxx
+```
 
 ---
 
@@ -1166,12 +1699,24 @@ Tiket berlaku sebagai bukti perjalanan. Petugas di bus/terminal dapat memindai Q
 | `400` | `"Seat X is currently held by another user"` | Kursi sedang di-hold (coba kursi lain) |
 | `400` | `"Payment not found"` | `providerRef` di webhook tidak dikenali |
 | `400` | `"Payment already processed"` | Webhook duplikat untuk payment yang sama |
-| `400` | `"Seat holds have expired. Booking cannot be confirmed."` | Pembayaran melebihi 15 menit |
+| `400` | `"Seat holds have expired. Booking cannot be confirmed."` | Pembayaran melebihi 15 menit (webhook) |
+| `400` | `"Seat holds have expired. Booking cannot be paid."` | Pembayaran melebihi 15 menit (pay endpoint) |
+| `400` | `"Booking is not in held/pending status"` | Mencoba membayar booking yang sudah confirmed/canceled |
+| `400` | `"Booking hold has expired"` | `pendingExpiresAt` sudah terlewat |
+| `400` | `"Seat X is no longer available"` | Kursi diambil orang lain saat proses pembayaran |
+| `400` | `"Booking cannot be canceled"` | Booking sudah dibatalkan atau status tidak valid |
+| `400` | `"Voucher not found or inactive"` | Kode voucher tidak ditemukan atau sudah nonaktif |
+| `400` | `"Voucher has expired"` | Voucher sudah melewati tanggal berlaku |
+| `400` | `"Voucher is not yet valid"` | Voucher belum memasuki tanggal berlaku |
+| `400` | `"Promotion usage limit reached"` | Kuota penggunaan promosi habis |
+| `400` | `"Minimum purchase amount is X"` | Total pembelian kurang dari minimal pembelian voucher |
 | `401` | `"Unauthorized"` | Service key tidak ada atau salah |
 | `401` | `"Missing webhook signature"` | Webhook tanpa header signature |
 | `401` | `"Invalid webhook signature"` | Signature webhook tidak cocok |
+| `403` | `"Unauthorized"` | JWT user mengakses booking milik user lain |
 | `404` | `"Trip not found"` | `tripId` tidak ada di database |
 | `404` | `"Trip has no layout"` | Trip belum dikonfigurasi layout kursi |
+| `404` | `"Booking not found"` | Booking ID tidak ditemukan |
 | `422` | `"Base trip tidak eligible..."` | Materialize gagal — jadwal tidak berlaku untuk tanggal ini |
 | `404` | `"Shipment not found"` | Nomor waybill tidak ditemukan |
 | `503` | `"Payment webhook not configured"` | `PAYMENT_WEBHOOK_SECRET` belum diset di server |
