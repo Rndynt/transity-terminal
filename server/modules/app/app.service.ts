@@ -3,7 +3,7 @@ import {
   appUsers, reviews, bookings, payments, trips, tripPatterns, 
   tripStopTimes, stops, patternStops, vehicles, cargoShipments, cargoTypes,
   seatInventory, tripLegs, seatHolds, tripBases, scheduleExceptions,
-  operatorSettings,
+  operatorSettings, vouchers, promotions,
   type AppUser, type InsertAppUser, type Review, type InsertReview
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, lte, inArray, gt, isNull } from "drizzle-orm";
@@ -879,7 +879,7 @@ export class AppService {
     originSeq: number;
     destinationSeq: number;
     passengers: { fullName: string; phone?: string; idNumber?: string; seatNo: string }[];
-    paymentMethod: 'qr' | 'ewallet' | 'bank';
+    paymentMethod?: 'qr' | 'ewallet' | 'bank';
     serviceDate?: string;
   }): Promise<BookingDetailResponse> {
     const resolvedTripId = await this.resolveTripId(params.tripId, params.serviceDate);
@@ -922,17 +922,19 @@ export class AppService {
       await insertPassengerRows(tx, booking.id, params.passengers, fareQuote);
       await createSeatHoldsForBooking(tx, resolvedTripId, booking.id, seatNos, legIndexes, params.userId, holdExpiresAt);
 
-      const { randomBytes } = await import('crypto');
-      const paymentRef = `PAY-${randomBytes(12).toString('hex').toUpperCase()}`;
+      if (params.paymentMethod) {
+        const { randomBytes } = await import('crypto');
+        const paymentRef = `PAY-${randomBytes(12).toString('hex').toUpperCase()}`;
 
-      await tx.insert(payments).values({
-        bookingId: booking.id,
-        method: params.paymentMethod,
-        amount: totalAmount.toString(),
-        status: 'pending',
-        providerRef: paymentRef,
-        paidAt: null,
-      });
+        await tx.insert(payments).values({
+          bookingId: booking.id,
+          method: params.paymentMethod,
+          amount: totalAmount.toString(),
+          status: 'pending',
+          providerRef: paymentRef,
+          paidAt: null,
+        });
+      }
 
       return booking.id;
     });
@@ -1072,7 +1074,7 @@ export class AppService {
     };
   }
 
-  async getUserBookings(userId: string): Promise<UserBookingSummary[]> {
+  async getUserBookings(userId: string): Promise<any[]> {
     const result = await db.select({
       id: bookings.id,
       tripId: bookings.tripId,
@@ -1085,7 +1087,9 @@ export class AppService {
       destinationSeq: bookings.destinationSeq,
       status: bookings.status,
       totalAmount: bookings.totalAmount,
+      discountAmount: bookings.discountAmount,
       channel: bookings.channel,
+      pendingExpiresAt: bookings.pendingExpiresAt,
       createdAt: bookings.createdAt,
     })
     .from(bookings)
@@ -1099,15 +1103,26 @@ export class AppService {
     const stopIds = [...new Set(result.flatMap(b => [b.originStopId, b.destinationStopId]))];
     const bookingIds = result.map(b => b.id);
 
-    const [allStops, allPassengers] = await Promise.all([
+    const pendingBookingIds = result.filter(b => b.status === 'pending').map(b => b.id);
+    const [allStops, allPassengers, holdRows] = await Promise.all([
       this.storage.getStopsByIds(stopIds),
       this.storage.getPassengersByBookingIds(bookingIds),
+      pendingBookingIds.length > 0
+        ? db.select({ bookingId: seatHolds.bookingId, expiresAt: seatHolds.expiresAt })
+            .from(seatHolds).where(inArray(seatHolds.bookingId, pendingBookingIds))
+        : Promise.resolve([]),
     ]);
 
     const stopsMap = new Map(allStops.map(s => [s.id, s]));
     const paxCountMap = new Map<string, number>();
     for (const p of allPassengers) {
       paxCountMap.set(p.bookingId, (paxCountMap.get(p.bookingId) || 0) + 1);
+    }
+    const holdExpiryMap = new Map<string, string | null>();
+    for (const h of holdRows) {
+      if (h.bookingId && !holdExpiryMap.has(h.bookingId)) {
+        holdExpiryMap.set(h.bookingId, h.expiresAt?.toISOString() ?? null);
+      }
     }
 
     return result.map(b => {
@@ -1117,7 +1132,11 @@ export class AppService {
         ...b,
         origin: origin ? { name: origin.name, code: origin.code, city: origin.city } : null,
         destination: dest ? { name: dest.name, code: dest.code, city: dest.city } : null,
-        passengerCount: paxCountMap.get(b.id) || 0
+        passengerCount: paxCountMap.get(b.id) || 0,
+        holdExpiresAt: b.status === 'pending'
+          ? (holdExpiryMap.get(b.id) || b.pendingExpiresAt?.toISOString() || null)
+          : null,
+        finalAmount: (Number(b.totalAmount ?? 0) - Number(b.discountAmount ?? 0)).toString(),
       };
     });
   }
@@ -1210,10 +1229,10 @@ export class AppService {
     };
   }
 
-  async cancelBooking(bookingId: string, userId: string): Promise<void> {
+  async cancelBooking(bookingId: string, userId: string | null): Promise<void> {
     const booking = await this.storage.getBookingById(bookingId);
     if (!booking) throw new Error("Booking not found");
-    if (booking.appUserId !== userId) throw new Error("Unauthorized");
+    if (userId && booking.appUserId !== userId) throw new Error("Unauthorized");
     if (!['pending', 'confirmed'].includes(booking.status!)) {
       throw new Error("Booking cannot be canceled");
     }
@@ -1243,6 +1262,289 @@ export class AppService {
         .set({ status: 'canceled' })
         .where(eq(bookings.id, bookingId));
     });
+  }
+
+  getPaymentMethods() {
+    return [
+      { code: 'qr', name: 'QRIS', description: 'Pembayaran via QRIS', active: true },
+      { code: 'ewallet', name: 'E-Wallet', description: 'Pembayaran via e-wallet (GoPay, OVO, DANA)', active: true },
+      { code: 'bank', name: 'Bank Transfer', description: 'Transfer bank (VA)', active: true },
+    ];
+  }
+
+  async validateVoucher(code: string, purchaseAmount?: number): Promise<{
+    valid: boolean;
+    code: string;
+    discountType: string;
+    discountValue: string;
+    minPurchase: string | null;
+    maxDiscount: string | null;
+    calculatedDiscount: number | null;
+  }> {
+    const voucher = await db.select().from(vouchers)
+      .where(and(eq(vouchers.code, code.toUpperCase()), eq(vouchers.status, 'active')))
+      .limit(1);
+
+    if (voucher.length === 0) throw new Error("Voucher not found or inactive");
+
+    const v = voucher[0];
+    const now = new Date();
+    if (v.validFrom && now < v.validFrom) throw new Error("Voucher is not yet valid");
+    if (v.validTo && now > v.validTo) throw new Error("Voucher has expired");
+
+    const promo = await db.select().from(promotions)
+      .where(eq(promotions.id, v.promoId))
+      .limit(1);
+
+    if (promo.length === 0) throw new Error("Associated promotion not found");
+
+    const p = promo[0];
+    if (!p.isActive) throw new Error("Associated promotion is inactive");
+    if (p.validFrom && now < p.validFrom) throw new Error("Promotion is not yet valid");
+    if (p.validTo && now > p.validTo) throw new Error("Promotion has expired");
+    if (p.usageLimit && (p.usageCount ?? 0) >= p.usageLimit) throw new Error("Promotion usage limit reached");
+
+    const minPurchase = Number(p.minPurchase ?? 0);
+    if (purchaseAmount !== undefined && purchaseAmount < minPurchase) {
+      throw new Error(`Minimum purchase amount is ${minPurchase}`);
+    }
+
+    let calculatedDiscount: number | null = null;
+    if (purchaseAmount !== undefined) {
+      const discountVal = Number(p.discountValue);
+      if (p.type === 'percentage') {
+        calculatedDiscount = Math.round(purchaseAmount * discountVal / 100);
+        const maxDisc = p.maxDiscount ? Number(p.maxDiscount) : null;
+        if (maxDisc && calculatedDiscount > maxDisc) calculatedDiscount = maxDisc;
+      } else {
+        calculatedDiscount = discountVal;
+      }
+    }
+
+    return {
+      valid: true,
+      code: v.code,
+      discountType: p.type,
+      discountValue: p.discountValue,
+      minPurchase: p.minPurchase,
+      maxDiscount: p.maxDiscount,
+      calculatedDiscount,
+    };
+  }
+
+  async payBooking(bookingId: string, paymentMethod: 'qr' | 'ewallet' | 'bank', voucherCode?: string, userId?: string | null): Promise<{
+    bookingId: string;
+    status: string;
+    totalAmount: string;
+    discountAmount: string;
+    finalAmount: string;
+    paymentIntent: {
+      paymentId: string;
+      providerRef: string;
+      method: string;
+      amount: string;
+    };
+  }> {
+    const booking = await this.storage.getBookingById(bookingId);
+    if (!booking) throw new Error("Booking not found");
+    if (userId && booking.appUserId !== userId) throw new Error("Unauthorized");
+    if (booking.status !== 'pending') throw new Error("Booking is not in held/pending status");
+
+    if (booking.pendingExpiresAt && new Date() > booking.pendingExpiresAt) {
+      throw new Error("Booking hold has expired");
+    }
+
+    const activeHolds = await db.select().from(seatHolds)
+      .where(and(eq(seatHolds.bookingId, bookingId), gt(seatHolds.expiresAt, new Date())));
+    if (activeHolds.length === 0) {
+      throw new Error("Seat holds have expired. Booking cannot be paid.");
+    }
+
+    let discountAmount = 0;
+    let usedVoucherId: string | null = null;
+    let usedPromoId: string | null = null;
+    const totalAmount = Number(booking.totalAmount);
+
+    if (voucherCode) {
+      const voucherResult = await this.validateVoucher(voucherCode, totalAmount);
+      discountAmount = voucherResult.calculatedDiscount ?? 0;
+
+      const [v] = await db.select().from(vouchers)
+        .where(eq(vouchers.code, voucherCode.toUpperCase())).limit(1);
+      if (v) {
+        usedVoucherId = v.id;
+        usedPromoId = v.promoId;
+      }
+    }
+
+    const finalAmount = Math.max(0, totalAmount - discountAmount);
+
+    const pax = await this.storage.getPassengers(bookingId);
+    const seatNos = pax.map(p => p.seatNo);
+    const legIndexes = computeLegIndexes(booking.originSeq, booking.destinationSeq);
+
+    const { randomBytes } = await import('crypto');
+    const paymentRef = `PAY-${randomBytes(12).toString('hex').toUpperCase()}`;
+
+    let paymentId = '';
+
+    await db.transaction(async (tx) => {
+      const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
+      const seatArr = sql`ARRAY[${sql.join(seatNos.map(s => sql`${s}`), sql`, `)}]`;
+      const seatRows = await tx.execute(sql`
+        SELECT seat_no, booked FROM seat_inventory
+        WHERE trip_id = ${booking.tripId}
+          AND seat_no = ANY(${seatArr})
+          AND leg_index = ANY(${legArr})
+        FOR UPDATE
+      `);
+      const bookedSeat = (seatRows.rows as Record<string, unknown>[]).find(r => r.booked === true);
+      if (bookedSeat) {
+        throw new Error(`Seat ${bookedSeat.seat_no} is no longer available`);
+      }
+
+      const [payment] = await tx.insert(payments).values({
+        bookingId: booking.id,
+        method: paymentMethod,
+        amount: finalAmount.toString(),
+        status: 'success',
+        providerRef: paymentRef,
+        paidAt: new Date(),
+      }).returning({ id: payments.id });
+      paymentId = payment.id;
+
+      await tx.update(bookings).set({
+        status: 'confirmed',
+        discountAmount: discountAmount.toString(),
+        voucherCode: voucherCode?.toUpperCase() || null,
+        promoId: usedPromoId,
+      }).where(eq(bookings.id, bookingId));
+
+      await tx.update(seatInventory)
+        .set({ booked: true, holdRef: null })
+        .where(and(
+          eq(seatInventory.tripId, booking.tripId),
+          inArray(seatInventory.seatNo, seatNos),
+          inArray(seatInventory.legIndex, legIndexes)
+        ));
+
+      await tx.delete(seatHolds)
+        .where(and(
+          eq(seatHolds.tripId, booking.tripId),
+          inArray(seatHolds.seatNo, seatNos)
+        ));
+
+      if (usedVoucherId) {
+        await tx.update(vouchers).set({
+          status: 'used',
+          usedAt: new Date(),
+          usedByBookingId: bookingId,
+        }).where(eq(vouchers.id, usedVoucherId));
+      }
+
+      if (usedPromoId) {
+        await tx.execute(sql`
+          UPDATE promotions SET usage_count = COALESCE(usage_count, 0) + 1
+          WHERE id = ${usedPromoId}
+        `);
+      }
+    });
+
+    return {
+      bookingId: booking.id,
+      status: 'confirmed',
+      totalAmount: totalAmount.toString(),
+      discountAmount: discountAmount.toString(),
+      finalAmount: finalAmount.toString(),
+      paymentIntent: {
+        paymentId,
+        providerRef: paymentRef,
+        method: paymentMethod,
+        amount: finalAmount.toString(),
+      },
+    };
+  }
+
+  async listBookings(filters: {
+    status?: string;
+    date?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    data: any[];
+    total: number;
+    page: number;
+    limit: number;
+    hasMore: boolean;
+  }> {
+    const page = Math.max(1, filters.page ?? 1);
+    const limit = Math.min(50, Math.max(1, filters.limit ?? 20));
+
+    const conditions = [];
+    if (filters.status) {
+      conditions.push(eq(bookings.status, filters.status as any));
+    }
+    if (filters.date) {
+      conditions.push(eq(trips.serviceDate, filters.date));
+    }
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const countResult = await db.select({ count: sql<number>`count(*)::int` })
+      .from(bookings)
+      .innerJoin(trips, eq(bookings.tripId, trips.id))
+      .where(where);
+    const total = countResult[0]?.count ?? 0;
+
+    const result = await db.select({
+      id: bookings.id,
+      bookingCode: bookings.bookingCode,
+      tripId: bookings.tripId,
+      serviceDate: trips.serviceDate,
+      status: bookings.status,
+      totalAmount: bookings.totalAmount,
+      discountAmount: bookings.discountAmount,
+      voucherCode: bookings.voucherCode,
+      channel: bookings.channel,
+      pendingExpiresAt: bookings.pendingExpiresAt,
+      originStopId: bookings.originStopId,
+      destinationStopId: bookings.destinationStopId,
+      snapOriginStopName: bookings.snapOriginStopName,
+      snapDestinationStopName: bookings.snapDestinationStopName,
+      createdAt: bookings.createdAt,
+    })
+    .from(bookings)
+    .innerJoin(trips, eq(bookings.tripId, trips.id))
+    .where(where)
+    .orderBy(desc(bookings.createdAt))
+    .limit(limit)
+    .offset((page - 1) * limit);
+
+    const bookingIds = result.map(b => b.id);
+    let holdExpiryMap = new Map<string, string | null>();
+    if (bookingIds.length > 0) {
+      const holds = await db.select({
+        bookingId: seatHolds.bookingId,
+        expiresAt: seatHolds.expiresAt,
+      }).from(seatHolds)
+        .where(inArray(seatHolds.bookingId, bookingIds));
+
+      for (const h of holds) {
+        if (h.bookingId && !holdExpiryMap.has(h.bookingId)) {
+          holdExpiryMap.set(h.bookingId, h.expiresAt?.toISOString() ?? null);
+        }
+      }
+    }
+
+    const data = result.map(b => ({
+      ...b,
+      holdExpiresAt: b.status === 'pending'
+        ? (holdExpiryMap.get(b.id) || b.pendingExpiresAt?.toISOString() || null)
+        : null,
+      finalAmount: (Number(b.totalAmount ?? 0) - Number(b.discountAmount ?? 0)).toString(),
+    }));
+
+    return { data, total, page, limit, hasMore: (page - 1) * limit + data.length < total };
   }
 
   async createReview(data: { userId: string; tripId: string; bookingId?: string; rating: number; comment?: string }): Promise<Review> {

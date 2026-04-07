@@ -36,8 +36,18 @@ const createBookingSchema = z.object({
     idNumber: z.string().optional(),
     seatNo: z.string().min(1)
   })).min(1),
-  paymentMethod: z.enum(['qr', 'ewallet', 'bank']),
+  paymentMethod: z.enum(['qr', 'ewallet', 'bank']).optional(),
   serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+});
+
+const payBookingSchema = z.object({
+  paymentMethod: z.enum(['qr', 'ewallet', 'bank']),
+  voucherCode: z.string().optional()
+});
+
+const validateVoucherSchema = z.object({
+  code: z.string().min(1),
+  amount: z.number().positive().optional()
 });
 
 const createReviewSchema = z.object({
@@ -236,8 +246,10 @@ export class AppController {
   }
 
   async getBookingDetail(req: FastifyRequest, reply: FastifyReply) {
+    const isServiceClient = (req as any).isServiceClient === true;
+    const userId = isServiceClient ? undefined : (req.appUser?.userId ?? undefined);
     try {
-      const detail = await this.service.getBookingDetail(req.params.id, req.appUser!.userId);
+      const detail = await this.service.getBookingDetail(req.params.id, userId);
       reply.send(detail);
     } catch (e: unknown) {
       if (errMsg(e) === "Unauthorized") {
@@ -249,8 +261,10 @@ export class AppController {
   }
 
   async getPaymentStatus(req: FastifyRequest, reply: FastifyReply) {
+    const isServiceClient = (req as any).isServiceClient === true;
+    const userId = isServiceClient ? undefined : (req.appUser?.userId ?? undefined);
     try {
-      const result = await this.service.getPaymentStatus(req.params.id, req.appUser!.userId);
+      const result = await this.service.getPaymentStatus(req.params.id, userId!);
       reply.send(result);
     } catch (e: unknown) {
       if (errMsg(e) === "Unauthorized") {
@@ -301,11 +315,71 @@ export class AppController {
   }
 
   async cancelBooking(req: FastifyRequest, reply: FastifyReply) {
+    const isServiceClient = (req as any).isServiceClient === true;
+    const userId = isServiceClient ? null : (req.appUser?.userId ?? null);
     try {
-      await this.service.cancelBooking(req.params.id, req.appUser!.userId);
-      reply.send({ success: true });
+      await this.service.cancelBooking(req.params.id, userId);
+      reply.send({ status: 'cancelled' });
+    } catch (e: unknown) {
+      const msg = errMsg(e);
+      if (msg === "Booking not found") {
+        reply.code(404).send({ error: msg });
+      } else if (msg === "Unauthorized") {
+        reply.code(403).send({ error: msg });
+      } else {
+        reply.code(400).send({ error: msg });
+      }
+    }
+  }
+
+  async payBooking(req: FastifyRequest, reply: FastifyReply) {
+    const parsed = payBookingSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
+    const isServiceClient = (req as any).isServiceClient === true;
+    const userId = isServiceClient ? null : (req.appUser?.userId ?? null);
+    try {
+      const result = await this.service.payBooking(req.params.id, parsed.data.paymentMethod, parsed.data.voucherCode, userId);
+      reply.send(result);
+    } catch (e: unknown) {
+      const msg = errMsg(e);
+      if (msg === "Booking not found") {
+        reply.code(404).send({ error: msg });
+      } else if (msg === "Unauthorized") {
+        reply.code(403).send({ error: msg });
+      } else {
+        reply.code(400).send({ error: msg });
+      }
+    }
+  }
+
+  async getPaymentMethods(_req: FastifyRequest, reply: FastifyReply) {
+    const methods = this.service.getPaymentMethods();
+    reply.send(methods);
+  }
+
+  async validateVoucher(req: FastifyRequest, reply: FastifyReply) {
+    const parsed = validateVoucherSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
+    try {
+      const result = await this.service.validateVoucher(parsed.data.code, parsed.data.amount);
+      reply.send(result);
     } catch (e: unknown) {
       reply.code(400).send({ error: errMsg(e) });
+    }
+  }
+
+  async listBookings(req: FastifyRequest, reply: FastifyReply) {
+    const query = req.query as Record<string, string>;
+    try {
+      const result = await this.service.listBookings({
+        status: query.status,
+        date: query.date,
+        page: query.page ? Number(query.page) : undefined,
+        limit: query.limit ? Number(query.limit) : undefined,
+      });
+      reply.send(result);
+    } catch (e: unknown) {
+      reply.code(500).send({ error: errMsg(e) });
     }
   }
 

@@ -209,7 +209,7 @@ Key docs:
 - `PUBLIC_API.md` — full endpoint reference for third-party developers
 - `TRANSITY_CONSOLE_INTEGRATION.md` — step-by-step guide for TransityConsole integration
 
-Endpoints verified end-to-end (search → seatmap → booking → payment webhook):
+Endpoints verified end-to-end (search → seatmap → booking → pay → cancel):
 - `GET /api/app/operator-info` — brand info
 - `GET /api/app/cities` — city list
 - `GET /api/app/service-lines` — active routes
@@ -217,7 +217,13 @@ Endpoints verified end-to-end (search → seatmap → booking → payment webhoo
 - `GET /api/app/trips/:id` — trip detail
 - `GET /api/app/trips/:id/seatmap` — seat availability
 - `POST /api/app/trips/materialize` — materialize virtual trip (service key auth, idempotent, race-safe)
-- `POST /api/app/bookings` — create booking (supports virtual trip auto-materialization)
+- `POST /api/app/bookings` — create booking (`paymentMethod` optional; omit to create held booking)
+- `GET /api/app/bookings` — list bookings with `holdExpiresAt`, `finalAmount`; supports `?status=&date=&page=&limit=` filters (service key) or returns user's own bookings (app auth)
+- `GET /api/app/bookings/:id` — booking detail (service key or app auth)
+- `POST /api/app/bookings/:id/pay` — pay a held/pending booking; accepts `paymentMethod` + optional `voucherCode`; validates hold expiry, applies voucher discount, confirms booking
+- `POST /api/app/bookings/:id/cancel` — cancel a pending/confirmed booking (service key bypasses ownership check)
+- `GET /api/app/payments/methods` — static list of available payment methods (service key auth)
+- `POST /api/app/vouchers/validate` — validate a voucher code, returns discount info; accepts optional `amount` for calculated discount (service key auth)
 - `POST /api/app/payments/webhook` — payment confirmation (HMAC-SHA256)
 
 Environment variables required:
