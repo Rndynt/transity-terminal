@@ -176,6 +176,12 @@ export class AppController {
     const parsed = searchSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", code: 'VALIDATION_ERROR', details: parsed.error.flatten() });
     const result = await this.service.searchTrips(parsed.data);
+    for (const trip of result.data) {
+      console.log(`[searchTrips] trip=${trip.tripId} pattern=${trip.patternCode} stops:`);
+      for (const s of trip.stops) {
+        console.log(`  seq=${s.sequence} ${s.name} (${s.code}) city=${s.city ?? '-'} canPickup=${s.canPickup} canDrop=${s.canDrop}`);
+      }
+    }
     reply.send(result);
   }
 
@@ -183,6 +189,10 @@ export class AppController {
     try {
       const { serviceDate } = (req.query || {}) as { serviceDate?: string };
       const detail = await this.service.getTripDetail(req.params.id, serviceDate);
+      console.log(`[getTripDetail] trip=${detail.tripId} pattern=${detail.patternCode} stops:`);
+      for (const s of detail.stops) {
+        console.log(`  seq=${s.sequence} ${s.name} (${s.code}) city=${s.city ?? '-'} canPickup=${s.boardingAllowed} canDrop=${s.alightingAllowed}`);
+      }
       reply.send(detail);
     } catch (e: unknown) {
       const msg = errMsg(e);

@@ -41,6 +41,8 @@ interface TripStopPoint {
 
 interface TripStopPointWithCity extends TripStopPoint {
   city?: string;
+  canPickup?: boolean;
+  canDrop?: boolean;
 }
 
 interface TripSearchResult {
@@ -418,6 +420,8 @@ export class AppService {
       stopSequence: tripStopTimes.stopSequence,
       arriveAt: tripStopTimes.arriveAt,
       departAt: tripStopTimes.departAt,
+      boardingAllowed: tripStopTimes.boardingAllowed,
+      alightingAllowed: tripStopTimes.alightingAllowed,
       stopName: stops.name,
       stopCode: stops.code,
       stopCity: stops.city,
@@ -491,7 +495,9 @@ export class AppService {
           city: st.stopCity,
           sequence: st.stopSequence,
           arriveAt: st.arriveAt,
-          departAt: st.departAt
+          departAt: st.departAt,
+          canPickup: st.boardingAllowed !== false,
+          canDrop: st.alightingAllowed !== false,
         }))
       };
     }));
@@ -627,6 +633,8 @@ export class AppService {
           sequence: ps.stopSequence,
           departAt: departUtc?.toISOString() || null,
           arriveAt: arriveUtc?.toISOString() || null,
+          canPickup: ps.boardingAllowed !== false,
+          canDrop: ps.alightingAllowed !== false,
         };
       });
 
