@@ -36,14 +36,23 @@ const TERMINAL_SERVICE_KEY = process.env.TERMINAL_SERVICE_KEY || '';
 export async function registerRoutes(app: FastifyInstance): Promise<FastifyInstance> {
   app.get('/api/health', async (req, reply) => {
     const incomingKey = req.headers['x-service-key'] as string | undefined;
-    if (incomingKey) {
-      if (!TERMINAL_SERVICE_KEY) {
-        return reply.code(401).send({ error: 'Service key not configured on this terminal' });
+
+    if (!TERMINAL_SERVICE_KEY) {
+      // Development: service key belum dikonfigurasi — tetap lanjut dengan warning
+      if (process.env.NODE_ENV === 'production') {
+        return reply.code(503).send({ error: 'TERMINAL_SERVICE_KEY not configured' });
       }
-      if (incomingKey !== TERMINAL_SERVICE_KEY) {
-        return reply.code(401).send({ error: 'Unauthorized' });
-      }
+      return reply.send({ status: 'ok', warning: 'TERMINAL_SERVICE_KEY not configured — development mode' });
     }
+
+    if (!incomingKey) {
+      return reply.code(401).send({ error: 'Missing X-Service-Key header', code: 'MISSING_SERVICE_KEY' });
+    }
+
+    if (incomingKey !== TERMINAL_SERVICE_KEY) {
+      return reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
+    }
+
     reply.send({ status: 'ok' });
   });
 

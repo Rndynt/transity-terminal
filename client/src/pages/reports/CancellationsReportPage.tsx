@@ -112,7 +112,7 @@ export default function CancellationsReportPage() {
                   <YAxis fontSize={11} allowDecimals={false} />
                   <Tooltip />
                   <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="canceled" stackId="a" fill={ACTION_COLORS.canceled} name="Batal" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="cancelled" stackId="a" fill={ACTION_COLORS.canceled} name="Batal" radius={[0, 0, 0, 0]} />
                   <Bar dataKey="unseated" stackId="a" fill={ACTION_COLORS.unseated} name="Unseat" />
                   <Bar dataKey="rescheduled" stackId="a" fill={ACTION_COLORS.rescheduled} name="Reschedule" />
                   <Bar dataKey="reassigned" stackId="a" fill={ACTION_COLORS.reassigned} name="Pindah" radius={[4, 4, 0, 0]} />

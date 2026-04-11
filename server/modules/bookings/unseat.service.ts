@@ -20,7 +20,7 @@ export class UnseatService {
   ): Promise<{ success: boolean; booking: any; passenger: any }> {
     const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
     if (!passenger) throw new Error("Penumpang tidak ditemukan");
-    if (passenger.ticketStatus === 'unseated' || passenger.ticketStatus === 'canceled') {
+    if (passenger.ticketStatus === 'unseated' || passenger.ticketStatus === 'cancelled') {
       throw new Error("Penumpang sudah di-unseat atau dibatalkan");
     }
 
@@ -57,7 +57,7 @@ export class UnseatService {
 
       const allPassengers = await tx.select().from(passengers).where(eq(passengers.bookingId, booking.id));
       const allUnseatedOrCanceled = allPassengers.every(
-        p => p.ticketStatus === 'unseated' || p.ticketStatus === 'canceled'
+        p => p.ticketStatus === 'unseated' || p.ticketStatus === 'cancelled'
       );
       if (allUnseatedOrCanceled) {
         await tx.update(bookings)
@@ -88,7 +88,7 @@ export class UnseatService {
     if (!booking) throw new Error("Booking tidak ditemukan");
 
     const paxList = await this.storage.getPassengers(bookingId);
-    const activePax = paxList.filter(p => p.ticketStatus !== 'unseated' && p.ticketStatus !== 'canceled');
+    const activePax = paxList.filter(p => p.ticketStatus !== 'unseated' && p.ticketStatus !== 'cancelled');
     if (activePax.length === 0) throw new Error("Tidak ada penumpang aktif untuk di-unseat");
 
     const legIndexes = getLegIndexes(booking.originSeq, booking.destinationSeq);

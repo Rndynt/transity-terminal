@@ -94,7 +94,7 @@ function BookingDetailModal({
   });
 
   const hasActivePassengers = detail?.passengers?.some(
-    (p: any) => p.ticketStatus !== 'unseated' && p.ticketStatus !== 'canceled'
+    (p: any) => p.ticketStatus !== 'unseated' && p.ticketStatus !== 'cancelled'
   );
 
 

@@ -239,14 +239,36 @@ export class AppController {
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
     const userId = isServiceClient ? null : (req.appUser?.userId ?? null);
     if (!isServiceClient && !userId) return reply.code(401).send({ error: "Unauthorized" });
+    // Service client (Console) selalu OTA channel
+    const channel = isServiceClient ? 'OTA' : 'APP';
     try {
       const result = await this.service.createAppBooking({
         userId,
+        channel,
         ...parsed.data
       });
       reply.code(201).send(result);
     } catch (e: unknown) {
       reply.code(400).send({ error: errMsg(e) });
+    }
+  }
+
+  async confirmOtaPaid(req: FastifyRequest, reply: FastifyReply) {
+    const { id } = req.params as { id: string };
+    const { providerRef, paymentMethod } = (req.body ?? {}) as { providerRef?: string; paymentMethod?: string };
+    try {
+      const result = await this.service.confirmOtaPayment(id, providerRef ?? '', paymentMethod ?? 'online');
+      reply.send(result);
+    } catch (e: unknown) {
+      const msg = errMsg(e);
+      if (msg === 'Booking not found') {
+        reply.code(404).send({ error: msg });
+      } else if (msg.includes('already') || msg.includes('confirmed')) {
+        // Idempotent — anggap sukses
+        reply.send({ status: 'confirmed', bookingId: id });
+      } else {
+        reply.code(400).send({ error: msg });
+      }
     }
   }
 

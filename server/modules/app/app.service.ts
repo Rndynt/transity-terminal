@@ -889,6 +889,7 @@ export class AppService {
     passengers: { fullName: string; phone?: string; idNumber?: string; seatNo: string }[];
     paymentMethod?: 'qr' | 'ewallet' | 'bank';
     serviceDate?: string;
+    channel?: 'APP' | 'OTA' | 'WEB';
   }): Promise<BookingDetailResponse> {
     const resolvedTripId = await this.resolveTripId(params.tripId, params.serviceDate);
 
@@ -902,7 +903,12 @@ export class AppService {
     const legIndexes = computeLegIndexes(params.originSeq, params.destinationSeq);
     const seatNos = params.passengers.map(p => p.seatNo);
 
-    const HOLD_TTL_MINUTES = 15;
+    const channel = params.channel ?? 'APP';
+    // Hold TTL berbeda per channel — OTA user perlu lebih banyak waktu pilih metode bayar
+    const HOLD_TTL_MINUTES =
+      channel === 'OTA' ? parseInt(process.env.OTA_HOLD_TTL_MINUTES ?? '20') :
+      channel === 'WEB' ? parseInt(process.env.WEB_HOLD_TTL_MINUTES ?? '20') :
+      parseInt(process.env.APP_HOLD_TTL_MINUTES ?? '15');
     const holdExpiresAt = new Date(Date.now() + HOLD_TTL_MINUTES * 60 * 1000);
 
     const snapshots = await fetchBookingSnapshots(this.storage, resolvedTripId, params.originStopId, params.destinationStopId, null, params.originSeq);
@@ -918,7 +924,7 @@ export class AppService {
         originSeq: params.originSeq,
         destinationSeq: params.destinationSeq,
         appUserId: params.userId,
-        channel: 'APP',
+        channel,
         status: 'pending',
         pendingExpiresAt: holdExpiresAt,
         totalAmount: totalAmount.toString(),
@@ -968,7 +974,7 @@ export class AppService {
     if (gatewayStatus === 'failed') {
       await db.transaction(async (tx) => {
         await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
-        await tx.update(bookings).set({ status: 'canceled' }).where(eq(bookings.id, booking.id));
+        await tx.update(bookings).set({ status: 'cancelled' }).where(eq(bookings.id, booking.id));
 
         await tx.update(seatInventory)
           .set({ holdRef: null })
@@ -1005,7 +1011,7 @@ export class AppService {
           inArray(seatHolds.seatNo, seatNos)
         ));
         await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
-        await tx.update(bookings).set({ status: 'canceled' }).where(eq(bookings.id, booking.id));
+        await tx.update(bookings).set({ status: 'cancelled' }).where(eq(bookings.id, booking.id));
         throw new Error("Seat holds have expired. Booking cannot be confirmed.");
       }
 
@@ -1021,7 +1027,7 @@ export class AppService {
       const bookedSeat = (seatRows.rows as Record<string, unknown>[]).find(r => r.booked === true);
       if (bookedSeat) {
         await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
-        await tx.update(bookings).set({ status: 'canceled' }).where(eq(bookings.id, booking.id));
+        await tx.update(bookings).set({ status: 'cancelled' }).where(eq(bookings.id, booking.id));
         await tx.update(seatInventory)
           .set({ holdRef: null })
           .where(and(
@@ -1060,6 +1066,64 @@ export class AppService {
     });
 
     return { status: 'success', bookingId: booking.id };
+  }
+
+  // Dipanggil Console setelah pembayaran OTA dikonfirmasi di sisi Console.
+  // Terminal tidak perlu tahu detail payment gateway — cukup tahu booking ini sudah dibayar.
+  async confirmOtaPayment(bookingId: string, providerRef: string, paymentMethod = 'online'): Promise<{ status: string; bookingId: string }> {
+    const booking = await this.storage.getBookingById(bookingId);
+    if (!booking) throw new Error("Booking not found");
+
+    // Idempotent: jika sudah confirmed sebelumnya, anggap sukses
+    if (booking.status === 'confirmed') {
+      return { status: 'confirmed', bookingId: booking.id };
+    }
+
+    if (booking.status !== 'pending') {
+      throw new Error(`Booking cannot be confirmed. Current status: ${booking.status}`);
+    }
+
+    const pax = await this.storage.getPassengers(booking.id);
+    const legIndexes: number[] = [];
+    for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
+    const seatNos = pax.map(p => p.seatNo);
+
+    await db.transaction(async (tx) => {
+      // Konfirmasi booking
+      await tx.update(bookings)
+        .set({ status: 'confirmed', channel: 'OTA' })
+        .where(and(eq(bookings.id, booking.id), eq(bookings.status, 'pending')));
+
+      // Lock kursi permanen
+      await tx.update(seatInventory)
+        .set({ booked: true, holdRef: null })
+        .where(and(
+          eq(seatInventory.tripId, booking.tripId),
+          inArray(seatInventory.seatNo, seatNos),
+          inArray(seatInventory.legIndex, legIndexes)
+        ));
+
+      // Hapus seat holds
+      await tx.delete(seatHolds)
+        .where(and(
+          eq(seatHolds.tripId, booking.tripId),
+          inArray(seatHolds.seatNo, seatNos)
+        ));
+
+      // Buat payment record dengan method 'online'
+      const { randomBytes } = await import('crypto');
+      const paymentRef = providerRef || `OTA-${randomBytes(12).toString('hex').toUpperCase()}`;
+      await tx.insert(payments).values({
+        bookingId: booking.id,
+        method: 'online' as any,
+        amount: booking.totalAmount,
+        status: 'success',
+        providerRef: paymentRef,
+        paidAt: new Date(),
+      });
+    });
+
+    return { status: 'confirmed', bookingId: booking.id };
   }
 
   async getPaymentStatus(bookingId: string, userId: string): Promise<PaymentStatusResponse> {
@@ -1267,7 +1331,7 @@ export class AppService {
       }
 
       await tx.update(bookings)
-        .set({ status: 'canceled' })
+        .set({ status: 'cancelled' })
         .where(eq(bookings.id, bookingId));
     });
   }

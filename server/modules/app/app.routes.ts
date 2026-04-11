@@ -103,6 +103,8 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
   app.get('/api/app/bookings/:id/payment-status', { preHandler: [bookingAuthMiddleware] }, async (req, reply) => appController.getPaymentStatus(req, reply));
   app.post('/api/app/bookings/:id/pay', { preHandler: [bookingAuthMiddleware] }, async (req, reply) => appController.payBooking(req, reply));
   app.post('/api/app/bookings/:id/cancel', { preHandler: [bookingAuthMiddleware] }, async (req, reply) => appController.cancelBooking(req, reply));
+  // Endpoint khusus untuk Console mengkonfirmasi pembayaran OTA — hanya service client
+  app.post('/api/app/bookings/:id/confirm-paid', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.confirmOtaPaid(req, reply));
 
   app.get('/api/app/payments/methods', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.getPaymentMethods(req, reply));
   app.post('/api/app/payments/webhook', async (req, reply) => appController.paymentWebhook(req, reply));

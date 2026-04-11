@@ -115,7 +115,7 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
 
     const [passengerRow] = await db.select().from(passengersTable).where(eq(passengersTable.id, (req.params as any).id));
     if (!passengerRow) return reply.code(404).send({ error: 'Penumpang tidak ditemukan' });
-    if (passengerRow.ticketStatus === 'canceled') return reply.code(400).send({ error: 'Tiket sudah dibatalkan' });
+    if (passengerRow.ticketStatus === 'cancelled') return reply.code(400).send({ error: 'Tiket sudah dibatalkan' });
 
     const booking = await storage.getBookingById(passengerRow.bookingId);
     if (!booking) return reply.code(404).send({ error: 'Booking tidak ditemukan' });
@@ -128,7 +128,7 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
 
     const updatedPassenger = await db.transaction(async (tx) => {
       const [updated] = await tx.update(passengersTable)
-        .set({ ticketStatus: 'canceled' })
+        .set({ ticketStatus: 'cancelled' })
         .where(eq(passengersTable.id, (req.params as any).id))
         .returning();
 
@@ -145,7 +145,7 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
       await tx.insert(bookingHistory).values({
         bookingId: booking.id,
         passengerId: (req.params as any).id,
-        action: 'canceled',
+        action: 'cancelled',
         details: {
           seatNo: passengerRow.seatNo,
           reason: reason.trim(),
@@ -155,10 +155,10 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
       });
 
       const allPassengers = await tx.select().from(passengersTable).where(eq(passengersTable.bookingId, booking.id));
-      const allInactive = allPassengers.every(p => p.ticketStatus === 'canceled' || p.ticketStatus === 'unseated');
+      const allInactive = allPassengers.every(p => p.ticketStatus === 'cancelled' || p.ticketStatus === 'unseated');
       if (allInactive) {
         await tx.update(bookingsTable)
-          .set({ status: 'canceled' })
+          .set({ status: 'cancelled' })
           .where(eq(bookingsTable.id, booking.id));
       }
 

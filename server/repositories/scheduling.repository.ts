@@ -118,7 +118,7 @@ export class SchedulingRepository {
         );
         await tx.delete(seatInventory).where(inArray(seatInventory.tripId, tripIds));
         await tx.delete(seatHolds).where(inArray(seatHolds.tripId, tripIds));
-        await tx.update(trips).set({ status: 'canceled', deletedAt: now }).where(inArray(trips.id, tripIds));
+        await tx.update(trips).set({ status: 'cancelled', deletedAt: now }).where(inArray(trips.id, tripIds));
       }
       await tx.update(tripBases).set({ deletedAt: now }).where(eq(tripBases.id, id));
     });
@@ -569,7 +569,7 @@ export class SchedulingRepository {
       await tx.update(priceRules).set({ deletedAt: now }).where(and(eq(priceRules.tripId, id), eq(priceRules.scope, 'trip')));
       await tx.delete(seatInventory).where(eq(seatInventory.tripId, id));
       await tx.delete(seatHolds).where(eq(seatHolds.tripId, id));
-      await tx.update(trips).set({ status: 'canceled', deletedAt: now }).where(eq(trips.id, id));
+      await tx.update(trips).set({ status: 'cancelled', deletedAt: now }).where(eq(trips.id, id));
     });
   }
 
@@ -779,8 +779,8 @@ export class SchedulingRepository {
       LEFT JOIN ${stops} os ON os.id = b.origin_stop_id
       LEFT JOIN ${stops} ds ON ds.id = b.destination_stop_id
       WHERE b.trip_id = ${tripId}
-        AND b.status NOT IN ('canceled', 'refunded', 'unseated')
-        AND COALESCE(p.ticket_status, 'active') NOT IN ('unseated', 'canceled')
+        AND b.status NOT IN ('cancelled', 'refunded', 'unseated')
+        AND COALESCE(p.ticket_status, 'active') NOT IN ('unseated', 'cancelled')
       ORDER BY p.seat_no ASC
     `);
 
@@ -851,8 +851,8 @@ export class SchedulingRepository {
       LEFT JOIN ${stops} os ON os.id = b.origin_stop_id
       LEFT JOIN ${stops} ds ON ds.id = b.destination_stop_id
       WHERE b.trip_id = ${tripId}
-        AND b.status NOT IN ('canceled', 'refunded', 'unseated')
-        AND COALESCE(p.ticket_status, 'active') NOT IN ('unseated', 'canceled')
+        AND b.status NOT IN ('cancelled', 'refunded', 'unseated')
+        AND COALESCE(p.ticket_status, 'active') NOT IN ('unseated', 'cancelled')
       ORDER BY p.seat_no ASC
     `);
 
@@ -873,7 +873,7 @@ export class SchedulingRepository {
       LEFT JOIN ${stops} os ON os.id = cs.origin_stop_id
       LEFT JOIN ${stops} ds ON ds.id = cs.destination_stop_id
       WHERE cs.trip_id = ${tripId}
-        AND cs.status NOT IN ('canceled')
+        AND cs.status NOT IN ('cancelled')
       ORDER BY cs.created_at ASC
     `);
 
@@ -991,7 +991,7 @@ export class SchedulingRepository {
       LEFT JOIN vehicles v ON v.id = t.vehicle_id
       WHERE t.service_date = ${serviceDate}
         AND t.deleted_at IS NULL
-        AND t.status NOT IN ('canceled')
+        AND t.status NOT IN ('cancelled')
     `);
 
     if ((result.rows as any[]).length === 0) return [];

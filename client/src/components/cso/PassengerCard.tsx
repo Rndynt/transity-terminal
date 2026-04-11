@@ -47,7 +47,7 @@ export default function PassengerCard({
   onStartAssignMode,
   onAssignInCso,
 }: PassengerCardProps) {
-  const isActive = p.ticketStatus !== 'unseated' && p.ticketStatus !== 'canceled';
+  const isActive = p.ticketStatus !== 'unseated' && p.ticketStatus !== 'cancelled';
 
   return (
     <div className="rounded-lg border overflow-hidden">

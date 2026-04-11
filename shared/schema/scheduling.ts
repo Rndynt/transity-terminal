@@ -127,7 +127,7 @@ export type CsoAvailableTrip = {
   patternPath: string;
   vehicle: { code?: string; plate?: string } | null;
   capacity: number | null;
-  status: "scheduled" | "canceled" | "closed" | "draft" | "unknown";
+  status: "scheduled" | "cancelled" | "closed" | "draft" | "unknown";
   departAtAtOutlet: string | null;
   finalArrivalAt: string | null;
   stopCount: number;
@@ -145,7 +145,7 @@ export type CargoAvailableTrip = {
   patternCode: string;
   patternPath: string;
   vehicle: { code?: string; plate?: string } | null;
-  status: "scheduled" | "canceled" | "closed" | "draft" | "unknown";
+  status: "scheduled" | "cancelled" | "closed" | "draft" | "unknown";
   departAtOrigin: string | null;
   arriveAtDestination: string | null;
   originStopSequence: number;

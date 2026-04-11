@@ -91,9 +91,9 @@ export default function PassengerActions({
     }
   });
 
-  if (p.ticketStatus === 'canceled') return null;
+  if (p.ticketStatus === 'cancelled') return null;
 
-  const isActive = p.ticketStatus !== 'unseated' && p.ticketStatus !== 'canceled';
+  const isActive = p.ticketStatus !== 'unseated' && p.ticketStatus !== 'cancelled';
 
   if (p.ticketStatus === 'unseated') {
     return (

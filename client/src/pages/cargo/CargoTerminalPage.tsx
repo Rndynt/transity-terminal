@@ -367,7 +367,7 @@ export default function CargoTerminalPage() {
 
     for (const [date, trips] of rawByDate) {
       const filtered = trips.filter(t => {
-        if (t.status === 'canceled' || t.status === 'closed') return false;
+        if (t.status === 'cancelled' || t.status === 'closed') return false;
         if (!t.departAtOrigin) return true;
         return new Date(t.departAtOrigin) > now;
       });

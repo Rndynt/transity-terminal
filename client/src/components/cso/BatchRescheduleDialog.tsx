@@ -89,7 +89,7 @@ export default function BatchRescheduleDialog({
   const eligibleTrips = useMemo(() =>
     availableTrips.filter(t =>
       t.tripId && t.tripId !== tripId &&
-      t.status !== 'closed' && t.status !== 'canceled' &&
+      t.status !== 'closed' && t.status !== 'cancelled' &&
       (t.availableSeats ?? 0) > 0
     ),
     [availableTrips, tripId]

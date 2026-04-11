@@ -19,7 +19,7 @@ export class DashboardService {
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE status = 'scheduled')::int AS scheduled,
         COUNT(*) FILTER (WHERE status = 'closed')::int AS completed,
-        COUNT(*) FILTER (WHERE status = 'canceled')::int AS canceled,
+        COUNT(*) FILTER (WHERE status = 'cancelled')::int AS canceled,
         COUNT(*) FILTER (WHERE driver_id IS NULL)::int AS no_driver
       FROM trips WHERE service_date = ${today}
     `));
@@ -29,7 +29,7 @@ export class DashboardService {
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE status = 'paid')::int AS paid,
         COUNT(*) FILTER (WHERE status = 'pending')::int AS pending,
-        COUNT(*) FILTER (WHERE status = 'canceled')::int AS canceled
+        COUNT(*) FILTER (WHERE status = 'cancelled')::int AS canceled
       FROM bookings WHERE created_at::date = ${today}
     `));
 
@@ -73,7 +73,7 @@ export class DashboardService {
           CASE WHEN v.capacity > 0
             THEN (SELECT COUNT(*) FROM passengers p
                   JOIN bookings bk ON bk.id = p.booking_id
-                  WHERE bk.trip_id = t.id AND p.ticket_status NOT IN ('canceled', 'unseated'))::numeric / v.capacity * 100
+                  WHERE bk.trip_id = t.id AND p.ticket_status NOT IN ('cancelled', 'unseated'))::numeric / v.capacity * 100
             ELSE 0 END
         ), 0)::numeric AS avg_load
       FROM trips t

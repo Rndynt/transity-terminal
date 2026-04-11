@@ -136,21 +136,21 @@ class WebSocketService {
     this.emitToTrip(tripId, 'TRIP_STATUS_CHANGED', data);
     
     // If status is canceled, also emit TRIP_CANCELED
-    if (status === 'canceled') {
+    if (status === 'cancelled') {
       this.emitToTrip(tripId, 'TRIP_CANCELED', { tripId });
     }
     
     // Emit to additional rooms if provided
     if (additionalRooms?.baseId) {
       this.emitToBase(additionalRooms.baseId, 'TRIP_STATUS_CHANGED', data);
-      if (status === 'canceled') {
+      if (status === 'cancelled') {
         this.emitToBase(additionalRooms.baseId, 'TRIP_CANCELED', { tripId });
       }
     }
     
     if (additionalRooms?.outletId && additionalRooms?.serviceDate) {
       this.emitToCso(additionalRooms.outletId, additionalRooms.serviceDate, 'TRIP_STATUS_CHANGED', data);
-      if (status === 'canceled') {
+      if (status === 'cancelled') {
         this.emitToCso(additionalRooms.outletId, additionalRooms.serviceDate, 'TRIP_CANCELED', { tripId });
       }
     }

@@ -83,13 +83,13 @@ export class CustomersService {
         COALESCE(SUM(
           CASE WHEN v.capacity > 0 THEN
             (SELECT COUNT(*) FROM passengers p JOIN bookings bk ON bk.id = p.booking_id
-             WHERE bk.trip_id = t.id AND p.ticket_status NOT IN ('canceled','unseated'))
+             WHERE bk.trip_id = t.id AND p.ticket_status NOT IN ('cancelled','unseated'))
           ELSE 0 END
         ), 0)::int AS total_passengers,
         COALESCE(AVG(
           CASE WHEN v.capacity > 0 THEN
             (SELECT COUNT(*) FROM passengers p JOIN bookings bk ON bk.id = p.booking_id
-             WHERE bk.trip_id = t.id AND p.ticket_status NOT IN ('canceled','unseated'))::numeric / v.capacity * 100
+             WHERE bk.trip_id = t.id AND p.ticket_status NOT IN ('cancelled','unseated'))::numeric / v.capacity * 100
           ELSE 0 END
         ), 0)::numeric AS avg_load_factor
       FROM trips t
@@ -104,7 +104,7 @@ export class CustomersService {
              tp.name AS pattern_name,
              v.plate AS vehicle_plate,
              (SELECT COUNT(*) FROM passengers p JOIN bookings bk ON bk.id = p.booking_id
-              WHERE bk.trip_id = t.id AND p.ticket_status NOT IN ('canceled','unseated'))::int AS passenger_count
+              WHERE bk.trip_id = t.id AND p.ticket_status NOT IN ('cancelled','unseated'))::int AS passenger_count
       FROM trips t
       LEFT JOIN trip_patterns tp ON tp.id = t.pattern_id
       LEFT JOIN vehicles v ON v.id = t.vehicle_id

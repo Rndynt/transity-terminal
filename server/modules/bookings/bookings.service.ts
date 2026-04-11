@@ -310,7 +310,7 @@ export class BookingsService {
       }
 
       await tx.update(bookingsTable)
-        .set({ status: 'canceled' })
+        .set({ status: 'cancelled' })
         .where(eq(bookingsTable.id, bookingId));
     });
 
@@ -363,7 +363,7 @@ export class BookingsService {
           }
 
           await tx.update(bookingsTable)
-            .set({ status: 'canceled' })
+            .set({ status: 'cancelled' })
             .where(eq(bookingsTable.id, booking.id));
         });
 

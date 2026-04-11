@@ -85,7 +85,7 @@ export default function SalesReportPage() {
                   <YAxis fontSize={11} />
                   <Tooltip />
                   <Bar dataKey="paid" fill="#22c55e" name="Lunas" radius={[4, 4, 0, 0]} stackId="a" />
-                  <Bar dataKey="canceled" fill="#ef4444" name="Batal" radius={[4, 4, 0, 0]} stackId="a" />
+                  <Bar dataKey="cancelled" fill="#ef4444" name="Batal" radius={[4, 4, 0, 0]} stackId="a" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

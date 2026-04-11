@@ -5,10 +5,10 @@ const VALID_STATUSES = cargoStatusEnum.enumValues;
 type CargoStatus = typeof VALID_STATUSES[number];
 
 const ALLOWED_TRANSITIONS: Record<CargoStatus, CargoStatus[]> = {
-  pending: ['received', 'canceled'],
-  received: ['loaded', 'canceled'],
-  loaded: ['in_transit', 'canceled'],
-  in_transit: ['arrived', 'canceled'],
+  pending: ['received', 'cancelled'],
+  received: ['loaded', 'cancelled'],
+  loaded: ['in_transit', 'cancelled'],
+  in_transit: ['arrived', 'cancelled'],
   arrived: ['delivered', 'returned'],
   delivered: [],
   returned: [],

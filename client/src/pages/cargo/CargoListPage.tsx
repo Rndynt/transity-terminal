@@ -257,7 +257,7 @@ export default function CargoListPage() {
                 { value: 'arrived', label: 'Tiba' },
                 { value: 'delivered', label: 'Terkirim' },
                 { value: 'returned', label: 'Kembali' },
-                { value: 'canceled', label: 'Batal' }
+                { value: 'cancelled', label: 'Batal' }
               ] as const).map(f => (
                 <button
                   key={f.value}

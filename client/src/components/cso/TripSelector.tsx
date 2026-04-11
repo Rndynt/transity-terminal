@@ -816,7 +816,7 @@ export default function TripSelector({
                       const noPrice = !trip.hasPriceRule;
                       const isClosed = trip.status === 'closed';
                       const isStopClosed = trip.outletStopClosed === true;
-                      const isDisabled = (isClosed && !canViewClosed) || trip.status === 'canceled' || isPastVirtual || noPrice || isStopClosed;
+                      const isDisabled = (isClosed && !canViewClosed) || trip.status === 'cancelled' || isPastVirtual || noPrice || isStopClosed;
                       const isMaterializing = materializingBaseId === trip.baseId;
                       const seatCount = trip.availableSeats ?? trip.capacity ?? 0;
                       const totalSeats = trip.capacity ?? 40;

@@ -200,7 +200,7 @@ export class SpjService {
       SELECT
         COALESCE(SUM(b.total_amount::numeric), 0) as ticket_revenue,
         COALESCE((SELECT SUM(cs.total_amount::numeric) FROM cargo_shipments cs WHERE cs.trip_id = ${tripId}), 0) as cargo_revenue
-      FROM bookings b WHERE b.trip_id = ${tripId} AND b.status != 'canceled'
+      FROM bookings b WHERE b.trip_id = ${tripId} AND b.status != 'cancelled'
     `);
     const costs = await db.execute(sql`
       SELECT

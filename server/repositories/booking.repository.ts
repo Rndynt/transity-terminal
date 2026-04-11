@@ -112,8 +112,8 @@ export class BookingRepository {
       LEFT JOIN ${stops} os ON os.id = b.origin_stop_id
       LEFT JOIN ${stops} ds ON ds.id = b.destination_stop_id
       WHERE b.trip_id = ${tripId}
-        AND b.status NOT IN ('canceled', 'refunded')
-        AND COALESCE(p.ticket_status, 'active') NOT IN ('canceled', 'refunded', 'unseated')
+        AND b.status NOT IN ('cancelled', 'refunded')
+        AND COALESCE(p.ticket_status, 'active') NOT IN ('cancelled', 'refunded', 'unseated')
       ORDER BY p.full_name ASC
     `);
     return rows.rows as any[];
@@ -136,7 +136,7 @@ export class BookingRepository {
       LEFT JOIN ${stops} os ON os.id = b.origin_stop_id
       LEFT JOIN ${stops} ds ON ds.id = b.destination_stop_id
       WHERE b.trip_id = ${tripId}
-        AND b.status NOT IN ('canceled', 'refunded')
+        AND b.status NOT IN ('cancelled', 'refunded')
         AND COALESCE(p.ticket_status, 'active') = 'unseated'
       ORDER BY p.full_name ASC
     `);

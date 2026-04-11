@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 
 const PAID_STATUSES_SQL = sql.raw(`('paid','confirmed','checked_in')`);
 const ACTIVE_TICKET_SQL = sql.raw(`('active','checked_in')`);
-const EXCLUDE_CARGO_SQL = sql.raw(`('canceled','returned')`);
+const EXCLUDE_CARGO_SQL = sql.raw(`('cancelled','returned')`);
 
 export interface ReportFilters {
   dateFrom: string;
@@ -233,7 +233,7 @@ export class ReportsRepository {
       SELECT
         COUNT(*)::int as total_bookings,
         COUNT(*) FILTER (WHERE b.status = 'paid')::int as paid_count,
-        COUNT(*) FILTER (WHERE b.status = 'canceled')::int as canceled_count,
+        COUNT(*) FILTER (WHERE b.status = 'cancelled')::int as canceled_count,
         COUNT(*) FILTER (WHERE b.status = 'pending')::int as pending_count,
         COUNT(*) FILTER (WHERE b.status = 'confirmed')::int as confirmed_count,
         COUNT(*) FILTER (WHERE b.status = 'refunded')::int as refunded_count,
@@ -310,7 +310,7 @@ export class ReportsRepository {
           COUNT(*)::int as bookings,
           COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as revenue,
           COUNT(*) FILTER (WHERE b.status = 'paid')::int as paid,
-          COUNT(*) FILTER (WHERE b.status = 'canceled')::int as canceled
+          COUNT(*) FILTER (WHERE b.status = 'cancelled')::int as canceled
         FROM bookings b
         INNER JOIN trips t ON b.trip_id = t.id
         WHERE ${where}
@@ -548,7 +548,7 @@ export class ReportsRepository {
     const summary = await db.execute(sql`
       SELECT
         COUNT(DISTINCT bh.id)::int as total_events,
-        COUNT(DISTINCT bh.id) FILTER (WHERE bh.action = 'canceled')::int as canceled_count,
+        COUNT(DISTINCT bh.id) FILTER (WHERE bh.action = 'cancelled')::int as canceled_count,
         COUNT(DISTINCT bh.id) FILTER (WHERE bh.action = 'unseated')::int as unseated_count,
         COUNT(DISTINCT bh.id) FILTER (WHERE bh.action = 'rescheduled')::int as rescheduled_count,
         COUNT(DISTINCT bh.id) FILTER (WHERE bh.action = 'reassigned')::int as reassigned_count
@@ -578,7 +578,7 @@ export class ReportsRepository {
     const daily = await db.execute(sql`
       SELECT
         ${dailyDateCol}::text as date,
-        COUNT(*) FILTER (WHERE bh.action = 'canceled')::int as canceled,
+        COUNT(*) FILTER (WHERE bh.action = 'cancelled')::int as canceled,
         COUNT(*) FILTER (WHERE bh.action = 'unseated')::int as unseated,
         COUNT(*) FILTER (WHERE bh.action = 'rescheduled')::int as rescheduled,
         COUNT(*) FILTER (WHERE bh.action = 'reassigned')::int as reassigned
@@ -595,7 +595,7 @@ export class ReportsRepository {
         COALESCE(t.snap_route_name, tp.name, '-') as route_name,
         COALESCE(t.snap_route_code, tp.code) as route_code,
         COUNT(*)::int as total,
-        COUNT(*) FILTER (WHERE bh.action = 'canceled')::int as canceled,
+        COUNT(*) FILTER (WHERE bh.action = 'cancelled')::int as canceled,
         COUNT(*) FILTER (WHERE bh.action = 'unseated')::int as unseated
       FROM booking_history bh
       INNER JOIN bookings b ON bh.booking_id = b.id
@@ -650,7 +650,7 @@ export class ReportsRepository {
         COALESCE(SUM(cs.total_amount::numeric), 0) as total_revenue,
         COALESCE(SUM(cs.weight_kg::numeric), 0) as total_weight_kg,
         COUNT(*) FILTER (WHERE cs.status = 'delivered')::int as delivered_count,
-        COUNT(*) FILTER (WHERE cs.status = 'canceled')::int as canceled_count,
+        COUNT(*) FILTER (WHERE cs.status = 'cancelled')::int as canceled_count,
         COUNT(*) FILTER (WHERE cs.status NOT IN ${EXCLUDE_CARGO_SQL})::int as active_count
       FROM cargo_shipments cs
       INNER JOIN trips t ON cs.trip_id = t.id

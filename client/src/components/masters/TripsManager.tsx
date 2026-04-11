@@ -33,7 +33,7 @@ interface TripFormData {
   layoutId: string;
   capacity: string;
   driverId: string;
-  status: 'scheduled' | 'canceled' | 'closed';
+  status: 'scheduled' | 'cancelled' | 'closed';
 }
 
 function SectionDivider({ label }: { label: string }) {
@@ -287,7 +287,7 @@ export default function TripsManager() {
   const statusCounts = useMemo(() => ({
     all: trips.length,
     scheduled: trips.filter(t => (t.status || 'scheduled') === 'scheduled').length,
-    canceled: trips.filter(t => t.status === 'canceled').length,
+    canceled: trips.filter(t => t.status === 'cancelled').length,
     closed: trips.filter(t => t.status === 'closed').length,
   }), [trips]);
 
@@ -315,7 +315,7 @@ export default function TripsManager() {
 
       {/* Status Tabs */}
       <div className="flex items-center gap-1 border-b">
-        {(['all', 'scheduled', 'canceled', 'closed'] as const).map(status => {
+        {(['all', 'scheduled', 'cancelled', 'closed'] as const).map(status => {
           const labels: Record<string, string> = { all: 'Semua', scheduled: 'Terjadwal', canceled: 'Dibatalkan', closed: 'Ditutup' };
           const count = statusCounts[status];
           const isActive = filterStatus === status;
@@ -736,7 +736,7 @@ export default function TripsManager() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="scheduled">Terjadwal</SelectItem>
-                <SelectItem value="canceled">Dibatalkan</SelectItem>
+                <SelectItem value="cancelled">Dibatalkan</SelectItem>
                 <SelectItem value="closed">Ditutup</SelectItem>
               </SelectContent>
             </Select>

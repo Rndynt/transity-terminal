@@ -27,7 +27,7 @@ export class RescheduleService {
   ): Promise<{ success: boolean; oldBooking: any; newBooking: any }> {
     const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
     if (!passenger) throw new Error("Penumpang tidak ditemukan");
-    if (passenger.ticketStatus === 'unseated' || passenger.ticketStatus === 'canceled') {
+    if (passenger.ticketStatus === 'unseated' || passenger.ticketStatus === 'cancelled') {
       throw new Error("Penumpang sudah di-unseat atau dibatalkan, tidak bisa di-reschedule");
     }
 
@@ -57,7 +57,7 @@ export class RescheduleService {
 
     const allPax = await db.select().from(passengers).where(eq(passengers.bookingId, booking.id));
     const activeSiblings = allPax.filter(
-      p => p.id !== passengerId && p.ticketStatus !== 'unseated' && p.ticketStatus !== 'canceled'
+      p => p.id !== passengerId && p.ticketStatus !== 'unseated' && p.ticketStatus !== 'cancelled'
     );
     const isSoleActivePassenger = activeSiblings.length === 0;
     const tripChanged = oldTripId !== newTripId;

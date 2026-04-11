@@ -274,7 +274,7 @@ export default function PassengerDetailModal({
                             </div>
                             <div className="divide-y">
                               {others.map((op) => {
-                                const isActive = op.ticketStatus !== 'unseated' && op.ticketStatus !== 'canceled';
+                                const isActive = op.ticketStatus !== 'unseated' && op.ticketStatus !== 'cancelled';
                                 return (
                                   <div key={op.id} className="px-4 py-2.5 flex items-center justify-between gap-2" data-testid={`other-pax-${op.seatNo}`}>
                                     <div className="min-w-0 flex-1">

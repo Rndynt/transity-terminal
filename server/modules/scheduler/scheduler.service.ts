@@ -124,7 +124,7 @@ export class SchedulerService {
                 tripId: null,
                 vehiclePlate: null,
                 driverName: null,
-                status: 'canceled',
+                status: 'cancelled',
                 capacity: base.capacity || null,
                 seatsBooked: 0,
                 exceptionId: exception.id,
@@ -283,7 +283,7 @@ export class SchedulerService {
       JOIN passengers p ON p.booking_id = b.id
       WHERE b.trip_id = ANY(${pgArray}::uuid[])
         AND b.status IN ('pending', 'paid', 'confirmed')
-        AND COALESCE(p.ticket_status, 'active') != 'canceled'
+        AND COALESCE(p.ticket_status, 'active') != 'cancelled'
       GROUP BY b.trip_id
     `);
 

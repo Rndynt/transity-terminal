@@ -1,10 +1,10 @@
-export type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'canceled' | 'refunded' | 'unseated';
+export type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'paid' | 'cancelled' | 'refunded' | 'unseated';
 export type BookingChannel = 'CSO' | 'WEB' | 'APP' | 'OTA';
-export type TripStatus = 'scheduled' | 'canceled' | 'closed';
-export type TicketStatus = 'active' | 'checked_in' | 'no_show' | 'canceled' | 'refunded' | 'unseated';
-export type CargoStatus = 'pending' | 'received' | 'loaded' | 'in_transit' | 'arrived' | 'delivered' | 'returned' | 'canceled';
+export type TripStatus = 'scheduled' | 'cancelled' | 'closed';
+export type TicketStatus = 'active' | 'checked_in' | 'no_show' | 'cancelled' | 'refunded' | 'unseated';
+export type CargoStatus = 'pending' | 'received' | 'loaded' | 'in_transit' | 'arrived' | 'delivered' | 'returned' | 'cancelled';
 export type SpjStatus = 'draft' | 'issued' | 'on_trip' | 'settled';
-export type HistoryAction = 'unseated' | 'reassigned' | 'rescheduled' | 'canceled' | 'status_change';
+export type HistoryAction = 'unseated' | 'reassigned' | 'rescheduled' | 'cancelled' | 'status_change';
 
 export const BOOKING_STATUS_MAP: Record<BookingStatus, { label: string; color: string; bg: string }> = {
   pending:    { label: 'Pending',        color: 'text-amber-700',   bg: 'bg-amber-50 border border-amber-200' },
@@ -97,14 +97,14 @@ export const CUSTOMER_TAG_MAP: Record<CustomerTag, { label: string; color: strin
   blacklist: { label: 'Blacklist', color: 'text-red-700',    bg: 'bg-red-50 border border-red-200' },
 };
 
-export const ALL_BOOKING_STATUSES: BookingStatus[] = ['pending', 'confirmed', 'checked_in', 'paid', 'canceled', 'refunded', 'unseated'];
+export const ALL_BOOKING_STATUSES: BookingStatus[] = ['pending', 'confirmed', 'checked_in', 'paid', 'cancelled', 'refunded', 'unseated'];
 export const ALL_CHANNELS: BookingChannel[] = ['CSO', 'WEB', 'APP', 'OTA'];
 
 export const CARGO_STATUS_TRANSITIONS: Record<CargoStatus, CargoStatus[]> = {
-  pending: ['received', 'canceled'],
-  received: ['loaded', 'canceled'],
-  loaded: ['in_transit', 'canceled'],
-  in_transit: ['arrived', 'canceled'],
+  pending: ['received', 'cancelled'],
+  received: ['loaded', 'cancelled'],
+  loaded: ['in_transit', 'cancelled'],
+  in_transit: ['arrived', 'cancelled'],
   arrived: ['delivered', 'returned'],
   delivered: [],
   returned: [],

@@ -558,7 +558,7 @@ export default function RefundsPage() {
                           <span className="text-gray-600 flex-1 truncate">{p.fullName}</span>
                           {p.phone && <span className="text-gray-400">{p.phone}</span>}
                           <Badge variant={p.ticketStatus === 'active' ? 'default' : 'secondary'} className="text-[10px] h-4 px-1.5">
-                            {p.ticketStatus === 'active' ? 'Aktif' : p.ticketStatus === 'canceled' ? 'Batal' : p.ticketStatus}
+                            {p.ticketStatus === 'active' ? 'Aktif' : p.ticketStatus === 'cancelled' ? 'Batal' : p.ticketStatus}
                           </Badge>
                           <span className="font-medium text-gray-600">{fmtCurrency(parseFloat(p.fareAmount || '0'))}</span>
                         </div>

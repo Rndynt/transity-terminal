@@ -93,7 +93,7 @@ const API_ENDPOINTS: ApiEndpoint[] = [
   { id: 'cso-available-trips', method: 'GET', path: '/api/cso/available-trips', description: 'Get CSO available trips', category: 'Trips', queryParams: ['serviceDate', 'outletId'] },
   { id: 'trips-get', method: 'GET', path: '/api/trips/:id', description: 'Get trip by ID', category: 'Trips', pathParams: ['id'] },
   { id: 'trips-create', method: 'POST', path: '/api/trips', description: 'Create new trip', category: 'Trips', bodyExample: '{"patternId": "pattern-id", "vehicleId": "vehicle-id", "serviceDate": "2024-01-15", "status": "scheduled"}' },
-  { id: 'trips-update', method: 'PUT', path: '/api/trips/:id', description: 'Update trip', category: 'Trips', pathParams: ['id'], bodyExample: '{"status": "canceled"}' },
+  { id: 'trips-update', method: 'PUT', path: '/api/trips/:id', description: 'Update trip', category: 'Trips', pathParams: ['id'], bodyExample: '{"status": "cancelled"}' },
   { id: 'trips-delete', method: 'DELETE', path: '/api/trips/:id', description: 'Delete trip', category: 'Trips', pathParams: ['id'] },
   
   // Trip Stop Times
