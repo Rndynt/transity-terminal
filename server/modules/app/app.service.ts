@@ -129,6 +129,7 @@ interface PaymentIntentInfo {
 
 interface BookingDetailResponse {
   id: string;
+  bookingCode: string | null;
   tripId: string;
   serviceDate: string | null | undefined;
   patternCode: string | null | undefined;
@@ -1250,6 +1251,7 @@ export class AppService {
 
     return {
       id: booking.id,
+      bookingCode: booking.bookingCode ?? null,
       tripId: booking.tripId,
       serviceDate: trip?.serviceDate,
       patternCode: pattern?.code,
