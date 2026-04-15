@@ -91,6 +91,7 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
     }
   }
 
+  app.get('/api/app/bookings/find-ota', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.findOtaBooking(req, reply));
   app.post('/api/app/bookings', { preHandler: [bookingAuthMiddleware] }, async (req, reply) => appController.createBooking(req, reply));
   app.get('/api/app/bookings', { preHandler: [bookingAuthMiddleware] }, async (req, reply) => {
     const isServiceClient = (req as any).isServiceClient === true;

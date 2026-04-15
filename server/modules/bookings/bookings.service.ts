@@ -5,7 +5,7 @@ import { AtomicHoldService } from "./atomicHold.service";
 import { PrintService } from "@modules/printing/print.service";
 import { db } from "@server/db";
 import { bookings as bookingsTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable } from "@shared/schema";
-import { eq, and, inArray, gt, lt, sql } from "drizzle-orm";
+import { eq, and, inArray, gt, lt, sql, not } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
 import {
   computeLegIndexes,
@@ -329,7 +329,8 @@ export class BookingsService {
       .from(bookingsTable)
       .where(and(
         eq(bookingsTable.status, 'pending'),
-        lt(bookingsTable.pendingExpiresAt, now)
+        lt(bookingsTable.pendingExpiresAt, now),
+        not(eq(bookingsTable.channel, 'OTA'))
       ));
 
     if (expiredPendingBookings.length === 0) return;

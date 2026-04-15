@@ -3,10 +3,10 @@ import {
   appUsers, reviews, bookings, payments, trips, tripPatterns, 
   tripStopTimes, stops, patternStops, vehicles, cargoShipments, cargoTypes,
   seatInventory, tripLegs, seatHolds, tripBases, scheduleExceptions,
-  operatorSettings, vouchers, promotions,
+  operatorSettings, vouchers, promotions, passengers,
   type AppUser, type InsertAppUser, type Review, type InsertReview
 } from "@shared/schema";
-import { eq, and, desc, sql, gte, lte, inArray, gt, isNull } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lte, inArray, gt, isNull, not } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { signToken, type AppUserPayload } from "./app.auth";
 import { IStorage } from "@server/storage.interface";
@@ -1075,12 +1075,22 @@ export class AppService {
     const booking = await this.storage.getBookingById(bookingId);
     if (!booking) throw new Error("Booking not found");
 
-    // Idempotent: jika sudah confirmed sebelumnya, anggap sukses
     if (booking.status === 'confirmed') {
       return { status: 'confirmed', bookingId: booking.id };
     }
 
-    if (booking.status !== 'pending') {
+    let isGracePeriodRecovery = false;
+    if (booking.status === 'cancelled' && booking.channel === 'OTA') {
+      const graceWindowMs = 5 * 60 * 1000;
+      const expiryTime = booking.pendingExpiresAt ? new Date(booking.pendingExpiresAt).getTime() : 0;
+      const cancelledRecently = expiryTime > 0 && (Date.now() - expiryTime) < graceWindowMs;
+      if (cancelledRecently) {
+        console.log(`[OTA] Grace period: re-activating recently cancelled OTA booking ${bookingId}`);
+        isGracePeriodRecovery = true;
+      } else {
+        throw new Error(`Booking cannot be confirmed. Current status: ${booking.status}`);
+      }
+    } else if (booking.status !== 'pending') {
       throw new Error(`Booking cannot be confirmed. Current status: ${booking.status}`);
     }
 
@@ -1089,13 +1099,34 @@ export class AppService {
     for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
     const seatNos = pax.map(p => p.seatNo);
 
-    await db.transaction(async (tx) => {
-      // Konfirmasi booking
-      await tx.update(bookings)
-        .set({ status: 'confirmed', channel: 'OTA' })
-        .where(and(eq(bookings.id, booking.id), eq(bookings.status, 'pending')));
+    const expectedStatus = isGracePeriodRecovery ? 'cancelled' : 'pending';
 
-      // Lock kursi permanen
+    await db.transaction(async (tx) => {
+      if (seatNos.length > 0) {
+        const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
+        const seatArr = sql`ARRAY[${sql.join(seatNos.map(s => sql`${s}`), sql`, `)}]`;
+        const seatRows = await tx.execute(sql`
+          SELECT seat_no, booked FROM seat_inventory
+          WHERE trip_id = ${booking.tripId}
+            AND seat_no = ANY(${seatArr})
+            AND leg_index = ANY(${legArr})
+          FOR UPDATE
+        `);
+        const alreadyBooked = (seatRows.rows as Record<string, unknown>[]).find(r => r.booked === true);
+        if (alreadyBooked) {
+          throw new Error(`Cannot confirm: seat ${alreadyBooked.seat_no} is already booked by another passenger`);
+        }
+      }
+
+      const [updated] = await tx.update(bookings)
+        .set({ status: 'confirmed', channel: 'OTA' })
+        .where(and(eq(bookings.id, booking.id), eq(bookings.status, expectedStatus)))
+        .returning({ id: bookings.id });
+
+      if (!updated) {
+        throw new Error(`Booking status changed concurrently. Expected: ${expectedStatus}`);
+      }
+
       await tx.update(seatInventory)
         .set({ booked: true, holdRef: null })
         .where(and(
@@ -1104,14 +1135,12 @@ export class AppService {
           inArray(seatInventory.legIndex, legIndexes)
         ));
 
-      // Hapus seat holds
       await tx.delete(seatHolds)
         .where(and(
           eq(seatHolds.tripId, booking.tripId),
           inArray(seatHolds.seatNo, seatNos)
         ));
 
-      // Buat payment record dengan method 'online'
       const { randomBytes } = await import('crypto');
       const paymentRef = providerRef || `OTA-${randomBytes(12).toString('hex').toUpperCase()}`;
       await tx.insert(payments).values({
@@ -1125,6 +1154,34 @@ export class AppService {
     });
 
     return { status: 'confirmed', bookingId: booking.id };
+  }
+
+  async findOtaBookingByCriteria(tripId: string, seatNos: string[]): Promise<BookingDetailResponse | null> {
+    const sortedInput = [...seatNos].sort();
+
+    const results = await db
+      .select()
+      .from(bookings)
+      .where(and(
+        eq(bookings.tripId, tripId),
+        eq(bookings.channel, 'OTA'),
+        inArray(bookings.status, ['pending', 'confirmed'] as any[])
+      ))
+      .orderBy(
+        sql`CASE WHEN ${bookings.status} = 'pending' THEN 0 ELSE 1 END`,
+        desc(bookings.createdAt)
+      );
+
+    for (const booking of results) {
+      const pax = await this.storage.getPassengers(booking.id);
+      const bookingSeats = pax.map(p => p.seatNo).sort();
+      if (sortedInput.length === bookingSeats.length &&
+          sortedInput.every((s, i) => s === bookingSeats[i])) {
+        return this.getBookingDetail(booking.id);
+      }
+    }
+
+    return null;
   }
 
   async getPaymentStatus(bookingId: string, userId: string): Promise<PaymentStatusResponse> {

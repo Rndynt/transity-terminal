@@ -272,6 +272,24 @@ export class AppController {
     }
   }
 
+  async findOtaBooking(req: FastifyRequest, reply: FastifyReply) {
+    const { tripId, seats } = req.query as { tripId?: string; seats?: string };
+    if (!tripId || !seats) {
+      return reply.code(400).send({ error: 'tripId and seats query parameters are required' });
+    }
+    const seatList = seats.split(',').map(s => s.trim()).filter(Boolean);
+    if (seatList.length === 0) {
+      return reply.code(400).send({ error: 'At least one seat number is required' });
+    }
+    try {
+      const booking = await this.service.findOtaBookingByCriteria(tripId, seatList);
+      if (!booking) return reply.code(404).send({ error: 'No matching OTA booking found' });
+      reply.send(booking);
+    } catch (e: unknown) {
+      reply.code(500).send({ error: errMsg(e) });
+    }
+  }
+
   async getMyBookings(req: FastifyRequest, reply: FastifyReply) {
     const bookings = await this.service.getUserBookings(req.appUser!.userId);
     reply.send(bookings);
