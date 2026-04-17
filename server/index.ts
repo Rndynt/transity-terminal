@@ -1,3 +1,19 @@
+import { existsSync as _envExists, readFileSync as _envRead } from "fs";
+import { resolve as _envResolve } from "path";
+const _envPath = _envResolve(process.cwd(), ".env");
+if (_envExists(_envPath)) {
+  for (const raw of _envRead(_envPath, "utf8").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq < 0) continue;
+    const k = line.slice(0, eq).trim();
+    let v = line.slice(eq + 1).trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+    process.env[k] = v;
+  }
+}
+
 import Fastify from "fastify";
 import { ZodError } from "zod";
 import rateLimit from "@fastify/rate-limit";

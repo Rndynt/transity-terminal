@@ -1144,9 +1144,13 @@ export class AppService {
 
       const { randomBytes } = await import('crypto');
       const paymentRef = providerRef || `OTA-${randomBytes(12).toString('hex').toUpperCase()}`;
+      const validPaymentMethods = ['qr', 'ewallet', 'bank'] as const;
+      const safePaymentMethod = (validPaymentMethods as readonly string[]).includes(paymentMethod)
+        ? paymentMethod
+        : 'bank';
       await tx.insert(payments).values({
         bookingId: booking.id,
-        method: 'online' as any,
+        method: safePaymentMethod as any,
         amount: booking.totalAmount,
         status: 'success',
         providerRef: paymentRef,

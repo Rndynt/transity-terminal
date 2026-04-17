@@ -256,8 +256,12 @@ export class AppController {
   async confirmOtaPaid(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
     const { providerRef, paymentMethod } = (req.body ?? {}) as { providerRef?: string; paymentMethod?: string };
+    const validMethods = ['qr', 'ewallet', 'bank'] as const;
+    const safeMethod = (validMethods as readonly string[]).includes(paymentMethod ?? '')
+      ? (paymentMethod as 'qr' | 'ewallet' | 'bank')
+      : 'bank';
     try {
-      const result = await this.service.confirmOtaPayment(id, providerRef ?? '', paymentMethod ?? 'online');
+      const result = await this.service.confirmOtaPayment(id, providerRef ?? '', safeMethod);
       reply.send(result);
     } catch (e: unknown) {
       const msg = errMsg(e);

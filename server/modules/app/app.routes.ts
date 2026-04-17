@@ -4,7 +4,7 @@ import { IStorage } from "@server/storage.interface";
 import { appAuthMiddleware } from "./app.auth";
 
 const ALLOWED_APP_ORIGINS = (process.env.APP_CORS_ORIGINS || '*').split(',').map(s => s.trim());
-const TERMINAL_SERVICE_KEY = process.env.TERMINAL_SERVICE_KEY || '';
+const getTerminalServiceKey = () => process.env.TERMINAL_SERVICE_KEY || '';
 
 function getAppCorsOrigin(reqOrigin: string | undefined): string {
   if (ALLOWED_APP_ORIGINS.includes('*')) return '*';
@@ -15,7 +15,7 @@ function getAppCorsOrigin(reqOrigin: string | undefined): string {
 function serviceKeyMiddleware(req: FastifyRequest, reply: FastifyReply, done: () => void) {
   const incomingKey = req.headers['x-service-key'] as string | undefined;
   if (!incomingKey) {
-    if (TERMINAL_SERVICE_KEY) {
+    if (getTerminalServiceKey()) {
       reply.code(401).send({ error: 'Missing X-Service-Key header', code: 'MISSING_SERVICE_KEY' });
       return;
     }
@@ -23,11 +23,11 @@ function serviceKeyMiddleware(req: FastifyRequest, reply: FastifyReply, done: ()
     done();
     return;
   }
-  if (!TERMINAL_SERVICE_KEY) {
+  if (!getTerminalServiceKey()) {
     reply.code(401).send({ error: 'Service key not configured on this terminal', code: 'SERVICE_KEY_NOT_CONFIGURED' });
     return;
   }
-  if (incomingKey !== TERMINAL_SERVICE_KEY) {
+  if (incomingKey !== getTerminalServiceKey()) {
     reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
     return;
   }
@@ -79,10 +79,10 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
   async function bookingAuthMiddleware(req: FastifyRequest, reply: FastifyReply) {
     const incomingKey = req.headers['x-service-key'] as string | undefined;
     if (incomingKey) {
-      if (!TERMINAL_SERVICE_KEY) {
+      if (!getTerminalServiceKey()) {
         return reply.code(401).send({ error: 'Service key not configured on this terminal', code: 'SERVICE_KEY_NOT_CONFIGURED' });
       }
-      if (incomingKey !== TERMINAL_SERVICE_KEY) {
+      if (incomingKey !== getTerminalServiceKey()) {
         return reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
       }
       (req as any).isServiceClient = true;
