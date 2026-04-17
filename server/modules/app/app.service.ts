@@ -1072,7 +1072,7 @@ export class AppService {
 
   // Dipanggil Console setelah pembayaran OTA dikonfirmasi di sisi Console.
   // Terminal tidak perlu tahu detail payment gateway — cukup tahu booking ini sudah dibayar.
-  async confirmOtaPayment(bookingId: string, providerRef: string, paymentMethod = 'online'): Promise<{ status: string; bookingId: string }> {
+  async confirmOtaPayment(bookingId: string, providerRef: string, paymentMethod: 'qr' | 'ewallet' | 'bank' = 'bank'): Promise<{ status: string; bookingId: string }> {
     const booking = await this.storage.getBookingById(bookingId);
     if (!booking) throw new Error("Booking not found");
 
@@ -1145,12 +1145,13 @@ export class AppService {
       const { randomBytes } = await import('crypto');
       const paymentRef = providerRef || `OTA-${randomBytes(12).toString('hex').toUpperCase()}`;
       const validPaymentMethods = ['qr', 'ewallet', 'bank'] as const;
-      const safePaymentMethod = (validPaymentMethods as readonly string[]).includes(paymentMethod)
-        ? paymentMethod
+      type PaymentMethod = typeof validPaymentMethods[number];
+      const safePaymentMethod: PaymentMethod = (validPaymentMethods as readonly string[]).includes(paymentMethod)
+        ? (paymentMethod as PaymentMethod)
         : 'bank';
       await tx.insert(payments).values({
         bookingId: booking.id,
-        method: safePaymentMethod as any,
+        method: safePaymentMethod,
         amount: booking.totalAmount,
         status: 'success',
         providerRef: paymentRef,
