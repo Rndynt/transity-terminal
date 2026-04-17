@@ -141,15 +141,15 @@ export default function SeatMap({
     queryKey: ['/api/trips', trip.id, 'seatmap', originSeq, destinationSeq],
     queryFn: () => tripsApi.getSeatmap(trip.id, originSeq, destinationSeq),
     enabled: !!trip.id && originSeq > 0 && destinationSeq > 0,
-    staleTime: 5000
+    staleTime: 2000
   });
 
   const { data: unseatedPassengers = [], refetch: refetchUnseated } = useQuery<any[]>({
     queryKey: ['/api/trips', trip.id, 'unseated-passengers'],
     queryFn: () => tripsApi.getUnseatedPassengers(trip.id),
     enabled: !!trip.id,
-    staleTime: 10000,
-    refetchInterval: isConnected ? false : 30000
+    staleTime: 5000,
+    refetchInterval: isConnected ? false : 5000
   });
 
   useEffect(() => { refetchRef.current = refetch; }, [refetch]);
@@ -182,7 +182,7 @@ export default function SeatMap({
 
   useEffect(() => {
     if (!autoRefreshEnabled || isConnected) return;
-    const interval = setInterval(() => refetch(), 30000);
+    const interval = setInterval(() => refetch(), 5000);
     return () => clearInterval(interval);
   }, [autoRefreshEnabled, isConnected, refetch]);
 

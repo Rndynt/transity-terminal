@@ -1,4 +1,5 @@
 import { db } from "@server/db";
+import { webSocketService } from "@server/realtime/ws";
 import { 
   appUsers, reviews, bookings, payments, trips, tripPatterns, 
   tripStopTimes, stops, patternStops, vehicles, cargoShipments, cargoTypes,
@@ -1152,6 +1153,12 @@ export class AppService {
         paidAt: new Date(),
       });
     });
+
+    // Broadcast realtime seatmap update ke semua CSO yang sedang buka trip ini
+    // Ini yang bikin seatmap langsung berubah dari kuning (hold) ke hijau/merah (confirmed)
+    for (const seatNo of seatNos) {
+      webSocketService.emitInventoryUpdated(booking.tripId, seatNo, legIndexes);
+    }
 
     return { status: 'confirmed', bookingId: booking.id };
   }
