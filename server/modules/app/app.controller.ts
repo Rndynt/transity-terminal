@@ -255,13 +255,12 @@ export class AppController {
 
   async confirmOtaPaid(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
-    const { providerRef, paymentMethod } = (req.body ?? {}) as { providerRef?: string; paymentMethod?: string };
-    const validMethods = ['qr', 'ewallet', 'bank'] as const;
-    const safeMethod = (validMethods as readonly string[]).includes(paymentMethod ?? '')
-      ? (paymentMethod as 'qr' | 'ewallet' | 'bank')
-      : 'bank';
+    const { providerRef } = (req.body ?? {}) as { providerRef?: string };
+    // Terminal sengaja tidak peduli paymentMethod dari Console — yang me-manage
+    // pilihan metode pembayaran (qris/va/ewallet/dst) adalah Console. Terminal
+    // hanya butuh tahu booking ini lunas dari kanal OTA dan mencatat method 'online'.
     try {
-      const result = await this.service.confirmOtaPayment(id, providerRef ?? '', safeMethod);
+      const result = await this.service.confirmOtaPayment(id, providerRef ?? '');
       reply.send(result);
     } catch (e: unknown) {
       const msg = errMsg(e);
