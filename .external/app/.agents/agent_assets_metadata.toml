@@ -1,0 +1,50 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "060nrjL-qvtwkXnaaYDPt"
+uri = "file://apps/mobile/MOBILE_APP_DOCS.md"
+type = "text"
+title = "Dokumentasi Mobile App Transity"
+
+[[outputs]]
+id = "jNw9kPOOGfYtohC4Q7SRC"
+uri = "file://docs/PKS_Perjanjian_Kerja_Sama.pdf"
+type = "pdf"
+title = "PKS - Perjanjian Kerja Sama Penggunaan Sistem Transity"
+
+[[outputs]]
+id = "j8wyTYvvkzk3lD4VgBi6v"
+uri = "file://docs/Commercial_Fee_Agreement.pdf"
+type = "pdf"
+title = "Perjanjian Commercial Fee - Sistem Transity"
+
+[[outputs]]
+id = "eV4cib5tN1U4VgZh9mNBO"
+uri = "file://docs/PKS_Perjanjian_Kerja_Sama.md"
+type = "text"
+title = "PKS (Markdown Source)"
+
+[[outputs]]
+id = "ZLAoozaDzQYYswBehq2Ww"
+uri = "file://docs/Commercial_Fee_Agreement.md"
+type = "text"
+title = "Commercial Fee (Markdown Source)"
+
+[[outputs]]
+id = "OaVRKlruWr46Tnj6TEUw1"
+uri = "file://docs/DEPLOY_VPS_DOCKER.md"
+type = "text"
+title = "DEPLOY_VPS_DOCKER.md — Transity Terminal"
+
+[[outputs]]
+id = "h1SLaDUuqTHE1oMnmIRia"
+uri = "file://apps/transityweb/ROADMAP.md"
+type = "text"
+title = "TransityWeb & TransityConsole — Product Roadmap"
+
+[[outputs]]
+id = "3nSzSIMVQeCEuxj9hIm6v"
+uri = "file://docs/console-api-requirements.md"
+type = "text"
+title = "Console API Requirements — Payment, Hold & Voucher (Updated)"

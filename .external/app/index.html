@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f766e" />
+    <meta name="description" content="Pesan tiket bus online dengan Transity. Cari jadwal, pilih kursi, bayar mudah." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Transity" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
+    <title>Transity — Pesan Tiket Bus Online</title>
+    <style>
+      .safe-top-sm {
+        padding-top: 12px !important;
+        padding-top: max(constant(safe-area-inset-top), 12px) !important;
+        padding-top: max(env(safe-area-inset-top, 0px), 12px) !important;
+      }
+      .safe-top-lg {
+        padding-top: 40px !important;
+        padding-top: max(calc(constant(safe-area-inset-top) + 24px), 40px) !important;
+        padding-top: max(calc(env(safe-area-inset-top, 0px) + 24px), 40px) !important;
+      }
+      .safe-bottom {
+        padding-bottom: 16px !important;
+        padding-bottom: max(constant(safe-area-inset-bottom), 16px) !important;
+        padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px) !important;
+      }
+      .safe-pb-24 {
+        padding-bottom: 96px !important;
+        padding-bottom: calc(constant(safe-area-inset-bottom) + 96px) !important;
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px) !important;
+      }
+      .safe-pb-32 {
+        padding-bottom: 128px !important;
+        padding-bottom: calc(constant(safe-area-inset-bottom) + 128px) !important;
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 128px) !important;
+      }
+      .safe-pb-36 {
+        padding-bottom: 144px !important;
+        padding-bottom: calc(constant(safe-area-inset-bottom) + 144px) !important;
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 144px) !important;
+      }
+    </style>
+  </head>
+  <body class="antialiased">
+    <div id="root">
+      <div id="pre-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(165deg,#0d4f4a 0%,#115e59 25%,#0f766e 50%,#059669 85%,#10b981 100%);z-index:9999;">
+        <div style="width:88px;height:88px;border-radius:28px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.12);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.18);box-shadow:0 8px 32px rgba(0,0,0,0.12);margin-bottom:24px;">
+          <svg width="44" height="44" viewBox="0 0 48 48" fill="none"><rect x="6" y="12" width="36" height="22" rx="6" fill="white" fill-opacity="0.95"/><rect x="10" y="16" width="8" height="7" rx="2.5" fill="#059669" fill-opacity="0.6"/><rect x="20" y="16" width="8" height="7" rx="2.5" fill="#059669" fill-opacity="0.6"/><rect x="30" y="16" width="8" height="7" rx="2.5" fill="#059669" fill-opacity="0.6"/><circle cx="14" cy="34" r="3.5" fill="white" fill-opacity="0.9"/><circle cx="14" cy="34" r="1.8" fill="#059669" fill-opacity="0.5"/><circle cx="34" cy="34" r="3.5" fill="white" fill-opacity="0.9"/><circle cx="34" cy="34" r="1.8" fill="#059669" fill-opacity="0.5"/><line x1="8" y1="28" x2="40" y2="28" stroke="#059669" stroke-opacity="0.15" stroke-width="1.5"/></svg>
+        </div>
+        <div style="font-family:Outfit,sans-serif;font-size:32px;font-weight:800;color:white;letter-spacing:-0.5px;text-shadow:0 2px 12px rgba(0,0,0,0.15);">Transity</div>
+        <div style="font-size:13px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.45);margin-top:4px;">Travel made simple</div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
