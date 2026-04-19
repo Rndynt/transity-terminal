@@ -990,6 +990,10 @@ export class AppService {
           inArray(seatHolds.seatNo, seatNos)
         ));
       });
+      // Realtime: webhook 'failed' membebaskan kursi → refresh seatmap CSO
+      for (const seatNo of seatNos) {
+        webSocketService.emitInventoryUpdated(booking.tripId, seatNo, legIndexes);
+      }
       return { status: 'failed', bookingId: booking.id };
     }
 
@@ -1066,6 +1070,11 @@ export class AppService {
         .set({ status: 'success', paidAt: new Date() })
         .where(eq(payments.id, payment.id));
     });
+
+    // Realtime: payment webhook sukses → kursi confirmed, refresh seatmap CSO
+    for (const seatNo of seatNos) {
+      webSocketService.emitInventoryUpdated(booking.tripId, seatNo, legIndexes);
+    }
 
     return { status: 'success', bookingId: booking.id };
   }
@@ -1403,6 +1412,11 @@ export class AppService {
         .set({ status: 'cancelled' })
         .where(eq(bookings.id, bookingId));
     });
+
+    // Realtime: kursi yang dibebaskan harus refresh di seatmap CSO
+    for (const seatNo of seatNos) {
+      webSocketService.emitInventoryUpdated(booking.tripId, seatNo, legIndexes);
+    }
   }
 
   getPaymentMethods() {
@@ -1590,6 +1604,11 @@ export class AppService {
         `);
       }
     });
+
+    // Realtime: kursi sudah dibayar/confirmed, refresh seatmap CSO
+    for (const seatNo of seatNos) {
+      webSocketService.emitInventoryUpdated(booking.tripId, seatNo, legIndexes);
+    }
 
     return {
       bookingId: booking.id,
