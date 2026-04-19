@@ -1,8 +1,0 @@
-node_modules
-dist
-dist-server
-.git
-.gitignore
-.env
-attached_assets
-.local
