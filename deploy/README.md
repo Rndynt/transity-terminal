@@ -66,38 +66,63 @@ systemctl enable --now docker nginx
 
 ## 3. Layout Direktori
 
-Clone 3 repo terpisah ke `/opt`:
+Folder induk bebas — **tidak harus `/opt/`**. Pilih sesuai konvensi server kamu. Beberapa pilihan umum:
+
+| Folder induk | Cocok untuk |
+|---|---|
+| `/srv/transity/` | Konvensi modern Linux untuk service data |
+| `/opt/` | Konvensi software optional/3rd-party |
+| `/home/admin/apps/` | Kalau server pakai user non-root |
+| `/var/www/transity/` | Konvensi lama (kayak Nginx default) |
+
+Di panduan ini saya pakai `/srv/transity/` sebagai contoh — **ganti aja sesuai preferensi kamu** (semua command tinggal sesuaikan path-nya).
+
+Layout yang disarankan:
 
 ```
-/opt/
-├── transity-terminal/   ← repo TransityTerminal (root project)
+/srv/transity/
+├── shared-app/                 ← repo TransityApp (1× shared, port 3001)
 │   ├── Dockerfile
 │   ├── docker-compose.yml
-│   ├── deploy/
-│   │   ├── README.md            ← file ini
+│   └── .env
+│
+├── shared-console/             ← repo TransityConsole (1× shared, port 8080)
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   └── .env
+│
+├── <slug>-terminal/            ← repo TransityTerminal (N× per operator)
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   ├── deploy/                 ← folder ini cuma ada di Terminal repo
+│   │   ├── README.md           ← file yang lagi kamu baca
 │   │   ├── setup-network.sh
+│   │   ├── add-operator.sh
 │   │   └── nginx/
 │   │       ├── terminal.conf
 │   │       ├── console.conf
-│   │       └── app.conf
-│   └── .env                     ← buat manual (lihat §5)
-│
-├── transity-console/    ← repo TransityConsole
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   └── .env                     ← buat manual
-│
-└── transity-app/        ← repo TransityApp
-    ├── Dockerfile
-    ├── docker-compose.yml
-    └── .env                     ← buat manual
+│   │       ├── app.conf
+│   │       └── _template-operator.conf
+│   └── .env
+└── <slug-lain>-terminal/       ← Terminal mitra lain
+    └── ...
 ```
 
+> **`<slug>`** adalah placeholder untuk nama operator (huruf kecil, no spasi). Contoh slug: `nusa`, `buskita`, `trans`, `prima`, `cepat`. Tiap operator punya folder, container, DB, subdomain sendiri. Detail di §11.
+
+Clone awal:
+
 ```bash
-mkdir -p /opt && cd /opt
-git clone <terminal-repo-url> transity-terminal
-git clone <console-repo-url>  transity-console
-git clone <app-repo-url>      transity-app
+# Pilih base directory (sesuaikan)
+BASE=/srv/transity
+mkdir -p "$BASE" && cd "$BASE"
+
+# 2 service shared (1 instance untuk semua operator)
+git clone <console-repo-url>  shared-console
+git clone <app-repo-url>      shared-app
+
+# Terminal pertama (1 folder per operator, ganti `nusa` dengan slug operatormu)
+git clone <terminal-repo-url> nusa-terminal
 ```
 
 ---
@@ -115,7 +140,9 @@ Network `transity-net` ini dipakai bersama oleh ketiga `docker-compose.yml`. Tan
 
 ## 5. Environment Variables
 
-### `/opt/transity-terminal/.env`
+> Catatan path: di bawah ini saya pakai `/srv/transity/...` — kalau base directory kamu beda, sesuaikan saja.
+
+### `<base>/<slug>-terminal/.env`  (contoh: `/srv/transity/nusa-terminal/.env`)
 
 ```bash
 NODE_ENV=production
@@ -144,7 +171,7 @@ HOLD_TTL_LONG_SECONDS=1800
 PENDING_BOOKING_AUTO_RELEASE=true
 ```
 
-### `/opt/transity-console/.env`
+### `<base>/shared-console/.env`
 
 ```bash
 NODE_ENV=production
@@ -170,7 +197,7 @@ TERMINAL_SERVICE_KEY=<value-yang-sama-dengan-Terminal>
 
 > **Catatan operator DB:** kolom `operators.api_url` di Console DB harus diisi `https://terminal.example.com` (URL public Terminal). Override env hanya berlaku untuk gateway.proxy.ts. Aggregator (search/seatmap) tetap baca dari kolom DB, jadi pastikan kolom itu benar di production.
 
-### `/opt/transity-app/.env`
+### `<base>/shared-app/.env`
 
 ```bash
 NODE_ENV=production
@@ -194,25 +221,26 @@ REALMIO_TENANT_ID=nusa-shuttle
 
 ## 6. Build & Run
 
-Urutan: **Terminal → Console → App** (App butuh Console up).
+Urutan: **Terminal (operator pertama) → Console → App**.
+
+Ganti `BASE` dengan folder induk pilihanmu:
 
 ```bash
-# 1. Terminal
-cd /opt/transity-terminal
-docker compose build
-docker compose up -d
-docker compose logs -f terminal   # tunggu sampai "ready"
+BASE=/srv/transity     # atau /opt, /home/admin/apps, dll
 
-# 2. Console
-cd /opt/transity-console
-docker compose build
-docker compose up -d
+# 1. Terminal pertama (mis. operator nusa)
+cd $BASE/nusa-terminal
+docker compose up -d --build
 docker compose logs -f
 
-# 3. App
-cd /opt/transity-app
-docker compose build
-docker compose up -d
+# 2. Console (shared)
+cd $BASE/shared-console
+docker compose up -d --build
+docker compose logs -f
+
+# 3. App (shared)
+cd $BASE/shared-app
+docker compose up -d --build
 docker compose logs -f
 ```
 
@@ -222,11 +250,11 @@ Cek semua running dan healthy:
 docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 ```
 
-Test internal connectivity:
+Test internal connectivity (ganti `nusa-terminal` dengan nama container Terminal):
 
 ```bash
 # Dari Console container, harus bisa hit Terminal
-docker exec transity-console wget -qO- http://terminal:5000/api/health
+docker exec transity-console wget -qO- http://nusa-terminal:5000/api/health
 
 # Dari App container, harus bisa hit Console
 docker exec transity-app wget -qO- http://transity-console:8080/api/healthz
@@ -298,13 +326,12 @@ certbot renew --dry-run
 
 ## 9. Update / Redeploy
 
-Per repo, dari direktorinya masing-masing:
+Per service, dari direktorinya masing-masing:
 
 ```bash
-cd /opt/transity-<service>
+cd <base>/<folder-service>     # mis. /srv/transity/nusa-terminal
 git pull
-docker compose build
-docker compose up -d
+docker compose up -d --build
 ```
 
 Karena ketiga service share network external `transity-net`, mereka bisa di-update independen tanpa ganggu yang lain.
@@ -332,49 +359,79 @@ docker compose -f /opt/transity-terminal/docker-compose.yml logs terminal | grep
 
 ## 11. Multi-Operator (Whitelabel) — Tambah Operator Baru
 
-Tiap mitra operator dapat **Terminal sendiri** (container, DB, subdomain, port unik). Console & App tetap shared.
+Tiap mitra operator dapat **Terminal sendiri** (container, DB, subdomain, port unik). Console & App tetap shared (1 instance saja, melayani semua operator).
 
-### Pola direktori & port
+### Konvensi penamaan
+
+| Item | Pola | Contoh (operator slug = `nusa`) |
+|---|---|---|
+| Slug operator | `<slug>` (huruf kecil, tanpa spasi) | `nusa` |
+| Folder Terminal | `<base>/<slug>-terminal/` | `/srv/transity/nusa-terminal/` |
+| Nama container | `<slug>-terminal` | `nusa-terminal` |
+| Port host | `<terminal-port>` (kelipatan 10) | `5000` |
+| Subdomain Terminal | `terminal-<slug>.<domain>` | `terminal-nusa.transity.web.id` |
+| Database Postgres | `<slug>_terminal` | `nusa_terminal` |
+| Tenant Realmio | `<slug>-shuttle` | `nusa-shuttle` |
+| Nginx vhost | `/etc/nginx/conf.d/terminal-<slug>.conf` | `terminal-nusa.conf` |
+
+> `<base>` = folder induk pilihanmu (lihat §3). Bisa `/srv/transity`, `/opt`, `/home/admin/apps`, dll.
+
+### Pola folder kalau ada banyak operator
+
+Misal kamu punya 5 mitra dengan slug masing-masing `<slug-1>` … `<slug-5>`:
 
 ```
-/opt/
-├── shared-console/          ← 1× shared (port 8080)
-├── shared-app/              ← 1× shared (port 3001)
+<base>/
+├── shared-console/             ← 1× shared (port 8080)
+├── shared-app/                 ← 1× shared (port 3001)
 │
-├── nusa-terminal/           ← operator 1 (port 5000)
-├── buskita-terminal/        ← operator 2 (port 5010)
-├── trans-terminal/          ← operator 3 (port 5020)
-├── prima-terminal/          ← operator 4 (port 5030)
-└── cepat-terminal/          ← operator 5 (port 5040)
+├── <slug-1>-terminal/          ← port 5000
+├── <slug-2>-terminal/          ← port 5010
+├── <slug-3>-terminal/          ← port 5020
+├── <slug-4>-terminal/          ← port 5030
+└── <slug-5>-terminal/          ← port 5040
 ```
 
-Konvensi port: kelipatan 10 per operator (5000, 5010, 5020, ...) — gampang diingat & gak bentrok.
+Konvensi port: kelipatan 10 per operator — gampang diingat dan tidak bentrok.
 
-### Cara cepat — pakai script
+### Cara cepat — pakai script otomatis
 
 ```bash
-cd /opt/nusa-terminal     # atau Terminal repo manapun
+# Set base directory & repo URL sekali
+export BASE_DIR=/srv/transity
 export TERMINAL_REPO_URL=git@github.com:your-org/TransityTerminal.git
 
-bash deploy/add-operator.sh buskita transity.web.id 5010
-bash deploy/add-operator.sh trans   transity.web.id 5020
-bash deploy/add-operator.sh prima   transity.web.id 5030
-bash deploy/add-operator.sh cepat   transity.web.id 5040
+# Format: bash deploy/add-operator.sh <slug> <domain-base> <terminal-port>
+bash deploy/add-operator.sh <slug-1> <domain-base> 5000
+bash deploy/add-operator.sh <slug-2> <domain-base> 5010
+bash deploy/add-operator.sh <slug-3> <domain-base> 5020
+# ... dst, sebanyak operator yang kamu punya
 ```
 
-Script otomatis:
-1. Clone Terminal repo ke `/opt/<slug>-terminal`
-2. Generate `.env` dengan `TERMINAL_PORT`, `TERMINAL_SERVICE_KEY` (random), `JWT_SECRET` (random)
-3. Generate Nginx vhost di `/etc/nginx/conf.d/terminal-<slug>.conf` dari template
+Contoh konkret:
 
-Setelah script jalan, kamu **tetap manual**:
-- Edit `.env` set `DATABASE_URL` operator
-- `createdb <slug>_terminal` di Postgres
-- Insert row di tabel `operators` di Console DB (slug, api_url, service_key dari output script, tenant_id)
-- Daftar tenant baru di Realmio
-- `certbot --standalone -d terminal-<slug>.transity.web.id`
-- `cd /opt/<slug>-terminal && docker compose up -d --build`
-- `nginx -t && systemctl reload nginx`
+```bash
+export BASE_DIR=/srv/transity
+export TERMINAL_REPO_URL=git@github.com:your-org/TransityTerminal.git
+
+bash deploy/add-operator.sh nusa     transity.web.id 5000   # → /srv/transity/nusa-terminal/
+bash deploy/add-operator.sh buskita  transity.web.id 5010   # → /srv/transity/buskita-terminal/
+bash deploy/add-operator.sh trans    transity.web.id 5020   # → /srv/transity/trans-terminal/
+```
+
+Script otomatis bikin (sesuai slug yang kamu masukin):
+1. Folder `<BASE_DIR>/<slug>-terminal/` dengan repo Terminal di-clone
+2. File `.env` dengan `TERMINAL_PORT`, `TERMINAL_SERVICE_KEY` (random), `JWT_SECRET` (random)
+3. Nginx vhost `<NGINX_CONF_DIR>/terminal-<slug>.conf` dari template
+
+Setelah script jalan, kamu **tetap manual** untuk tiap operator:
+1. Edit `.env` — set `DATABASE_URL` asli operator
+2. `createdb <slug>_terminal` di Postgres
+3. Insert row tabel `operators` di Console DB (slug, api_url, service_key dari output script, tenant_id)
+4. Daftar tenant baru di Realmio
+5. `certbot --standalone -d terminal-<slug>.<domain>`
+6. `cd <BASE_DIR>/<slug>-terminal && docker compose up -d --build`
+7. `nginx -t && systemctl reload nginx`
 
 ### Kenapa Terminal pakai container_name + port dari env
 
@@ -386,35 +443,36 @@ ports:
   - "127.0.0.1:${TERMINAL_PORT:-5000}:5000"
 ```
 
-Jadi 1 Dockerfile + 1 docker-compose bisa di-deploy 5x (atau 50x) dengan `.env` berbeda per operator. **Tanpa fork repo per operator.**
+Jadi **1 Dockerfile + 1 docker-compose** bisa di-deploy berkali-kali dengan `.env` berbeda per operator. **Tanpa fork repo per operator.**
 
 ### Verifikasi semua Terminal jalan
 
 ```bash
 docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep terminal
 
-# Hasil yang diharapkan:
-# nusa-terminal     Up 2h (healthy)   127.0.0.1:5000->5000/tcp
-# buskita-terminal  Up 1h (healthy)   127.0.0.1:5010->5000/tcp
-# trans-terminal    Up 30m (healthy)  127.0.0.1:5020->5000/tcp
-# ...
+# Contoh hasil (ganti <slug-N> dengan nama operatormu):
+# <slug-1>-terminal  Up 2h (healthy)   127.0.0.1:5000->5000/tcp
+# <slug-2>-terminal  Up 1h (healthy)   127.0.0.1:5010->5000/tcp
+# <slug-3>-terminal  Up 30m (healthy)  127.0.0.1:5020->5000/tcp
 ```
 
-### Update / redeploy 1 operator
+### Update / redeploy 1 operator saja
+
+Operator lain tetap jalan tanpa terganggu:
 
 ```bash
-cd /opt/buskita-terminal
+cd <BASE_DIR>/<slug>-terminal      # mis. /srv/transity/buskita-terminal
 git pull
-docker compose up -d --build      # cuma operator ini yang restart, lainnya tetap jalan
+docker compose up -d --build
 ```
 
 ### Pisah VPS per operator (kalau load besar)
 
-Pola yang sama tetap dipakai — pindahin direktori `/opt/<slug>-terminal/` ke VPS baru, sesuaikan DNS, set `OPERATOR_TERMINAL_URL_OVERRIDE` di Console kalau perlu reach via internal IP.
+Pola yang sama tetap dipakai — pindahin folder `<BASE_DIR>/<slug>-terminal/` ke VPS baru, sesuaikan DNS subdomain, set `OPERATOR_TERMINAL_URL_OVERRIDE` di Console kalau perlu reach via internal IP.
 
-Untuk Console sendiri (single instance) kalau perlu scale horizontal:
-- Tambah Redis adapter di Terminal Socket.IO untuk multi-instance scaling
-- Itu task code terpisah — saat ini setup ini valid untuk 1 instance per Terminal
+Untuk skala besar kalau perlu scale Terminal horizontal di 1 operator:
+- Tambah Redis adapter di Terminal Socket.IO supaya event antar instance ter-sync
+- Itu task code terpisah — saat ini setup valid untuk 1 instance per Terminal
 
 ---
 
