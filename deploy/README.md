@@ -1,47 +1,54 @@
 # Deploy Transity Stack di VPS Docker + Nginx
 
-Panduan deploy 3 service Transity (Terminal, Console, App) di **1 VPS** menggunakan Docker + Nginx reverse proxy. Tujuan utama: realtime Socket.IO **tidak putus** di production.
+Panduan deploy stack Transity di VPS pakai Docker + Nginx reverse proxy.
+
+**Arsitektur whitelabel:**
+- **Console** = 1 instance shared (multi-tenant, semua operator pakai sama)
+- **App** = 1 instance shared (customer-facing, multi-tenant routing)
+- **Terminal** = **N instance**, 1 per operator (whitelabel — tiap mitra punya brand, DB, subdomain sendiri)
 
 ---
 
 ## 1. Arsitektur
 
 ```
-                          Internet (HTTPS)
-                                │
-                       ┌────────┴────────┐
-                       │  Nginx (host)   │  443/80
-                       └────┬─────┬─────┬┘
-                            │     │     │
-            terminal.x.com  │     │     │  app.x.com
-              (CSO + WS)    │     │     │  (customer)
-                            ▼     │     ▼
-                    ┌─────────┐   │   ┌─────────┐
-                    │Terminal │   │   │  App    │
-                    │  :5000  │   │   │  :3001  │
-                    │ (WS srv)│   │   │ (proxy) │
-                    └────┬────┘   │   └────┬────┘
-                         │        │        │
-                         │   console.x.com │
-                         │        ▼        │
-                         │   ┌─────────┐   │
-                         │   │ Console │◄──┘  (App proxy /api/* ke Console)
-                         │   │  :8080  │
-                         │   └────┬────┘
-                         │        │
-                         └────────┴──── Console proxy ke Terminal (X-Service-Key)
-                                          via Docker network `transity-net`
+                            Internet (HTTPS)
+                                  │
+                         ┌────────┴────────┐
+                         │  Nginx (host)   │
+                         └─┬──┬──┬─────┬───┘
+                           │  │  │     │
+            app.x.com ─────┘  │  │     └──── console.x.com
+            (1 shared)        │  │           (1 shared backoffice)
+                              │  │
+            terminal-nusa.x  ◄┘  └► terminal-buskita.x ... (N operator)
+            terminal-trans.x      terminal-prima.x
+            terminal-cepat.x      ...
 
-                         ┌─────────────────────────┐
-                         │  PostgreSQL (Neon/RDS)  │  external managed DB
-                         └─────────────────────────┘
+   ┌─────────┐    ┌──────────┐    ┌──────────────────────────┐
+   │  App    │    │ Console  │    │ Terminal (per operator)  │
+   │  :3001  │───►│  :8080   │───►│ :5000  nusa-terminal     │
+   │ (proxy) │    │ (gateway)│    │ :5010  buskita-terminal  │
+   └─────────┘    └──────────┘    │ :5020  trans-terminal    │
+                                  │ :5030  prima-terminal    │
+                                  │ :5040  cepat-terminal    │
+                                  └──────────────────────────┘
+                                       │
+   ┌──────────────────────┐            │
+   │ PostgreSQL (managed) │ ◄──────────┘
+   │  - console_db        │   1 DB Console + N DB Terminal
+   │  - nusa_terminal     │   (data tiap operator terisolasi)
+   │  - buskita_terminal  │
+   │  - ...               │
+   └──────────────────────┘
 ```
 
 **Aturan flow:**
-- Browser **CSO** → `terminal.x.com` (langsung ke Terminal, dapat Socket.IO realtime)
-- Browser **customer** → `app.x.com` → App proxy semua `/api/*` ke Console → Console gateway ke Terminal
+- Browser **CSO operator X** → `terminal-X.domain.com` (langsung ke Terminal X, dapat Socket.IO realtime instance itu)
+- Browser **customer** → `app.domain.com` → App proxy `/api/*` ke Console → Console route ke Terminal yang sesuai berdasarkan kolom `operators.api_url` (atau slug di URL)
 - App **TIDAK PERNAH** akses Terminal langsung
-- Komunikasi internal antar container lewat shared Docker network `transity-net` (alamat: `http://terminal:5000`, `http://transity-console:8080`)
+- Console pilih Terminal mana berdasarkan `operator_id` di request (tabel `operators` di Console DB)
+- Komunikasi internal antar container lewat shared Docker network `transity-net`
 
 ---
 
@@ -323,14 +330,91 @@ docker compose -f /opt/transity-terminal/docker-compose.yml logs terminal | grep
 
 ---
 
-## 11. Single-host vs Multi-host
+## 11. Multi-Operator (Whitelabel) — Tambah Operator Baru
 
-Setup ini **single-host** (semua container di 1 VPS, share network). Cocok untuk operator kecil-menengah.
+Tiap mitra operator dapat **Terminal sendiri** (container, DB, subdomain, port unik). Console & App tetap shared.
 
-Kalau nanti pisah host:
-- Tiap service expose port publik / pakai service mesh
-- Ganti `CONSOLE_URL=http://transity-console:8080` → `https://console-internal.example.com`
+### Pola direktori & port
+
+```
+/opt/
+├── shared-console/          ← 1× shared (port 8080)
+├── shared-app/              ← 1× shared (port 3001)
+│
+├── nusa-terminal/           ← operator 1 (port 5000)
+├── buskita-terminal/        ← operator 2 (port 5010)
+├── trans-terminal/          ← operator 3 (port 5020)
+├── prima-terminal/          ← operator 4 (port 5030)
+└── cepat-terminal/          ← operator 5 (port 5040)
+```
+
+Konvensi port: kelipatan 10 per operator (5000, 5010, 5020, ...) — gampang diingat & gak bentrok.
+
+### Cara cepat — pakai script
+
+```bash
+cd /opt/nusa-terminal     # atau Terminal repo manapun
+export TERMINAL_REPO_URL=git@github.com:your-org/TransityTerminal.git
+
+bash deploy/add-operator.sh buskita transity.web.id 5010
+bash deploy/add-operator.sh trans   transity.web.id 5020
+bash deploy/add-operator.sh prima   transity.web.id 5030
+bash deploy/add-operator.sh cepat   transity.web.id 5040
+```
+
+Script otomatis:
+1. Clone Terminal repo ke `/opt/<slug>-terminal`
+2. Generate `.env` dengan `TERMINAL_PORT`, `TERMINAL_SERVICE_KEY` (random), `JWT_SECRET` (random)
+3. Generate Nginx vhost di `/etc/nginx/conf.d/terminal-<slug>.conf` dari template
+
+Setelah script jalan, kamu **tetap manual**:
+- Edit `.env` set `DATABASE_URL` operator
+- `createdb <slug>_terminal` di Postgres
+- Insert row di tabel `operators` di Console DB (slug, api_url, service_key dari output script, tenant_id)
+- Daftar tenant baru di Realmio
+- `certbot --standalone -d terminal-<slug>.transity.web.id`
+- `cd /opt/<slug>-terminal && docker compose up -d --build`
+- `nginx -t && systemctl reload nginx`
+
+### Kenapa Terminal pakai container_name + port dari env
+
+`docker-compose.yml` Terminal sudah pakai variabel:
+
+```yaml
+container_name: ${OPERATOR_SLUG:-default}-terminal
+ports:
+  - "127.0.0.1:${TERMINAL_PORT:-5000}:5000"
+```
+
+Jadi 1 Dockerfile + 1 docker-compose bisa di-deploy 5x (atau 50x) dengan `.env` berbeda per operator. **Tanpa fork repo per operator.**
+
+### Verifikasi semua Terminal jalan
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep terminal
+
+# Hasil yang diharapkan:
+# nusa-terminal     Up 2h (healthy)   127.0.0.1:5000->5000/tcp
+# buskita-terminal  Up 1h (healthy)   127.0.0.1:5010->5000/tcp
+# trans-terminal    Up 30m (healthy)  127.0.0.1:5020->5000/tcp
+# ...
+```
+
+### Update / redeploy 1 operator
+
+```bash
+cd /opt/buskita-terminal
+git pull
+docker compose up -d --build      # cuma operator ini yang restart, lainnya tetap jalan
+```
+
+### Pisah VPS per operator (kalau load besar)
+
+Pola yang sama tetap dipakai — pindahin direktori `/opt/<slug>-terminal/` ke VPS baru, sesuaikan DNS, set `OPERATOR_TERMINAL_URL_OVERRIDE` di Console kalau perlu reach via internal IP.
+
+Untuk Console sendiri (single instance) kalau perlu scale horizontal:
 - Tambah Redis adapter di Terminal Socket.IO untuk multi-instance scaling
+- Itu task code terpisah — saat ini setup ini valid untuk 1 instance per Terminal
 
 ---
 

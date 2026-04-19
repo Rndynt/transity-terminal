@@ -4,10 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile
     image: transity-terminal:latest
-    container_name: transity-terminal
+    container_name: ${OPERATOR_SLUG:-default}-terminal
     restart: unless-stopped
     ports:
-      - "127.0.0.1:5000:5000"
+      - "127.0.0.1:${TERMINAL_PORT:-5000}:5000"
     env_file:
       - .env
     environment:
