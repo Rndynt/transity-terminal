@@ -13,7 +13,7 @@ function nextNDays(n: number): string[] {
   return dates;
 }
 
-export async function seedTrips(ctx: SeedContext, days = 30) {
+export async function seedTrips(ctx: SeedContext, days = 14) {
   console.log(`\n[11] Materializing trips for next ${days} days...`);
 
   const tripBasesService = new TripBasesService(storage);
