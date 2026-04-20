@@ -2,6 +2,8 @@ import { IStorage } from "@server/storage.interface";
 import { InsertTrip, Trip } from "@shared/schema";
 import { TripLegsService } from "@modules/tripLegs/tripLegs.service";
 import { SeatInventoryService } from "@modules/seatInventory/seatInventory.service";
+import { fireAndForget } from "@server/lib/consoleWebhook";
+import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
 
 export class TripsService {
   private tripLegsService: TripLegsService;
@@ -10,6 +12,19 @@ export class TripsService {
   constructor(private storage: IStorage) {
     this.tripLegsService = new TripLegsService(storage);
     this.seatInventoryService = new SeatInventoryService(storage);
+  }
+
+  private async emitWebhook(
+    event: "schedule.created" | "schedule.updated" | "schedule.deleted",
+    trip: Trip
+  ) {
+    try {
+      const payload = await buildScheduleTripPayload(this.storage, trip);
+      if (!payload) return;
+      fireAndForget({ event, trip: payload, emittedAt: new Date().toISOString() });
+    } catch (err) {
+      console.warn("[trips.service] failed to build webhook payload:", (err as Error).message);
+    }
   }
 
   async getAllTrips(serviceDate?: string): Promise<Trip[]> {
@@ -48,6 +63,7 @@ export class TripsService {
       await this.storage.bulkUpsertTripStopTimes(trip.id, tripStopTimesData);
     }
     
+    void this.emitWebhook("schedule.created", trip);
     return trip;
   }
 
@@ -100,12 +116,15 @@ export class TripsService {
       (data as any).snapDriverName = null;
     }
     
-    return await this.storage.updateTrip(id, data);
+    const updated = await this.storage.updateTrip(id, data);
+    void this.emitWebhook("schedule.updated", updated);
+    return updated;
   }
 
   async deleteTrip(id: string): Promise<void> {
-    await this.getTripById(id);
+    const trip = await this.getTripById(id);
     await this.storage.deleteTrip(id);
+    void this.emitWebhook("schedule.deleted", trip);
   }
 
   async deriveLegs(tripId: string): Promise<void> {

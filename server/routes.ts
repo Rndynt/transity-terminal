@@ -30,6 +30,7 @@ import { registerRefundsRoutes } from "./modules/refunds/refunds.routes";
 import { registerMaintenanceRoutes } from "./modules/maintenance/maintenance.routes";
 import { registerCustomersRoutes } from "./modules/customers/customers.routes";
 import { registerSettingsRoutes } from "./modules/settings/settings.routes";
+import { registerConsoleRoutes } from "./modules/console/console.routes";
 
 const TERMINAL_SERVICE_KEY = process.env.TERMINAL_SERVICE_KEY || '';
 
@@ -57,9 +58,15 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
   });
 
   registerAuthRoutes(app);
+  registerConsoleRoutes(app, storage);
 
   app.addHook('preHandler', async (req, reply) => {
-    if (req.url.startsWith("/api/auth/") || req.url.startsWith("/api/app/") || !req.url.startsWith("/api")) {
+    if (
+      req.url.startsWith("/api/auth/") ||
+      req.url.startsWith("/api/app/") ||
+      req.url.startsWith("/api/console/") ||
+      !req.url.startsWith("/api")
+    ) {
       return;
     }
     await requireAuth(req, reply);
