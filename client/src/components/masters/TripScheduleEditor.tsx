@@ -353,7 +353,7 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
                     <OverridePill
                       label="Naik"
                       icon={<ArrowUp className="h-3 w-3" />}
-                      value={st.boardingAllowed}
+                      value={st.boardingAllowed ?? null}
                       onChange={v => updateStop(index, 'boardingAllowed', v)}
                       allowedClass="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
                       testId={`boarding-override-${index}`}
@@ -361,7 +361,7 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
                     <OverridePill
                       label="Turun"
                       icon={<ArrowDown className="h-3 w-3" />}
-                      value={st.alightingAllowed}
+                      value={st.alightingAllowed ?? null}
                       onChange={v => updateStop(index, 'alightingAllowed', v)}
                       allowedClass="bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400"
                       testId={`alighting-override-${index}`}

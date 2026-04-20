@@ -96,7 +96,7 @@ export default function BatchRescheduleDialog({
   );
 
   const sortedStopTimes = useMemo(() =>
-    [...targetStopTimes].sort((a, b) => a.sequence - b.sequence),
+    [...targetStopTimes].sort((a, b) => a.stopSequence - b.stopSequence),
     [targetStopTimes]
   );
 
@@ -109,10 +109,10 @@ export default function BatchRescheduleDialog({
     setSelectedStopPair({
       originStopId: origin.stopId,
       destinationStopId: destination.stopId,
-      originSeq: origin.sequence,
-      destinationSeq: destination.sequence,
-      originName: origin.stopName || `Stop ${origin.sequence}`,
-      destinationName: destination.stopName || `Stop ${destination.sequence}`,
+      originSeq: origin.stopSequence,
+      destinationSeq: destination.stopSequence,
+      originName: origin.stopName || `Stop ${origin.stopSequence}`,
+      destinationName: destination.stopName || `Stop ${destination.stopSequence}`,
     });
   };
 
@@ -263,18 +263,18 @@ export default function BatchRescheduleDialog({
                           <button
                             key={st.id}
                             onClick={() => {
-                              if (selectedStopPair?.destinationSeq && st.sequence < selectedStopPair.destinationSeq) {
-                                handleSelectStops(st, sortedStopTimes.find(s => s.sequence === selectedStopPair.destinationSeq)!);
+                              if (selectedStopPair?.destinationSeq && st.stopSequence < selectedStopPair.destinationSeq) {
+                                handleSelectStops(st, sortedStopTimes.find(s => s.stopSequence === selectedStopPair.destinationSeq)!);
                               } else {
                                 setSelectedStopPair(prev => prev ? {
                                   ...prev,
                                   originStopId: st.stopId,
-                                  originSeq: st.sequence,
-                                  originName: st.stopName || `Stop ${st.sequence}`,
+                                  originSeq: st.stopSequence,
+                                  originName: st.stopName || `Stop ${st.stopSequence}`,
                                 } : {
                                   originStopId: st.stopId,
-                                  originSeq: st.sequence,
-                                  originName: st.stopName || `Stop ${st.sequence}`,
+                                  originSeq: st.stopSequence,
+                                  originName: st.stopName || `Stop ${st.stopSequence}`,
                                   destinationStopId: '',
                                   destinationSeq: 0,
                                   destinationName: '',
@@ -282,12 +282,12 @@ export default function BatchRescheduleDialog({
                               }
                             }}
                             className={`w-full text-left px-2 py-1.5 rounded text-[11px] transition-colors ${
-                              selectedStopPair?.originSeq === st.sequence
+                              selectedStopPair?.originSeq === st.stopSequence
                                 ? 'bg-amber-100 border border-amber-300 text-amber-800 font-semibold'
                                 : 'bg-gray-50 hover:bg-gray-100 text-gray-600 border border-transparent'
                             }`}
                           >
-                            {st.stopName || `Stop ${st.sequence}`}
+                            {st.stopName || `Stop ${st.stopSequence}`}
                           </button>
                         ))}
                       </div>
@@ -296,7 +296,7 @@ export default function BatchRescheduleDialog({
                       <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Tujuan</label>
                       <div className="space-y-1 max-h-32 overflow-y-auto mt-1">
                         {sortedStopTimes
-                          .filter(st => !selectedStopPair?.originSeq || st.sequence > selectedStopPair.originSeq)
+                          .filter(st => !selectedStopPair?.originSeq || st.stopSequence > selectedStopPair.originSeq)
                           .map(st => (
                             <button
                               key={st.id}
@@ -305,19 +305,19 @@ export default function BatchRescheduleDialog({
                                   setSelectedStopPair(prev => prev ? {
                                     ...prev,
                                     destinationStopId: st.stopId,
-                                    destinationSeq: st.sequence,
-                                    destinationName: st.stopName || `Stop ${st.sequence}`,
+                                    destinationSeq: st.stopSequence,
+                                    destinationName: st.stopName || `Stop ${st.stopSequence}`,
                                   } : null);
                                 }
                               }}
                               disabled={!selectedStopPair?.originStopId}
                               className={`w-full text-left px-2 py-1.5 rounded text-[11px] transition-colors disabled:opacity-40 ${
-                                selectedStopPair?.destinationSeq === st.sequence
+                                selectedStopPair?.destinationSeq === st.stopSequence
                                   ? 'bg-amber-100 border border-amber-300 text-amber-800 font-semibold'
                                   : 'bg-gray-50 hover:bg-gray-100 text-gray-600 border border-transparent'
                               }`}
                             >
-                              {st.stopName || `Stop ${st.sequence}`}
+                              {st.stopName || `Stop ${st.stopSequence}`}
                             </button>
                           ))}
                       </div>

@@ -169,7 +169,13 @@ export class SchedulingRepository {
       baseId: trips.baseId,
       driverId: trips.driverId,
       originDepartHHMM: trips.originDepartHHMM,
+      manifestFirstPrintedAt: trips.manifestFirstPrintedAt,
+      snapRouteName: trips.snapRouteName,
+      snapRouteCode: trips.snapRouteCode,
+      snapDriverName: trips.snapDriverName,
+      snapVehiclePlate: trips.snapVehiclePlate,
       createdAt: trips.createdAt,
+      deletedAt: trips.deletedAt,
       patternName: tripPatterns.name,
       patternCode: tripPatterns.code,
       vehicleCode: vehicles.code,
@@ -207,7 +213,13 @@ export class SchedulingRepository {
       baseId: trips.baseId,
       driverId: trips.driverId,
       originDepartHHMM: trips.originDepartHHMM,
+      manifestFirstPrintedAt: trips.manifestFirstPrintedAt,
+      snapRouteName: trips.snapRouteName,
+      snapRouteCode: trips.snapRouteCode,
+      snapDriverName: trips.snapDriverName,
+      snapVehiclePlate: trips.snapVehiclePlate,
       createdAt: trips.createdAt,
+      deletedAt: trips.deletedAt,
       patternName: tripPatterns.name,
       patternCode: tripPatterns.code,
       vehicleCode: vehicles.code,
@@ -230,7 +242,7 @@ export class SchedulingRepository {
       lte(trips.serviceDate, toDate),
       isNull(trips.deletedAt)
     ))
-    .orderBy(trips.serviceDate);
+    .orderBy(trips.serviceDate) as unknown as TripWithDetails[];
   }
 
   async getCsoAvailableTrips(serviceDate: string, outletId: string, getOutletById: (id: string) => Promise<any>): Promise<CsoAvailableTrip[]> {
@@ -830,7 +842,7 @@ export class SchedulingRepository {
       ORDER BY p.seat_no ASC
     `);
 
-    return rows.rows as ManifestEntry[];
+    return rows.rows as unknown as ManifestEntry[];
   }
 
   async recordManifestPrint(tripId: string): Promise<string | null> {
@@ -902,7 +914,7 @@ export class SchedulingRepository {
       ORDER BY p.seat_no ASC
     `);
 
-    const passengerList = passengerRows.rows as ManifestEntry[];
+    const passengerList = passengerRows.rows as unknown as ManifestEntry[];
 
     const cargoRows = await db.execute(sql`
       SELECT
@@ -923,7 +935,7 @@ export class SchedulingRepository {
       ORDER BY cs.created_at ASC
     `);
 
-    const cargoList = cargoRows.rows as ManifestCargoEntry[];
+    const cargoList = cargoRows.rows as unknown as ManifestCargoEntry[];
 
     const totalTicketRevenue = passengerList.reduce((sum, p) => sum + parseFloat(p.fareAmount || '0'), 0);
     const totalCargoRevenue = cargoList.reduce((sum, c) => sum + parseFloat((c as any).totalAmount || '0'), 0);

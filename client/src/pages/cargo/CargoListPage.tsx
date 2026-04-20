@@ -20,7 +20,7 @@ import { CargoStatusBadge } from '@/components/shared/StatusBadges';
 
 const CARGO_ICON_MAP: Record<CargoStatus, typeof Clock> = {
   pending: Clock, received: Download, loaded: Upload, in_transit: Truck,
-  arrived: CheckCircle2, delivered: CheckCircle2, returned: RotateCcw, canceled: XCircle,
+  arrived: CheckCircle2, delivered: CheckCircle2, returned: RotateCcw, cancelled: XCircle,
 };
 
 function TripCombobox({

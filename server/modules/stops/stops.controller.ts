@@ -16,7 +16,7 @@ export class StopsController {
   }
 
   async getById(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const stop = await this.stopsService.getStopById(id);
     reply.send(stop);
   }
@@ -28,20 +28,20 @@ export class StopsController {
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const validatedData = insertStopSchema.partial().parse(req.body);
     const stop = await this.stopsService.updateStop(id, validatedData);
     reply.send(stop);
   }
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     await this.stopsService.deleteStop(id);
     reply.code(204).send();
   }
 
   async getImpact(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const [activeBookings, activeTrips] = await Promise.all([
       this.stopsService.getActiveBookingCountForStop(id),
       this.stopsService.getActiveTripsForStop(id),

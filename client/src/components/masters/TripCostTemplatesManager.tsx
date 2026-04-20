@@ -496,8 +496,8 @@ export default function TripCostTemplatesManager() {
                     </div>
                     <RowActionsMenu
                       actions={[
-                        { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: (e) => { e.stopPropagation(); startEditTemplate(template); } },
-                        { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: (e) => { e.stopPropagation(); setDeleteTemplateId(template.id); }, variant: 'destructive' },
+                        { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: (((e: Event) => { e.stopPropagation(); startEditTemplate(template); }) as () => void) },
+                        { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: (((e: Event) => { e.stopPropagation(); setDeleteTemplateId(template.id); }) as () => void), variant: 'destructive' },
                       ]}
                       data-testid={`actions-template-${template.id}`}
                     />

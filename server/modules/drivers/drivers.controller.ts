@@ -16,7 +16,8 @@ export class DriversController {
   }
 
   async getById(req: FastifyRequest, reply: FastifyReply) {
-    const driver = await this.service.getDriverById(req.params.id);
+    const { id } = req.params as { id: string };
+    const driver = await this.service.getDriverById(id);
     reply.send(driver);
   }
 
@@ -27,13 +28,15 @@ export class DriversController {
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
+    const { id } = req.params as { id: string };
     const data = insertDriverSchema.partial().parse(req.body);
-    const driver = await this.service.updateDriver(req.params.id, data);
+    const driver = await this.service.updateDriver(id, data);
     reply.send(driver);
   }
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
-    await this.service.deleteDriver(req.params.id);
+    const { id } = req.params as { id: string };
+    await this.service.deleteDriver(id);
     reply.code(204).send();
   }
 }

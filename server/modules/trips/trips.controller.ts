@@ -12,7 +12,7 @@ export class TripsController {
   }
 
   async getAll(req: FastifyRequest, reply: FastifyReply) {
-    const { date } = req.query;
+    const { date } = req.query as { date?: string };
     // Trips are system-wide resources (no outlet_id column in schema).
     // Outlet-scoped staff use GET /api/cso/available-trips (which enforces outlet).
     // This endpoint is primarily used by admin/manager roles that have no outlet restriction.
@@ -21,8 +21,8 @@ export class TripsController {
   }
 
   async getCsoAvailableTrips(req: FastifyRequest, reply: FastifyReply) {
-    const { date } = req.query;
-    let { outletId } = req.query;
+    const { date } = req.query as { date?: string };
+    let { outletId } = req.query as { outletId?: string };
     
     // ABAC: enforce outlet scope unless CSO has cross_outlet permission.
     // With cross_outlet: CSO may browse any outlet's trips; payment is still recorded to their outlet.
@@ -55,7 +55,7 @@ export class TripsController {
   }
 
   async getById(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const trip = await this.tripsService.getTripById(id);
     reply.send(trip);
   }
@@ -67,14 +67,14 @@ export class TripsController {
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const validatedData = insertTripSchema.partial().parse(req.body);
     const trip = await this.tripsService.updateTrip(id, validatedData);
     reply.send(trip);
   }
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     try {
       await this.tripsService.deleteTrip(id);
       reply.code(204).send();
@@ -91,19 +91,19 @@ export class TripsController {
   }
 
   async deriveLegs(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     await this.tripsService.deriveLegs(id);
     reply.send({ message: "Trip legs derived successfully" });
   }
 
   async precomputeSeatInventory(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     await this.tripsService.precomputeSeatInventory(id);
     reply.send({ message: "Seat inventory precomputed successfully" });
   }
 
   async getSeatmap(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const schema = z.object({
       originSeq: z.coerce.number(),
       destinationSeq: z.coerce.number()
@@ -115,7 +115,7 @@ export class TripsController {
   }
 
   async getSeatPassengerDetails(req: FastifyRequest, reply: FastifyReply) {
-    const { tripId, seatNo } = req.params;
+    const { tripId, seatNo } = req.params as { tripId: string; seatNo: string };
     const schema = z.object({
       originSeq: z.coerce.number(),
       destinationSeq: z.coerce.number()

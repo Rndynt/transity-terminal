@@ -16,7 +16,7 @@ export class LayoutsController {
   }
 
   async getById(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const layout = await this.layoutsService.getLayoutById(id);
     reply.send(layout);
   }
@@ -28,14 +28,14 @@ export class LayoutsController {
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const validatedData = insertLayoutSchema.partial().parse(req.body);
     const layout = await this.layoutsService.updateLayout(id, validatedData);
     reply.send(layout);
   }
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     await this.layoutsService.deleteLayout(id);
     reply.code(204).send();
   }

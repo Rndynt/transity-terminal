@@ -16,7 +16,7 @@ export class VehiclesController {
   }
 
   async getById(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const vehicle = await this.vehiclesService.getVehicleById(id);
     reply.send(vehicle);
   }
@@ -28,14 +28,14 @@ export class VehiclesController {
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const validatedData = insertVehicleSchema.partial().parse(req.body);
     const vehicle = await this.vehiclesService.updateVehicle(id, validatedData);
     reply.send(vehicle);
   }
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     await this.vehiclesService.deleteVehicle(id);
     reply.code(204).send();
   }

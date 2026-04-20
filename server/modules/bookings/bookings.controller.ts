@@ -87,12 +87,13 @@ export class BookingsController {
   }
 
   async getAll(req: FastifyRequest, reply: FastifyReply) {
-    const tripId = typeof req.query.tripId === 'string' ? req.query.tripId : undefined;
+    const query = req.query as { tripId?: string; page?: string; pageSize?: string };
+    const tripId = typeof query.tripId === 'string' ? query.tripId : undefined;
     const outletId = req.scopedOutletId ?? req.rbac?.outletId ?? null;
-    const pageParam = (req.query as any).page;
+    const pageParam = query.page;
     if (pageParam) {
       const page = Math.max(1, parseInt(pageParam) || 1);
-      const pageSize = Math.min(100, Math.max(1, parseInt((req.query as any).pageSize) || 50));
+      const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize ?? '') || 50));
       const { data, total } = await this.bookingsService.getBookingsPaginated({
         tripId,
         outletId: outletId || undefined,
@@ -109,7 +110,7 @@ export class BookingsController {
   }
 
   async getById(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const booking = await this.bookingsService.getBookingById(id);
     reply.send(booking);
   }
@@ -272,7 +273,7 @@ export class BookingsController {
   }
 
   async releaseHold(req: FastifyRequest, reply: FastifyReply) {
-    const { holdRef } = req.params;
+    const { holdRef } = req.params as { holdRef: string };
     const operatorId = req.user?.id ?? 'system';
 
     const holdCheck = await this.bookingsService.isHoldOwner(holdRef, operatorId);
@@ -361,7 +362,7 @@ export class BookingsController {
   }
 
   async getPendingBookings(req: FastifyRequest, reply: FastifyReply) {
-    const { outletId } = req.query;
+    const { outletId } = req.query as { outletId?: string };
     const operatorId = req.user?.id ?? 'system';
     
     const pendingBookings = await this.bookingsService.getPendingBookings(outletId as string, operatorId);
@@ -370,7 +371,7 @@ export class BookingsController {
 
   async releasePendingBooking(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const { id } = req.params;
+      const { id } = req.params as { id: string };
       const operatorId = req.user?.id ?? 'system';
       
       await this.bookingsService.releasePendingBooking(id, operatorId);
@@ -387,7 +388,7 @@ export class BookingsController {
 
   async unseatPassenger(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const { passengerId } = req.params;
+      const { passengerId } = req.params as { passengerId: string };
       const { reason } = unseatPassengerSchema.parse(req.body || {});
       const performedBy = req.user?.id ?? 'system';
       const result = await this.unseatService.unseatPassenger(passengerId, performedBy, reason);
@@ -403,7 +404,7 @@ export class BookingsController {
 
   async unseatAllPassengers(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const { bookingId } = req.params;
+      const { bookingId } = req.params as { bookingId: string };
       const { reason } = unseatPassengerSchema.parse(req.body || {});
       const performedBy = req.user?.id ?? 'system';
       const result = await this.unseatService.unseatAllPassengers(bookingId, performedBy, reason);
@@ -420,7 +421,7 @@ export class BookingsController {
 
   async reschedulePassenger(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const { passengerId } = req.params;
+      const { passengerId } = req.params as { passengerId: string };
       const data = reschedulePassengerSchema.parse(req.body);
       const performedBy = req.user?.id ?? 'system';
       const result = await this.rescheduleService.reschedulePassenger(
@@ -448,7 +449,7 @@ export class BookingsController {
 
   async assignSeatToUnseated(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const { passengerId } = req.params;
+      const { passengerId } = req.params as { passengerId: string };
       const { newSeatNo } = z.object({ newSeatNo: z.string() }).parse(req.body);
       const performedBy = req.user?.id ?? 'system';
       const result = await this.unseatService.assignSeatToUnseated(passengerId, newSeatNo, performedBy);
@@ -467,7 +468,7 @@ export class BookingsController {
 
   async getBookingHistory(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const { bookingId } = req.params;
+      const { bookingId } = req.params as { bookingId: string };
       const history = await this.unseatService.getBookingHistory(bookingId);
       reply.send(history);
     } catch (error: any) {

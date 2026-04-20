@@ -377,7 +377,21 @@ export class TripsService {
       this.storage.getTripStopTimes(tripId),
       this.storage.getTripById(tripId)
     ]);
-    const seatBookings = [];
+    const seatBookings: Array<{
+      booking: typeof activeBookings[number] & {
+        originStop: unknown;
+        destinationStop: unknown;
+        bookingType: 'main' | 'transit';
+        overlapType: 'covers' | 'within' | 'starts_before' | 'ends_after' | 'partial_overlap';
+        outlet: unknown;
+        vehicle: unknown;
+        departAt: unknown;
+        arriveAt: unknown;
+      };
+      passenger: typeof allPassengers[number];
+      otherPassengers: unknown[];
+      payments: unknown[];
+    }> = [];
     const totalStops = tripStopTimes.length;
 
     const activeBookingIds = activeBookings.map(b => b.id);

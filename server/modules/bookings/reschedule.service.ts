@@ -272,7 +272,7 @@ export class RescheduleService {
               destinationStopId: newDestinationStopId,
               originSeq: newOriginSeq,
               destinationSeq: newDestinationSeq,
-              channel: oldBooking?.channel || 'cso',
+              channel: oldBooking?.channel || 'CSO',
               outletId: oldBooking?.outletId,
               totalAmount: pax.fareAmount,
               discountAmount: '0',

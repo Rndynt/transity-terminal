@@ -16,7 +16,7 @@ export class OutletsController {
   }
 
   async getById(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const outlet = await this.outletsService.getOutletById(id);
     reply.send(outlet);
   }
@@ -28,14 +28,14 @@ export class OutletsController {
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const validatedData = insertOutletSchema.partial().parse(req.body);
     const outlet = await this.outletsService.updateOutlet(id, validatedData);
     reply.send(outlet);
   }
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     await this.outletsService.deleteOutlet(id);
     reply.code(204).send();
   }

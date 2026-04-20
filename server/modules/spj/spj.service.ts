@@ -167,7 +167,7 @@ export class SpjService {
   }
 
   async updateCostLine(lineId: string, data: { estimatedAmount?: string | null; actualAmount?: string | null; notes?: string | null }): Promise<SpjCostLine> {
-    const [updated] = await db.update(spjCostLines).set(data).where(eq(spjCostLines.id, lineId)).returning();
+    const [updated] = await db.update(spjCostLines).set(data as Partial<typeof spjCostLines.$inferInsert>).where(eq(spjCostLines.id, lineId)).returning();
     if (!updated) throw new Error("Cost line tidak ditemukan");
     return updated;
   }

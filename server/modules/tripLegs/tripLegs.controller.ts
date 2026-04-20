@@ -10,7 +10,7 @@ export class TripLegsController {
   }
 
   async getByTrip(req: FastifyRequest, reply: FastifyReply) {
-    const { tripId } = req.params;
+    const { tripId } = req.params as { tripId: string };
     const legs = await this.tripLegsService.getTripLegs(tripId);
     reply.send(legs);
   }

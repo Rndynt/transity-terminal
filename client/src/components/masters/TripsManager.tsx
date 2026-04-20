@@ -58,6 +58,7 @@ export default function TripsManager() {
     vehicleId: '',
     layoutId: '',
     capacity: '',
+    driverId: '',
     status: 'scheduled'
   });
 
@@ -287,7 +288,7 @@ export default function TripsManager() {
   const statusCounts = useMemo(() => ({
     all: trips.length,
     scheduled: trips.filter(t => (t.status || 'scheduled') === 'scheduled').length,
-    canceled: trips.filter(t => t.status === 'cancelled').length,
+    cancelled: trips.filter(t => t.status === 'cancelled').length,
     closed: trips.filter(t => t.status === 'closed').length,
   }), [trips]);
 
@@ -316,7 +317,7 @@ export default function TripsManager() {
       {/* Status Tabs */}
       <div className="flex items-center gap-1 border-b">
         {(['all', 'scheduled', 'cancelled', 'closed'] as const).map(status => {
-          const labels: Record<string, string> = { all: 'Semua', scheduled: 'Terjadwal', canceled: 'Dibatalkan', closed: 'Ditutup' };
+          const labels: Record<string, string> = { all: 'Semua', scheduled: 'Terjadwal', cancelled: 'Dibatalkan', closed: 'Ditutup' };
           const count = statusCounts[status];
           const isActive = filterStatus === status;
           return (

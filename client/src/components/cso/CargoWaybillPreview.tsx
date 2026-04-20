@@ -36,7 +36,7 @@ export default function CargoWaybillPreview({ shipment, onNewShipment, onPrint }
     canceled: { text: 'DIBATALKAN', color: 'bg-red-400/20 text-red-100' }
   };
 
-  const status = statusLabel[shipment.status] || statusLabel.pending;
+  const status = (shipment.status ? statusLabel[shipment.status] : null) || statusLabel.pending;
 
   return (
     <div className="space-y-5 flex flex-col items-center" data-testid="cargo-waybill-container">
@@ -130,7 +130,7 @@ export default function CargoWaybillPreview({ shipment, onNewShipment, onPrint }
           <div className="flex justify-between items-center">
             <div>
               <span className="text-[10px] text-gray-400 block">Tanggal</span>
-              <span className="text-[11px] font-medium text-gray-700">{formatDate(shipment.createdAt)}</span>
+              <span className="text-[11px] font-medium text-gray-700">{formatDate(shipment.createdAt ? String(shipment.createdAt) : '')}</span>
             </div>
             <div className="text-right">
               <span className="text-[10px] text-gray-400 block">Total Biaya</span>

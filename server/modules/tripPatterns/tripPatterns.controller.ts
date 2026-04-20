@@ -22,7 +22,7 @@ export class TripPatternsController {
   }
 
   async getById(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const pattern = await this.tripPatternsService.getTripPatternById(id);
     reply.send(pattern);
   }
@@ -34,20 +34,20 @@ export class TripPatternsController {
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const validatedData = insertTripPatternSchema.partial().parse(req.body);
     const pattern = await this.tripPatternsService.updateTripPattern(id, validatedData);
     reply.send(pattern);
   }
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     await this.tripPatternsService.deleteTripPattern(id);
     reply.code(204).send();
   }
 
   async getImpact(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const [activeTrips, activeBookings] = await Promise.all([
       this.tripPatternsService.getActiveTripsForPattern(id),
       this.tripPatternsService.getActiveBookingCountForPattern(id),

@@ -12,6 +12,7 @@ import DeleteConfirmDialog from './DeleteConfirmDialog';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import TripBaseFormDialog from './TripBaseFormDialog';
 import TripBaseGroupList from './TripBaseGroupList';
+import type { TripPattern } from '@/types';
 
 interface TripBase {
   id: string;
@@ -36,13 +37,6 @@ interface TripBase {
   defaultStopTimes: any[];
   createdAt: string;
   updatedAt: string;
-}
-
-interface TripPattern {
-  id: string;
-  code: string;
-  name: string;
-  note?: string;
 }
 
 interface Layout {
@@ -548,7 +542,7 @@ export default function TripBasesManager() {
       ) : (
         <TripBaseGroupList
           filteredTripBases={filteredTripBases}
-          patterns={patterns}
+          patterns={patterns.map(p => ({ id: p.id, code: p.code, name: p.name, note: p.note ?? undefined }))}
           layouts={layouts}
           vehicles={vehicles}
           expandedGroups={expandedGroups}
@@ -567,7 +561,7 @@ export default function TripBasesManager() {
         setFormData={setFormData}
         onSubmit={handleSubmit}
         isPending={createMutation.isPending || updateMutation.isPending}
-        patterns={patterns}
+        patterns={patterns.map(p => ({ id: p.id, code: p.code, name: p.name, note: p.note ?? undefined }))}
         layouts={layouts}
         vehicles={vehicles}
         stopTimes={stopTimes}

@@ -5,13 +5,21 @@ const reportsService = new ReportsService();
 
 function parseFilters(req: FastifyRequest) {
   const today = new Date().toISOString().split('T')[0];
+  const query = req.query as {
+    dateFrom?: string;
+    dateTo?: string;
+    dateMode?: string;
+    outletId?: string;
+    channel?: string;
+    patternId?: string;
+  };
   const raw = {
-    dateFrom: req.query.dateFrom || today,
-    dateTo: req.query.dateTo || today,
-    dateMode: req.query.dateMode || undefined,
-    outletId: req.query.outletId || undefined,
-    channel: req.query.channel || undefined,
-    patternId: req.query.patternId || undefined,
+    dateFrom: query.dateFrom || today,
+    dateTo: query.dateTo || today,
+    dateMode: query.dateMode || undefined,
+    outletId: query.outletId || undefined,
+    channel: query.channel || undefined,
+    patternId: query.patternId || undefined,
   };
   return reportFiltersSchema.parse(raw);
 }

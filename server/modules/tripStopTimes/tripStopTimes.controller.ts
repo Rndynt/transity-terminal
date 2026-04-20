@@ -107,7 +107,7 @@ export class TripStopTimesController {
   }
 
   async getByTrip(req: FastifyRequest, reply: FastifyReply) {
-    const { tripId } = req.params;
+    const { tripId } = req.params as { tripId: string };
     const stopTimes = await this.tripStopTimesService.getTripStopTimes(tripId);
     reply.send(stopTimes);
   }
@@ -119,27 +119,27 @@ export class TripStopTimesController {
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const validatedData = insertTripStopTimeSchema.partial().parse(req.body);
     const stopTime = await this.tripStopTimesService.updateTripStopTime(id, validatedData);
     reply.send(stopTime);
   }
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     await this.tripStopTimesService.deleteTripStopTime(id);
     reply.code(204).send();
   }
 
   async getByTripWithEffectiveFlags(req: FastifyRequest, reply: FastifyReply) {
-    const { tripId } = req.params;
+    const { tripId } = req.params as { tripId: string };
     const stopTimes = await this.tripStopTimesService.getTripStopTimesWithEffectiveFlags(tripId);
     reply.send(stopTimes);
   }
 
   async bulkUpsert(req: FastifyRequest, reply: FastifyReply) {
-    const { tripId } = req.params;
-    const { precompute } = req.query;
+    const { tripId } = req.params as { tripId: string };
+    const { precompute } = req.query as { precompute?: string };
     
     // Validate request body
     const validatedData = z.array(bulkUpsertTripStopTimeSchema).parse(req.body);
@@ -219,7 +219,7 @@ export class TripStopTimesController {
   }
 
   async syncFromPattern(req: FastifyRequest, reply: FastifyReply) {
-    const { tripId } = req.params;
+    const { tripId } = req.params as { tripId: string };
     try {
       const result = await this.tripStopTimesService.syncFromPattern(tripId);
       reply.send(result);
@@ -231,7 +231,7 @@ export class TripStopTimesController {
   }
 
   async deriveLegs(req: FastifyRequest, reply: FastifyReply) {
-    const { tripId } = req.params;
+    const { tripId } = req.params as { tripId: string };
     
     // Validate stop times before deriving legs
     const validation = await this.tripStopTimesService.validateStopTimes(tripId);
@@ -257,7 +257,7 @@ export class TripStopTimesController {
   }
 
   async precomputeSeatInventory(req: FastifyRequest, reply: FastifyReply) {
-    const { tripId } = req.params;
+    const { tripId } = req.params as { tripId: string };
     await this.tripStopTimesService.precomputeSeatInventory(tripId);
     reply.send({ success: true, message: 'Seat inventory precomputed successfully' });
   }

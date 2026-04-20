@@ -62,7 +62,7 @@ export class CargoRepository {
   }
 
   async findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string, tripId?: string, getTripById?: (id: string) => Promise<any>): Promise<CargoRate | undefined> {
-    const findBestInScope = async (scope: string, scopeRefId: string): Promise<CargoRate | undefined> => {
+    const findBestInScope = async (scope: 'global' | 'pattern' | 'trip', scopeRefId: string): Promise<CargoRate | undefined> => {
       const [routeSpecific] = await db.select().from(cargoRates).where(
         and(
           eq(cargoRates.cargoTypeId, cargoTypeId),

@@ -308,7 +308,7 @@ export default function CsoPage() {
           originStop: rt.outboundOriginStop,
           destinationStop: rt.outboundDestinationStop,
           departAt: rt.outboundTrip?.departAtAtOutlet,
-          vehicle: { plate: rt.outboundTrip?.vehiclePlate || '' },
+          vehicle: { plate: rt.outboundTrip?.vehicle?.plate || '' },
           passengers: (result.printPayloads?.[0]?.content?.tickets || []).map((t: any) => ({
             fullName: t.passengerName,
             seatNo: t.seatNo,
@@ -320,7 +320,7 @@ export default function CsoPage() {
           originStop: rt.returnOriginStop,
           destinationStop: rt.returnDestinationStop,
           departAt: rt.returnTrip?.departAtAtOutlet,
-          vehicle: { plate: rt.returnTrip?.vehiclePlate || '' },
+          vehicle: { plate: rt.returnTrip?.vehicle?.plate || '' },
           passengers: (result.printPayloads?.[1]?.content?.tickets || []).map((t: any) => ({
             fullName: t.passengerName,
             seatNo: t.seatNo,
@@ -1291,7 +1291,7 @@ export default function CsoPage() {
                     onPassengersUpdate={handlePassengersUpdate}
                     totalAmount={totalAmount}
                     onBook={handleBookWithData}
-                    onPay={handlePayWithData}
+                    onPay={(passengers, payment) => { void handlePayWithData(passengers, { ...payment, method: payment.method as 'cash' | 'qr' | 'ewallet' | 'bank' }); }}
                     onPaymentUpdate={handlePaymentUpdate}
                     payment={state.payment}
                     onBack={handleBackToSelect}

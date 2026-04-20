@@ -383,10 +383,9 @@ export default function SchedulePage() {
                     options={drivers.map(d => ({
                       value: d.id,
                       label: `${d.name} (${d.code})`,
-                      searchText: `${d.name} ${d.code} ${d.phone || ''}`
                     }))}
                     placeholder="Cari driver..."
-                    emptyText="Driver tidak ditemukan"
+                    emptyLabel="Driver tidak ditemukan"
                     data-testid="select-driver-schedule"
                   />
                 )}

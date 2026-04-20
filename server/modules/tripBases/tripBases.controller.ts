@@ -17,7 +17,7 @@ export class TripBasesController {
 
   async getTripBaseById(req: FastifyRequest, reply: FastifyReply): Promise<void> {
     try {
-      const { id } = req.params;
+      const { id } = req.params as { id: string };
       const tripBase = await this.tripBasesService.getTripBaseById(id);
       reply.send(tripBase);
     } catch (error) {
@@ -45,7 +45,7 @@ export class TripBasesController {
 
   async updateTripBase(req: FastifyRequest, reply: FastifyReply): Promise<void> {
     try {
-      const { id } = req.params;
+      const { id } = req.params as { id: string };
       const data = insertTripBaseSchema.partial().parse(req.body);
       const tripBase = await this.tripBasesService.updateTripBase(id, data);
       reply.send(tripBase);
@@ -62,7 +62,7 @@ export class TripBasesController {
 
   async deleteTripBase(req: FastifyRequest, reply: FastifyReply): Promise<void> {
     try {
-      const { id } = req.params;
+      const { id } = req.params as { id: string };
       await this.tripBasesService.deleteTripBase(id);
       reply.code(204).send();
     } catch (error) {
@@ -98,7 +98,7 @@ export class TripBasesController {
 
   async closeTrip(req: FastifyRequest, reply: FastifyReply): Promise<void> {
     try {
-      const { id } = req.params;
+      const { id } = req.params as { id: string };
       const trip = await this.tripBasesService.closeTrip(id);
       reply.send({ ok: true, tripId: trip.id, status: trip.status });
     } catch (error) {

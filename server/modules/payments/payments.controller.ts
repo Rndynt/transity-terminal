@@ -11,7 +11,7 @@ export class PaymentsController {
   }
 
   async getByBooking(req: FastifyRequest, reply: FastifyReply) {
-    const { bookingId } = req.params;
+    const { bookingId } = req.params as { bookingId: string };
     const payments = await this.paymentsService.getPaymentsByBooking(bookingId);
     reply.send(payments);
   }

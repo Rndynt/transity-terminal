@@ -1002,8 +1002,8 @@ function ThermalSpj({ spjData, costLines, totalEstimated, totalActual, totalAdva
       )}
 
       <div style={{ marginTop: '8pt' }}>Dicetak: {formatDateTimePrint(new Date().toISOString())}</div>
-      {spjData.issuedAt && <div>Diterbitkan: {formatDateTimePrint(spjData.issuedAt as string)}</div>}
-      {spjData.settledAt && <div>Diselesaikan: {formatDateTimePrint(spjData.settledAt as string)}</div>}
+      {spjData.issuedAt && <div>Diterbitkan: {formatDateTimePrint(new Date(spjData.issuedAt).toISOString())}</div>}
+      {spjData.settledAt && <div>Diselesaikan: {formatDateTimePrint(new Date(spjData.settledAt).toISOString())}</div>}
     </div>
   );
 }

@@ -17,7 +17,8 @@ export class PromosController {
   }
 
   async getPromotionById(req: FastifyRequest, reply: FastifyReply) {
-    const promo = await this.service.getPromotionById(req.params.id);
+    const { id } = req.params as { id: string };
+    const promo = await this.service.getPromotionById(id);
     reply.send(promo);
   }
 
@@ -28,18 +29,20 @@ export class PromosController {
   }
 
   async updatePromotion(req: FastifyRequest, reply: FastifyReply) {
+    const { id } = req.params as { id: string };
     const data = insertPromotionSchema.partial().parse(req.body);
-    const promo = await this.service.updatePromotion(req.params.id, data);
+    const promo = await this.service.updatePromotion(id, data);
     reply.send(promo);
   }
 
   async deletePromotion(req: FastifyRequest, reply: FastifyReply) {
-    await this.service.deletePromotion(req.params.id);
+    const { id } = req.params as { id: string };
+    await this.service.deletePromotion(id);
     reply.code(204).send();
   }
 
   async getVouchers(req: FastifyRequest, reply: FastifyReply) {
-    const promoId = req.query.promoId as string | undefined;
+    const { promoId } = req.query as { promoId?: string };
     const vouchers = await this.service.getVouchers(promoId);
     reply.send(vouchers);
   }
@@ -57,12 +60,14 @@ export class PromosController {
   }
 
   async revokeVoucher(req: FastifyRequest, reply: FastifyReply) {
-    const voucher = await this.service.revokeVoucher(req.params.id);
+    const { id } = req.params as { id: string };
+    const voucher = await this.service.revokeVoucher(id);
     reply.send(voucher);
   }
 
   async deleteVoucher(req: FastifyRequest, reply: FastifyReply) {
-    await this.service.deleteVoucher(req.params.id);
+    const { id } = req.params as { id: string };
+    await this.service.deleteVoucher(id);
     reply.code(204).send();
   }
 

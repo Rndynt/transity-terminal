@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,6 +19,13 @@ import { Plus, Pencil, Trash2, DollarSign, Tag, ArrowUpDown, X, Filter } from 'l
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import type { PriceRule, TripPattern, Trip, TripWithDetails } from '@/types';
+
+type PriceRuleConfig = {
+  pricingMode?: 'per_leg' | 'flat';
+  basePricePerLeg?: number;
+  multiplier?: number;
+};
+const ruleCfg = (r: PriceRule): PriceRuleConfig => (r.rule ?? {}) as PriceRuleConfig;
 
 interface PriceRuleFormData {
   scope: 'pattern' | 'trip' | 'leg' | 'time';
@@ -249,7 +257,7 @@ export default function PriceRulesManager() {
 
   const filteredPriceRules = priceRules.filter(rule => {
     if (filterScope && rule.scope !== filterScope) return false;
-    const ruleMode = rule.rule?.pricingMode || 'per_leg';
+    const ruleMode = ruleCfg(rule).pricingMode || 'per_leg';
     if (filterMode && ruleMode !== filterMode) return false;
     if (filterPatternId && rule.patternId !== filterPatternId) return false;
 
@@ -612,7 +620,7 @@ export default function PriceRulesManager() {
           {
             key: 'mode', header: 'Mode', hideOnMobile: true,
             render: (r) => {
-              const pricingMode = r.rule?.pricingMode || 'per_leg';
+              const pricingMode = ruleCfg(r).pricingMode || 'per_leg';
               return (
                 <Badge variant={pricingMode === 'flat' ? 'default' : 'secondary'} className="text-[11px] px-1.5 py-0">
                   {PRICING_MODE_LABELS[pricingMode] || 'Per Segmen'}
@@ -624,8 +632,8 @@ export default function PriceRulesManager() {
             key: 'price', header: 'Harga',
             className: 'tabular-nums',
             render: (r) => {
-              const basePrice = r.rule?.basePricePerLeg;
-              const multiplier = r.rule?.multiplier ?? 1;
+              const basePrice = ruleCfg(r).basePricePerLeg;
+              const multiplier = ruleCfg(r).multiplier ?? 1;
               const effectivePrice = basePrice != null ? basePrice * multiplier : null;
               if (effectivePrice == null) return <span className="text-muted-foreground">—</span>;
               return (
@@ -642,7 +650,7 @@ export default function PriceRulesManager() {
             key: 'mult', header: 'Mult.', hideOnMobile: true,
             className: 'font-mono tabular-nums',
             render: (r) => {
-              const m = r.rule?.multiplier ?? 1;
+              const m = ruleCfg(r).multiplier ?? 1;
               return <span className={m !== 1 ? 'text-amber-600 font-semibold' : 'text-muted-foreground'}>×{m}</span>;
             },
           },

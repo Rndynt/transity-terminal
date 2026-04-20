@@ -33,13 +33,13 @@ export class CargoController {
   }
 
   async getById(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const shipment = await this.cargoService.getShipmentById(id);
     reply.send(shipment);
   }
 
   async getByWaybill(req: FastifyRequest, reply: FastifyReply) {
-    const { waybillNumber } = req.params;
+    const { waybillNumber } = req.params as { waybillNumber: string };
     const shipment = await this.cargoService.getShipmentByWaybill(waybillNumber);
     reply.send(shipment);
   }
@@ -55,15 +55,15 @@ export class CargoController {
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const validated = insertCargoShipmentSchema.partial().parse(req.body);
     const shipment = await this.cargoService.updateShipment(id, validated);
     reply.send(shipment);
   }
 
   async updateStatus(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
-    const { status } = req.body;
+    const { id } = req.params as { id: string };
+    const { status } = (req.body ?? {}) as { status?: string };
     if (!status) {
       return reply.code(400).send({ error: 'Status is required' });
     }
@@ -89,7 +89,7 @@ export class CargoController {
   }
 
   async quoteTariff(req: FastifyRequest, reply: FastifyReply) {
-    const { cargoTypeId, originStopId, destinationStopId, weightKg, tripId } = req.query;
+    const { cargoTypeId, originStopId, destinationStopId, weightKg, tripId } = req.query as { cargoTypeId?: string; originStopId?: string; destinationStopId?: string; weightKg?: string; tripId?: string };
     if (!cargoTypeId || !originStopId || !destinationStopId || !weightKg) {
       return reply.code(400).send({ error: 'cargoTypeId, originStopId, destinationStopId, weightKg are required' });
     }
@@ -112,7 +112,7 @@ export class CargoController {
   }
 
   async getCargoTypeById(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const ct = await this.storage.getCargoTypeById(id);
     if (!ct) return reply.code(404).send({ error: 'Cargo type not found' });
     reply.send(ct);
@@ -125,26 +125,26 @@ export class CargoController {
   }
 
   async updateCargoType(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const validated = insertCargoTypeSchema.partial().parse(req.body);
     const ct = await this.storage.updateCargoType(id, validated);
     reply.send(ct);
   }
 
   async deleteCargoType(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     await this.storage.deleteCargoType(id);
     reply.code(204).send();
   }
 
   async getCargoRates(req: FastifyRequest, reply: FastifyReply) {
-    const { cargoTypeId } = req.query;
+    const { cargoTypeId } = req.query as { cargoTypeId?: string };
     const rates = await this.storage.getCargoRates(cargoTypeId as string);
     reply.send(rates);
   }
 
   async getCargoRateById(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const cr = await this.storage.getCargoRateById(id);
     if (!cr) return reply.code(404).send({ error: 'Cargo rate not found' });
     reply.send(cr);
@@ -160,7 +160,7 @@ export class CargoController {
   }
 
   async updateCargoRate(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const validated = insertCargoRateSchema.partial().parse(req.body);
     const existing = await this.storage.getCargoRateById(id);
     if (!existing) return reply.code(404).send({ error: 'Cargo rate not found' });
@@ -174,7 +174,7 @@ export class CargoController {
   }
 
   async deleteCargoRate(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     await this.storage.deleteCargoRate(id);
     reply.code(204).send();
   }

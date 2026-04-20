@@ -188,7 +188,7 @@ export class AppController {
   async getTripDetail(req: FastifyRequest, reply: FastifyReply) {
     try {
       const { serviceDate } = (req.query || {}) as { serviceDate?: string };
-      const detail = await this.service.getTripDetail(req.params.id, serviceDate);
+      const detail = await this.service.getTripDetail((req.params as { id: string }).id, serviceDate);
       console.log(`[getTripDetail] trip=${detail.tripId} pattern=${detail.patternCode} stops:`);
       for (const s of detail.stops) {
         console.log(`  seq=${s.sequence} ${s.name} (${s.code}) city=${s.city ?? '-'} canPickup=${s.boardingAllowed} canDrop=${s.alightingAllowed}`);
@@ -223,10 +223,10 @@ export class AppController {
   }
 
   async getSeatmap(req: FastifyRequest, reply: FastifyReply) {
-    const { originSeq, destinationSeq } = req.query;
+    const { originSeq, destinationSeq } = req.query as { originSeq?: string; destinationSeq?: string };
     if (!originSeq || !destinationSeq) return reply.code(400).send({ error: "originSeq and destinationSeq required" });
     try {
-      const seatmap = await this.service.getSeatmap(req.params.id, Number(originSeq), Number(destinationSeq));
+      const seatmap = await this.service.getSeatmap((req.params as { id: string }).id, Number(originSeq), Number(destinationSeq));
       reply.send(seatmap);
     } catch (e: unknown) {
       reply.code(404).send({ error: errMsg(e) });
@@ -302,7 +302,7 @@ export class AppController {
     const isServiceClient = (req as any).isServiceClient === true;
     const userId = isServiceClient ? undefined : (req.appUser?.userId ?? undefined);
     try {
-      const detail = await this.service.getBookingDetail(req.params.id, userId);
+      const detail = await this.service.getBookingDetail((req.params as { id: string }).id, userId);
       reply.send(detail);
     } catch (e: unknown) {
       if (errMsg(e) === "Unauthorized") {
@@ -317,7 +317,7 @@ export class AppController {
     const isServiceClient = (req as any).isServiceClient === true;
     const userId = isServiceClient ? undefined : (req.appUser?.userId ?? undefined);
     try {
-      const result = await this.service.getPaymentStatus(req.params.id, userId!);
+      const result = await this.service.getPaymentStatus((req.params as { id: string }).id, userId!);
       reply.send(result);
     } catch (e: unknown) {
       if (errMsg(e) === "Unauthorized") {
@@ -355,8 +355,8 @@ export class AppController {
         return;
       }
 
-      const { providerRef, status: gatewayStatus } = req.body;
-      if (!providerRef || !['success', 'failed'].includes(gatewayStatus)) {
+      const { providerRef, status: gatewayStatus } = (req.body ?? {}) as { providerRef?: string; status?: 'success' | 'failed' };
+      if (!providerRef || !gatewayStatus || !['success', 'failed'].includes(gatewayStatus)) {
         reply.code(400).send({ error: "Invalid webhook payload: providerRef and status (success|failed) required" });
         return;
       }
@@ -371,7 +371,7 @@ export class AppController {
     const isServiceClient = (req as any).isServiceClient === true;
     const userId = isServiceClient ? null : (req.appUser?.userId ?? null);
     try {
-      await this.service.cancelBooking(req.params.id, userId);
+      await this.service.cancelBooking((req.params as { id: string }).id, userId);
       reply.send({ status: 'cancelled' });
     } catch (e: unknown) {
       const msg = errMsg(e);
@@ -391,7 +391,7 @@ export class AppController {
     const isServiceClient = (req as any).isServiceClient === true;
     const userId = isServiceClient ? null : (req.appUser?.userId ?? null);
     try {
-      const result = await this.service.payBooking(req.params.id, parsed.data.paymentMethod, parsed.data.voucherCode, userId);
+      const result = await this.service.payBooking((req.params as { id: string }).id, parsed.data.paymentMethod, parsed.data.voucherCode, userId);
       reply.send(result);
     } catch (e: unknown) {
       const msg = errMsg(e);
@@ -451,13 +451,13 @@ export class AppController {
   }
 
   async getTripReviews(req: FastifyRequest, reply: FastifyReply) {
-    const reviews = await this.service.getTripReviews(req.params.tripId);
+    const reviews = await this.service.getTripReviews((req.params as { tripId: string }).tripId);
     reply.send(reviews);
   }
 
   async trackCargo(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const result = await this.service.trackCargo(req.params.waybillNumber);
+      const result = await this.service.trackCargo((req.params as { waybillNumber: string }).waybillNumber);
       reply.send(result);
     } catch (e: unknown) {
       reply.code(404).send({ error: errMsg(e) });

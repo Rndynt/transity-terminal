@@ -30,7 +30,8 @@ export class SpjController {
 
   async getById(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const spj = await spjService.getById(req.params.id);
+      const { id } = req.params as { id: string };
+      const spj = await spjService.getById(id);
       if (!spj) return reply.code(404).send({ error: "SPJ tidak ditemukan" });
       reply.send(spj);
     } catch (e: any) {
@@ -40,7 +41,8 @@ export class SpjController {
 
   async getByTripId(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const spj = await spjService.getByTripId(req.params.tripId);
+      const { tripId } = req.params as { tripId: string };
+      const spj = await spjService.getByTripId(tripId);
       reply.send(spj);
     } catch (e: any) {
       reply.code(500).send({ error: e.message });
@@ -49,7 +51,7 @@ export class SpjController {
 
   async create(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const { tripId, driverId, vehicleId, notes } = req.body;
+      const { tripId, driverId, vehicleId, notes } = req.body as { tripId?: string; driverId?: string; vehicleId?: string; notes?: string };
       if (!tripId) return reply.code(400).send({ error: "tripId wajib diisi" });
       const spj = await spjService.create(tripId, { driverId, vehicleId, notes });
       reply.code(201).send(spj);
@@ -60,7 +62,8 @@ export class SpjController {
 
   async issue(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const spj = await spjService.updateStatus(req.params.id, 'issued');
+      const { id } = req.params as { id: string };
+      const spj = await spjService.updateStatus(id, 'issued');
       reply.send(spj);
     } catch (e: any) {
       reply.code(400).send({ error: e.message });
@@ -69,7 +72,8 @@ export class SpjController {
 
   async settle(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const spj = await spjService.updateStatus(req.params.id, 'settled');
+      const { id } = req.params as { id: string };
+      const spj = await spjService.updateStatus(id, 'settled');
       reply.send(spj);
     } catch (e: any) {
       reply.code(400).send({ error: e.message });
@@ -78,7 +82,9 @@ export class SpjController {
 
   async updateNotes(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const spj = await spjService.updateNotes(req.params.id, req.body.notes || '');
+      const { id } = req.params as { id: string };
+      const { notes } = (req.body ?? {}) as { notes?: string };
+      const spj = await spjService.updateNotes(id, notes || '');
       reply.send(spj);
     } catch (e: any) {
       reply.code(400).send({ error: e.message });
@@ -87,7 +93,8 @@ export class SpjController {
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
     try {
-      await spjService.delete(req.params.id);
+      const { id } = req.params as { id: string };
+      await spjService.delete(id);
       reply.send({ success: true });
     } catch (e: any) {
       reply.code(400).send({ error: e.message });
@@ -118,7 +125,8 @@ export class SpjController {
 
   async deleteCostLine(req: FastifyRequest, reply: FastifyReply) {
     try {
-      await spjService.deleteCostLine(req.params.id);
+      const { id } = req.params as { id: string };
+      await spjService.deleteCostLine(id);
       reply.send({ success: true });
     } catch (e: any) {
       reply.code(400).send({ error: e.message });
@@ -127,7 +135,8 @@ export class SpjController {
 
   async getTripProfit(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const profit = await spjService.getTripProfit(req.params.tripId);
+      const { tripId } = req.params as { tripId: string };
+      const profit = await spjService.getTripProfit(tripId);
       reply.send(profit);
     } catch (e: any) {
       reply.code(500).send({ error: e.message });

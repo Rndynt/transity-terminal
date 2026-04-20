@@ -22,14 +22,14 @@ export class PriceRulesController {
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const validatedData = insertPriceRuleSchema.partial().parse(req.body);
     const rule = await this.priceRulesService.updatePriceRule(id, validatedData);
     reply.send(rule);
   }
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     await this.priceRulesService.deletePriceRule(id);
     reply.code(204).send();
   }

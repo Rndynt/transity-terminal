@@ -88,9 +88,9 @@ export class RoundTripService {
     const stopsMap = new Map(allStopsData.map(s => [s.id, s]));
     const tripsMap = new Map(allTripsData.filter(Boolean).map(t => [t!.id, t!]));
 
-    const outboundLegIndexes = [];
+    const outboundLegIndexes: number[] = [];
     for (let i = outbound.originSeq; i < outbound.destinationSeq; i++) outboundLegIndexes.push(i);
-    const returnLegIndexes = [];
+    const returnLegIndexes: number[] = [];
     for (let i = returnData.originSeq; i < returnData.destinationSeq; i++) returnLegIndexes.push(i);
 
     const outboundSeatNosArr = outbound.passengers.map((p: any) => p.seatNo);

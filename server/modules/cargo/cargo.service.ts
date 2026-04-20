@@ -12,7 +12,7 @@ const ALLOWED_TRANSITIONS: Record<CargoStatus, CargoStatus[]> = {
   arrived: ['delivered', 'returned'],
   delivered: [],
   returned: [],
-  canceled: []
+  cancelled: []
 };
 
 export class CargoService {
