@@ -86,5 +86,16 @@ export async function runSchemaMigrations(migrationsFolder = "./migrations") {
   // Panggil migrate() — hanya migration baru yang folderMillis-nya lebih tinggi
   // dari entri terakhir di tracking table yang akan dijalankan.
   await migrate(db, { migrationsFolder });
+
+  // Q5: pastikan sequence untuk waybill cargo ada (deterministic, anti-collision).
+  // Sequence di-reset per-hari oleh aplikasi via padding date prefix sehingga
+  // satu sequence cukup untuk seumur hidup app.
+  const seqClient = await pool.connect();
+  try {
+    await seqClient.query(`CREATE SEQUENCE IF NOT EXISTS cargo_waybill_seq START 1`);
+  } finally {
+    seqClient.release();
+  }
+
   console.log("[migrator] Schema database sudah up-to-date.");
 }

@@ -103,7 +103,10 @@ export const payments = pgTable("payments", {
 }, (table) => ({
   idxPaymentsBookingId: sql`CREATE INDEX IF NOT EXISTS idx_payments_booking_id ON ${table} (booking_id)`,
   idxPaymentsProviderRef: sql`CREATE INDEX IF NOT EXISTS idx_payments_provider_ref ON ${table} (provider_ref) WHERE provider_ref IS NOT NULL`,
-  idxPaymentsPaidAt: sql`CREATE INDEX IF NOT EXISTS idx_payments_paid_at ON ${table} (paid_at)`
+  idxPaymentsPaidAt: sql`CREATE INDEX IF NOT EXISTS idx_payments_paid_at ON ${table} (paid_at)`,
+  // P3: functional index on (paid_at::date) so reports that group/filter by
+  // date hit an index instead of a full scan when status='success'.
+  idxPaymentsPaidDate: sql`CREATE INDEX IF NOT EXISTS idx_payments_paid_date ON ${table} ((paid_at::date)) WHERE status = 'success'`
 }));
 
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, paidAt: true });

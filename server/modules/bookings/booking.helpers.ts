@@ -207,6 +207,35 @@ export async function confirmSeatsBooked(
     throw new Error(`Seat ${conflict.seatNo} (leg ${conflict.legIndex}) is already booked`);
   }
 
+  // B2 (additional): also lock the seat_holds rows for this operator and
+  // re-assert ownership *under the same transaction*. This catches the case
+  // where the hold expired (and was either reaped by the scheduler or grabbed
+  // by another operator) between the outer validateHoldOwnership() call and
+  // this confirm. We require that every seat being booked still has a live
+  // hold owned by the caller.
+  const lockedHolds = await tx
+    .select({ seatNo: seatHolds.seatNo, legIndexes: seatHolds.legIndexes, expiresAt: seatHolds.expiresAt })
+    .from(seatHolds)
+    .where(and(
+      eq(seatHolds.tripId, tripId),
+      inArray(seatHolds.seatNo, seatNos),
+      eq(seatHolds.operatorId, operatorId),
+      gt(seatHolds.expiresAt, new Date())
+    ))
+    .for('update');
+
+  const heldBySeat = new Map(lockedHolds.map(h => [h.seatNo, h]));
+  for (const seatNo of seatNos) {
+    const h = heldBySeat.get(seatNo);
+    if (!h) {
+      throw new Error(`Seat ${seatNo} hold ownership lost (expired or taken by another operator)`);
+    }
+    const holdLegs = (h.legIndexes as number[]) || [];
+    if (!legIndexes.every(leg => holdLegs.includes(leg))) {
+      throw new Error(`Seat ${seatNo} hold no longer covers all required legs`);
+    }
+  }
+
   await tx
     .update(seatInventory)
     .set({ booked: true, holdRef: null })

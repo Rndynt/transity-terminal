@@ -124,7 +124,9 @@ export class BookingsService {
       throw new Error(`Payment amount ${paymentAmount} does not match expected total ${expectedTotal}`);
     }
 
-    const booking = await db.transaction(async (tx) => {
+    let booking: Booking;
+    try {
+      booking = await db.transaction(async (tx) => {
       const [newBooking] = await tx.insert(bookingsTable).values({
         ...bookingData,
         bookingCode: generateBookingCode(),
@@ -178,7 +180,32 @@ export class BookingsService {
       }
 
       return newBooking;
-    });
+      });
+    } catch (err: unknown) {
+      // B1: race-loss path. If two concurrent requests with the same
+      // idempotency key reach the INSERT at the same time, the loser will hit
+      // the partial unique index `uniq_bookings_idempotency_key`. Recover by
+      // returning the winner's booking instead of bubbling a generic 500.
+      const dbErr = err as { code?: string; constraint?: string };
+      if (
+        idempotencyKey &&
+        dbErr?.code === '23505' &&
+        (dbErr?.constraint === 'uniq_bookings_idempotency_key' ||
+          dbErr?.constraint?.includes('idempotency_key'))
+      ) {
+        const [existing] = await db
+          .select()
+          .from(bookingsTable)
+          .where(eq(bookingsTable.idempotencyKey, idempotencyKey))
+          .limit(1);
+        if (existing) {
+          const bookingWithRelations = await this.getBookingById(existing.id);
+          const printPayload = await this.printService.generatePrintPayload(existing.id);
+          return { booking: bookingWithRelations, printPayload };
+        }
+      }
+      throw err;
+    }
 
     const bookingWithRelations = await this.getBookingById(booking.id);
     const printPayload = await this.printService.generatePrintPayload(booking.id);

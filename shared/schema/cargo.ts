@@ -79,6 +79,9 @@ export const cargoShipments = pgTable("cargo_shipments", {
   idxCargoOutletId: sql`CREATE INDEX IF NOT EXISTS idx_cargo_outlet_id ON ${table} (outlet_id)`,
   idxCargoTripStatus: sql`CREATE INDEX IF NOT EXISTS idx_cargo_trip_status ON ${table} (trip_id, status)`,
   idxCargoPaidAt: sql`CREATE INDEX IF NOT EXISTS idx_cargo_paid_at ON ${table} (paid_at) WHERE paid_at IS NOT NULL`,
+  // P3: functional index on (paid_at::date) for daily/monthly cargo revenue
+  // reports.
+  idxCargoPaidDate: sql`CREATE INDEX IF NOT EXISTS idx_cargo_paid_date ON ${table} ((paid_at::date)) WHERE paid_at IS NOT NULL`,
   idxCargoOutletCreated: sql`CREATE INDEX IF NOT EXISTS idx_cargo_outlet_created ON ${table} (outlet_id, created_at DESC)`,
   idxCargoCargoType: sql`CREATE INDEX IF NOT EXISTS idx_cargo_cargo_type_id ON ${table} (cargo_type_id) WHERE cargo_type_id IS NOT NULL`
 }));

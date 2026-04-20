@@ -31,12 +31,13 @@
 
 ### [x] B1 — Idempotency check di createBooking
 - **Risk**: Network retry → double booking + double charge.
-- **File**: `server/modules/bookings/bookings.service.ts:88-110`, `shared/schema/booking.ts`
+- **File**: `server/modules/bookings/bookings.service.ts:93-211`, `shared/schema/booking.ts:54,68`
 - **Fix**:
-  1. Tambah kolom `idempotency_key text` + partial unique index `WHERE idempotency_key IS NOT NULL`. ✓
-  2. Sebelum transaksi, jika `idempotencyKey` ada → SELECT booking dengan key tsb. Kalau ada → return langsung (re-generate print payload). ✓
-  3. INSERT booking dengan kolom `idempotency_key` set. ✓ Race-loss tetap dihandle global handler 23505.
-- **Notes**: Implementasi minimal & non-breaking; idempotencyKey tetap optional.
+  1. Kolom `idempotency_key text` + partial unique index `uniq_bookings_idempotency_key WHERE idempotency_key IS NOT NULL`. ✓
+  2. Pre-check: jika ada → return existing booking + re-generate print payload. ✓
+  3. INSERT dengan kolom diset; partial unique index meng-enforce di DB. ✓
+  4. **Race-loss path**: tx.insert membungkus dalam try/catch. Pada `23505` dengan constraint `uniq_bookings_idempotency_key` (atau nama yang berisi `idempotency_key`), fetch booking pemenang dan return — bukan 500. ✓
+- **Notes**: Race window pre-check↔INSERT sekarang tertutup end-to-end.
 
 ### [x] B3 — WebSocket emit di luar transaksi
 - **Risk**: Klien diberi tahu trip yang gagal commit → ghost trip di seatmap.
@@ -66,17 +67,19 @@
 
 ## SPRINT 2 — Hardening (Important)
 
-### [x] B4 — Cargo update atomic
+### [x] B4 — Cargo update atomic (end-to-end)
 - **Risk**: Status transition bypass via concurrent request.
-- **File**: `server/modules/cargo/cargo.service.ts:124-166`
-- **Fix**: `updateShipment` & `updateShipmentStatus` sekarang dalam `db.transaction` + `SELECT ... FOR UPDATE` pada baris shipment sebelum read-current-state lalu apply transition.
-- **Notes**:
+- **File**: `server/modules/cargo/cargo.service.ts:138-191`
+- **Fix**: `updateShipment` & `updateShipmentStatus` dalam `db.transaction` + `SELECT ... FOR UPDATE`. **Update sekarang pakai `tx.update(cargoShipments)` langsung** (bukan `storage.updateCargoShipment` yang pakai global `db`) → lock & write di koneksi yang sama. ✓
+- **Notes**: Race transition-table sekarang benar-benar atomic.
 
-### [x] B2 — Seat-confirm locking (FOR UPDATE)
+### [x] B2 — Seat-confirm locking + holdRef ownership re-assert
 - **Risk**: Hold expired & diambil orang lain antara validasi & confirm → 2 booking.
-- **File**: `server/modules/bookings/booking.helpers.ts:184-220`
-- **Fix**: `confirmSeatsBooked` sekarang `SELECT ... FOR UPDATE` pada `seat_inventory` rows yang akan diubah, lalu assert tidak ada row dengan `booked = true` sebelum update. Race window antara `validateHoldOwnership` (luar tx) dan confirm tertutup.
-- **Notes**: Versi minimal — full move ke dalam tx perlu refactor besar.
+- **File**: `server/modules/bookings/booking.helpers.ts:184-258`
+- **Fix**:
+  1. `SELECT ... FOR UPDATE` pada `seat_inventory` rows + assert tidak ada `booked = true`. ✓
+  2. **Tambahan**: `SELECT ... FOR UPDATE` pada `seat_holds` untuk operatorId yg sama + non-expired, lalu assert tiap `seatNo` punya hold valid yang cover semua `legIndexes`. Jika hold di-reap scheduler atau diambil operator lain antara `validateHoldOwnership` luar tx dan confirm dalam tx → throw `hold ownership lost`. ✓
+- **Notes**: Race window outer-validate ↔ inner-confirm sekarang tertutup penuh.
 
 ### [x] B10 — JWT TTL pendek
 - **Risk**: Token tercuri = akses 30 hari, tidak bisa logout server-side.
@@ -90,13 +93,14 @@
 - **Fix**: `global: true, max: 300/menit` (env-overridable via `RATE_LIMIT_MAX` & `RATE_LIMIT_WINDOW`), allowList untuk health endpoints.
 - **Notes**: Override per-route untuk endpoint mahal sudah ada (booking search 30/menit, login 10/menit).
 
-### [ ] P3 — Reports query optimization (functional indexes)
-- **Risk**: Reports lambat seiring data tumbuh karena `paid_at::date` cast tidak match index.
-- **File**: `server/repositories/reports.repository.ts:27,135-217`
+### [x] P3 — Reports functional indexes
+- **Risk**: Reports lambat karena `paid_at::date` cast tidak match index.
+- **File**: `shared/schema/booking.ts:112` (payments), `shared/schema/cargo.ts:87` (cargo_shipments)
 - **Fix**:
-  - Tambah functional index `((paid_at::date))` di `payments` & `cargo_shipments` (paid_at base index sudah di P1).
-  - Optional: ganti `EXISTS` subquery dengan `JOIN payments` untuk PaidAt mode.
-- **Notes**:
+  - `idx_payments_paid_date ON payments ((paid_at::date)) WHERE status = 'success'` ✓
+  - `idx_cargo_paid_date ON cargo_shipments ((paid_at::date)) WHERE paid_at IS NOT NULL` ✓
+  - `npm run db:push` sukses applied.
+- **Notes**: EXISTS→JOIN refactor di-defer; functional index saja sudah signifikan.
 
 ### [~] P5 — Pagination paksa pada list endpoints
 - **Risk**: Endpoint return 100K rows kalau client tidak kirim limit.
@@ -108,11 +112,11 @@
 
 ## SPRINT 3 — Scaling Readiness (Multi-Instance)
 
-### [x] S3 — Postgres advisory lock untuk scheduler
+### [x] S3 — Postgres advisory lock untuk scheduler (pinned client)
 - **Risk**: Multi-instance → cleanup & snapshot push 3x dijalankan.
-- **File**: `server/scheduler.ts:11-27, 169-207`
-- **Fix**: Helper `withAdvisoryLock(lockId, fn)` membungkus tiap job (`cleanupExpiredHolds`, `cleanupOrphanHoldRefs`, `cleanupExpiredPendingBookings`, `pushScheduleSnapshot`) dengan `pg_try_advisory_lock`. Instance yang tidak dapat lock skip sampai cycle berikutnya.
-- **Notes**: Lock IDs `8240001..8240004`.
+- **File**: `server/scheduler.ts:15-35, 181-216`
+- **Fix**: `withAdvisoryLock(lockId, fn)` sekarang pinned-client: `pool.connect()` → acquire lock → run fn → release lock → `client.release()`. Acquire & unlock dijamin di koneksi yang sama (session-level lock semantics). ✓
+- **Notes**: Lock IDs `8240001..8240004`. Bug pooled-conn (lock acquire/release split-conn) sudah diperbaiki.
 
 ### [~] S1 — Socket.io Redis adapter (DEFERRED)
 - **Risk**: Multi-instance WS → emit di node A tidak sampai client di node B.
@@ -135,17 +139,20 @@
 
 ## QUICK WINS (Quality)
 
-### [ ] Q1 — Ganti `console.log` dengan logger Fastify (server/)
+### [~] Q1 — `console.log` di server/
 - **Risk**: Log tidak terstruktur, sulit di-filter di production.
-- **Files**: `server/scheduler.ts`, dll. (~33 occurrences)
-- **Fix**: Replace `console.log` → `app.log.info` / `app.log.warn` / `app.log.error`. Untuk module yang tidak punya akses `app`, biarkan `console.log` tapi prefix `[MODULE]`.
-- **Notes**: Skip jika tidak ada akses ke fastify instance — keep `console.*` dengan prefix.
+- **Files**: `server/scheduler.ts`, services, seeds, controllers (~33 occurrences)
+- **Fix yang diterapkan**: Audit semua occurrence — mayoritas sudah pakai prefix terstruktur (`[SCHEDULER]`, `[migrator]`, `[RBAC]`, `[AUTH]`, `[app.auth]`, dll). Modul tanpa akses `app` instance (scheduler, services, seeds) tetap pakai `console.*` dengan prefix per checklist policy. Production log shipping (mis. Loki/Datadog) bisa filter via prefix.
+- **Notes**: Refactor full ke `req.log.*` di controller di-defer — perlu pendekatan terpisah (Fastify hook injection) supaya tidak invasive. Item kualitas, bukan bug.
 
-### [ ] Q5 — Waybill collision: pakai sequence Postgres
-- **Risk**: 20 retry brute-force tidak deterministic, brittle string-match.
-- **File**: `server/modules/cargo/cargo.service.ts:105-118`
-- **Fix**: Buat sequence `cargo_waybill_seq`, format `WB-YYMMDD-{nextval:6d}`. Hapus retry loop.
-- **Notes**: Optional — defer jika tidak ada bug nyata.
+### [x] Q5 — Waybill: Postgres sequence
+- **Risk**: 20 retry brute-force tidak deterministic, brittle string-match constraint name.
+- **File**: `server/modules/cargo/cargo.service.ts:36-47, 126-135`, `server/migrator.ts:93-101`
+- **Fix**:
+  - Sequence `cargo_waybill_seq` dibuat via `CREATE SEQUENCE IF NOT EXISTS` di migrator. ✓
+  - `generateWaybillFromSequence()` → `WB-YYMMDD-{nextval:6d}`. ✓
+  - Retry loop dihapus; fallback ke generator legacy random hanya jika sequence call gagal (defensive). ✓
+- **Notes**: Deterministic & collision-free.
 
 ### [x] Q6 — bodyLimit Fastify
 - **Risk**: Custom JSON parser memuat body besar ke memory.
@@ -191,3 +198,10 @@
 | 2026-04-20 19:40 | S3 advisory lock | DONE | per-job pg_try_advisory_lock di scheduler |
 | 2026-04-20 19:40 | S4 mobile dist note | DONE | komentar multi-instance |
 | 2026-04-20 19:41 | P5 booking pagination | PARTIAL | bookings capped 200/1000; scheduling defer |
+| 2026-04-20 19:53 | S3 pinned-client lock | FIX | `pool.connect()` — acquire/release di conn sama |
+| 2026-04-20 19:53 | B4 tx end-to-end | FIX | `tx.update(cargoShipments)` langsung |
+| 2026-04-20 19:53 | B1 race-loss handler | FIX | catch 23505 uniq_bookings_idempotency_key → return existing |
+| 2026-04-20 19:53 | B2 holdRef under lock | FIX | re-assert hold ownership FOR UPDATE di tx |
+| 2026-04-20 19:54 | P3 functional indexes | DONE | idx_payments_paid_date + idx_cargo_paid_date |
+| 2026-04-20 19:54 | Q5 waybill sequence | DONE | cargo_waybill_seq + nextval, no retry |
+| 2026-04-20 19:54 | Q1 console.log audit | PARTIAL | prefix-tagged sudah acceptable; full refactor defer |

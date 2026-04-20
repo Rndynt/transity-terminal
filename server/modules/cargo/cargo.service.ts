@@ -21,10 +21,26 @@ export class CargoService {
   constructor(private storage: IStorage) {}
 
   generateWaybillNumber(): string {
+    // Legacy random-based generator; kept for fallback only. The active path
+    // uses generateWaybillFromSequence() (Q5) which is deterministic and
+    // collision-free.
     const now = new Date();
     const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
     const randomPart = String(Math.floor(10000 + Math.random() * 90000));
     return `TRN-${datePart}-${randomPart}`;
+  }
+
+  // Q5: pull next id from a Postgres sequence. Format `WB-YYMMDD-{id:6d}`.
+  // Sequence is created in migrator.ts so it's guaranteed to exist by the
+  // time the first request comes in.
+  async generateWaybillFromSequence(): Promise<string> {
+    const now = new Date();
+    const yy = String(now.getUTCFullYear()).slice(-2);
+    const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(now.getUTCDate()).padStart(2, '0');
+    const result: any = await db.execute(sql`SELECT nextval('cargo_waybill_seq') AS id`);
+    const id = String(result.rows?.[0]?.id ?? 0).padStart(6, '0');
+    return `WB-${yy}${mm}${dd}-${id}`;
   }
 
   async countLegsBetweenStops(tripId: string, originStopId: string, destinationStopId: string): Promise<number> {
@@ -104,20 +120,16 @@ export class CargoService {
       data = { ...data, paidAt: new Date() };
     }
 
-    const maxRetries = 20;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const waybillNumber = this.generateWaybillNumber();
-      try {
-        return await this.storage.createCargoShipment({ ...data, waybillNumber });
-      } catch (error: unknown) {
-        const dbErr = error as { code?: string; constraint?: string };
-        if (dbErr?.code === '23505' && dbErr?.constraint?.includes('waybill')) {
-          continue;
-        }
-        throw error;
-      }
+    // Q5: deterministic waybill from a Postgres sequence — no retry loop, no
+    // brittle string-match on constraint names. Fall back to the legacy
+    // random generator only if the sequence call fails for some reason.
+    let waybillNumber: string;
+    try {
+      waybillNumber = await this.generateWaybillFromSequence();
+    } catch {
+      waybillNumber = this.generateWaybillNumber();
     }
-    throw new Error('Failed to generate unique waybill number after multiple attempts');
+    return await this.storage.createCargoShipment({ ...data, waybillNumber });
   }
 
   async updateShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment> {
