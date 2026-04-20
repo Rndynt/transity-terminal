@@ -391,6 +391,20 @@ CONSOLE_SNAPSHOT_MAX_TRIPS=1000
 SCHEDULE_SNAPSHOT_GRACE_MINUTES=60
 
 # ─────────────────────────────────────────
+# REDIS — MULTI-INSTANCE SCALING (opsional)
+# ─────────────────────────────────────────
+# Native Redis URL (rediss:// untuk TLS). HANYA dibutuhkan jika deploy
+# multi-instance (cluster, Autoscale, atau >1 replica di belakang LB).
+# Tanpa Redis, app fallback ke in-memory: aman untuk single-instance VPS.
+# Provider: Upstash (free tier), Aiven, Redis Cloud, atau self-hosted.
+# Upstash: ambil di dashboard tab Connect → ioredis/Node (BUKAN REST tab).
+# REDIS_URL=rediss://default:PASSWORD@host.upstash.io:6379
+
+# Optional: tuning rate-limit global
+# RATE_LIMIT_MAX=300
+# RATE_LIMIT_WINDOW=1 minute
+
+# ─────────────────────────────────────────
 # HOLD & BOOKING CONFIG
 # ─────────────────────────────────────────
 # CSO terminal hold (detik)
@@ -739,6 +753,10 @@ Setiap operator punya:
 | Kursi hold tidak expire | Scheduler tidak berjalan | Cek log container: `docker compose logs terminal \| grep SCHEDULER` |
 | Build gagal karena OOM | VPS RAM kurang | Gunakan swap: `fallocate -l 2G /swapfile && mkswap /swapfile && swapon /swapfile` |
 | Kustomisasi brand tidak muncul | Cache browser atau setting belum disimpan | Buka `/admin/settings`, simpan ulang, hard refresh (Ctrl+Shift+R) |
+| `[redis] REDIS_URL has unsupported protocol "https:"` | URL yang dipakai REST endpoint, bukan native Redis | Ganti dengan native URL `rediss://default:PASSWORD@host:6379` (di Upstash: tab Connect → Node/ioredis, BUKAN tab `@upstash/redis`) |
+| `[redis:rate-limit] error: connect EACCES /` | URL malformed / hostname kosong | Validasi format `redis://[user:pass@]host:port`. App tetap jalan dengan fallback in-memory. |
+| Seat inventory desync antar outlet (multi-instance) | `REDIS_URL` belum diset, tiap instance broadcast lokal saja | Set `REDIS_URL` ke native Redis URL di `.env`, restart container |
+| Rate limit terlampaui tapi user tidak diblokir (multi-instance) | Counter per-instance | Sda — perlu `REDIS_URL` supaya counter shared |
 
 ---
 
@@ -764,7 +782,15 @@ docker compose exec terminal sh
 docker compose exec transityweb sh
 
 # Cek env variables di container
-docker compose exec terminal printenv | grep -E "PORT|NODE_ENV|REALMIO|DATABASE"
+docker compose exec terminal printenv | grep -E "PORT|NODE_ENV|REALMIO|DATABASE|REDIS"
+
+# Cek status Redis (kalau dipakai)
+docker compose logs terminal | grep -E "redis|rate-limit|websocket"
+# Output yang diharapkan jika Redis aktif:
+#   [rate-limit] Redis store enabled (multi-instance safe)
+#   [redis:rate-limit] ready
+#   [redis:sio-pub] ready
+#   [websocket] Socket.io Redis adapter attached (multi-instance broadcast enabled)
 
 
 # ─────────────────────────────────────

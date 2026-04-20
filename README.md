@@ -414,6 +414,19 @@ Lihat `.env.example` untuk template lengkap dengan keterangan per variabel. Ring
 | `HOLD_TTL_LONG_SECONDS` | 1800 | TTL hold panjang CSO (30 menit) |
 | `PENDING_BOOKING_AUTO_RELEASE` | true | Auto-cleanup booking pending non-OTA |
 
+**Redis (Multi-Instance Scaling)** — opsional
+| Variable | Default | Deskripsi | Required |
+|----------|---------|-----------|----------|
+| `REDIS_URL` | (kosong) | Native Redis URL (`redis://...` atau `rediss://...`). Wajib kalau deploy multi-instance. | Ya (multi-instance) |
+| `RATE_LIMIT_MAX` | 300 | Maks request per `RATE_LIMIT_WINDOW` per IP (global) | Tidak |
+| `RATE_LIMIT_WINDOW` | `1 minute` | Window untuk global rate limit | Tidak |
+
+> **Kapan butuh Redis:** kalau deploy >1 instance Node.js (Autoscale, multiple replicas, atau load-balanced cluster). Tanpa Redis: (a) Socket.io broadcast hanya nyampai ke client di instance yg sama → desync seat inventory antar outlet/CSO; (b) rate-limit counter per-instance → limit efektif jadi N × max.
+>
+> **Format wajib:** native Redis TCP URL, **bukan** REST endpoint. Upstash: dashboard → tab Connect → pilih Node/ioredis (BUKAN tab `@upstash/redis`). Format `rediss://default:PASSWORD@host:6379`.
+>
+> **Single-instance deploy:** biarkan kosong — app otomatis fallback ke in-memory adapter, semua fitur tetap jalan normal. Kalau `REDIS_URL` salah format (mis. `https://...`), app log warning + fallback in-memory tanpa crash.
+
 ### Dev Mode
 
 Jika `NODE_ENV !== 'production'` dan `REALMIO_BASE_URL` kosong, sistem akan auto-login sebagai owner dengan semua permission. `DEV_BYPASS_AUTH` di-hardcode ke `!IS_PRODUCTION` — tidak bisa aktif di production meskipun env var di-set.
