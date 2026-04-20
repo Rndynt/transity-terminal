@@ -740,6 +740,10 @@ Setelah booking dibuat:
 | `passengers[].idNumber` | `string` | ❌ | NIK / nomor identitas |
 | `passengers[].seatNo` | `string` | ✅ | Minimal 1 karakter — harus sesuai `seat_no` dari seatmap |
 | `paymentMethod` | `string` | ❌ | `"qr"` \| `"ewallet"` \| `"bank"`. Jika tidak dikirim, booking dibuat dengan status `pending` tanpa payment record — pembayaran dilakukan kemudian via [`POST /api/app/bookings/:id/pay`](#post-apiappbookingsidpay) |
+| `salesChannelCode` | `string` | ❌ | **Hanya channel OTA (Service Key).** Kode unik sales channel dari Console (mis. `"transity"`, `"abc"`, `"def"`). Disimpan apa adanya di Terminal untuk grouping/laporan. Max 64 karakter. Diabaikan untuk request JWT (channel APP). |
+| `salesChannelName` | `string` | ❌ | **Hanya channel OTA (Service Key).** Nama display sales channel (mis. `"Transity"`, `"ABC Travel"`). Ditampilkan di UI CSO sebagai `OTA - <salesChannelName>` di kolom "Oleh" detail kursi. Max 128 karakter. |
+
+> **Sales Channel:** Untuk channel **OTA** (Service Key), Console diharapkan mengirim `salesChannelCode` + `salesChannelName` per booking agar Terminal tahu partner OTA mana yang melakukan transaksi. Tanpa field ini, Terminal akan menyimpan `created_by = "OTA:unknown"` dan kolom "Oleh" di UI CSO akan menampilkan teks tersebut. Field ini diabaikan untuk request dari mobile app (JWT).
 
 **Response `201` (Booking Berhasil Dibuat):**
 

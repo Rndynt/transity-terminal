@@ -142,6 +142,9 @@ interface BookingDetailResponse {
   status: string | null;
   totalAmount: string | null;
   channel: string | null;
+  createdBy: string | null;
+  salesChannelCode: string | null;
+  salesChannelName: string | null;
   holdExpiresAt: string | null;
   qrData: QrDataItem[];
   passengers: PassengerInfo[];
@@ -892,6 +895,8 @@ export class AppService {
     paymentMethod?: 'qr' | 'ewallet' | 'bank';
     serviceDate?: string;
     channel?: 'APP' | 'OTA' | 'WEB';
+    salesChannelCode?: string;
+    salesChannelName?: string;
   }): Promise<BookingDetailResponse> {
     const resolvedTripId = await this.resolveTripId(params.tripId, params.serviceDate);
 
@@ -918,6 +923,16 @@ export class AppService {
     const bookingId = await db.transaction(async (tx) => {
       await checkSeatsAvailable(tx, resolvedTripId, seatNos, legIndexes);
 
+      // createdBy semantics:
+      //   - APP / WEB (user login): "app:<userId>"
+      //   - OTA (service-client): "OTA:<salesChannelCode>" agar log audit informatif.
+      //     Fallback "OTA:unknown" kalau Console belum mengirim sales channel.
+      const createdBy = params.userId
+        ? `app:${params.userId}`
+        : channel === 'OTA'
+          ? `OTA:${params.salesChannelCode ?? 'unknown'}`
+          : 'service-client';
+
       const [booking] = await tx.insert(bookings).values({
         tripId: resolvedTripId,
         bookingCode: generateBookingCode(),
@@ -932,7 +947,9 @@ export class AppService {
         totalAmount: totalAmount.toString(),
         discountAmount: '0',
         ...snapshots,
-        createdBy: params.userId ? `app:${params.userId}` : 'service-client'
+        createdBy,
+        salesChannelCode: channel === 'OTA' ? params.salesChannelCode ?? null : null,
+        salesChannelName: channel === 'OTA' ? params.salesChannelName ?? null : null
       }).returning({ id: bookings.id });
 
       await insertPassengerRows(tx, booking.id, params.passengers, fareQuote);
@@ -1339,6 +1356,9 @@ export class AppService {
       status: booking.status,
       totalAmount: booking.totalAmount,
       channel: booking.channel,
+      createdBy: booking.createdBy ?? null,
+      salesChannelCode: booking.salesChannelCode ?? null,
+      salesChannelName: booking.salesChannelName ?? null,
       holdExpiresAt: holdExpiry,
       qrData: pax.map(p => ({
         passengerId: p.id,

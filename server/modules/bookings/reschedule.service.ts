@@ -109,6 +109,10 @@ export class RescheduleService {
           discountAmount: '0',
           currency: booking.currency || 'IDR',
           createdBy: performedBy,
+          // Propagate identitas sales channel dari booking asal supaya laporan
+          // per-OTA tetap konsisten setelah split akibat reschedule.
+          salesChannelCode: booking.salesChannelCode,
+          salesChannelName: booking.salesChannelName,
           appUserId: booking.appUserId,
           status: booking.status === 'paid' ? 'paid' : 'confirmed',
         }).returning();
@@ -278,6 +282,10 @@ export class RescheduleService {
               discountAmount: '0',
               currency: oldBooking?.currency || 'IDR',
               createdBy: performedBy,
+              // Propagate identitas sales channel dari booking asal supaya laporan
+              // per-OTA tetap konsisten setelah batch reschedule.
+              salesChannelCode: oldBooking?.salesChannelCode,
+              salesChannelName: oldBooking?.salesChannelName,
               appUserId: oldBooking?.appUserId,
               status: oldBooking?.status === 'paid' ? 'paid' : 'confirmed',
             }).returning();

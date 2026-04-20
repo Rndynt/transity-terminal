@@ -37,7 +37,11 @@ const createBookingSchema = z.object({
     seatNo: z.string().min(1)
   })).min(1),
   paymentMethod: z.enum(['qr', 'ewallet', 'bank']).optional(),
-  serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+  serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // Identitas sales channel (mis. nama OTA / aggregator). Opsional, hanya
+  // dipakai saat request datang dari Service Key (channel OTA).
+  salesChannelCode: z.string().min(1).max(64).optional(),
+  salesChannelName: z.string().min(1).max(128).optional()
 });
 
 const payBookingSchema = z.object({

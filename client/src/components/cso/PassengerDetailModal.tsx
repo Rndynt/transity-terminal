@@ -30,6 +30,8 @@ interface BookingDetail {
   voucherCode?: string;
   createdAt?: string;
   createdBy?: string;
+  salesChannelCode?: string | null;
+  salesChannelName?: string | null;
   originSeq?: number;
   destinationSeq?: number;
   originStopId?: string;
@@ -219,7 +221,11 @@ export default function PassengerDetailModal({
                             </div>
                             <div>
                               <p className="text-muted-foreground">Oleh</p>
-                              <p className="font-medium mt-0.5 truncate">{b.createdBy ?? '—'}</p>
+                              <p className="font-medium mt-0.5 truncate" data-testid={`text-created-by-${b.id}`}>
+                                {b.channel === 'OTA' && b.salesChannelName
+                                  ? `OTA - ${b.salesChannelName}`
+                                  : b.createdBy ?? '—'}
+                              </p>
                             </div>
                             {b.outlet && (
                               <div>

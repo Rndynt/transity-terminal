@@ -49,6 +49,8 @@ export const bookings = pgTable("bookings", {
   voucherCode:        text("voucher_code"),
   currency:           text("currency").default('IDR'),
   createdBy:          text("created_by"),
+  salesChannelCode:   text("sales_channel_code"),
+  salesChannelName:   text("sales_channel_name"),
   appUserId:          uuid("app_user_id").references(() => appUsers.id),
   pendingExpiresAt:   timestamp("pending_expires_at", { withTimezone: true }),
   idempotencyKey:     text("idempotency_key"),
