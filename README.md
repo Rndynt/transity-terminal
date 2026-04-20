@@ -934,7 +934,7 @@ client/src/
     queryClient.ts           React Query config + apiRequest helper
 
 apps/mobile/                 Expo React Native B2C app
-plan/                        Dokumentasi teknis & plan fitur
+docs/                        Dokumentasi teknis (FEATURES, DEPLOY, fixes log, kontrak)
 ```
 
 ### Lapisan Arsitektur Backend

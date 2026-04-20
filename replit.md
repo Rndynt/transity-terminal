@@ -40,7 +40,7 @@ Fixes applied per TransityConsole `TERMINAL_FIXES.md` to resolve race conditions
 
 ### Console Schedule Webhook (April 2026)
 Terminal pushes schedule changes to TransityConsole automatically so the `/schedules` page stays in sync without operators clicking "Sync". Two cooperating layers:
-- **Lib**: `server/lib/consoleWebhook.ts` (HMAC-SHA256 signing, channel filter, status mapping, `fireAndForget`) and `server/lib/scheduleSnapshot.ts` (`buildScheduleTripPayload` / `buildScheduleSnapshot`). Also powers the `GET /api/console/schedules` Sync endpoint.
+- **Lib**: `server/lib/consoleWebhook.ts` (HMAC-SHA256 signing, channel filter, status mapping, `fireAndForget`, circuit-breaker, retry queue) and `server/lib/scheduleSnapshot.ts` (`buildScheduleTripPayload` / `buildScheduleTripPayloadSync` / `buildScheduleSnapshot`). Also powers the `GET /api/console/schedules` Sync endpoint.
 - **Trigger paths** (all fire-and-forget):
   - `TripsService.createTrip` → `schedule.created`
   - `TripsService.updateTrip` → `schedule.updated`
@@ -50,10 +50,15 @@ Terminal pushes schedule changes to TransityConsole automatically so the `/sched
   - `SchedulerService.addException` → `schedule.updated` with `status: cancelled`, `availableSeats: 0` for the materialized trip on that base+date
 - **Transport**: `POST {CONSOLE_URL}/api/webhooks/operators/{slug}/schedules` with header `X-Transity-Signature: sha256=<hex>`.
 - **Channel filter**: events whose trip has no OTA/APP channel are silently dropped (snapshot endpoint never includes them either, so Console converges on next Sync).
-- **Env vars**: `CONSOLE_URL`, `CONSOLE_OPERATOR_SLUG`, `CONSOLE_WEBHOOK_SECRET`. Missing any of these no-ops the emitter (logged in dev).
+- **Fare & stop info in payload**: each snapshot trip carries `farePerPerson` (resolved from `price_rules` per pattern with fallback hierarchy) plus `pickupStopName` / `dropoffStopName` so Console can render schedule cards without a second roundtrip.
+- **Auto-recover after Console outage**: `consoleWebhook.ts` keeps a circuit-breaker (`failureCount`, `lastFailureAt`, `state`). When Console comes back online, `scheduler.ts` triggers a full snapshot push via `pushScheduleSnapshot()` so missed events are reconciled automatically — operators never need to click "Sync" manually after an outage.
+- **Settings page Console status (Task #8)**: `/admin/settings` shows live Console connectivity (`GET /api/settings/console-status`): healthy / degraded / down, last successful push timestamp, queued retry count, and a manual "Push snapshot now" button. Updates auto-refresh every 30 s.
+- **Past-trip filter**: trips whose `departAt` is more than `SCHEDULE_SNAPSHOT_GRACE_MINUTES` (default 60) ago are excluded from snapshot — saves DB work and avoids syncing obsolete trips. Applied before batched fetches in both HTTP route and scheduler.
+- **Snapshot endpoint guard**: `GET /api/console/schedules` returns HTTP 413 when trip count exceeds `CONSOLE_SNAPSHOT_MAX_TRIPS` (default 1000) and logs `rawTripCount` / `syncedTripCount` / `skippedPast` / `ms` for observability.
+- **Env vars**: `CONSOLE_URL`, `CONSOLE_OPERATOR_SLUG`, `CONSOLE_WEBHOOK_SECRET`, `CONSOLE_SNAPSHOT_INTERVAL_MS`, `CONSOLE_SNAPSHOT_DAYS_AHEAD`, `CONSOLE_SNAPSHOT_MAX_TRIPS`, `SCHEDULE_SNAPSHOT_GRACE_MINUTES`, `OPERATOR_TZ`. Missing the first three no-ops the emitter (logged in dev).
 
 ### Performance Optimizations (April 2026)
-All 13 issues from `PERFORMANCE_AUDIT.md` have been resolved:
+All 13 issues from the performance audit have been resolved:
 - **N+1 queries eliminated**: `confirmSeatsBooked`, `checkSeatsAvailable`, `createSeatHoldsForBooking`, `releaseHoldsByOwner`, `getUserBookings`, `processPaymentWebhook`, `cancelBooking`, `getTripDetail`, `searchRealTrips`, `searchVirtualTrips` — all converted to bulk `inArray` operations.
 - **Parallel validation**: `createBooking` runs 4 validations via `Promise.all`; `getBookingById` merges sequential fetches into one batch.
 - **Scheduler**: Uses `FOR UPDATE SKIP LOCKED` + bulk delete; orphan cleanup uses `NOT EXISTS` subquery.
@@ -111,12 +116,15 @@ Each terminal instance has customizable branding via `/admin/settings`:
 - Default fallback: "Transity" / "Multi-Stop Travel System" / blue (#2563EB)
 
 ## Deployment
-See `DEPLOY.md` for full VPS deployment guide. Key points:
+See `docs/DEPLOY_VPS_DOCKER.md` for the canonical VPS + Docker + Nginx deployment guide. Key points:
 - Each operator gets own terminal instance + database + Realmio tenant
-- Environment: `REALMIO_BASE_URL`, `REALMIO_TENANT_ID`, `DATABASE_URL`
-- `.env.example` provided as template
-- Nginx reverse proxy per subdomain (e.g., `nusa-terminal.transity.web.id`)
-- `apps/transityweb` is the OTA channel (separate deployment, ignore for terminal)
+- Whitelabel via env vars: `OPERATOR_SLUG` (container/subdomain) + `HOST_PORT` (loopback bind). `docker-compose.yml` is parameterized — same compose file deploys every operator.
+- Required env: `DATABASE_URL`, `REALMIO_BASE_URL`, `REALMIO_TENANT_ID`, `JWT_SECRET`, `TERMINAL_SERVICE_KEY`, `PAYMENT_WEBHOOK_SECRET`. Console sync requires `CONSOLE_URL`, `CONSOLE_OPERATOR_SLUG`, `CONSOLE_WEBHOOK_SECRET`. See `.env.example` for the complete annotated template.
+- Standard deploy script: `./deploy.sh` (validates `.env` exists, `git pull`, `docker compose up -d --build --remove-orphans`, prunes old images >24h).
+- Post-merge hook: `scripts/post-merge.sh` runs `npm install` + `npm run db:push` automatically after `git merge` / `git pull`.
+- Nginx reverse proxy per subdomain (e.g., `nusa-terminal.transity.web.id`) — see deploy guide for the template.
+- `apps/transityweb` is the OTA channel (separate deployment, ignore for terminal).
+- Networking: containers join the external Docker network `transity-terminals-net` (must be created once with `docker network create transity-terminals-net`).
 
 ## External Dependencies
 - **PostgreSQL (via Neon)**: Primary database for all application data.
@@ -251,8 +259,3 @@ Environment variables required:
 - `TERMINAL_SERVICE_KEY` — service key for X-Service-Key auth
 - `PAYMENT_WEBHOOK_SECRET` — HMAC secret for webhook verification
 
-## Performance Optimizations
-- **`getActiveBookingsForTrip`**: Filters bookings at DB level (WHERE status IN active statuses) instead of fetching all then filtering in memory. Used by getSeatmap and getSeatPassengerDetails.
-- **Virtual trip price rules**: Uses targeted `SELECT WHERE pattern_id IN (...)` + Set membership check instead of loading ALL price rules.
-- **Database indexes**: Composite indexes on `passengers(booking_id, seat_no)`, `seat_inventory(trip_id, leg_index)`, `bookings(trip_id, status)`, `seat_holds(trip_id, expires_at) WHERE booking_id IS NULL`.
-- **Polling fallback**: TripSelector polls every 30s as backup; WebSocket provides instant updates for most events.
