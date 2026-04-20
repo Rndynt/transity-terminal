@@ -1,3 +1,6 @@
+import { and, eq, isNull, or, desc, inArray } from "drizzle-orm";
+import { db } from "@server/db";
+import { priceRules } from "@shared/schema/inventory";
 import type { IStorage } from "@server/storage.interface";
 import type { Trip } from "@shared/schema";
 import {
@@ -5,6 +8,94 @@ import {
   mapTripStatus,
   type SchedulePayloadTrip,
 } from "./consoleWebhook";
+
+function extractFareFromRule(rule: unknown): number {
+  if (!rule || typeof rule !== "object") return 0;
+  const r = rule as Record<string, unknown>;
+  const raw =
+    r["basePricePerLeg"] ??
+    r["basePrice"] ??
+    r["price"] ??
+    r["amount"] ??
+    r["fare"];
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 0;
+  const mult = Number(r["multiplier"]);
+  return Math.round(n * (Number.isFinite(mult) && mult > 0 ? mult : 1));
+}
+
+async function resolveFarePerPerson(trip: Trip): Promise<number> {
+  try {
+    const conds: any[] = [];
+    conds.push(eq(priceRules.tripId, trip.id));
+    if (trip.patternId) conds.push(eq(priceRules.patternId, trip.patternId));
+    const orCond = conds.length === 1 ? conds[0] : or(...conds);
+
+    const rows = await db
+      .select({
+        scope: priceRules.scope,
+        priority: priceRules.priority,
+        rule: priceRules.rule,
+        tripId: priceRules.tripId,
+      })
+      .from(priceRules)
+      .where(and(orCond, isNull(priceRules.deletedAt)))
+      .orderBy(desc(priceRules.priority));
+
+    const tripScoped = rows.find((r) => r.tripId === trip.id);
+    const chosen = tripScoped ?? rows[0];
+    return chosen ? extractFareFromRule(chosen.rule) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function resolveFaresForTrips(
+  trips: Trip[]
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (trips.length === 0) return out;
+  const tripIds = trips.map((t) => t.id);
+  const patternIds = Array.from(
+    new Set(trips.map((t) => t.patternId).filter((x): x is string => !!x))
+  );
+  try {
+    const conds: any[] = [];
+    if (tripIds.length) conds.push(inArray(priceRules.tripId, tripIds));
+    if (patternIds.length) conds.push(inArray(priceRules.patternId, patternIds));
+    if (conds.length === 0) return out;
+    const orCond = conds.length === 1 ? conds[0] : or(...conds);
+    const rows = await db
+      .select({
+        priority: priceRules.priority,
+        rule: priceRules.rule,
+        tripId: priceRules.tripId,
+        patternId: priceRules.patternId,
+      })
+      .from(priceRules)
+      .where(and(orCond, isNull(priceRules.deletedAt)))
+      .orderBy(desc(priceRules.priority));
+
+    const byTrip = new Map<string, number>();
+    const byPattern = new Map<string, number>();
+    for (const r of rows) {
+      const v = extractFareFromRule(r.rule);
+      if (r.tripId && !byTrip.has(r.tripId)) byTrip.set(r.tripId, v);
+      else if (r.patternId && !byPattern.has(r.patternId))
+        byPattern.set(r.patternId, v);
+    }
+    for (const t of trips) {
+      const v =
+        byTrip.get(t.id) ??
+        (t.patternId ? byPattern.get(t.patternId) : undefined) ??
+        0;
+      out.set(t.id, v);
+    }
+  } catch {
+    // best-effort: leave map empty -> 0
+  }
+  return out;
+}
 
 function toHHMMSS(input: unknown): string | null {
   if (!input) return null;
@@ -59,7 +150,7 @@ export async function buildScheduleTripPayload(
     // best-effort
   }
 
-  const farePerPerson = 0; // TODO: wire to price_rules / trip default fare when available
+  const farePerPerson = await resolveFarePerPerson(trip);
 
   const routeName =
     (pattern && (pattern as any).name) ||
