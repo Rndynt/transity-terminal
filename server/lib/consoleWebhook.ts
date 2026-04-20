@@ -74,6 +74,97 @@ export type EmitResult =
   | { ok: false; reason: "transport"; error: string }
   | { ok: false; reason: "http"; status: number; body: string };
 
+// ---------------------------------------------------------------------------
+// Health tracking — records the most recent success/failure so operators can
+// see if Terminal is actually reaching Console without tailing server logs.
+// ---------------------------------------------------------------------------
+
+type HealthError =
+  | { reason: "transport"; error: string }
+  | { reason: "http"; status: number; body: string };
+
+type HealthState = {
+  lastAttemptAt: number | null;
+  lastSuccessAt: number | null;
+  lastSuccessEvent: WebhookEvent | null;
+  lastErrorAt: number | null;
+  lastError: (HealthError & { event: WebhookEvent }) | null;
+  consecutiveFailures: number;
+};
+
+const health: HealthState = {
+  lastAttemptAt: null,
+  lastSuccessAt: null,
+  lastSuccessEvent: null,
+  lastErrorAt: null,
+  lastError: null,
+  consecutiveFailures: 0,
+};
+
+function recordResult(payload: WebhookPayload, result: EmitResult): void {
+  if (!result.ok && result.reason === "skip") return;
+  const now = Date.now();
+  health.lastAttemptAt = now;
+  if (result.ok) {
+    health.lastSuccessAt = now;
+    health.lastSuccessEvent = payload.event;
+    health.consecutiveFailures = 0;
+    return;
+  }
+  health.lastErrorAt = now;
+  health.consecutiveFailures += 1;
+  if (result.reason === "transport") {
+    health.lastError = { event: payload.event, reason: "transport", error: result.error };
+  } else if (result.reason === "http") {
+    health.lastError = {
+      event: payload.event,
+      reason: "http",
+      status: result.status,
+      body: result.body,
+    };
+  }
+}
+
+export type ConsoleHealth = {
+  configured: boolean;
+  missing: string[];
+  url: string | null;
+  operatorSlug: string | null;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastSuccessEvent: WebhookEvent | null;
+  lastErrorAt: string | null;
+  lastError:
+    | { event: WebhookEvent; reason: "transport"; error: string }
+    | { event: WebhookEvent; reason: "http"; status: number; body: string }
+    | null;
+  consecutiveFailures: number;
+  retryQueueSize: number;
+};
+
+export function getConsoleHealth(): ConsoleHealth {
+  const url = process.env.CONSOLE_URL ?? null;
+  const slug = process.env.CONSOLE_OPERATOR_SLUG ?? null;
+  const secret = process.env.CONSOLE_WEBHOOK_SECRET ?? null;
+  const missing: string[] = [];
+  if (!url) missing.push("CONSOLE_URL");
+  if (!slug) missing.push("CONSOLE_OPERATOR_SLUG");
+  if (!secret) missing.push("CONSOLE_WEBHOOK_SECRET");
+  return {
+    configured: missing.length === 0,
+    missing,
+    url,
+    operatorSlug: slug,
+    lastAttemptAt: health.lastAttemptAt ? new Date(health.lastAttemptAt).toISOString() : null,
+    lastSuccessAt: health.lastSuccessAt ? new Date(health.lastSuccessAt).toISOString() : null,
+    lastSuccessEvent: health.lastSuccessEvent,
+    lastErrorAt: health.lastErrorAt ? new Date(health.lastErrorAt).toISOString() : null,
+    lastError: health.lastError,
+    consecutiveFailures: health.consecutiveFailures,
+    retryQueueSize: queue.size,
+  };
+}
+
 export async function emitToConsole(payload: WebhookPayload): Promise<EmitResult> {
   const url = process.env.CONSOLE_URL;
   const slug = process.env.CONSOLE_OPERATOR_SLUG;
@@ -102,6 +193,7 @@ export async function emitToConsole(payload: WebhookPayload): Promise<EmitResult
   const signature = sign(body, secret);
   const endpoint = `${url.replace(/\/$/, "")}/api/webhooks/operators/${slug}/schedules`;
 
+  let result: EmitResult;
   try {
     const res = await fetch(endpoint, {
       method: "POST",
@@ -117,14 +209,17 @@ export async function emitToConsole(payload: WebhookPayload): Promise<EmitResult
       console.warn(
         `[consoleWebhook] ${payload.event} ${res.status}: ${text.slice(0, 200)}`
       );
-      return { ok: false, reason: "http", status: res.status, body: text.slice(0, 200) };
+      result = { ok: false, reason: "http", status: res.status, body: text.slice(0, 200) };
+    } else {
+      result = { ok: true };
     }
-    return { ok: true };
   } catch (err) {
     const message = (err as Error).message;
     console.warn(`[consoleWebhook] ${payload.event} failed:`, message);
-    return { ok: false, reason: "transport", error: message };
+    result = { ok: false, reason: "transport", error: message };
   }
+  recordResult(payload, result);
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -285,6 +380,39 @@ export function fireAndForget(payload: WebhookPayload): void {
       enqueue(payload);
     }
   })();
+}
+
+// Sends a synthetic schedule.updated payload that operators (and Console)
+// can recognise as a connection probe. We bypass the channel filter inside
+// emitToConsole by tagging the trip with the "app" channel, but the
+// externalTripId starts with "test:connection" so Console-side handlers can
+// drop or ignore it.
+export async function sendTestEvent(): Promise<EmitResult> {
+  const now = new Date();
+  const payload: WebhookSinglePayload = {
+    event: "schedule.updated",
+    emittedAt: now.toISOString(),
+    trip: {
+      externalTripId: `test:connection:${now.getTime()}`,
+      externalBaseId: null,
+      routeName: "Terminal Connection Test",
+      originCity: "Terminal",
+      originStop: null,
+      destinationCity: "Console",
+      destinationStop: null,
+      serviceDate: now.toISOString().slice(0, 10),
+      departureTime: null,
+      arrivalTime: null,
+      vehicleClass: null,
+      farePerPerson: 0,
+      capacity: 0,
+      availableSeats: 0,
+      channels: ["app"],
+      status: "draft",
+      raw: { test: true },
+    },
+  };
+  return emitToConsole(payload);
 }
 
 // Test/diagnostic helpers

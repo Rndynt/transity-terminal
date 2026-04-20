@@ -3,6 +3,7 @@ import { requireFlag } from "@modules/rbac/rbac.middleware";
 import { db } from "@server/db";
 import { operatorSettings } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
+import { getConsoleHealth, sendTestEvent } from "@server/lib/consoleWebhook";
 
 async function getOrCreateSettings() {
   const rows = await db.select().from(operatorSettings).limit(1);
@@ -54,4 +55,30 @@ export function registerSettingsRoutes(app: FastifyInstance) {
       .returning();
     reply.send(updated);
   });
+
+  app.get(
+    '/api/settings/console-webhook',
+    { preHandler: [requireFlag('admin.flags.manage')] },
+    async (_req: FastifyRequest, reply: FastifyReply) => {
+      reply.send(getConsoleHealth());
+    }
+  );
+
+  app.post(
+    '/api/settings/console-webhook/test',
+    { preHandler: [requireFlag('admin.flags.manage')] },
+    async (_req: FastifyRequest, reply: FastifyReply) => {
+      const health = getConsoleHealth();
+      if (!health.configured) {
+        return reply.code(400).send({
+          ok: false,
+          reason: 'not_configured',
+          missing: health.missing,
+          health,
+        });
+      }
+      const result = await sendTestEvent();
+      reply.send({ result, health: getConsoleHealth() });
+    }
+  );
 }

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, Save, Upload, Palette, Type, ImageIcon, RotateCcw, Bus } from 'lucide-react';
+import { Loader2, Save, Upload, Palette, Type, ImageIcon, RotateCcw, Bus, Plug, CheckCircle2, XCircle, AlertCircle, Send } from 'lucide-react';
 
 interface OperatorSettingsData {
   id: string;
@@ -228,6 +228,8 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      <ConsoleWebhookCard />
+
       <div className="flex items-center gap-3 pb-8">
         <Button
           onClick={handleSave}
@@ -248,6 +250,219 @@ export default function SettingsPage() {
           Reset ke Default
         </Button>
       </div>
+    </div>
+  );
+}
+
+interface ConsoleHealthData {
+  configured: boolean;
+  missing: string[];
+  url: string | null;
+  operatorSlug: string | null;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastSuccessEvent: string | null;
+  lastErrorAt: string | null;
+  lastError:
+    | { event: string; reason: 'transport'; error: string }
+    | { event: string; reason: 'http'; status: number; body: string }
+    | null;
+  consecutiveFailures: number;
+  retryQueueSize: number;
+}
+
+interface TestResult {
+  result:
+    | { ok: true }
+    | { ok: false; reason: 'skip' }
+    | { ok: false; reason: 'transport'; error: string }
+    | { ok: false; reason: 'http'; status: number; body: string };
+  health: ConsoleHealthData;
+}
+
+function formatRelative(iso: string | null): string {
+  if (!iso) return 'belum pernah';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 0) return new Date(iso).toLocaleString();
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return `${sec} detik lalu`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min} menit lalu`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr} jam lalu`;
+  const day = Math.round(hr / 24);
+  return `${day} hari lalu`;
+}
+
+function ConsoleWebhookCard() {
+  const { toast } = useToast();
+  const { data: health, isLoading, isError, error, refetch } = useQuery<ConsoleHealthData>({
+    queryKey: ['/api/settings/console-webhook'],
+    refetchInterval: 15_000,
+  });
+
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/settings/console-webhook/test');
+      return res.json() as Promise<TestResult>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/settings/console-webhook'] });
+      if (data.result.ok) {
+        toast({ title: 'Berhasil', description: 'Console menerima event uji coba.' });
+      } else if (data.result.reason === 'http') {
+        toast({
+          title: 'Gagal',
+          description: `Console menolak (HTTP ${data.result.status}): ${data.result.body || '-'}`,
+          variant: 'destructive',
+        });
+      } else if (data.result.reason === 'transport') {
+        toast({
+          title: 'Tidak terhubung',
+          description: data.result.error,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Tidak terkirim',
+          description: 'Console webhook belum dikonfigurasi.',
+          variant: 'destructive',
+        });
+      }
+    },
+    onError: (err: Error) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/settings/console-webhook'] });
+      // apiRequest throws Error("<status>: <body>") on non-2xx responses, so
+      // pull the JSON body off the message to surface the structured reason.
+      let msg = 'Gagal mengirim event uji coba.';
+      const match = err.message.match(/^\d+:\s*(.*)$/s);
+      const bodyText = match ? match[1] : err.message;
+      let parsed: { reason?: string; missing?: unknown } | null = null;
+      try {
+        parsed = JSON.parse(bodyText);
+      } catch {
+        parsed = null;
+      }
+      if (parsed?.reason === 'not_configured' && Array.isArray(parsed.missing)) {
+        msg = `Konfigurasi belum lengkap: ${parsed.missing.join(', ')}`;
+      } else if (bodyText) {
+        msg = bodyText;
+      }
+      toast({ title: 'Gagal', description: msg, variant: 'destructive' });
+    },
+  });
+
+  let statusBadge: { icon: typeof CheckCircle2; label: string; className: string };
+  if (!health?.configured) {
+    statusBadge = { icon: AlertCircle, label: 'Belum dikonfigurasi', className: 'text-amber-700 bg-amber-50 border-amber-200' };
+  } else if (health.consecutiveFailures > 0) {
+    statusBadge = { icon: XCircle, label: `Gagal (${health.consecutiveFailures}x berturut-turut)`, className: 'text-red-700 bg-red-50 border-red-200' };
+  } else if (health.lastSuccessAt) {
+    statusBadge = { icon: CheckCircle2, label: 'Terhubung', className: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+  } else {
+    statusBadge = { icon: AlertCircle, label: 'Belum ada aktivitas', className: 'text-gray-700 bg-gray-50 border-gray-200' };
+  }
+  const StatusIcon = statusBadge.icon;
+
+  return (
+    <Card data-testid="card-console-webhook">
+      <CardHeader className="pb-4">
+        <div className="flex items-center gap-2">
+          <Plug className="w-4 h-4 text-blue-600" />
+          <CardTitle className="text-base">Koneksi Console</CardTitle>
+        </div>
+        <CardDescription>
+          Status sinkronisasi jadwal Terminal ke Transity Console.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <Loader2 className="w-4 h-4 animate-spin" /> Memuat status...
+          </div>
+        ) : isError || !health ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-900 space-y-2" data-testid="text-console-health-error">
+            <div>Gagal memuat status koneksi Console.{error?.message ? ` ${error.message}` : ''}</div>
+            <Button size="sm" variant="outline" onClick={() => refetch()} data-testid="button-retry-console-health">
+              Coba lagi
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${statusBadge.className}`} data-testid="status-console-webhook">
+              <StatusIcon className="w-3.5 h-3.5" />
+              {statusBadge.label}
+            </div>
+
+            {!health.configured && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" data-testid="text-console-missing-config">
+                Variabel berikut belum di-set: <span className="font-mono">{health.missing.join(', ')}</span>. Hubungi admin untuk mengisi konfigurasi webhook.
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <InfoRow label="Console URL" value={health.url || '—'} testId="text-console-url" mono />
+              <InfoRow label="Operator slug" value={health.operatorSlug || '—'} testId="text-console-slug" mono />
+              <InfoRow
+                label="Push terakhir berhasil"
+                value={
+                  health.lastSuccessAt
+                    ? `${formatRelative(health.lastSuccessAt)}${health.lastSuccessEvent ? ` · ${health.lastSuccessEvent}` : ''}`
+                    : 'belum pernah'
+                }
+                testId="text-console-last-success"
+              />
+              <InfoRow
+                label="Error terakhir"
+                value={
+                  health.lastErrorAt
+                    ? formatRelative(health.lastErrorAt)
+                    : 'tidak ada'
+                }
+                testId="text-console-last-error-time"
+              />
+              <InfoRow label="Antrian retry" value={String(health.retryQueueSize)} testId="text-console-queue-size" />
+              <InfoRow label="Kegagalan beruntun" value={String(health.consecutiveFailures)} testId="text-console-consecutive-failures" />
+            </div>
+
+            {health.lastError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-900 space-y-1" data-testid="text-console-last-error-detail">
+                <div className="font-medium">
+                  Detail error ({health.lastError.event})
+                </div>
+                {health.lastError.reason === 'http' ? (
+                  <div className="font-mono break-all">
+                    HTTP {health.lastError.status}: {health.lastError.body || '(tanpa body)'}
+                  </div>
+                ) : (
+                  <div className="font-mono break-all">Transport: {health.lastError.error}</div>
+                )}
+              </div>
+            )}
+
+            <Button
+              onClick={() => testMutation.mutate()}
+              disabled={testMutation.isPending || !health.configured}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              data-testid="button-test-console-webhook"
+            >
+              {testMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              Kirim event uji coba
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function InfoRow({ label, value, testId, mono }: { label: string; value: string; testId: string; mono?: boolean }) {
+  return (
+    <div className="space-y-0.5">
+      <div className="text-[11px] uppercase tracking-wide text-gray-400">{label}</div>
+      <div className={`text-gray-800 break-all ${mono ? 'font-mono' : ''}`} data-testid={testId}>{value}</div>
     </div>
   );
 }
