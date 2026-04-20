@@ -16,6 +16,49 @@ import {
   mapTripStatus,
   type SchedulePayloadTrip,
 } from "./consoleWebhook";
+import { fromZonedHHMMToUtc, ensureDefaultTimezone } from "@server/utils/timezone";
+
+/**
+ * Decide whether a trip's departure is far enough in the past that we should
+ * stop syncing it. We allow a grace window (default 60 minutes) after the
+ * scheduled departure so last-minute updates (e.g. seat checked in 10 min after
+ * departure) still propagate, but anything older than the grace is dropped.
+ *
+ * Returns true when the trip should be EXCLUDED from sync.
+ */
+export function isTripDeparturePastGrace(
+  trip: Trip,
+  graceMinutes: number,
+  tz: string,
+  now: Date = new Date()
+): boolean {
+  const sd: unknown = trip.serviceDate;
+  let serviceDate: string | null = null;
+  if (typeof sd === "string" && sd.length >= 10) {
+    serviceDate = sd.substring(0, 10);
+  } else if (sd instanceof Date) {
+    serviceDate = sd.toISOString().substring(0, 10);
+  }
+  if (!serviceDate) return false; // unknown date — be conservative, keep it
+
+  // Cheap pre-check: if serviceDate is more than ~2 days before "today" in tz,
+  // it's definitely past-grace regardless of HH:MM.
+  // (Skip — handled by the precise check below; small perf gain not needed.)
+
+  const hhmm = trip.originDepartHHMM;
+  if (!hhmm || typeof hhmm !== "string") {
+    // No known departure time. Fall back to end-of-service-date in tz.
+    // If serviceDate < today (in tz) by more than 1 day, exclude.
+    const todayUtc = fromZonedHHMMToUtc(serviceDate, "23:59:59", tz);
+    if (!todayUtc) return false;
+    return todayUtc.getTime() < now.getTime() - graceMinutes * 60_000;
+  }
+
+  const departUtc = fromZonedHHMMToUtc(serviceDate, hhmm, tz);
+  if (!departUtc) return false; // invalid time — keep, don't lose data
+
+  return departUtc.getTime() < now.getTime() - graceMinutes * 60_000;
+}
 
 function extractFareFromRule(rule: unknown): number {
   if (!rule || typeof rule !== "object") return 0;
@@ -240,7 +283,20 @@ export async function buildScheduleSnapshot(
   serviceDate?: string,
   preloadedTrips?: Trip[]
 ): Promise<SchedulePayloadTrip[]> {
-  const trips = preloadedTrips ?? (await storage.getTrips(serviceDate));
+  const allTrips = preloadedTrips ?? (await storage.getTrips(serviceDate));
+  if (allTrips.length === 0) return [];
+
+  // Drop trips whose departure has already passed by more than the grace
+  // window, so we don't keep re-syncing yesterday's / earlier-today's trips.
+  const graceMinutes = Math.max(
+    0,
+    parseInt(process.env.SCHEDULE_SNAPSHOT_GRACE_MINUTES || "60", 10) || 60
+  );
+  const tz = ensureDefaultTimezone(process.env.OPERATOR_TZ);
+  const now = new Date();
+  const trips = allTrips.filter(
+    (t) => !isTripDeparturePastGrace(t, graceMinutes, tz, now)
+  );
   if (trips.length === 0) return [];
 
   const tripIds = trips.map((t) => t.id);

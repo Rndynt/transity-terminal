@@ -46,7 +46,13 @@ export function registerConsoleRoutes(app: FastifyInstance, storage: IStorage) {
     const snapshot = await buildScheduleSnapshot(storage, serviceDate, allTripsForDay);
     const t1 = Date.now();
     req.log.info(
-      { tripCount: snapshot.length, ms: t1 - t0, serviceDate },
+      {
+        rawTripCount: allTripsForDay.length,
+        syncedTripCount: snapshot.length,
+        skippedPast: allTripsForDay.length - snapshot.length,
+        ms: t1 - t0,
+        serviceDate,
+      },
       "console.schedules.snapshot.built"
     );
 
