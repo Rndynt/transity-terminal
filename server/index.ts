@@ -17,6 +17,7 @@ if (_envExists(_envPath)) {
 import Fastify from "fastify";
 import { ZodError } from "zod";
 import rateLimit from "@fastify/rate-limit";
+import { createRateLimitRedisClient } from "./realtime/redis";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { scheduler } from "./scheduler";
@@ -41,11 +42,20 @@ app.decorateRequest('outletId', undefined);
 app.decorateRequest('appUser', undefined);
 app.decorateRequest('rawBody', undefined);
 
+// S2: kalau REDIS_URL diset, pakai Redis store supaya counter konsisten lintas instance.
+// Tanpa Redis, fallback in-memory (per-instance) yang OK untuk single-instance deploy.
+const _rateLimitRedis = createRateLimitRedisClient();
+if (_rateLimitRedis) {
+  console.log('[rate-limit] Redis store enabled (multi-instance safe)');
+} else {
+  console.log('[rate-limit] in-memory store (single-instance only)');
+}
 app.register(rateLimit, {
   global: true,
   max: parseInt(process.env.RATE_LIMIT_MAX || '300', 10),
   timeWindow: process.env.RATE_LIMIT_WINDOW || '1 minute',
   allowList: (req) => req.url === '/api/health' || req.url === '/health',
+  ...(_rateLimitRedis ? { redis: _rateLimitRedis, nameSpace: 'transity-rl:' } : {}),
 });
 
 app.register(import("@fastify/middie"));
@@ -178,7 +188,7 @@ app.setErrorHandler((err: Error & { status?: number; statusCode?: number; code?:
   });
 
   const { webSocketService } = await import('./realtime/ws');
-  webSocketService.initialize(app.server);
+  await webSocketService.initialize(app.server);
 
   log(`serving on port ${port}`);
 

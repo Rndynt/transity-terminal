@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { log } from '@server/vite';
+import { createSocketIoAdapter } from './redis';
 
 // WebSocket event types
 export interface WSEvents {
@@ -18,7 +19,7 @@ export type WSEventData<T extends WSEventName> = WSEvents[T];
 class WebSocketService {
   private io: SocketIOServer | null = null;
 
-  initialize(httpServer: HttpServer) {
+  async initialize(httpServer: HttpServer) {
     if (this.io) {
       return;
     }
@@ -48,6 +49,20 @@ class WebSocketService {
       },
       transports: ['websocket', 'polling']
     });
+
+    // S1: Redis adapter untuk multi-instance broadcast sync.
+    // Kalau REDIS_URL tidak diset, tetap pakai in-memory adapter (single-instance OK).
+    try {
+      const bundle = await createSocketIoAdapter();
+      if (bundle) {
+        this.io.adapter(bundle.adapter as never);
+        log('Socket.io Redis adapter attached (multi-instance broadcast enabled)', 'websocket');
+      } else {
+        log('Redis not configured — using in-memory adapter (single-instance only)', 'websocket');
+      }
+    } catch (err) {
+      console.error('[ws] failed to attach redis adapter, falling back to in-memory:', err);
+    }
 
     this.io.on('connection', (socket: Socket) => {
       log(`WebSocket client connected: ${socket.id}`, 'websocket');
