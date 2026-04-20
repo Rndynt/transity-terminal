@@ -8,6 +8,24 @@ import { fromZonedHHMMToUtc, getDayInTZ, formatTimeInTZ, ensureDefaultTimezone, 
 import { webSocketService } from "@server/realtime/ws";
 import { db } from "@server/db";
 import { eq, and } from "drizzle-orm";
+import { fireAndForget } from "@server/lib/consoleWebhook";
+import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
+
+async function emitTripWebhook(
+  storage: IStorage,
+  event: "schedule.created" | "schedule.updated" | "schedule.deleted",
+  tripId: string,
+) {
+  try {
+    const trip = await storage.getTripById(tripId);
+    if (!trip) return;
+    const payload = await buildScheduleTripPayload(storage, trip);
+    if (!payload) return;
+    fireAndForget({ event, trip: payload, emittedAt: new Date().toISOString() });
+  } catch (err) {
+    console.warn("[tripBases.service] failed to emit webhook:", (err as Error).message);
+  }
+}
 
 export class TripBasesService {
   private tripLegsService: TripLegsService;
@@ -307,6 +325,7 @@ export class TripBasesService {
       await this.seatInventoryService.precomputeInventory(trip);
 
       webSocketService.emitTripMaterialized(baseId, serviceDate, trip.id);
+      void emitTripWebhook(this.storage, "schedule.created", trip.id);
 
       return trip.id;
     } catch (error) {
@@ -344,7 +363,8 @@ export class TripBasesService {
       baseId: trip.baseId || undefined,
       serviceDate: trip.serviceDate || undefined,
     });
-    
+    void emitTripWebhook(this.storage, "schedule.updated", tripId);
+
     return updatedTrip;
   }
 

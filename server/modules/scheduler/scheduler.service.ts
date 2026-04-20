@@ -6,6 +6,8 @@ import { db } from "@server/db";
 import { sql, inArray, and, eq, gte, lte, isNull } from "drizzle-orm";
 import { scheduleExceptions, patternStops, scheduleStopExceptions } from "@shared/schema/scheduling";
 import { stops } from "@shared/schema/network";
+import { fireAndForget } from "@server/lib/consoleWebhook";
+import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
 
 export type CalendarItem = {
   id: string;
@@ -194,7 +196,25 @@ export class SchedulerService {
       target: [scheduleExceptions.baseId, scheduleExceptions.exceptionDate],
       set: { reason: reason || null, createdBy: createdBy || null },
     }).returning();
+    // Fire-and-forget: notify Console that any materialized trip on this date is cancelled
+    void this.emitExceptionWebhook(baseId, exceptionDate);
     return inserted;
+  }
+
+  private async emitExceptionWebhook(baseId: string, exceptionDate: string) {
+    try {
+      const trip = await this.storage.getTripByBaseAndDate(baseId, exceptionDate);
+      if (!trip) return;
+      const payload = await buildScheduleTripPayload(this.storage, trip);
+      if (!payload) return;
+      fireAndForget({
+        event: "schedule.updated",
+        trip: { ...payload, status: "cancelled", availableSeats: 0 },
+        emittedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.warn("[scheduler.addException] webhook emit failed:", (err as Error).message);
+    }
   }
 
   async removeException(exceptionId: string) {

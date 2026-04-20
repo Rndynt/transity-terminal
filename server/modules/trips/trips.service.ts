@@ -62,7 +62,7 @@ export class TripsService {
     if (tripStopTimesData.length > 0) {
       await this.storage.bulkUpsertTripStopTimes(trip.id, tripStopTimesData);
     }
-    
+
     void this.emitWebhook("schedule.created", trip);
     return trip;
   }

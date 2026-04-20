@@ -38,6 +38,20 @@ Fixes applied per TransityConsole `TERMINAL_FIXES.md` to resolve race conditions
 - **Grace period**: `confirmOtaPayment()` allows re-activation of recently cancelled OTA bookings (5-min window after `pendingExpiresAt`) with seat availability validation.
 - Full documentation: `docs/TERMINAL_FIXES_APPLIED.md`
 
+### Console Schedule Webhook (April 2026)
+Terminal pushes schedule changes to TransityConsole automatically so the `/schedules` page stays in sync without operators clicking "Sync". Two cooperating layers:
+- **Lib**: `server/lib/consoleWebhook.ts` (HMAC-SHA256 signing, channel filter, status mapping, `fireAndForget`) and `server/lib/scheduleSnapshot.ts` (`buildScheduleTripPayload` / `buildScheduleSnapshot`). Also powers the `GET /api/console/schedules` Sync endpoint.
+- **Trigger paths** (all fire-and-forget):
+  - `TripsService.createTrip` → `schedule.created`
+  - `TripsService.updateTrip` → `schedule.updated`
+  - `TripsService.deleteTrip` → `schedule.deleted`
+  - `TripBasesService.ensureMaterializedTrip` (real materialization) → `schedule.created`
+  - `TripBasesService.closeTrip` → `schedule.updated`
+  - `SchedulerService.addException` → `schedule.updated` with `status: cancelled`, `availableSeats: 0` for the materialized trip on that base+date
+- **Transport**: `POST {CONSOLE_URL}/api/webhooks/operators/{slug}/schedules` with header `X-Transity-Signature: sha256=<hex>`.
+- **Channel filter**: events whose trip has no OTA/APP channel are silently dropped (snapshot endpoint never includes them either, so Console converges on next Sync).
+- **Env vars**: `CONSOLE_URL`, `CONSOLE_OPERATOR_SLUG`, `CONSOLE_WEBHOOK_SECRET`. Missing any of these no-ops the emitter (logged in dev).
+
 ### Performance Optimizations (April 2026)
 All 13 issues from `PERFORMANCE_AUDIT.md` have been resolved:
 - **N+1 queries eliminated**: `confirmSeatsBooked`, `checkSeatsAvailable`, `createSeatHoldsForBooking`, `releaseHoldsByOwner`, `getUserBookings`, `processPaymentWebhook`, `cancelBooking`, `getTripDetail`, `searchRealTrips`, `searchVirtualTrips` — all converted to bulk `inArray` operations.
