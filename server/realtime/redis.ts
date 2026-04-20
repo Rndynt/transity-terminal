@@ -3,8 +3,23 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import type { Adapter } from 'socket.io-adapter';
 
 export function getRedisUrl(): string | null {
-  const url = process.env.REDIS_URL?.trim();
-  return url && url.length > 0 ? url : null;
+  const raw = process.env.REDIS_URL?.trim();
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'redis:' && u.protocol !== 'rediss:') {
+      console.warn(`[redis] REDIS_URL has unsupported protocol "${u.protocol}". Use redis:// or rediss://. Falling back to in-memory.`);
+      return null;
+    }
+    if (!u.hostname) {
+      console.warn('[redis] REDIS_URL is missing a hostname. Falling back to in-memory.');
+      return null;
+    }
+    return raw;
+  } catch {
+    console.warn('[redis] REDIS_URL is not a valid URL. Expected format: redis://[user:pass@]host:port[/db]. Falling back to in-memory.');
+    return null;
+  }
 }
 
 export function isRedisEnabled(): boolean {

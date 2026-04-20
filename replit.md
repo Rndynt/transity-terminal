@@ -123,6 +123,7 @@ See `docs/DEPLOY_VPS_DOCKER.md` for the canonical VPS + Docker + Nginx deploymen
 - Each operator gets own terminal instance + database + Realmio tenant
 - Whitelabel via env vars: `OPERATOR_SLUG` (container/subdomain) + `HOST_PORT` (loopback bind). `docker-compose.yml` is parameterized — same compose file deploys every operator.
 - Required env: `DATABASE_URL`, `REALMIO_BASE_URL`, `REALMIO_TENANT_ID`, `JWT_SECRET`, `TERMINAL_SERVICE_KEY`, `PAYMENT_WEBHOOK_SECRET`. Console sync requires `CONSOLE_URL`, `CONSOLE_OPERATOR_SLUG`, `CONSOLE_WEBHOOK_SECRET`. See `.env.example` for the complete annotated template.
+- Optional env: `REDIS_URL` — native Redis URL (`redis://...` or `rediss://...`, **bukan** REST endpoint). Diperlukan kalau deploy multi-instance: Socket.io adapter pakai Redis pub/sub supaya broadcast nyampai lintas instance, dan `@fastify/rate-limit` pakai Redis store supaya counter konsisten. Tanpa `REDIS_URL` app fallback ke in-memory adapter (aman untuk single-instance). Validasi format: harus diawali `redis://` atau `rediss://` dengan hostname valid; selain itu app tetap jalan dengan warning + fallback. Kode: `server/realtime/redis.ts`.
 - Standard deploy script: `./deploy.sh` (validates `.env` exists, `git pull`, `docker compose up -d --build --remove-orphans`, prunes old images >24h).
 - Post-merge hook: `scripts/post-merge.sh` runs `npm install` + `npm run db:push` automatically after `git merge` / `git pull`.
 - Nginx reverse proxy per subdomain (e.g., `nusa-terminal.transity.web.id`) — see deploy guide for the template.
@@ -132,7 +133,7 @@ See `docs/DEPLOY_VPS_DOCKER.md` for the canonical VPS + Docker + Nginx deploymen
 ## External Dependencies
 - **PostgreSQL (via Neon)**: Primary database for all application data.
 - **Drizzle ORM**: Used for interacting with the PostgreSQL database.
-- **Socket.io**: Powers real-time communication for seat inventory updates.
+- **Socket.io**: Powers real-time communication for seat inventory updates. Multi-instance broadcast sync via `@socket.io/redis-adapter` + `ioredis` (opsional, aktif kalau `REDIS_URL` diset).
 - **Realmio**: External authentication service used for staff and admin users.
 - **Expo React Native**: Framework for the mobile B2C application.
 - **Vite**: Frontend build tool.
