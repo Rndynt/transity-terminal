@@ -24,7 +24,12 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
     if (!booking) return reply.code(404).send({ message: 'Booking tidak ditemukan' });
     reply.send(booking);
   });
-  app.get('/api/bookings/search', async (req, reply) => {
+  app.get('/api/bookings/search', {
+    preHandler: [requireFlag('page.bookings')],
+    config: {
+      rateLimit: { max: 30, timeWindow: '1 minute' },
+    },
+  }, async (req, reply) => {
     const q = ((req.query as any).q || '').toUpperCase().trim();
     if (!q || q.length < 3) return reply.send([]);
 

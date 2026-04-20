@@ -1,5 +1,7 @@
 import { IStorage } from "@server/storage.interface";
-import { InsertCargoShipment, CargoShipment, CargoAvailableTrip, cargoStatusEnum } from "@shared/schema";
+import { InsertCargoShipment, CargoShipment, CargoAvailableTrip, cargoStatusEnum, cargoShipments } from "@shared/schema";
+import { db } from "@server/db";
+import { sql, eq } from "drizzle-orm";
 
 const VALID_STATUSES = cargoStatusEnum.enumValues;
 type CargoStatus = typeof VALID_STATUSES[number];
@@ -119,8 +121,23 @@ export class CargoService {
   }
 
   async updateShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment> {
-    await this.getShipmentById(id);
-    return await this.storage.updateCargoShipment(id, data);
+    // B4: lock + update in the SAME transaction. Using tx.update keeps the
+    // write on the same connection that holds the row lock — calling the
+    // global storage.updateCargoShipment would go through `db` (different
+    // connection) and break the lock semantics.
+    return await db.transaction(async (tx) => {
+      const lockResult: any = await tx.execute(
+        sql`SELECT id FROM cargo_shipments WHERE id = ${id} FOR UPDATE`
+      );
+      if (!lockResult.rows?.[0]) {
+        throw new Error('Cargo shipment not found');
+      }
+      const [updated] = await tx.update(cargoShipments)
+        .set(data)
+        .where(eq(cargoShipments.id, id))
+        .returning();
+      return updated;
+    });
   }
 
   async updateShipmentStatus(id: string, newStatus: string): Promise<CargoShipment> {
@@ -128,20 +145,30 @@ export class CargoService {
       throw new Error(`Invalid status: ${newStatus}. Valid: ${VALID_STATUSES.join(', ')}`);
     }
 
-    const shipment = await this.getShipmentById(id);
-    const currentStatus = (shipment.status || 'received') as CargoStatus;
-    const allowed = ALLOWED_TRANSITIONS[currentStatus] || [];
-
-    if (!allowed.includes(newStatus as CargoStatus)) {
-      throw new Error(`Cannot transition from '${currentStatus}' to '${newStatus}'. Allowed: ${allowed.join(', ') || 'none'}`);
-    }
-
-    const updates: Partial<InsertCargoShipment> = {};
-    const statusVal = newStatus as CargoStatus;
-    updates.status = statusVal;
-    if (statusVal === 'delivered') {
-      updates.paidAt = new Date();
-    }
-    return await this.storage.updateCargoShipment(id, updates);
+    return await db.transaction(async (tx) => {
+      const result: any = await tx.execute(
+        sql`SELECT status FROM cargo_shipments WHERE id = ${id} FOR UPDATE`
+      );
+      const row = result.rows?.[0];
+      if (!row) {
+        throw new Error('Cargo shipment not found');
+      }
+      const currentStatus = (row.status || 'received') as CargoStatus;
+      const allowed = ALLOWED_TRANSITIONS[currentStatus] || [];
+      if (!allowed.includes(newStatus as CargoStatus)) {
+        throw new Error(`Cannot transition from '${currentStatus}' to '${newStatus}'. Allowed: ${allowed.join(', ') || 'none'}`);
+      }
+      const updates: Partial<InsertCargoShipment> = {};
+      const statusVal = newStatus as CargoStatus;
+      updates.status = statusVal;
+      if (statusVal === 'delivered') {
+        updates.paidAt = new Date();
+      }
+      const [updated] = await tx.update(cargoShipments)
+        .set(updates)
+        .where(eq(cargoShipments.id, id))
+        .returning();
+      return updated;
+    });
   }
 }

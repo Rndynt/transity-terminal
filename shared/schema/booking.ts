@@ -51,6 +51,7 @@ export const bookings = pgTable("bookings", {
   createdBy:          text("created_by"),
   appUserId:          uuid("app_user_id").references(() => appUsers.id),
   pendingExpiresAt:   timestamp("pending_expires_at", { withTimezone: true }),
+  idempotencyKey:     text("idempotency_key"),
   createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
   idxBookingsTripId: sql`CREATE INDEX IF NOT EXISTS idx_bookings_trip_id ON ${table} (trip_id)`,
@@ -58,7 +59,13 @@ export const bookings = pgTable("bookings", {
   idxBookingsTripStatus: sql`CREATE INDEX IF NOT EXISTS idx_bookings_trip_status ON ${table} (trip_id, status)`,
   idxBookingsOutletId: sql`CREATE INDEX IF NOT EXISTS idx_bookings_outlet_id ON ${table} (outlet_id)`,
   idxBookingsCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_bookings_created_at ON ${table} (created_at)`,
-  idxBookingsPendingExpiry: sql`CREATE INDEX IF NOT EXISTS idx_bookings_pending_expiry ON ${table} (pending_expires_at) WHERE status = 'pending'`
+  idxBookingsPendingExpiry: sql`CREATE INDEX IF NOT EXISTS idx_bookings_pending_expiry ON ${table} (pending_expires_at) WHERE status = 'pending'`,
+  idxBookingsAppUserId: sql`CREATE INDEX IF NOT EXISTS idx_bookings_app_user_id ON ${table} (app_user_id) WHERE app_user_id IS NOT NULL`,
+  idxBookingsGroupId: sql`CREATE INDEX IF NOT EXISTS idx_bookings_group_id ON ${table} (group_id) WHERE group_id IS NOT NULL`,
+  idxBookingsOriginStop: sql`CREATE INDEX IF NOT EXISTS idx_bookings_origin_stop ON ${table} (origin_stop_id)`,
+  idxBookingsDestStop: sql`CREATE INDEX IF NOT EXISTS idx_bookings_destination_stop ON ${table} (destination_stop_id)`,
+  idxBookingsOutletCreated: sql`CREATE INDEX IF NOT EXISTS idx_bookings_outlet_created ON ${table} (outlet_id, created_at DESC)`,
+  uniqBookingsIdempotency: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_bookings_idempotency_key ON ${table} (idempotency_key) WHERE idempotency_key IS NOT NULL`
 }));
 
 export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, createdAt: true });

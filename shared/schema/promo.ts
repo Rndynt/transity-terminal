@@ -26,7 +26,9 @@ export const promotions = pgTable("promotions", {
   validFrom:         timestamp("valid_from", { withTimezone: true }),
   validTo:           timestamp("valid_to", { withTimezone: true }),
   createdAt:         timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxPromotionsActiveValid: sql`CREATE INDEX IF NOT EXISTS idx_promotions_active_valid ON ${table} (is_active, valid_from, valid_to) WHERE is_active = true`
+}));
 
 export const promotionsRelations = relations(promotions, ({ many }) => ({
   vouchers: many(vouchers)

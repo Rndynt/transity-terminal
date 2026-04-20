@@ -231,6 +231,8 @@ export class TripBasesService {
     }
 
     // 3. Begin transaction to create trip
+    let tripIdResolved: string;
+    let isFreshlyCreated = false;
     try {
       // Get pattern stops for this base
       const patternStops = await this.storage.getPatternStops(base.patternId);
@@ -321,30 +323,41 @@ export class TripBasesService {
 
       // Derive trip legs
       await this.tripLegsService.deriveLegsFromTrip(trip);
-      
+
       await this.seatInventoryService.precomputeInventory(trip);
 
-      webSocketService.emitTripMaterialized(baseId, serviceDate, trip.id);
-      void emitTripWebhook(this.storage, "schedule.created", trip.id);
-
-      return trip.id;
+      tripIdResolved = trip.id;
+      isFreshlyCreated = true;
     } catch (error) {
       // Handle race condition: if unique constraint violation, fetch the existing trip
       if (error instanceof Error && (
-        error.message.includes('unique') || 
+        error.message.includes('unique') ||
         error.message.includes('duplicate') ||
         error.message.includes('violates unique constraint')
       )) {
         // Another request already created the trip, fetch it
         const existingTrip = await this.storage.getTripByBaseAndDate(baseId, serviceDate);
         if (existingTrip) {
-          return existingTrip.id;
+          tripIdResolved = existingTrip.id;
+        } else {
+          // If still not found, there might be a deeper issue
+          throw new Error(`Failed to materialize trip for base ${baseId} on ${serviceDate}: unique constraint violation but no existing trip found`);
         }
-        // If still not found, there might be a deeper issue
-        throw new Error(`Failed to materialize trip for base ${baseId} on ${serviceDate}: unique constraint violation but no existing trip found`);
+      } else {
+        throw error;
       }
-      throw error;
     }
+
+    // B3: Emit WebSocket + webhook AFTER all DB work has settled, so listeners
+    // never see a "trip materialized" event that points at a row still mid-write.
+    // Skip emission for the race-condition path where another request already
+    // emitted on the original creation.
+    if (isFreshlyCreated) {
+      webSocketService.emitTripMaterialized(baseId, serviceDate, tripIdResolved);
+      void emitTripWebhook(this.storage, "schedule.created", tripIdResolved);
+    }
+
+    return tripIdResolved;
   }
 
   /**

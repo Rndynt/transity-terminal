@@ -15,7 +15,11 @@ export const reviews = pgTable("reviews", {
   rating:    integer("rating").notNull(),
   comment:   text("comment"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxReviewsTripCreated: sql`CREATE INDEX IF NOT EXISTS idx_reviews_trip_created ON ${table} (trip_id, created_at DESC)`,
+  idxReviewsAppUser: sql`CREATE INDEX IF NOT EXISTS idx_reviews_app_user ON ${table} (app_user_id)`,
+  idxReviewsBooking: sql`CREATE INDEX IF NOT EXISTS idx_reviews_booking ON ${table} (booking_id) WHERE booking_id IS NOT NULL`
+}));
 
 export const reviewsRelations = relations(reviews, ({ one }) => ({
   appUser: one(appUsers, { fields: [reviews.appUserId], references: [appUsers.id] }),

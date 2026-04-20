@@ -12,7 +12,9 @@ export const tripCostTemplates = pgTable("trip_cost_templates", {
   name:      text("name").notNull(),
   isActive:  boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxCostTemplPatternActive: sql`CREATE INDEX IF NOT EXISTS idx_cost_templates_pattern_active ON ${table} (pattern_id, is_active)`
+}));
 
 export const tripCostTemplatesRelations = relations(tripCostTemplates, ({ one, many }) => ({
   pattern: one(tripPatterns, { fields: [tripCostTemplates.patternId], references: [tripPatterns.id] }),

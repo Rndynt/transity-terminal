@@ -20,8 +20,10 @@ export interface AppUserPayload {
   email: string;
 }
 
+const JWT_TTL = process.env.JWT_TTL || "24h";
+
 export function signToken(payload: AppUserPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "30d" });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_TTL as jwt.SignOptions["expiresIn"] });
 }
 
 export function verifyToken(token: string): AppUserPayload {

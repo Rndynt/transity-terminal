@@ -19,7 +19,10 @@ export const appUsers = pgTable("app_users", {
   avatar:       text("avatar"),
   passwordHash: text("password_hash").notNull(),
   createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  idxAppUsersPhone: sql`CREATE INDEX IF NOT EXISTS idx_app_users_phone ON ${table} (phone) WHERE phone IS NOT NULL`,
+  idxAppUsersActive: sql`CREATE INDEX IF NOT EXISTS idx_app_users_active ON ${table} (is_active) WHERE is_active = true`
+}));
 
 export const insertAppUserSchema = createInsertSchema(appUsers).omit({ id: true, createdAt: true });
 export type AppUser = typeof appUsers.$inferSelect;

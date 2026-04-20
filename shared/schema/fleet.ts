@@ -16,7 +16,10 @@ export const drivers = pgTable("drivers", {
   notes:       text("notes"),
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
   deletedAt:   timestamp("deleted_at", { withTimezone: true })
-});
+}, (table) => ({
+  idxDriversStatus: sql`CREATE INDEX IF NOT EXISTS idx_drivers_status ON ${table} (status) WHERE deleted_at IS NULL`,
+  idxDriversActive: sql`CREATE INDEX IF NOT EXISTS idx_drivers_active ON ${table} (deleted_at) WHERE deleted_at IS NULL`
+}));
 
 export const insertDriverSchema = createInsertSchema(drivers).omit({ id: true, createdAt: true });
 export type Driver = typeof drivers.$inferSelect;

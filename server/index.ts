@@ -28,7 +28,11 @@ import { runSchemaMigrations } from "./migrator";
 
 const app = Fastify({
   logger: false,
+  bodyLimit: 1024 * 1024,
 });
+
+const LOG_RESPONSE_BODIES =
+  process.env.NODE_ENV !== "production" || process.env.LOG_BODIES === "true";
 
 app.decorateRequest('user', undefined);
 app.decorateRequest('rbac', undefined);
@@ -38,7 +42,10 @@ app.decorateRequest('appUser', undefined);
 app.decorateRequest('rawBody', undefined);
 
 app.register(rateLimit, {
-  global: false,
+  global: true,
+  max: parseInt(process.env.RATE_LIMIT_MAX || '300', 10),
+  timeWindow: process.env.RATE_LIMIT_WINDOW || '1 minute',
+  allowList: (req) => req.url === '/api/health' || req.url === '/health',
 });
 
 app.register(import("@fastify/middie"));
@@ -82,7 +89,7 @@ app.addHook('onSend', async (request, reply, payload) => {
     const duration = Math.round(reply.elapsedTime);
     let logLine = `${request.method} ${path} ${reply.statusCode} in ${duration}ms`;
 
-    if (payload && typeof payload === 'string') {
+    if (LOG_RESPONSE_BODIES && payload && typeof payload === 'string') {
       try {
         const parsed = JSON.parse(payload);
         if (!SENSITIVE_PATHS.includes(path)) {
@@ -141,6 +148,10 @@ app.setErrorHandler((err: Error & { status?: number; statusCode?: number; code?:
   await seedRbac();
   await registerRoutes(app);
 
+  // S4: in single-instance deployment we serve mobile/dist directly. For
+  // multi-instance (k8s, multi-node), bake apps/mobile/dist into the image
+  // or push it to a CDN — every node must serve the SAME build to avoid
+  // version skew on rolling deploys.
   const mobileDist = join(process.cwd(), "apps/mobile/dist");
   if (existsSync(mobileDist)) {
     await app.register(import("@fastify/static"), {

@@ -47,7 +47,10 @@ async function verifyWithRealmio(
   if (authHeader) headers["Authorization"] = authHeader;
 
   try {
-    const res = await fetch(`${REALMIO_BASE_URL}/me`, { headers });
+    const res = await fetch(`${REALMIO_BASE_URL}/me`, {
+      headers,
+      signal: AbortSignal.timeout(5000),
+    });
     if (!res.ok) return null;
     const data = await res.json();
     return data.user ?? data;
@@ -124,6 +127,7 @@ export async function createRealmioUser(
       "X-Tenant-Id": REALMIO_TENANT_ID,
     },
     body: JSON.stringify({ name, email, password }),
+    signal: AbortSignal.timeout(8000),
   });
 
   const data = await res.json();

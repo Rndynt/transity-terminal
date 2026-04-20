@@ -89,7 +89,22 @@ export class BookingsService {
     idempotencyKey?: string,
     promoCode?: string
   ): Promise<{ booking: Booking; printPayload: any }> {
-    
+
+    // B1: Idempotency — if same key was already used, return the existing booking
+    // unchanged. This protects against double-charge from network retries.
+    if (idempotencyKey) {
+      const [existing] = await db
+        .select()
+        .from(bookingsTable)
+        .where(eq(bookingsTable.idempotencyKey, idempotencyKey))
+        .limit(1);
+      if (existing) {
+        const bookingWithRelations = await this.getBookingById(existing.id);
+        const printPayload = await this.printService.generatePrintPayload(existing.id);
+        return { booking: bookingWithRelations, printPayload };
+      }
+    }
+
     const legIndexes = computeLegIndexes(bookingData.originSeq, bookingData.destinationSeq);
     const operatorId = bookingData.createdBy || 'default-operator';
     const seatNos = passengers.map(p => p.seatNo);
@@ -118,6 +133,7 @@ export class BookingsService {
         discountAmount: promo.discountAmount.toString(),
         promoId: promo.promoId || null,
         voucherCode: promo.voucherCode || null,
+        idempotencyKey: idempotencyKey || null,
         ...snapshots,
       }).returning();
 

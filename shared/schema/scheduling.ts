@@ -102,7 +102,10 @@ export const trips = pgTable("trips", {
   idxTripsPatternId: sql`CREATE INDEX IF NOT EXISTS idx_trips_pattern_id ON ${table} (pattern_id)`,
   idxTripsStatus: sql`CREATE INDEX IF NOT EXISTS idx_trips_status ON ${table} (status)`,
   idxTripsDriverId: sql`CREATE INDEX IF NOT EXISTS idx_trips_driver_id ON ${table} (driver_id)`,
-  idxTripsVehicleId: sql`CREATE INDEX IF NOT EXISTS idx_trips_vehicle_id ON ${table} (vehicle_id)`
+  idxTripsVehicleId: sql`CREATE INDEX IF NOT EXISTS idx_trips_vehicle_id ON ${table} (vehicle_id)`,
+  idxTripsPatternDate: sql`CREATE INDEX IF NOT EXISTS idx_trips_pattern_date ON ${table} (pattern_id, service_date)`,
+  idxTripsBaseDate: sql`CREATE INDEX IF NOT EXISTS idx_trips_base_date ON ${table} (base_id, service_date) WHERE base_id IS NOT NULL`,
+  idxTripsDateStatus: sql`CREATE INDEX IF NOT EXISTS idx_trips_date_status ON ${table} (service_date, status) WHERE deleted_at IS NULL`
 }));
 
 export const insertTripSchema = createInsertSchema(trips).omit({ id: true, createdAt: true });

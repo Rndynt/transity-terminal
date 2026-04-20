@@ -185,6 +185,28 @@ export async function confirmSeatsBooked(
   legIndexes: number[],
   operatorId: string
 ) {
+  // B2: lock the affected seat_inventory rows first and assert none of them
+  // are already booked. This closes the race window between
+  // validateHoldOwnership() (run outside the tx) and the actual confirm.
+  const lockedRows = await tx
+    .select({ seatNo: seatInventory.seatNo, legIndex: seatInventory.legIndex, booked: seatInventory.booked })
+    .from(seatInventory)
+    .where(and(
+      eq(seatInventory.tripId, tripId),
+      inArray(seatInventory.seatNo, seatNos),
+      inArray(seatInventory.legIndex, legIndexes)
+    ))
+    .for('update');
+
+  const expected = seatNos.length * legIndexes.length;
+  if (lockedRows.length !== expected) {
+    throw new Error(`Seat inventory mismatch: expected ${expected} rows, found ${lockedRows.length}`);
+  }
+  const conflict = lockedRows.find(r => r.booked === true);
+  if (conflict) {
+    throw new Error(`Seat ${conflict.seatNo} (leg ${conflict.legIndex}) is already booked`);
+  }
+
   await tx
     .update(seatInventory)
     .set({ booked: true, holdRef: null })

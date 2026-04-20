@@ -8,13 +8,25 @@ import {
   type PrintJob, type InsertPrintJob
 } from "@shared/schema";
 
+// P5: pagination guards. Any unbounded listing must default to a sane cap so
+// a careless `GET /api/bookings` cannot pull 100K rows into memory.
+const BOOKINGS_DEFAULT_LIMIT = 200;
+const BOOKINGS_MAX_LIMIT = 1000;
+
+function clampPageSize(pageSize: number | undefined): number {
+  const n = Math.floor(Number(pageSize) || BOOKINGS_DEFAULT_LIMIT);
+  if (n <= 0) return BOOKINGS_DEFAULT_LIMIT;
+  if (n > BOOKINGS_MAX_LIMIT) return BOOKINGS_MAX_LIMIT;
+  return n;
+}
+
 export class BookingRepository {
   async getBookings(tripId?: string): Promise<Booking[]> {
     const query = db.select().from(bookings);
     if (tripId) {
-      return await query.where(eq(bookings.tripId, tripId)).orderBy(desc(bookings.createdAt));
+      return await query.where(eq(bookings.tripId, tripId)).orderBy(desc(bookings.createdAt)).limit(BOOKINGS_MAX_LIMIT);
     }
-    return await query.orderBy(desc(bookings.createdAt));
+    return await query.orderBy(desc(bookings.createdAt)).limit(BOOKINGS_DEFAULT_LIMIT);
   }
 
   async getActiveBookingsForTrip(tripId: string): Promise<Booking[]> {

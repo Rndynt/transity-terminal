@@ -1,9 +1,38 @@
 import { BookingsService } from './modules/bookings/bookings.service';
 import { storage } from './storage';
 import { getConfig } from './config';
-import { db } from './db';
+import { db, pool } from './db';
 import { seatHolds, seatInventory } from '@shared/schema';
 import { lt, inArray, sql, and } from 'drizzle-orm';
+
+// S3: per-job advisory lock IDs. Pick stable, project-unique numbers so that
+// multi-instance deployments don't run cleanup or snapshot push in parallel.
+const LOCK_HOLDS_CLEANUP = 8240_001;
+const LOCK_ORPHAN_REFS   = 8240_002;
+const LOCK_PENDING_BOOK  = 8240_003;
+const LOCK_SNAPSHOT_PUSH = 8240_004;
+
+// IMPORTANT: session-level pg advisory locks are bound to a *single
+// connection*. The default `db` client uses a connection pool — two separate
+// `db.execute(...)` calls can land on different connections, so the unlock
+// will fail (or worse, unlock another session's hold). We therefore pin a
+// dedicated client from the pool for the entire acquire/work/release cycle.
+async function withAdvisoryLock<T>(lockId: number, fn: () => Promise<T>): Promise<T | null> {
+  const client = await pool.connect();
+  try {
+    const acquired = await client.query('SELECT pg_try_advisory_lock($1) AS got', [lockId]);
+    if (!acquired.rows?.[0]?.got) {
+      return null;
+    }
+    try {
+      return await fn();
+    } finally {
+      await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
+    }
+  } finally {
+    client.release();
+  }
+}
 import { webSocketService } from './realtime/ws';
 import { buildScheduleSnapshot } from './lib/scheduleSnapshot';
 import { fireAndForget } from './lib/consoleWebhook';
@@ -145,19 +174,18 @@ export class Scheduler {
   start(): void {
     const config = getConfig();
     
-    // Run cleanup every 60 seconds
+    // Run cleanup every 60 seconds. Wrap each job in a Postgres advisory lock
+    // so multi-instance deployments do not run the same cleanup multiple times.
     this.intervalId = setInterval(async () => {
       try {
-        // Cleanup expired holds
-        await this.cleanupExpiredHolds();
+        await withAdvisoryLock(LOCK_HOLDS_CLEANUP, () => this.cleanupExpiredHolds());
+        await withAdvisoryLock(LOCK_ORPHAN_REFS, () => this.cleanupOrphanHoldRefs());
 
-        // Cleanup orphan holdRefs in seat_inventory
-        await this.cleanupOrphanHoldRefs();
-        
-        // Cleanup expired pending bookings
         if (config.pendingBookingAutoRelease) {
-          console.log('[SCHEDULER] Running expired pending bookings cleanup...');
-          await this.bookingsService.cleanupExpiredPendingBookings();
+          await withAdvisoryLock(LOCK_PENDING_BOOK, async () => {
+            console.log('[SCHEDULER] Running expired pending bookings cleanup...');
+            await this.bookingsService.cleanupExpiredPendingBookings();
+          });
         }
       } catch (error) {
         console.error('[SCHEDULER] Error during cleanup:', error);
@@ -175,7 +203,7 @@ export class Scheduler {
     // comes back, without an operator having to press "Sync".
     if (SNAPSHOT_INTERVAL_MS > 0) {
       this.snapshotIntervalId = setInterval(() => {
-        void this.pushScheduleSnapshot();
+        void withAdvisoryLock(LOCK_SNAPSHOT_PUSH, () => this.pushScheduleSnapshot());
       }, SNAPSHOT_INTERVAL_MS);
       console.log(
         `[SCHEDULER] Schedule snapshot push started (every ${Math.round(
@@ -183,7 +211,7 @@ export class Scheduler {
         )}s, ${SNAPSHOT_DAYS_AHEAD} days ahead)`
       );
       // Kick once on startup so a freshly-restarted Terminal pushes immediately.
-      void this.pushScheduleSnapshot();
+      void withAdvisoryLock(LOCK_SNAPSHOT_PUSH, () => this.pushScheduleSnapshot());
     }
   }
 

@@ -19,7 +19,12 @@ export const customerProfiles = pgTable("customer_profiles", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => ({
+  idxCustomersPhone: sql`CREATE INDEX IF NOT EXISTS idx_customers_phone ON ${table} (phone)`,
+  idxCustomersIdNumber: sql`CREATE INDEX IF NOT EXISTS idx_customers_id_number ON ${table} (id_number) WHERE id_number IS NOT NULL`,
+  idxCustomersEmail: sql`CREATE INDEX IF NOT EXISTS idx_customers_email ON ${table} (email) WHERE email IS NOT NULL`,
+  idxCustomersTag: sql`CREATE INDEX IF NOT EXISTS idx_customers_tag ON ${table} (tag)`
+}));
 
 export const insertCustomerProfileSchema = createInsertSchema(customerProfiles).omit({ id: true, createdAt: true, updatedAt: true });
 export type CustomerProfile = typeof customerProfiles.$inferSelect;
