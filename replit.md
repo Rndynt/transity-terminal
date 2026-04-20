@@ -36,6 +36,9 @@ Fixes applied per TransityConsole `TERMINAL_FIXES.md` to resolve race conditions
 - **Scheduler skip OTA**: `cleanupExpiredPendingBookings()` now excludes `channel='OTA'` bookings. Console manages OTA lifecycle.
 - **Find OTA endpoint**: `GET /api/app/bookings/find-ota?tripId=X&seats=A,B` — allows Console to recover bookings after timeout.
 - **Grace period**: `confirmOtaPayment()` allows re-activation of recently cancelled OTA bookings (5-min window after `pendingExpiresAt`) with seat availability validation.
+- **WebSocket emit on OTA confirmation** (commit `7d70fb1`): `confirmOtaPayment()` now emits `emitInventoryUpdated` for every confirmed seat after the transaction commits. CSO seatmap converts from yellow (hold) to confirmed color in real time without manual refresh. SeatMap React Query `staleTime` tightened from 5000 → 2000ms as a defense-in-depth fallback.
+- **Payment method = `online` for OTA** (commit `1687c4a`): `confirmOtaPayment()` no longer accepts a `paymentMethod` parameter. `payments.method` is hardcoded to `'online'` for all OTA-paid bookings — Terminal does not need to know the user's actual instrument (qris / va_* / ewallet_*). The `confirmOtaPaid` controller stops parsing/validating `paymentMethod` from the request body but still accepts and ignores it for backward compatibility with older Console clients. Only `providerRef` matters.
+- **`bookingCode` in detail response** (commit `6fb95aa`): `GET /api/app/bookings/:id` (Console-side `getBookingDetail`) now returns `bookingCode` (human-readable, e.g. `BK-XXXXXX`) alongside the UUID `id`. Previously Console only got the UUID and could not forward the booking code to the App for display on confirmation screens.
 - Full documentation: `docs/TERMINAL_FIXES_APPLIED.md`
 
 ### Console Schedule Webhook (April 2026)
@@ -249,7 +252,8 @@ Endpoints verified end-to-end (search → seatmap → booking → pay → cancel
 - `POST /api/app/bookings` — create booking (`paymentMethod` optional; omit to create held booking)
 - `GET /api/app/bookings` — list bookings with `holdExpiresAt`, `finalAmount`; supports `?status=&date=&page=&limit=` filters (service key) or returns user's own bookings (app auth)
 - `GET /api/app/bookings/:id` — booking detail (service key or app auth)
-- `POST /api/app/bookings/:id/pay` — pay a held/pending booking; accepts `paymentMethod` + optional `voucherCode`; validates hold expiry, applies voucher discount, confirms booking
+- `POST /api/app/bookings/:id/pay` — pay a held/pending booking; accepts `paymentMethod` + optional `voucherCode`; validates hold expiry, applies voucher discount, confirms booking. Used by mobile App channel only.
+- `POST /api/app/bookings/:id/confirm-paid` — Console-side OTA confirmation. Body accepts `providerRef`; `paymentMethod` is ignored if sent (Terminal records `payments.method = 'online'` for all OTA-paid bookings). Emits `INVENTORY_UPDATED` WS events on success so CSO seatmap updates in real time.
 - `POST /api/app/bookings/:id/cancel` — cancel a pending/confirmed booking (service key bypasses ownership check)
 - `GET /api/app/payments/methods` — static list of available payment methods (service key auth)
 - `POST /api/app/vouchers/validate` — validate a voucher code, returns discount info; accepts optional `amount` for calculated discount (service key auth)
