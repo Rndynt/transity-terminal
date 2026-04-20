@@ -13,6 +13,7 @@ interface FilterOptions {
   outlets: { id: string; name: string }[];
   patterns: { id: string; code: string; name: string }[];
   channels: string[];
+  salesChannels: { code: string; name: string }[];
 }
 
 export type DateMode = 'departure' | 'paid' | 'created';
@@ -23,6 +24,7 @@ export interface ReportFilterValues {
   dateMode?: DateMode;
   outletId?: string;
   channel?: string;
+  salesChannelCode?: string;
   patternId?: string;
 }
 
@@ -69,10 +71,10 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
   });
 
   const hasExtraFilters = showRoute || showOutlet || showChannel;
-  const activeFilterCount = [value.outletId, value.channel, value.patternId].filter(Boolean).length;
+  const activeFilterCount = [value.outletId, value.channel, value.salesChannelCode, value.patternId].filter(Boolean).length;
 
   const clearFilters = () => {
-    onChange({ ...value, outletId: undefined, channel: undefined, patternId: undefined });
+    onChange({ ...value, outletId: undefined, channel: undefined, salesChannelCode: undefined, patternId: undefined });
   };
 
   const routeOptions = (options?.patterns || []).map(p => ({
@@ -89,6 +91,11 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
   const channelOptions = (options?.channels || []).map(c => ({
     value: c,
     label: c,
+  }));
+
+  const salesChannelOptions = (options?.salesChannels || []).map(s => ({
+    value: s.code,
+    label: s.name && s.name !== s.code ? `${s.code} — ${s.name}` : s.code,
   }));
 
   return (
@@ -219,11 +226,30 @@ export default function ReportFilters({ value, onChange, showOutlet = true, show
                   <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Channel</label>
                   <SearchableSelect
                     value={value.channel || ''}
-                    onChange={(v) => onChange({ ...value, channel: v || undefined })}
+                    onChange={(v) => {
+                      const next = v || undefined;
+                      const dropOta = next !== undefined && next !== 'OTA';
+                      onChange({ ...value, channel: next, salesChannelCode: dropOta ? undefined : value.salesChannelCode });
+                    }}
                     options={channelOptions}
                     placeholder="Semua Channel"
                     searchPlaceholder="Cari channel..."
                     emptyLabel="Channel tidak ditemukan"
+                    className="w-full"
+                  />
+                </div>
+              )}
+
+              {showChannel && salesChannelOptions.length > 0 && (value.channel === undefined || value.channel === 'OTA') && (
+                <div className="min-w-0">
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">OTA Partner</label>
+                  <SearchableSelect
+                    value={value.salesChannelCode || ''}
+                    onChange={(v) => onChange({ ...value, salesChannelCode: v || undefined })}
+                    options={salesChannelOptions}
+                    placeholder="Semua OTA"
+                    searchPlaceholder="Cari OTA..."
+                    emptyLabel="OTA tidak ditemukan"
                     className="w-full"
                   />
                 </div>

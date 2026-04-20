@@ -11,6 +11,7 @@ export interface ReportFilters {
   dateMode?: 'departure' | 'paid' | 'created';
   outletId?: string;
   channel?: string;
+  salesChannelCode?: string;
   patternId?: string;
 }
 
@@ -37,6 +38,7 @@ function bookingFilters(f: ReportFilters, bAlias: string, tAlias: string): SQL[]
   const conds = bookingDateConditions(f, bAlias, tAlias);
   if (f.outletId) conds.push(sql.raw(`${bAlias}.outlet_id = `).append(sql`${f.outletId}`));
   if (f.channel) conds.push(sql.raw(`${bAlias}.channel = `).append(sql`${f.channel}`));
+  if (f.salesChannelCode) conds.push(sql.raw(`${bAlias}.sales_channel_code = `).append(sql`${f.salesChannelCode}`));
   if (f.patternId) conds.push(sql.raw(`${tAlias}.pattern_id = `).append(sql`${f.patternId}`));
   return conds;
 }
@@ -65,6 +67,7 @@ function paymentFilters(f: ReportFilters, pyAlias: string, bAlias: string, tAlia
   }
   if (f.outletId) conds.push(sql.raw(`${bAlias}.outlet_id = `).append(sql`${f.outletId}`));
   if (f.channel) conds.push(sql.raw(`${bAlias}.channel = `).append(sql`${f.channel}`));
+  if (f.salesChannelCode) conds.push(sql.raw(`${bAlias}.sales_channel_code = `).append(sql`${f.salesChannelCode}`));
   if (f.patternId) conds.push(sql.raw(`${tAlias}.pattern_id = `).append(sql`${f.patternId}`));
   return conds;
 }
@@ -84,6 +87,7 @@ function cancellationFilters(f: ReportFilters, bhAlias: string, bAlias: string, 
   }
   if (f.outletId) conds.push(sql.raw(`${bAlias}.outlet_id = `).append(sql`${f.outletId}`));
   if (f.channel) conds.push(sql.raw(`${bAlias}.channel = `).append(sql`${f.channel}`));
+  if (f.salesChannelCode) conds.push(sql.raw(`${bAlias}.sales_channel_code = `).append(sql`${f.salesChannelCode}`));
   if (f.patternId) conds.push(sql.raw(`${tAlias}.pattern_id = `).append(sql`${f.patternId}`));
   return conds;
 }
@@ -202,6 +206,19 @@ export class ReportsRepository {
       ORDER BY revenue DESC
     `);
 
+    const bySalesChannel = await db.execute(sql`
+      SELECT
+        b.sales_channel_code as code,
+        COALESCE(MAX(b.sales_channel_name), b.sales_channel_code) as name,
+        COALESCE(SUM(b.total_amount::numeric), 0) as revenue,
+        COUNT(*)::int as bookings
+      FROM bookings b
+      INNER JOIN trips t ON b.trip_id = t.id
+      WHERE ${where} AND b.channel = 'OTA' AND b.sales_channel_code IS NOT NULL
+      GROUP BY b.sales_channel_code
+      ORDER BY revenue DESC
+    `);
+
     const byRoute = await db.execute(sql`
       SELECT
         COALESCE(t.snap_route_name, tp.name) as route_name,
@@ -220,6 +237,7 @@ export class ReportsRepository {
       summary: summary.rows[0],
       daily: daily.rows,
       byChannel: byChannel.rows,
+      bySalesChannel: bySalesChannel.rows,
       byOutlet: byOutlet.rows,
       byRoute: byRoute.rows,
     };
@@ -266,6 +284,19 @@ export class ReportsRepository {
       INNER JOIN trips t ON b.trip_id = t.id
       WHERE ${where}
       GROUP BY b.channel
+      ORDER BY count DESC
+    `);
+
+    const bySalesChannel = await db.execute(sql`
+      SELECT
+        b.sales_channel_code as code,
+        COALESCE(MAX(b.sales_channel_name), b.sales_channel_code) as name,
+        COUNT(*)::int as count,
+        COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as revenue
+      FROM bookings b
+      INNER JOIN trips t ON b.trip_id = t.id
+      WHERE ${where} AND b.channel = 'OTA' AND b.sales_channel_code IS NOT NULL
+      GROUP BY b.sales_channel_code
       ORDER BY count DESC
     `);
 
@@ -342,6 +373,7 @@ export class ReportsRepository {
       summary: summary.rows[0],
       byStatus: byStatus.rows,
       byChannel: byChannel.rows,
+      bySalesChannel: bySalesChannel.rows,
       byOutlet: byOutlet.rows,
       daily: daily.rows,
       recent: recent.rows,
@@ -1015,9 +1047,19 @@ export class ReportsRepository {
   async getFilterOptions() {
     const outlets = await db.execute(sql`SELECT id, name FROM outlets ORDER BY name`);
     const patterns = await db.execute(sql`SELECT id, code, name FROM trip_patterns WHERE active = true ORDER BY name`);
+    const salesChannels = await db.execute(sql`
+      SELECT
+        sales_channel_code as code,
+        COALESCE(MAX(sales_channel_name), sales_channel_code) as name
+      FROM bookings
+      WHERE sales_channel_code IS NOT NULL AND channel = 'OTA'
+      GROUP BY sales_channel_code
+      ORDER BY code
+    `);
     return {
       outlets: outlets.rows,
       patterns: patterns.rows,
+      salesChannels: salesChannels.rows,
     };
   }
 }

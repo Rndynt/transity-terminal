@@ -23,6 +23,7 @@ function buildQuery(f: ReportFilterValues) {
   if (f.dateMode) params.set('dateMode', f.dateMode);
   if (f.outletId) params.set('outletId', f.outletId);
   if (f.channel) params.set('channel', f.channel);
+  if (f.salesChannelCode) params.set('salesChannelCode', f.salesChannelCode);
   if (f.patternId) params.set('patternId', f.patternId);
   return params.toString();
 }
@@ -46,6 +47,7 @@ export default function SalesReportPage() {
   const summary = data?.summary;
   const byStatus = data?.byStatus || [];
   const byChannel = data?.byChannel || [];
+  const bySalesChannel = data?.bySalesChannel || [];
   const byOutlet = data?.byOutlet || [];
   const daily = data?.daily || [];
   const recent = data?.recent || [];
@@ -146,6 +148,37 @@ export default function SalesReportPage() {
           </CardContent>
         </Card>
       </div>
+
+      {bySalesChannel.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Per OTA Partner</CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">OTA</TableHead>
+                  <TableHead className="text-xs text-right">Jumlah</TableHead>
+                  <TableHead className="text-xs text-right">Revenue</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bySalesChannel.map((s: any, i: number) => (
+                  <TableRow key={i} data-testid={`row-sales-ota-${s.code}`}>
+                    <TableCell className="text-sm">
+                      <div className="font-medium">{s.code}</div>
+                      {s.name && s.name !== s.code && <div className="text-xs text-muted-foreground">{s.name}</div>}
+                    </TableCell>
+                    <TableCell className="text-sm text-right">{s.count}</TableCell>
+                    <TableCell className="text-sm text-right font-medium">{fmtCurrency(Number(s.revenue))}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {byOutlet.length > 0 && (
         <Card>

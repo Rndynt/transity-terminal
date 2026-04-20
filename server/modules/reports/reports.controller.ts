@@ -11,14 +11,18 @@ function parseFilters(req: FastifyRequest) {
     dateMode?: string;
     outletId?: string;
     channel?: string;
+    salesChannelCode?: string;
     patternId?: string;
   };
+  const channel = query.channel || undefined;
+  const salesChannelCode = query.salesChannelCode || undefined;
   const raw = {
     dateFrom: query.dateFrom || today,
     dateTo: query.dateTo || today,
     dateMode: query.dateMode || undefined,
     outletId: query.outletId || undefined,
-    channel: query.channel || undefined,
+    channel,
+    salesChannelCode: channel && channel !== 'OTA' ? undefined : salesChannelCode,
     patternId: query.patternId || undefined,
   };
   return reportFiltersSchema.parse(raw);

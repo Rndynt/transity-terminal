@@ -10,6 +10,7 @@ export const reportFiltersSchema = z.object({
   dateMode: z.enum(['departure', 'paid', 'created']).optional(),
   outletId: z.string().regex(uuidRegex, 'Invalid UUID').optional(),
   channel: z.enum(['CSO', 'WEB', 'APP', 'OTA']).optional(),
+  salesChannelCode: z.string().min(1).max(64).optional(),
   patternId: z.string().regex(uuidRegex, 'Invalid UUID').optional(),
 });
 
