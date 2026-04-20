@@ -75,8 +75,8 @@ export class DatabaseStorage implements IStorage {
   createTripBase(data: InsertTripBase): Promise<TripBase> { return this.scheduling.createTripBase(data); }
   updateTripBase(id: string, data: Partial<InsertTripBase>): Promise<TripBase> { return this.scheduling.updateTripBase(id, data); }
   deleteTripBase(id: string): Promise<void> { return this.scheduling.deleteTripBase(id); }
-  getTrips(serviceDate?: string): Promise<TripWithDetails[]> { return this.scheduling.getTrips(serviceDate); }
-  getTripsForDateRange(fromDate: string, toDate: string): Promise<TripWithDetails[]> { return this.scheduling.getTripsForDateRange(fromDate, toDate); }
+  getTrips(serviceDate?: string, opts?: { limit?: number }): Promise<TripWithDetails[]> { return this.scheduling.getTrips(serviceDate, opts); }
+  getTripsForDateRange(fromDate: string, toDate: string, opts?: { limit?: number }): Promise<TripWithDetails[]> { return this.scheduling.getTripsForDateRange(fromDate, toDate, opts); }
   getCsoAvailableTrips(serviceDate: string, outletId: string): Promise<CsoAvailableTrip[]> {
     return this.scheduling.getCsoAvailableTrips(serviceDate, outletId, (id) => this.network.getOutletById(id));
   }

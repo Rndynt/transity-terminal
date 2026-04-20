@@ -56,7 +56,7 @@ export class RoundTripController {
       
       reply.code(201).send(result);
     } catch (error: any) {
-      console.error('Round-trip booking creation error:', error);
+      req.log.error({ err: error }, 'Round-trip booking creation error');
       
       if (error.name === 'ZodError') {
         return reply.code(400).send({
@@ -104,7 +104,7 @@ export class RoundTripController {
       
       reply.send(result);
     } catch (error: any) {
-      console.error('Get group by code error:', error);
+      req.log.error({ err: error }, 'Get group by code error');
       reply.code(500).send({
         error: 'Internal server error',
         code: 'INTERNAL_ERROR',

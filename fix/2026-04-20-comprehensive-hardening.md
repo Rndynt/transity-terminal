@@ -102,11 +102,14 @@
   - `npm run db:push` sukses applied.
 - **Notes**: EXISTS→JOIN refactor di-defer; functional index saja sudah signifikan.
 
-### [~] P5 — Pagination paksa pada list endpoints
+### [x] P5 — Pagination paksa pada list endpoints
 - **Risk**: Endpoint return 100K rows kalau client tidak kirim limit.
-- **Files**: `server/repositories/booking.repository.ts:14-33`
-- **Fix**: `getBookings()` sekarang capped: default 200, max 1000 row. Helper `clampPageSize` siap untuk dipakai endpoint paginasi lain.
-- **Notes**: scheduling.repository belum disentuh — sebagian besar query trip sudah filter by date jadi risiko lebih kecil. Defer untuk audit terpisah agar tidak ganggu manifest/seatmap loader.
+- **Files**: `server/repositories/booking.repository.ts:14-33`, `server/repositories/scheduling.repository.ts:162-247`
+- **Fix**:
+  - `getBookings()` capped: default 200, max 1000. ✓
+  - `getTrips(serviceDate?, opts?)` capped: default 500, max 2000. ✓
+  - `getTripsForDateRange(from, to, opts?)` capped: default 1000, max 2000. ✓
+- **Notes**: Caller existing tidak pass `opts` → otomatis pakai default cap. Backward compatible.
 
 ---
 
@@ -139,11 +142,17 @@
 
 ## QUICK WINS (Quality)
 
-### [~] Q1 — `console.log` di server/
+### [x] Q1 — `console.*` di server/
 - **Risk**: Log tidak terstruktur, sulit di-filter di production.
-- **Files**: `server/scheduler.ts`, services, seeds, controllers (~33 occurrences)
-- **Fix yang diterapkan**: Audit semua occurrence — mayoritas sudah pakai prefix terstruktur (`[SCHEDULER]`, `[migrator]`, `[RBAC]`, `[AUTH]`, `[app.auth]`, dll). Modul tanpa akses `app` instance (scheduler, services, seeds) tetap pakai `console.*` dengan prefix per checklist policy. Production log shipping (mis. Loki/Datadog) bisa filter via prefix.
-- **Notes**: Refactor full ke `req.log.*` di controller di-defer — perlu pendekatan terpisah (Fastify hook injection) supaya tidak invasive. Item kualitas, bukan bug.
+- **Files refactored ke `req.log.*`**:
+  - `server/modules/bookings/bookings.controller.ts` (9 occurrences)
+  - `server/modules/bookings/roundTrip.controller.ts` (2)
+  - `server/modules/pricing/pricing.controller.ts` (1)
+  - `server/modules/reports/reports.controller.ts` (9)
+  - `server/modules/app/app.controller.ts` (4 — debug-gated + webhook error)
+- **Pattern**: `req.log.error({ err: error }, 'message')` (struktur Pino-compatible). Debug logs (`searchTrips`, `getTripDetail` stop dump) diguard `req.log.level === 'debug'`.
+- **Files yang sengaja tetap `console.*`**: `server/scheduler.ts`, `server/migrator.ts`, RBAC seeds, dev scripts — modul ini boot-time/background tanpa akses ke Fastify request, prefix-tagged sudah cukup untuk log shipper.
+- **Notes**: Total 25+ console call di hot-path controllers sudah di-refactor.
 
 ### [x] Q5 — Waybill: Postgres sequence
 - **Risk**: 20 retry brute-force tidak deterministic, brittle string-match constraint name.
@@ -168,14 +177,27 @@
 
 ---
 
+## ADDITIONAL FIXES (post-architect review)
+
+### [x] B8 — Settings PUT/POST body validation
+- **Risk**: Body apapun bisa masuk → write field tak terduga + tidak ada validasi format warna/URL.
+- **File**: `server/modules/settings/settings.routes.ts:8-23, 42-71, 73-89`
+- **Fix**: Tambah Zod schema `updateSettingsSchema` (strict, hex color regex `#RRGGBB`, URL validation untuk `logoUrl`) untuk PUT `/api/settings`, dan `logoBodySchema` untuk POST `/api/settings/logo`. Return 400 dengan `details` flatten kalau invalid. ✓
+- **Notes**: `.strict()` menolak field yang tidak dikenal.
+
+### [x] B12 — CORS guard production
+- **Risk**: WS server bisa accept dari origin manapun di production kalau `CORS_ORIGINS` lupa di-set.
+- **File**: `server/realtime/ws.ts:29-45`
+- **Fix**: Logic sekarang: kalau `CORS_ORIGINS=*` atau tidak diset di production → CLOSE (false) + log warning. Hanya buka cross-origin kalau `CORS_ORIGINS` berisi list domain valid. Development tetap permisif. ✓
+- **Notes**: Default-deny di production menutup foot-gun deploy.
+
 ## DEFERRED (perlu diskusi user atau effort besar)
 
-- **Q2** — Pecah `app.service.ts` (1828 LOC). Big refactor, butuh test coverage.
+- **Q2** — Pecah `app.service.ts` (1828 LOC). Big refactor, butuh test coverage. Skip — pure refactor tanpa benefit functional, risiko regression tinggi.
 - **Q3** — Pecah `scheduling.repository.ts` (1269 LOC). Sda.
-- **Q4** — TanStack Query staleTime default. Perlu evaluasi per-query (beberapa harus realtime).
-- **B6** — Verifikasi signature webhook Console masuk. Saat ini Console **belum** push back ke Terminal, jadi tidak urgent. Saat fitur ditambahkan baru implement.
-- **B8** — Settings PUT body validation. Akan dihandle saat refactor settings module.
-- **B12** — CORS reflect Origin. Sudah aman selama `APP_CORS_ORIGINS != '*'` di production. Tambahkan guard bahwa `*` tidak boleh di production.
+- **Q4** — TanStack Query staleTime — sudah set global `5 menit` di `client/src/lib/queryClient.ts:50` dengan `refetchOnWindowFocus: false` & `refetchInterval: false`. Dianggap CUKUP; per-query tuning bisa dilakukan saat ada keluhan UX spesifik.
+- **B6** — Verifikasi signature webhook dari Console. Saat ini Console **tidak** push ke Terminal (consoleWebhook.ts hanya outbound). Tidak ada inbound endpoint dari Console → tidak ada surface untuk diserang. Implement saat Console push-back ditambahkan.
+- **S1/S2** — Redis adapter (Socket.io & rate-limit). Perlu install `@socket.io/redis-adapter` + `ioredis` + env `REDIS_URL`. Tetap defer sampai user putuskan deploy multi-instance.
 
 ---
 
@@ -205,3 +227,7 @@
 | 2026-04-20 19:54 | P3 functional indexes | DONE | idx_payments_paid_date + idx_cargo_paid_date |
 | 2026-04-20 19:54 | Q5 waybill sequence | DONE | cargo_waybill_seq + nextval, no retry |
 | 2026-04-20 19:54 | Q1 console.log audit | PARTIAL | prefix-tagged sudah acceptable; full refactor defer |
+| 2026-04-20 20:00 | B12 CORS guard | DONE | ws.ts default-deny di production tanpa CORS_ORIGINS |
+| 2026-04-20 20:00 | B8 settings validation | DONE | Zod safeParse strict + hex color + URL |
+| 2026-04-20 20:00 | P5 scheduling pagination | DONE | getTrips/getTripsForDateRange capped 500/1000-2000 |
+| 2026-04-20 20:01 | Q1 controller logger | DONE | 25+ console.* → req.log.* di 5 controllers |

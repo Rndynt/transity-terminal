@@ -32,7 +32,7 @@ export class ReportsController {
       reply.send(data);
     } catch (e: any) {
       if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
-      console.error('[reports] revenue error:', e);
+      req.log.error({ err: e }, '[reports] revenue error');
       reply.code(500).send({ error: 'Gagal memuat laporan pendapatan' });
     }
   }
@@ -44,7 +44,7 @@ export class ReportsController {
       reply.send(data);
     } catch (e: any) {
       if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
-      console.error('[reports] sales error:', e);
+      req.log.error({ err: e }, '[reports] sales error');
       reply.code(500).send({ error: 'Gagal memuat laporan penjualan' });
     }
   }
@@ -56,7 +56,7 @@ export class ReportsController {
       reply.send(data);
     } catch (e: any) {
       if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
-      console.error('[reports] trip-profitability error:', e);
+      req.log.error({ err: e }, '[reports] trip-profitability error');
       reply.code(500).send({ error: 'Gagal memuat laporan laba rugi' });
     }
   }
@@ -68,7 +68,7 @@ export class ReportsController {
       reply.send(data);
     } catch (e: any) {
       if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
-      console.error('[reports] load-factor error:', e);
+      req.log.error({ err: e }, '[reports] load-factor error');
       reply.code(500).send({ error: 'Gagal memuat laporan load factor' });
     }
   }
@@ -80,7 +80,7 @@ export class ReportsController {
       reply.send(data);
     } catch (e: any) {
       if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
-      console.error('[reports] cancellations error:', e);
+      req.log.error({ err: e }, '[reports] cancellations error');
       reply.code(500).send({ error: 'Gagal memuat laporan pembatalan' });
     }
   }
@@ -92,7 +92,7 @@ export class ReportsController {
       reply.send(data);
     } catch (e: any) {
       if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
-      console.error('[reports] cargo error:', e);
+      req.log.error({ err: e }, '[reports] cargo error');
       reply.code(500).send({ error: 'Gagal memuat laporan kargo' });
     }
   }
@@ -104,7 +104,7 @@ export class ReportsController {
       reply.send(data);
     } catch (e: any) {
       if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
-      console.error('[reports] payments error:', e);
+      req.log.error({ err: e }, '[reports] payments error');
       reply.code(500).send({ error: 'Gagal memuat laporan pembayaran' });
     }
   }
@@ -116,17 +116,17 @@ export class ReportsController {
       reply.send(data);
     } catch (e: any) {
       if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
-      console.error('[reports] commercial-fee error:', e);
+      req.log.error({ err: e }, '[reports] commercial-fee error');
       reply.code(500).send({ error: 'Gagal memuat laporan commercial fee' });
     }
   }
 
-  async getFilterOptions(_req: FastifyRequest, reply: FastifyReply) {
+  async getFilterOptions(req: FastifyRequest, reply: FastifyReply) {
     try {
       const data = await reportsService.getFilterOptions();
       reply.send(data);
     } catch (e: any) {
-      console.error('[reports] filter-options error:', e);
+      req.log.error({ err: e }, '[reports] filter-options error');
       reply.code(500).send({ error: 'Gagal memuat opsi filter' });
     }
   }

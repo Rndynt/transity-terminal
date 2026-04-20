@@ -156,7 +156,10 @@ export class SchedulingRepository {
     });
   }
 
-  async getTrips(serviceDate?: string): Promise<TripWithDetails[]> {
+  async getTrips(serviceDate?: string, opts?: { limit?: number }): Promise<TripWithDetails[]> {
+    // P5: enforce hard cap to avoid OOM if a caller forgets serviceDate.
+    // Default 500 rows (~17 trips/day × 30 days), max 2000.
+    const cap = Math.min(Math.max(opts?.limit ?? 500, 1), 2000);
     const query = db.select({
       id: trips.id,
       patternId: trips.patternId,
@@ -195,12 +198,14 @@ export class SchedulingRepository {
     .leftJoin(drivers, eq(trips.driverId, drivers.id));
     
     if (serviceDate) {
-      return await query.where(and(eq(trips.serviceDate, serviceDate), isNull(trips.deletedAt))).orderBy(trips.serviceDate);
+      return await query.where(and(eq(trips.serviceDate, serviceDate), isNull(trips.deletedAt))).orderBy(trips.serviceDate).limit(cap);
     }
-    return await query.where(isNull(trips.deletedAt)).orderBy(desc(trips.serviceDate));
+    return await query.where(isNull(trips.deletedAt)).orderBy(desc(trips.serviceDate)).limit(cap);
   }
 
-  async getTripsForDateRange(fromDate: string, toDate: string): Promise<TripWithDetails[]> {
+  async getTripsForDateRange(fromDate: string, toDate: string, opts?: { limit?: number }): Promise<TripWithDetails[]> {
+    // P5: same cap policy as getTrips. Date range queries must be bounded.
+    const cap = Math.min(Math.max(opts?.limit ?? 1000, 1), 2000);
     return await db.select({
       id: trips.id,
       patternId: trips.patternId,

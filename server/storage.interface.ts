@@ -125,8 +125,8 @@ export interface IStorage {
   updateTripBase(id: string, data: Partial<InsertTripBase>): Promise<TripBase>;
   deleteTripBase(id: string): Promise<void>;
 
-  getTrips(serviceDate?: string): Promise<TripWithDetails[]>;
-  getTripsForDateRange(fromDate: string, toDate: string): Promise<TripWithDetails[]>;
+  getTrips(serviceDate?: string, opts?: { limit?: number }): Promise<TripWithDetails[]>;
+  getTripsForDateRange(fromDate: string, toDate: string, opts?: { limit?: number }): Promise<TripWithDetails[]>;
   getCsoAvailableTrips(serviceDate: string, outletId: string): Promise<CsoAvailableTrip[]>;
   getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]>;
   getTripById(id: string): Promise<Trip | undefined>;

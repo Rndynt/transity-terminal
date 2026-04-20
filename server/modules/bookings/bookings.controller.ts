@@ -176,7 +176,7 @@ export class BookingsController {
       
       reply.code(201).send(result);
     } catch (error: any) {
-      console.error('Booking creation error:', error);
+      req.log.error({ err: error }, 'Booking creation error');
       
       if (error.name === 'ZodError') {
         return reply.code(400).send({
@@ -263,7 +263,7 @@ export class BookingsController {
         });
       }
     } catch (error: any) {
-      console.error('Hold creation error:', error);
+      req.log.error({ err: error }, 'Hold creation error');
       reply.code(500).send({
         error: 'Internal server error',
         code: 'INTERNAL_ERROR',
@@ -335,7 +335,7 @@ export class BookingsController {
       
       reply.code(201).send(result);
     } catch (error: any) {
-      console.error('Pending booking creation error:', error);
+      req.log.error({ err: error }, 'Pending booking creation error');
       
       if (error.name === 'ZodError') {
         return reply.code(400).send({
@@ -377,7 +377,7 @@ export class BookingsController {
       await this.bookingsService.releasePendingBooking(id, operatorId);
       reply.code(204).send();
     } catch (error: any) {
-      console.error('Release pending booking error:', error);
+      req.log.error({ err: error }, 'Release pending booking error');
       reply.code(500).send({
         error: 'Internal server error',
         code: 'INTERNAL_ERROR',
@@ -394,7 +394,7 @@ export class BookingsController {
       const result = await this.unseatService.unseatPassenger(passengerId, performedBy, reason);
       reply.send(result);
     } catch (error: any) {
-      console.error('Unseat passenger error:', error);
+      req.log.error({ err: error }, 'Unseat passenger error');
       reply.code(error.message.includes('tidak ditemukan') ? 404 : 400).send({
         error: error.message,
         code: 'UNSEAT_ERROR'
@@ -410,7 +410,7 @@ export class BookingsController {
       const result = await this.unseatService.unseatAllPassengers(bookingId, performedBy, reason);
       reply.send(result);
     } catch (error: any) {
-      console.error('Unseat all passengers error:', error);
+      req.log.error({ err: error }, 'Unseat all passengers error');
       reply.code(error.message.includes('tidak ditemukan') ? 404 : 400).send({
         error: error.message,
         code: 'UNSEAT_ERROR'
@@ -437,7 +437,7 @@ export class BookingsController {
       );
       reply.send(result);
     } catch (error: any) {
-      console.error('Reschedule passenger error:', error);
+      req.log.error({ err: error }, 'Reschedule passenger error');
       const status = error.message.includes('tidak ditemukan') ? 404
         : error.message.includes('tidak tersedia') ? 409 : 400;
       reply.code(status).send({
@@ -455,7 +455,7 @@ export class BookingsController {
       const result = await this.unseatService.assignSeatToUnseated(passengerId, newSeatNo, performedBy);
       reply.send(result);
     } catch (error: any) {
-      console.error('Assign seat to unseated error:', error);
+      req.log.error({ err: error }, 'Assign seat to unseated error');
       const status = error.message.includes('tidak ditemukan') ? 404
         : error.message.includes('tidak tersedia') ? 409
         : error.message.includes('berstatus unseated') ? 400 : 400;
@@ -472,7 +472,7 @@ export class BookingsController {
       const history = await this.unseatService.getBookingHistory(bookingId);
       reply.send(history);
     } catch (error: any) {
-      console.error('Get booking history error:', error);
+      req.log.error({ err: error }, 'Get booking history error');
       reply.code(500).send({
         error: error.message,
         code: 'HISTORY_ERROR'

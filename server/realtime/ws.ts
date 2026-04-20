@@ -23,9 +23,23 @@ class WebSocketService {
       return;
     }
 
-    const allowedOrigins = process.env.CORS_ORIGINS
-      ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
-      : (process.env.NODE_ENV === 'development' ? true : false);
+    // B12: di production, JANGAN pernah pakai wildcard `*` atau `true` (reflect any).
+    // Jika CORS_ORIGINS tidak diset di production, tutup CORS penuh (false) +
+    // log warning agar deploy yang kelupaan setting tidak diam-diam permissive.
+    const isProd = process.env.NODE_ENV === 'production';
+    const rawOrigins = process.env.CORS_ORIGINS?.trim();
+    let allowedOrigins: string[] | boolean;
+    if (rawOrigins && rawOrigins !== '*') {
+      allowedOrigins = rawOrigins.split(',').map(s => s.trim()).filter(Boolean);
+    } else if (isProd) {
+      // Production tanpa CORS_ORIGINS yang valid → CLOSE (no cross-origin allowed).
+      // Set CORS_ORIGINS=https://yourdomain,https://other untuk membuka.
+      console.warn('[ws] CORS_ORIGINS not set (or set to "*") in production. Cross-origin WS connections will be REJECTED. Set CORS_ORIGINS=https://yourdomain to enable.');
+      allowedOrigins = false;
+    } else {
+      // Development → permisif.
+      allowedOrigins = true;
+    }
 
     this.io = new SocketIOServer(httpServer, {
       cors: {

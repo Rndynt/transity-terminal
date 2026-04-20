@@ -38,7 +38,7 @@ export class PricingController {
         breakdown: fareQuote.breakdown
       });
     } catch (error: any) {
-      console.error('Fare quote error:', error);
+      req.log.error({ err: error }, 'Fare quote error');
       
       if (error.name === 'ZodError') {
         return reply.code(400).send({

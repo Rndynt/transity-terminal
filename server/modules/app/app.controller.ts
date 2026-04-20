@@ -176,10 +176,9 @@ export class AppController {
     const parsed = searchSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", code: 'VALIDATION_ERROR', details: parsed.error.flatten() });
     const result = await this.service.searchTrips(parsed.data);
-    for (const trip of result.data) {
-      console.log(`[searchTrips] trip=${trip.tripId} pattern=${trip.patternCode} stops:`);
-      for (const s of trip.stops) {
-        console.log(`  seq=${s.sequence} ${s.name} (${s.code}) city=${s.city ?? '-'} canPickup=${s.canPickup} canDrop=${s.canDrop}`);
+    if (req.log.level === 'debug' || req.log.level === 'trace') {
+      for (const trip of result.data) {
+        req.log.debug({ tripId: trip.tripId, pattern: trip.patternCode, stops: trip.stops }, '[searchTrips] trip');
       }
     }
     reply.send(result);
@@ -189,9 +188,8 @@ export class AppController {
     try {
       const { serviceDate } = (req.query || {}) as { serviceDate?: string };
       const detail = await this.service.getTripDetail((req.params as { id: string }).id, serviceDate);
-      console.log(`[getTripDetail] trip=${detail.tripId} pattern=${detail.patternCode} stops:`);
-      for (const s of detail.stops) {
-        console.log(`  seq=${s.sequence} ${s.name} (${s.code}) city=${s.city ?? '-'} canPickup=${s.boardingAllowed} canDrop=${s.alightingAllowed}`);
+      if (req.log.level === 'debug' || req.log.level === 'trace') {
+        req.log.debug({ tripId: detail.tripId, pattern: detail.patternCode, stops: detail.stops }, '[getTripDetail] trip');
       }
       reply.send(detail);
     } catch (e: unknown) {
@@ -332,7 +330,7 @@ export class AppController {
     try {
       const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET;
       if (!webhookSecret) {
-        console.error("[paymentWebhook] PAYMENT_WEBHOOK_SECRET not configured");
+        req.log.error("[paymentWebhook] PAYMENT_WEBHOOK_SECRET not configured");
         reply.code(503).send({ error: "Payment webhook not configured" });
         return;
       }
