@@ -39,10 +39,34 @@ export function registerConsoleRoutes(app: FastifyInstance, storage: IStorage) {
       .filter((t) => t.channels.some((c) => wantedChannels.has(c)))
       .slice(0, limit);
 
+    const trips = filtered.map((t) => ({
+      tripId: t.externalTripId,
+      baseScheduleId: t.externalBaseId,
+      routeName: t.routeName,
+      origin: {
+        city: t.originCity,
+        name: t.originStop,
+        departAt: t.departureTime,
+      },
+      destination: {
+        city: t.destinationCity,
+        name: t.destinationStop,
+        arriveAt: t.arrivalTime,
+      },
+      serviceDate: t.serviceDate,
+      vehicleClass: t.vehicleClass,
+      farePerPerson: t.farePerPerson,
+      capacity: t.capacity,
+      availableSeats: t.availableSeats,
+      channels: t.channels,
+      status: t.status,
+      raw: t.raw,
+    }));
+
     reply.send({
       event: "schedule.snapshot",
       serviceDate,
-      trips: filtered,
+      trips,
       emittedAt: new Date().toISOString(),
     });
   });
