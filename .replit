@@ -147,3 +147,7 @@ TERMINAL_SERVICE_KEY = "sk_dev_test_key_12345"
 
 [userenv.production]
 NODE_ENV = "production"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
