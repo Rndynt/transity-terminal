@@ -64,6 +64,8 @@ export class DatabaseStorage implements IStorage {
   updateTripPattern(id: string, data: Partial<InsertTripPattern>): Promise<TripPattern> { return this.scheduling.updateTripPattern(id, data); }
   deleteTripPattern(id: string): Promise<void> { return this.scheduling.deleteTripPattern(id); }
   getPatternStops(patternId: string): Promise<Array<PatternStop & { stop: Stop | null }>> { return this.scheduling.getPatternStops(patternId); }
+  getPatternStopsByPatternIds(patternIds: string[]): Promise<Map<string, Array<PatternStop & { stop: Stop | null }>>> { return this.scheduling.getPatternStopsByPatternIds(patternIds); }
+  getTripPatternsByIds(patternIds: string[]): Promise<Map<string, TripPattern>> { return this.scheduling.getTripPatternsByIds(patternIds); }
   createPatternStop(data: InsertPatternStop): Promise<PatternStop> { return this.scheduling.createPatternStop(data); }
   updatePatternStop(id: string, data: Partial<InsertPatternStop>): Promise<PatternStop> { return this.scheduling.updatePatternStop(id, data); }
   deletePatternStop(id: string): Promise<void> { return this.scheduling.deletePatternStop(id); }
@@ -86,6 +88,7 @@ export class DatabaseStorage implements IStorage {
   updateTrip(id: string, data: Partial<InsertTrip>): Promise<Trip> { return this.scheduling.updateTrip(id, data); }
   deleteTrip(id: string): Promise<void> { return this.scheduling.deleteTrip(id); }
   getTripStopTimes(tripId: string): Promise<TripStopTime[]> { return this.scheduling.getTripStopTimes(tripId); }
+  getTripStopTimesByTripIds(tripIds: string[]): Promise<Map<string, TripStopTime[]>> { return this.scheduling.getTripStopTimesByTripIds(tripIds); }
   createTripStopTime(data: InsertTripStopTime): Promise<TripStopTime> { return this.scheduling.createTripStopTime(data); }
   updateTripStopTime(id: string, data: Partial<InsertTripStopTime>): Promise<TripStopTime> { return this.scheduling.updateTripStopTime(id, data); }
   deleteTripStopTime(id: string): Promise<void> { return this.scheduling.deleteTripStopTime(id); }
@@ -118,6 +121,7 @@ export class DatabaseStorage implements IStorage {
   // Booking
   getBookings(tripId?: string): Promise<Booking[]> { return this.booking.getBookings(tripId); }
   getActiveBookingsForTrip(tripId: string): Promise<Booking[]> { return this.booking.getActiveBookingsForTrip(tripId); }
+  getActiveBookingsByTripIds(tripIds: string[]): Promise<Map<string, Booking[]>> { return this.booking.getActiveBookingsByTripIds(tripIds); }
   getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }> { return this.booking.getBookingsPaginated(options); }
   getBookingById(id: string): Promise<Booking | undefined> { return this.booking.getBookingById(id); }
   createBooking(data: InsertBooking): Promise<Booking> { return this.booking.createBooking(data); }

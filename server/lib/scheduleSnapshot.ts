@@ -2,7 +2,15 @@ import { and, eq, isNull, or, desc, inArray } from "drizzle-orm";
 import { db } from "@server/db";
 import { priceRules } from "@shared/schema/inventory";
 import type { IStorage } from "@server/storage.interface";
-import type { Trip } from "@shared/schema";
+import type {
+  Trip,
+  PatternStop,
+  TripStopTime,
+  TripPattern,
+  Booking,
+  Passenger,
+  Stop,
+} from "@shared/schema";
 import {
   deriveChannels,
   mapTripStatus,
@@ -115,45 +123,43 @@ function dateStr(d: unknown): string {
   return new Date().toISOString().substring(0, 10);
 }
 
-export async function buildScheduleTripPayload(
-  storage: IStorage,
-  trip: Trip
-): Promise<SchedulePayloadTrip | null> {
+export type BuildPayloadDeps = {
+  patternStops: Array<PatternStop & { stop: Stop | null }>;
+  stopTimes: TripStopTime[];
+  pattern: TripPattern | null;
+  bookings: Booking[];
+  passengers: Passenger[];
+  fare: number;
+};
+
+/**
+ * Sync core builder — pure function over already-fetched deps.
+ * Single source of truth for the SchedulePayloadTrip shape.
+ */
+export function buildScheduleTripPayloadSync(
+  trip: Trip,
+  deps: BuildPayloadDeps
+): SchedulePayloadTrip | null {
   const channels = deriveChannels(trip.channelFlags as any);
 
-  const patternStops = trip.patternId
-    ? await storage.getPatternStops(trip.patternId).catch(() => [])
-    : [];
-  const stopTimes = await storage.getTripStopTimes(trip.id).catch(() => []);
-  const pattern = trip.patternId
-    ? await storage.getTripPatternById?.(trip.patternId).catch(() => null)
-    : null;
-
-  const sortedStops = [...patternStops].sort((a, b) => a.stopSequence - b.stopSequence);
+  const sortedStops = [...deps.patternStops].sort((a, b) => a.stopSequence - b.stopSequence);
   const firstStop = sortedStops[0]?.stop ?? null;
   const lastStop = sortedStops[sortedStops.length - 1]?.stop ?? null;
 
-  const sortedTimes = [...stopTimes].sort((a, b) => a.stopSequence - b.stopSequence);
+  const sortedTimes = [...deps.stopTimes].sort((a, b) => a.stopSequence - b.stopSequence);
   const firstTime = sortedTimes[0];
   const lastTime = sortedTimes[sortedTimes.length - 1];
 
   let availableSeats = trip.capacity ?? 0;
-  try {
-    const bookings = await storage.getActiveBookingsForTrip(trip.id);
-    if (bookings.length > 0) {
-      const ids = bookings.map((b) => b.id);
-      const passengers = await storage.getPassengersByBookingIds(ids);
-      const taken = new Set(passengers.map((p) => p.seatNo).filter(Boolean));
-      availableSeats = Math.max(0, (trip.capacity ?? 0) - taken.size);
-    }
-  } catch {
-    // best-effort
+  if (deps.bookings.length > 0) {
+    const bookingIds = new Set(deps.bookings.map((b) => b.id));
+    const tripPassengers = deps.passengers.filter((p) => bookingIds.has(p.bookingId));
+    const taken = new Set(tripPassengers.map((p) => p.seatNo).filter(Boolean));
+    availableSeats = Math.max(0, (trip.capacity ?? 0) - taken.size);
   }
 
-  const farePerPerson = await resolveFarePerPerson(trip);
-
   const routeName =
-    (pattern && (pattern as any).name) ||
+    (deps.pattern && (deps.pattern as any).name) ||
     [firstStop?.city, lastStop?.city].filter(Boolean).join(" - ") ||
     "Unknown route";
 
@@ -168,8 +174,8 @@ export async function buildScheduleTripPayload(
     serviceDate: dateStr(trip.serviceDate),
     departureTime: toHHMMSS(firstTime?.departAt) ?? toHHMMSS(trip.originDepartHHMM),
     arrivalTime: toHHMMSS(lastTime?.arriveAt),
-    vehicleClass: (pattern as any)?.vehicleClass ?? null,
-    farePerPerson,
+    vehicleClass: (deps.pattern as any)?.vehicleClass ?? null,
+    farePerPerson: deps.fare,
     capacity: trip.capacity ?? 0,
     availableSeats,
     channels,
@@ -184,17 +190,112 @@ export async function buildScheduleTripPayload(
   };
 }
 
+/**
+ * Async single-trip builder. Thin wrapper that fetches deps then delegates
+ * to buildScheduleTripPayloadSync. Kept for backward-compat with callers
+ * that build payloads one trip at a time (webhooks: trip.created/updated).
+ */
+export async function buildScheduleTripPayload(
+  storage: IStorage,
+  trip: Trip
+): Promise<SchedulePayloadTrip | null> {
+  const [patternStops, stopTimes, pattern, bookings, fare] = await Promise.all([
+    trip.patternId
+      ? storage.getPatternStops(trip.patternId).catch(() => [])
+      : Promise.resolve([] as Array<PatternStop & { stop: Stop | null }>),
+    storage.getTripStopTimes(trip.id).catch(() => [] as TripStopTime[]),
+    trip.patternId
+      ? (storage.getTripPatternById?.(trip.patternId).catch(() => null) ??
+         Promise.resolve(null))
+      : Promise.resolve(null),
+    storage.getActiveBookingsForTrip(trip.id).catch(() => [] as Booking[]),
+    resolveFarePerPerson(trip),
+  ]);
+
+  const passengers = bookings.length
+    ? await storage
+        .getPassengersByBookingIds(bookings.map((b) => b.id))
+        .catch(() => [] as Passenger[])
+    : [];
+
+  return buildScheduleTripPayloadSync(trip, {
+    patternStops,
+    stopTimes,
+    pattern: pattern ?? null,
+    bookings,
+    passengers,
+    fare,
+  });
+}
+
+/**
+ * Batched snapshot builder. Fetches all related data in ~5 parallel queries
+ * (regardless of trip count), then assembles payloads in-memory.
+ *
+ * If `preloadedTrips` is provided, skips the initial `getTrips` query — useful
+ * when the caller has already fetched trips (e.g. for a size guard).
+ */
 export async function buildScheduleSnapshot(
   storage: IStorage,
-  serviceDate?: string
+  serviceDate?: string,
+  preloadedTrips?: Trip[]
 ): Promise<SchedulePayloadTrip[]> {
-  const trips = await storage.getTrips(serviceDate);
+  const trips = preloadedTrips ?? (await storage.getTrips(serviceDate));
+  if (trips.length === 0) return [];
+
+  const tripIds = trips.map((t) => t.id);
+  const patternIds = Array.from(
+    new Set(trips.map((t) => t.patternId).filter((x): x is string => !!x))
+  );
+
+  const [
+    patternStopsByPattern,
+    stopTimesByTrip,
+    patternsById,
+    bookingsByTrip,
+    faresByTrip,
+  ] = await Promise.all([
+    storage.getPatternStopsByPatternIds(patternIds).catch(() => new Map()),
+    storage.getTripStopTimesByTripIds(tripIds).catch(() => new Map()),
+    storage.getTripPatternsByIds(patternIds).catch(() => new Map()),
+    storage.getActiveBookingsByTripIds(tripIds).catch(() => new Map()),
+    resolveFaresForTrips(trips),
+  ]);
+
+  const allBookingIds: string[] = [];
+  Array.from(bookingsByTrip.values()).forEach((list) => {
+    for (const b of list) allBookingIds.push(b.id);
+  });
+  const allPassengers = allBookingIds.length
+    ? await storage.getPassengersByBookingIds(allBookingIds).catch(() => [] as Passenger[])
+    : [];
+
+  // Group passengers by bookingId for O(1) lookup per trip
+  const passengersByBooking = new Map<string, Passenger[]>();
+  for (const p of allPassengers) {
+    const arr = passengersByBooking.get(p.bookingId) ?? [];
+    arr.push(p);
+    passengersByBooking.set(p.bookingId, arr);
+  }
+
   const out: SchedulePayloadTrip[] = [];
   for (const t of trips) {
-    const payload = await buildScheduleTripPayload(storage, t);
-    if (payload && payload.channels.length > 0) {
-      out.push(payload);
+    const tripBookings = bookingsByTrip.get(t.id) ?? [];
+    const tripPassengers: Passenger[] = [];
+    for (const b of tripBookings) {
+      const ps = passengersByBooking.get(b.id);
+      if (ps) tripPassengers.push(...ps);
     }
+
+    const payload = buildScheduleTripPayloadSync(t, {
+      patternStops: t.patternId ? (patternStopsByPattern.get(t.patternId) ?? []) : [],
+      stopTimes: stopTimesByTrip.get(t.id) ?? [],
+      pattern: t.patternId ? (patternsById.get(t.patternId) ?? null) : null,
+      bookings: tripBookings,
+      passengers: tripPassengers,
+      fare: faresByTrip.get(t.id) ?? 0,
+    });
+    if (payload && payload.channels.length > 0) out.push(payload);
   }
   return out;
 }

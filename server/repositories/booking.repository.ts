@@ -26,6 +26,24 @@ export class BookingRepository {
       .orderBy(desc(bookings.createdAt));
   }
 
+  async getActiveBookingsByTripIds(tripIds: string[]): Promise<Map<string, Booking[]>> {
+    const map = new Map<string, Booking[]>();
+    if (tripIds.length === 0) return map;
+    const rows = await db.select().from(bookings)
+      .where(and(
+        inArray(bookings.tripId, tripIds),
+        inArray(bookings.status, ['paid', 'pending', 'confirmed', 'checked_in'])
+      ))
+      .orderBy(desc(bookings.createdAt));
+    for (const r of rows) {
+      if (!r.tripId) continue;
+      const arr = map.get(r.tripId) ?? [];
+      arr.push(r);
+      map.set(r.tripId, arr);
+    }
+    return map;
+  }
+
   async getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }> {
     const { tripId, outletId, page, pageSize } = options;
     const conditions = [];

@@ -112,6 +112,8 @@ export interface IStorage {
   deleteTripPattern(id: string): Promise<void>;
 
   getPatternStops(patternId: string): Promise<Array<PatternStop & { stop: Stop | null }>>;
+  getPatternStopsByPatternIds(patternIds: string[]): Promise<Map<string, Array<PatternStop & { stop: Stop | null }>>>;
+  getTripPatternsByIds(patternIds: string[]): Promise<Map<string, TripPattern>>;
   createPatternStop(data: InsertPatternStop): Promise<PatternStop>;
   updatePatternStop(id: string, data: Partial<InsertPatternStop>): Promise<PatternStop>;
   deletePatternStop(id: string): Promise<void>;
@@ -133,6 +135,7 @@ export interface IStorage {
   deleteTrip(id: string): Promise<void>;
 
   getTripStopTimes(tripId: string): Promise<TripStopTime[]>;
+  getTripStopTimesByTripIds(tripIds: string[]): Promise<Map<string, TripStopTime[]>>;
   getTripStopTimesWithEffectiveFlags(tripId: string): Promise<any[]>;
   createTripStopTime(data: InsertTripStopTime): Promise<TripStopTime>;
   updateTripStopTime(id: string, data: Partial<InsertTripStopTime>): Promise<TripStopTime>;
@@ -156,6 +159,7 @@ export interface IStorage {
 
   getBookings(tripId?: string): Promise<Booking[]>;
   getActiveBookingsForTrip(tripId: string): Promise<Booking[]>;
+  getActiveBookingsByTripIds(tripIds: string[]): Promise<Map<string, Booking[]>>;
   getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }>;
   getBookingById(id: string): Promise<Booking | undefined>;
   getBookingByCode(bookingCode: string): Promise<Booking | undefined>;

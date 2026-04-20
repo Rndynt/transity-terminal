@@ -34,7 +34,22 @@ export function registerConsoleRoutes(app: FastifyInstance, storage: IStorage) {
     const serviceDate = q.serviceDate || q.date || today;
     const limit = Math.min(parseInt(q.limit || "200", 10) || 200, 500);
 
-    const snapshot = await buildScheduleSnapshot(storage, serviceDate);
+    const maxTrips = parseInt(process.env.CONSOLE_SNAPSHOT_MAX_TRIPS || "1000", 10);
+    const allTripsForDay = await storage.getTrips(serviceDate);
+    if (allTripsForDay.length > maxTrips) {
+      return reply.code(413).send({
+        error: `Snapshot too large (${allTripsForDay.length} trips). Use date range filter or increase CONSOLE_SNAPSHOT_MAX_TRIPS.`,
+      });
+    }
+
+    const t0 = Date.now();
+    const snapshot = await buildScheduleSnapshot(storage, serviceDate, allTripsForDay);
+    const t1 = Date.now();
+    req.log.info(
+      { tripCount: snapshot.length, ms: t1 - t0, serviceDate },
+      "console.schedules.snapshot.built"
+    );
+
     const filtered = snapshot
       .filter((t) => t.channels.some((c) => wantedChannels.has(c)))
       .slice(0, limit);

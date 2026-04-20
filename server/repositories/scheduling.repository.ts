@@ -57,6 +57,38 @@ export class SchedulingRepository {
     return rows as Array<PatternStop & { stop: Stop | null }>;
   }
 
+  async getPatternStopsByPatternIds(
+    patternIds: string[]
+  ): Promise<Map<string, Array<PatternStop & { stop: Stop | null }>>> {
+    const map = new Map<string, Array<PatternStop & { stop: Stop | null }>>();
+    if (patternIds.length === 0) return map;
+    const rows = await db
+      .select()
+      .from(patternStops)
+      .leftJoin(stops, eq(patternStops.stopId, stops.id))
+      .where(and(inArray(patternStops.patternId, patternIds), isNull(patternStops.deletedAt)))
+      .orderBy(patternStops.stopSequence);
+    for (const r of rows) {
+      const ps = r.pattern_stops as PatternStop;
+      const st = r.stops as Stop | null;
+      const arr = map.get(ps.patternId) ?? [];
+      arr.push({ ...ps, stop: st });
+      map.set(ps.patternId, arr);
+    }
+    return map;
+  }
+
+  async getTripPatternsByIds(patternIds: string[]): Promise<Map<string, TripPattern>> {
+    const map = new Map<string, TripPattern>();
+    if (patternIds.length === 0) return map;
+    const rows = await db
+      .select()
+      .from(tripPatterns)
+      .where(inArray(tripPatterns.id, patternIds));
+    for (const r of rows) map.set(r.id, r);
+    return map;
+  }
+
   async createPatternStop(data: InsertPatternStop): Promise<PatternStop> {
     const [patternStop] = await db.insert(patternStops).values(data).returning();
     return patternStop;
@@ -577,6 +609,20 @@ export class SchedulingRepository {
     return await db.select().from(tripStopTimes)
       .where(and(eq(tripStopTimes.tripId, tripId), isNull(tripStopTimes.deletedAt)))
       .orderBy(tripStopTimes.stopSequence);
+  }
+
+  async getTripStopTimesByTripIds(tripIds: string[]): Promise<Map<string, TripStopTime[]>> {
+    const map = new Map<string, TripStopTime[]>();
+    if (tripIds.length === 0) return map;
+    const rows = await db.select().from(tripStopTimes)
+      .where(and(inArray(tripStopTimes.tripId, tripIds), isNull(tripStopTimes.deletedAt)))
+      .orderBy(tripStopTimes.stopSequence);
+    for (const r of rows) {
+      const arr = map.get(r.tripId) ?? [];
+      arr.push(r);
+      map.set(r.tripId, arr);
+    }
+    return map;
   }
 
   async createTripStopTime(data: InsertTripStopTime): Promise<TripStopTime> {
