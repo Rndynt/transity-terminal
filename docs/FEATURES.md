@@ -1224,3 +1224,131 @@ Tabel `customer_profiles`:
 - Menggunakan `ON CONFLICT DO UPDATE` untuk idempotent
 - Hanya aktif di non-production environment
 - Tidak auto-run saat startup — harus dipanggil manual
+
+---
+
+## 27. TransityConsole Schedule Sync
+
+### Konteks
+
+TransityConsole adalah gateway/BFF terpusat yang dipakai mobile App, web booking, dan
+mitra OTA pihak ketiga. Console butuh snapshot jadwal **terkini** dari semua operator
+agar pencarian trip cepat tanpa harus selalu hit Terminal. Schedule sync menjamin
+Console punya data trip yang sinkron dengan Terminal dalam window detik–menit.
+
+### Mode Sinkronisasi
+
+**1. Webhook event (real-time)** — di-trigger setiap kali jadwal berubah di Terminal:
+- Buat trip base baru → `schedule.created`
+- Edit jadwal / pattern / pricing → `schedule.updated`
+- Hapus / cancel trip base → `schedule.deleted`
+
+Payload di-sign HMAC-SHA256 dengan `CONSOLE_WEBHOOK_SECRET`, dikirim via header
+`X-Webhook-Signature`. Console verifikasi signature sebelum apply update.
+
+**2. Snapshot rutin (interval)** — setiap `CONSOLE_SNAPSHOT_INTERVAL_MS` (default 10
+menit), scheduler push full snapshot trip untuk N hari ke depan
+(`CONSOLE_SNAPSHOT_DAYS_AHEAD`, default 7) sebagai safety net jika ada webhook yang
+hilang. Snapshot di-batch maks `CONSOLE_SNAPSHOT_MAX_TRIPS` per HTTP request untuk
+hindari `413 Payload Too Large`.
+
+**3. Manual trigger** — operator bisa klik tombol "Push snapshot now" di
+`/admin/settings` atau Console hit endpoint `POST /api/admin/console/snapshot/push`.
+
+### Auto-Recovery
+
+Scheduler menyimpan status koneksi terakhir (`healthy` / `degraded` / `down`) dan
+counter retry. Jika Console down lalu kembali healthy, scheduler **otomatis** men-trigger
+full snapshot push tanpa intervensi operator. Detail:
+
+- HTTP error / timeout → mark `degraded`, retry exponential backoff
+- 3 kegagalan beruntun → mark `down`
+- Health check berhasil setelah `down` → trigger recovery snapshot
+
+### Past-Trip Filter
+
+Snapshot otomatis men-skip trip yang berangkat lebih dari `SCHEDULE_SNAPSHOT_GRACE_MINUTES`
+(default 60) menit yang lalu (relative ke `OPERATOR_TZ`). Tujuannya: tidak mengirim trip
+yang sudah berlalu dan tidak bisa lagi dibooking — menghemat bandwidth & menghindari
+Console menampilkan trip "kadaluarsa" di hasil pencarian.
+
+### Snapshot Guard (Conditional Push)
+
+Scheduler menghitung hash dari payload snapshot. Jika hash sama dengan push terakhir,
+HTTP request di-skip — menghindari noise di Console. Hanya snapshot rutin yang
+mendapat guard ini; webhook event dan manual push selalu dikirim.
+
+### Status di UI
+
+Halaman `/admin/settings` (tab "Integrations / Console") menampilkan:
+- Status koneksi: `Healthy` (hijau) / `Degraded` (kuning) / `Down` (merah)
+- Timestamp push terakhir + jumlah trip dikirim
+- Tombol "Push snapshot now" untuk manual trigger
+- Auto-refresh setiap 30 detik
+
+### File Terkait
+- `server/lib/consoleWebhook.ts` — HMAC sign + HTTP push
+- `server/lib/scheduleSnapshot.ts` — generator payload snapshot + past-trip filter
+- `server/scheduler.ts` — interval scheduler + auto-recovery
+- `server/modules/admin/console.controller.ts` — endpoint manual push + status
+- `client/src/pages/admin/SettingsPage.tsx` — UI status
+
+### Env Vars Terkait
+`CONSOLE_URL`, `CONSOLE_OPERATOR_SLUG`, `CONSOLE_WEBHOOK_SECRET`,
+`CONSOLE_SNAPSHOT_INTERVAL_MS`, `CONSOLE_SNAPSHOT_DAYS_AHEAD`,
+`CONSOLE_SNAPSHOT_MAX_TRIPS`, `SCHEDULE_SNAPSHOT_GRACE_MINUTES`, `OPERATOR_TZ`
+
+> Bila `CONSOLE_URL` kosong, semua mode sync menjadi no-op (aman untuk dev environment).
+
+---
+
+## 28. Whitelabel Docker Deployment
+
+### Konsep
+
+Satu codebase, satu file `docker-compose.yml`, banyak operator. Container, volume, dan
+subdomain di-parameterize via dua env vars utama:
+
+| Variable | Contoh | Dipakai untuk |
+|----------|--------|---------------|
+| `OPERATOR_SLUG` | `nusa`, `buskita`, `armada` | `container_name`, label, subdomain Nginx |
+| `HOST_PORT` | `5000`, `5010`, `5020` | Port host yang di-bind ke `127.0.0.1` |
+
+### Stack per VPS
+
+```
+┌─────────────────────── 1 VPS ───────────────────────┐
+│                                                      │
+│  Nginx (host)                                        │
+│   ├── nusa-terminal.transity.web.id → 127.0.0.1:5000 │
+│   ├── buskita-terminal.transity...   → 127.0.0.1:5010│
+│   └── armada-terminal.transity...    → 127.0.0.1:5020│
+│                                                      │
+│  Docker network: transity-terminals-net              │
+│   ├── container: ${OPERATOR_SLUG}-terminal           │
+│   └── container: ${OPERATOR_SLUG}-transityweb        │
+└──────────────────────────────────────────────────────┘
+```
+
+### Script Deploy
+
+`./deploy.sh` di root project melakukan:
+1. Validasi `.env` — cek key wajib ada
+2. `git pull` — yang men-trigger hook `scripts/post-merge.sh`
+3. `scripts/post-merge.sh` — `npm install` + `npm run db:push` (auto-migrate schema)
+4. `docker compose up -d --build --remove-orphans`
+5. Prune image lebih dari 24 jam
+
+### Multi-Operator di 1 VPS
+
+Cukup duplikasi folder project, isi `.env` dengan `OPERATOR_SLUG` + `HOST_PORT` yang
+berbeda, lalu jalankan `./deploy.sh` di masing-masing folder. Tidak perlu edit
+`docker-compose.yml`.
+
+### File Terkait
+- `Dockerfile` — multi-stage build untuk main app
+- `docker-compose.yml` — service definitions ter-parameter
+- `deploy.sh` — script standar deploy
+- `scripts/post-merge.sh` — git hook auto-install + auto-migrate
+- `.env.example` — template lengkap dengan komentar berbahasa Indonesia
+- `docs/DEPLOY_VPS_DOCKER.md` — panduan step-by-step (Nginx, SSL, multi-op)

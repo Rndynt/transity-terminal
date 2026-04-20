@@ -60,19 +60,22 @@ X-Service-Key: <service-key-operator>
 | # | Endpoint | Kegunaan |
 |---|----------|----------|
 | 8 | `GET /api/app/bookings` | Daftar booking dengan filter (status, tanggal, pagination) |
-| 9 | `GET /api/app/bookings/:id` | Detail lengkap satu booking |
+| 9 | `GET /api/app/bookings/:id` | Detail lengkap satu booking (termasuk `bookingCode` & `holdExpiresAt`) |
+| 9b | `GET /api/app/bookings/find-ota` | **Recovery** — cari booking OTA via `tripId` + `seats` saat `POST /bookings` timeout |
 
 ### Endpoint Write (POST) — Transaksi
 
 | # | Endpoint | Kegunaan |
 |---|----------|----------|
 | 10 | `POST /api/app/trips/materialize` | Materialize trip virtual → trip nyata (wajib sebelum seatmap untuk virtual trip) |
-| 11 | `POST /api/app/bookings` | Buat booking baru (tanpa atau dengan pembayaran langsung) |
-| 12 | `POST /api/app/bookings/:id/pay` | Bayar booking yang ditahan (held) — pilih metode pembayaran + voucher opsional |
+| 11 | `POST /api/app/bookings` | Buat booking baru (Console mengirim `channel: "OTA"`, tanpa `paymentMethod` → kursi held) |
+| 12 | `POST /api/app/bookings/:id/confirm-paid` | **OTA confirmation** — dipakai Console setelah charge sukses. Body: `{ providerRef }`. `paymentMethod` diabaikan & dicatat sebagai `online` |
 | 13 | `POST /api/app/bookings/:id/cancel` | Batalkan booking (pending atau confirmed) |
 | 14 | `GET /api/app/payments/methods` | Daftar metode pembayaran yang tersedia |
 | 15 | `POST /api/app/vouchers/validate` | Validasi kode voucher + hitung diskon |
-| 16 | `POST /api/app/payments/webhook` | Konfirmasi pembayaran (dari payment gateway) |
+| 16 | `POST /api/app/payments/webhook` | Konfirmasi pembayaran webhook (jika pakai PG yang push langsung ke Terminal) |
+
+> **Catatan:** Endpoint `POST /api/app/bookings/:id/pay` memang ada tapi ditujukan untuk channel **APP** (mobile direct). Untuk channel **OTA**, Console wajib pakai `confirm-paid` agar metode pembayaran dicatat konsisten sebagai `online` dan agar emit WebSocket `INVENTORY_UPDATED` terpicu untuk menyinkronkan seatmap CSO.
 
 ---
 

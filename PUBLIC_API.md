@@ -1033,6 +1033,8 @@ JWT user mencoba mengakses booking milik user lain.
 
 Membayar booking yang sedang dalam status `pending` (held). Endpoint ini digunakan saat booking dibuat **tanpa `paymentMethod`** — booking ditahan terlebih dahulu, lalu user memilih metode pembayaran dan menyelesaikan transaksi.
 
+> **Catatan channel:** Endpoint ini ditujukan untuk channel **APP** (mobile / web direct). Untuk channel **OTA** (TransityConsole sebagai gateway pembayaran), gunakan `POST /api/app/bookings/:id/confirm-paid` di bawah — Console melakukan charge sendiri lalu memberitahu Terminal.
+
 **Auth:** `X-Service-Key` ATAU `Authorization: Bearer <jwt-token>`
 
 Jika menggunakan JWT, hanya bisa membayar booking milik sendiri. Service Key dapat membayar booking siapapun.
@@ -1143,6 +1145,88 @@ Content-Type: application/json
 ```json
 { "error": "Booking not found" }
 ```
+
+---
+
+### `POST /api/app/bookings/:id/confirm-paid`
+
+Konfirmasi bahwa booking OTA sudah dibayar di sisi gateway (TransityConsole). Terminal mengubah status `pending` → `confirmed`, lock kursi permanen, hapus seat hold, dan emit `INVENTORY_UPDATED` ke seatmap CSO.
+
+**Auth:** `X-Service-Key` (wajib — endpoint ini khusus Console/OTA, tidak menerima JWT user)
+
+**Path Parameter:**
+| Parameter | Keterangan |
+|-----------|------------|
+| `id` | UUID booking yang sudah dibayar di Console |
+
+**Request Body:**
+
+```json
+{
+  "providerRef": "INV-2026-04-20-A1B2C3"
+}
+```
+
+| Field | Tipe | Wajib | Keterangan |
+|-------|------|-------|------------|
+| `providerRef` | `string` | ✅ | Referensi unik dari payment gateway / Console (akan dicatat di tabel `payments.provider_ref`) |
+| `paymentMethod` | `string` | ❌ | **Diabaikan**. Terminal selalu mencatat `payment_method = 'online'` untuk channel OTA agar konsisten di laporan |
+
+**Response `200` (Berhasil):**
+
+```json
+{
+  "bookingId": "booking-uuid-123",
+  "status": "confirmed"
+}
+```
+
+**Idempotency:** Jika booking sudah `confirmed`, endpoint mengembalikan `200` dengan response yang sama (tidak membuat payment record duplikat). Aman dipanggil ulang oleh Console saat retry.
+
+**Response `400` — Booking tidak bisa dikonfirmasi:**
+```json
+{ "error": "Booking is not in pending state" }
+{ "error": "Booking already cancelled" }
+```
+
+**Response `404`:**
+```json
+{ "error": "Booking not found" }
+```
+
+**Side Effects:**
+- `bookings.status = 'confirmed'`, `confirmed_at = now()`
+- `payments` baru dengan `method = 'online'`, `provider_ref = <providerRef>`, `status = 'success'`
+- `seat_inventory.booked = true` untuk semua kursi pada leg yang dipesan
+- Hapus row `seat_holds` terkait
+- Emit WebSocket `INVENTORY_UPDATED` ke room `trip:{tripId}`, `base:{baseId}`, `cso:{outletId}:{serviceDate}`
+
+---
+
+### `GET /api/app/bookings/find-ota`
+
+Endpoint **recovery** untuk Console: jika `POST /api/app/bookings` timeout/disconnect tetapi backend Terminal sebenarnya berhasil membuat booking, Console bisa mencari booking-nya berdasarkan tripId + daftar kursi untuk menghindari duplikasi/kursi nyangkut.
+
+**Auth:** `X-Service-Key` (wajib)
+
+**Query Parameters:**
+| Parameter | Tipe | Wajib | Keterangan |
+|-----------|------|-------|------------|
+| `tripId` | `string (uuid)` | ✅ | UUID trip (real, bukan virtual) |
+| `seats` | `string` | ✅ | Daftar nomor kursi dipisahkan koma, contoh: `1A,2A` |
+| `originSeq` | `number` | ✅ | Sequence stop asal |
+| `destinationSeq` | `number` | ✅ | Sequence stop tujuan |
+| `withinMinutes` | `number` | ❌ | Window pencarian dalam menit (default 5) — booking yang dibuat dalam window ini |
+
+**Response `200` — Booking ditemukan:**
+Mengembalikan `BookingDetailResponse` lengkap (sama dengan `GET /api/app/bookings/:id`), termasuk `bookingCode` dan `holdExpiresAt`.
+
+**Response `404` — Tidak ada booking yang cocok:**
+```json
+{ "error": "No matching OTA booking found" }
+```
+
+Console kemudian bisa retry `POST /api/app/bookings` dengan aman karena dipastikan tidak ada booking duplikat di Terminal.
 
 ---
 

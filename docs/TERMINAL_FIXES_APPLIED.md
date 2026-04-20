@@ -148,6 +148,80 @@ Skenario: Hold baru expired, customer sudah bayar
 
 ---
 
+## Fix #4: KRITIS — Emit `INVENTORY_UPDATED` saat OTA Confirmation
+
+### File Diubah
+- `server/modules/app/app.service.ts` (`confirmOtaPaid`)
+
+### Perubahan
+Setelah `bookings.status` di-update menjadi `confirmed` dan `seat_inventory.booked` di-set
+`true`, service kini meng-emit event WebSocket `INVENTORY_UPDATED` ke tiga room:
+
+```ts
+io.to(`trip:${tripId}`).emit('INVENTORY_UPDATED', { tripId });
+io.to(`base:${baseId}`).emit('INVENTORY_UPDATED', { tripId });
+io.to(`cso:${outletId}:${serviceDate}`).emit('INVENTORY_UPDATED', { tripId });
+```
+
+### Alasan
+Sebelumnya, CSO yang sedang membuka seatmap untuk trip yang sama tidak melihat
+kursi yang baru dibooking via OTA berubah warna sampai mereka manual refresh.
+Akibatnya CSO bisa double-booking kursi yang sebenarnya sudah dibayar OTA.
+
+### Hasil
+Seat map CSO ter-update real-time ke semua terminal yang membuka trip yang sama
+dalam <1 detik setelah Console memanggil `/confirm-paid`.
+
+---
+
+## Fix #5: KONSISTENSI — `paymentMethod` di `confirm-paid` Diabaikan
+
+### File Diubah
+- `server/modules/app/app.controller.ts` (`confirmOtaPaid` handler)
+- `server/modules/app/app.service.ts`
+
+### Perubahan
+Field `paymentMethod` di body `POST /api/app/bookings/:id/confirm-paid` tetap diterima
+(opsional, untuk backward compat) tetapi **diabaikan**. Terminal selalu menyimpan
+`payments.method = 'online'` untuk semua confirmation OTA.
+
+### Alasan
+Console mengirim nilai metode yang berbeda-beda (`bca_va`, `qris`, `gopay`, dll)
+berdasarkan payment gateway yang dipakai customer. Variasi ini bocor ke laporan
+operator dan mengacaukan agregasi (`SELECT method, COUNT(*) FROM payments`).
+Kontrak baru: untuk channel OTA, Terminal hanya peduli "ini dibayar online via
+Console" — detail PG ada di `provider_ref`.
+
+### Hasil
+Laporan revenue/sales operator memiliki kolom `method` yang konsisten:
+`cash`, `qr`, `ewallet`, `bank` (untuk CSO direct), `online` (untuk semua OTA).
+
+---
+
+## Fix #6: USABILITY — `bookingCode` Disertakan di Response Detail
+
+### File Diubah
+- `server/modules/app/app.service.ts` (`getBookingDetail`)
+- Type `BookingDetailResponse` di `server/modules/app/app.types.ts`
+
+### Perubahan
+Field `bookingCode` (format `BK-YYYYMMDD-XXXXX`) sekarang selalu ada di response
+`GET /api/app/bookings/:id` dan `GET /api/app/bookings/find-ota`.
+
+### Alasan
+Console butuh `bookingCode` untuk ditampilkan ke customer (di e-tiket, email
+konfirmasi, halaman "My Bookings"). Sebelumnya Console harus memanggil endpoint
+internal lain atau membuat code sendiri — tidak konsisten dengan kode yang dicetak
+di tiket termal CSO.
+
+### Hasil
+Kode booking yang sama muncul di:
+- E-tiket customer di App / Console
+- Tiket termal yang dicetak CSO saat customer datang ke pool
+- Riwayat booking di dashboard operator
+
+---
+
 ## API External Lengkap (untuk Console/OTA)
 
 ### Authentication
@@ -212,9 +286,10 @@ STEP 2: Create Booking (Hold Seats)
 
 STEP 3a: Pembayaran Berhasil
   Console → Terminal: POST /api/app/bookings/:id/confirm-paid
-    Body: { providerRef, paymentMethod }
+    Body: { providerRef }   // paymentMethod opsional & diabaikan (lihat Fix #5)
     Response: { status: "confirmed", bookingId }
     Seats di-lock permanen (booked = true), hold dihapus
+    Terminal emit INVENTORY_UPDATED ke CSO seatmap (lihat Fix #4)
 
 STEP 3b: Pembayaran Gagal / Customer Batal
   Console → Terminal: POST /api/app/bookings/:id/cancel

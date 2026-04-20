@@ -67,6 +67,8 @@ Dokumentasi teknis lengkap dengan penjelasan cara kerja, teknologi, dan logika p
 - **Kasir** — Buka/tutup sesi kasir harian, approval sesi, breakdown settlement, live transaction summary (auto-refresh 30s)
 - **Refund** — Buat/approve/proses refund dengan pencarian booking code. CSO buat, manager/finance approve & proses
 - **Pelanggan (CRM)** — Profil pelanggan dengan tag (regular/vip/frequent/blacklist) dan riwayat booking
+- **Console Schedule Sync** — Push otomatis perubahan jadwal ke TransityConsole via webhook HMAC-signed (`schedule.created/updated/deleted`). Auto-recovery setelah outage Console: scheduler trigger full snapshot push begitu Console healthy kembali. Operator tidak perlu klik "Sync" manual.
+- **Console Connection Status** — Halaman `/admin/settings` menampilkan live status koneksi Console (healthy / degraded / down), timestamp push terakhir, antrian retry, dan tombol "Push snapshot now" untuk manual trigger. Auto-refresh 30 detik.
 
 ### Master Data
 - **Halte (Stops)** — Titik berhenti/terminal dengan koordinat GPS
@@ -338,25 +340,79 @@ npm run build
 npm start
 ```
 
+### Deployment via Docker (VPS)
+
+Pada VPS, gunakan stack Docker + Nginx terstandar:
+
+```bash
+# 1. Setup network sekali (pertama kali di VPS)
+docker network create transity-terminals-net
+
+# 2. Copy template env dan isi nilai operator
+cp .env.example .env
+# edit OPERATOR_SLUG, HOST_PORT, DATABASE_URL, REALMIO_*, JWT_SECRET, TERMINAL_SERVICE_KEY,
+# CONSOLE_URL, CONSOLE_OPERATOR_SLUG, CONSOLE_WEBHOOK_SECRET, dll.
+
+# 3. Deploy (script standar)
+./deploy.sh
+```
+
+`deploy.sh` melakukan: validasi `.env`, `git pull`, `docker compose up -d --build --remove-orphans`, prune image >24 jam. Hook `scripts/post-merge.sh` otomatis menjalankan `npm install` + `npm run db:push` setelah `git merge`/`git pull`. Compose ter-parameter via `${OPERATOR_SLUG}` + `${HOST_PORT}` — file compose yang sama dipakai untuk semua operator. Panduan lengkap (Nginx, SSL, multi-operator) di `docs/DEPLOY_VPS_DOCKER.md`.
+
 ---
 
 ## Konfigurasi
 
 ### Environment Variables
 
+Lihat `.env.example` untuk template lengkap dengan keterangan per variabel. Ringkasan:
+
+**Operator & Server**
+| Variable | Default | Deskripsi | Required |
+|----------|---------|-----------|----------|
+| `OPERATOR_SLUG` | — | Slug operator (lowercase) untuk container & subdomain | Ya (Docker) |
+| `HOST_PORT` | 5000 | Port host yang dipublish (bind ke 127.0.0.1) | Ya (Docker) |
+| `NODE_ENV` | development | `production` di VPS | Tidak |
+| `PORT` | 5000 | Port aplikasi internal | Tidak |
+| `OPERATOR_TZ` | Asia/Jakarta | Timezone operator untuk grace-period & cutoff | Tidak |
+
+**Database & Auth**
 | Variable | Default | Deskripsi | Required |
 |----------|---------|-----------|----------|
 | `DATABASE_URL` | — | PostgreSQL connection string | Ya |
-| `PORT` | 5000 | Port server | Tidak |
 | `REALMIO_BASE_URL` | — | URL Realmio auth server | Tidak (dev bypass tersedia) |
 | `REALMIO_TENANT_ID` | — | Realmio tenant ID | Tidak |
+| `JWT_SECRET` | — | Secret untuk JWT mobile auth (`openssl rand -hex 32`) | Ya (production) |
 | `DEV_BYPASS_AUTH` | — | Hanya aktif jika `NODE_ENV !== 'production'` | Tidak |
-| `JWT_SECRET` | — | Secret untuk JWT mobile auth | Ya (production) |
-| `PAYMENT_WEBHOOK_SECRET` | — | Secret untuk verifikasi webhook pembayaran | Ya (production) |
-| `APP_CORS_ORIGINS` | `*` | Allowed origins untuk mobile API | Tidak |
-| `HOLD_TTL_SHORT_SECONDS` | 300 | TTL hold singkat (5 menit) | Tidak |
-| `HOLD_TTL_LONG_SECONDS` | 1800 | TTL hold panjang (30 menit) | Tidak |
-| `PENDING_BOOKING_AUTO_RELEASE` | true | Auto-cleanup booking pending | Tidak |
+
+**Public API & CORS**
+| Variable | Default | Deskripsi | Required |
+|----------|---------|-----------|----------|
+| `TERMINAL_SERVICE_KEY` | — | Service key untuk header `X-Service-Key` | Ya (production) |
+| `PAYMENT_WEBHOOK_SECRET` | — | HMAC secret webhook pembayaran | Ya (jika pakai webhook) |
+| `APP_CORS_ORIGINS` | `*` | Allowed origins untuk endpoint `/api/app/*` | Tidak |
+| `CORS_ORIGINS` | (kosong) | Allowed origins untuk WebSocket (Socket.io) | Ya (production) |
+
+**TransityConsole Sync** (kosong = no-op)
+| Variable | Default | Deskripsi |
+|----------|---------|-----------|
+| `CONSOLE_URL` | — | Base URL TransityConsole |
+| `CONSOLE_OPERATOR_SLUG` | — | Slug operator di Console (umumnya = `OPERATOR_SLUG`) |
+| `CONSOLE_WEBHOOK_SECRET` | — | HMAC secret untuk signing payload schedule sync |
+| `CONSOLE_SNAPSHOT_INTERVAL_MS` | 600000 | Interval push snapshot rutin (10 menit) |
+| `CONSOLE_SNAPSHOT_DAYS_AHEAD` | 7 | Jumlah hari ke depan yang dipush |
+| `CONSOLE_SNAPSHOT_MAX_TRIPS` | 1000 | Maksimum trip per snapshot HTTP (guard 413) |
+| `SCHEDULE_SNAPSHOT_GRACE_MINUTES` | 60 | Trip yang berangkat >N menit lalu di-skip dari snapshot |
+
+**Hold TTL**
+| Variable | Default | Deskripsi |
+|----------|---------|-----------|
+| `OTA_HOLD_TTL_MINUTES` | 20 | Hold TTL untuk channel OTA |
+| `WEB_HOLD_TTL_MINUTES` | 20 | Hold TTL untuk channel WEB |
+| `APP_HOLD_TTL_MINUTES` | 15 | Hold TTL untuk channel APP |
+| `HOLD_TTL_SHORT_SECONDS` | 300 | TTL hold singkat CSO (5 menit) |
+| `HOLD_TTL_LONG_SECONDS` | 1800 | TTL hold panjang CSO (30 menit) |
+| `PENDING_BOOKING_AUTO_RELEASE` | true | Auto-cleanup booking pending non-OTA |
 
 ### Dev Mode
 
@@ -598,14 +654,44 @@ Query parameter `dateMode` (`departure` | `paid` | `created`) menentukan kolom t
 
 Laba Rugi Trip dan Load Factor selalu menggunakan `departure` (tanpa toggle).
 
-### Mobile B2C API
+### Public API (`/api/app/*`) — Service Key + Mobile JWT
+
+Endpoint untuk TransityConsole, OTA pihak ketiga, dan mobile App. Auth via header `X-Service-Key` (env `TERMINAL_SERVICE_KEY`); booking juga menerima `Authorization: Bearer <jwt>` untuk mobile user. Spec lengkap di `PUBLIC_API.md` dan `TRANSITY_CONSOLE_INTEGRATION.md`.
 
 ```http
-POST   /api/app/auth/register                  # Registrasi user mobile
-POST   /api/app/auth/login                     # Login user mobile
-GET    /api/app/trips                           # Cari trip tersedia
-POST   /api/app/bookings                       # Buat booking mobile
-GET    /api/app/cargo/track/:waybillNumber      # Track kargo
+# Mobile auth
+POST   /api/app/auth/register
+POST   /api/app/auth/login
+
+# Referensi
+GET    /api/app/operator-info                  # Brand operator (nama, logo, warna)
+GET    /api/app/cities                         # Kota dilayani
+GET    /api/app/service-lines                  # Rute aktif
+GET    /api/app/payments/methods               # Daftar metode pembayaran
+
+# Pencarian & detail trip
+GET    /api/app/trips/search                   # Cari trip (real + virtual)
+POST   /api/app/trips/materialize              # Materialize trip virtual → real
+GET    /api/app/trips/:id                      # Detail trip
+GET    /api/app/trips/:id/seatmap              # Seatmap trip
+GET    /api/app/trips/:tripId/reviews          # Ulasan penumpang
+
+# Booking
+POST   /api/app/bookings                       # Buat booking (held jika tanpa paymentMethod)
+GET    /api/app/bookings                       # List bookings (filter status, tanggal, pagination)
+GET    /api/app/bookings/:id                   # Detail booking (return bookingCode + holdExpiresAt)
+GET    /api/app/bookings/find-ota              # Recovery: cari booking OTA via tripId+seats (timeout)
+POST   /api/app/bookings/:id/pay               # Bayar held booking — mobile App channel only
+POST   /api/app/bookings/:id/confirm-paid      # OTA confirmation dari Console (paymentMethod diabaikan, dicatat 'online')
+POST   /api/app/bookings/:id/cancel            # Batalkan booking pending/confirmed
+
+# Voucher & webhook
+POST   /api/app/vouchers/validate              # Validasi voucher + hitung diskon
+POST   /api/app/payments/webhook               # Webhook payment gateway (HMAC-SHA256)
+
+# Kargo
+GET    /api/app/cargo/track/:waybillNumber     # Track kargo via waybill
+GET    /api/app/cargo/:waybillNumber           # Detail kargo
 ```
 
 ---
@@ -790,11 +876,12 @@ app.get('/api/bookings', { preHandler: [requireOutletScope] }, handler);
 
 | Event | Payload | Deskripsi |
 |-------|---------|-----------|
-| `INVENTORY_UPDATED` | `{ tripId }` | Perubahan ketersediaan kursi |
+| `INVENTORY_UPDATED` | `{ tripId, seatNo? }` | Perubahan ketersediaan kursi (di-emit oleh CSO booking, hold/release, **dan OTA confirmation**) |
 | `TRIP_STATUS_CHANGED` | `{ tripId, status }` | Status trip berubah |
 | `HOLDS_RELEASED` | `{ tripId }` | Seat hold expired/released |
 | `TRIP_MATERIALIZED` | `{ tripId, baseId }` | Virtual trip dimaterialize |
 | `TRIP_CANCELED` | `{ tripId }` | Trip dibatalkan |
+| `STOP_EXCEPTION_CHANGED` | `{ tripId, stopId }` | Aturan boarding/alighting di stop berubah (exception ditambahkan/dihapus) |
 
 ---
 
@@ -1089,6 +1176,11 @@ Gunakan `requireFlag("master.myFeature")` di route preHandler, dan `usePermissio
 | Operator Settings (branding: nama, logo, warna) | Done |
 | Logout fix (clear cookie domain mismatch) | Done |
 | Backend: Fastify 5 Migration | Done |
+| TransityConsole Public API Integration (`/api/app/*` + service key) | Done |
+| Console Schedule Sync (push webhook + manual snapshot endpoint + auto-recovery) | Done |
+| Console Connection Status di Settings page (live status + manual push button) | Done |
+| OTA Booking — race-condition fixes, WS emit on confirm, payment method='online', bookingCode in response | Done |
+| Whitelabel Docker Deployment (`OPERATOR_SLUG` + `HOST_PORT` parameterized compose, `deploy.sh`, `post-merge.sh`) | Done |
 | Mobile B2C (Expo React Native) | In Progress |
 
 ---

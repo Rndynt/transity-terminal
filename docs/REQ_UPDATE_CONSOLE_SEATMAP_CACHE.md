@@ -5,6 +5,9 @@
 **Untuk:** TransityConsole (Gateway)  
 **Terkait:** TransityApp (Consumer)
 
+> **Status (per 20 April 2026): IMPLEMENTED di TransityTerminal.**  
+> Endpoint `POST /api/app/trips/materialize` sudah live. Spesifikasi lengkap & finalnya ada di `PUBLIC_API.md` dan `TRANSITY_CONSOLE_INTEGRATION.md`. Dokumen ini disimpan sebagai arsip request awal.
+
 ---
 
 ## 1. Endpoint Baru: POST /api/app/trips/materialize

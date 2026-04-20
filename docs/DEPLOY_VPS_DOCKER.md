@@ -363,12 +363,50 @@ TERMINAL_SERVICE_KEY=<RANDOM_HEX_32_KARAKTER>
 # PAYMENT_WEBHOOK_SECRET=<secret-dari-payment-gateway>
 
 # ─────────────────────────────────────────
+# WHITELABEL (untuk Docker Compose terparametrisasi)
+# ─────────────────────────────────────────
+# Slug operator (lowercase, no spaces) — dipakai untuk container_name & subdomain
+OPERATOR_SLUG=nusa
+# Port host yang dipublish (bind ke 127.0.0.1 — Nginx yang ekspos ke publik)
+HOST_PORT=5000
+# Timezone operator untuk grace period & cutoff scheduler
+OPERATOR_TZ=Asia/Jakarta
+
+# ─────────────────────────────────────────
+# TRANSITYCONSOLE SCHEDULE SYNC (kosongkan jika tidak pakai Console)
+# ─────────────────────────────────────────
+# Base URL TransityConsole untuk push schedule webhook
+CONSOLE_URL=https://console.transity.web.id
+# Slug operator di Console (umumnya sama dengan OPERATOR_SLUG)
+CONSOLE_OPERATOR_SLUG=nusa
+# HMAC secret untuk signing payload — generate: openssl rand -hex 32
+CONSOLE_WEBHOOK_SECRET=<RANDOM_HEX_32_KARAKTER>
+# Interval push snapshot rutin (default: 600000 ms = 10 menit)
+CONSOLE_SNAPSHOT_INTERVAL_MS=600000
+# Jumlah hari ke depan yang dipush per snapshot
+CONSOLE_SNAPSHOT_DAYS_AHEAD=7
+# Maksimum trip per snapshot HTTP request (guard 413)
+CONSOLE_SNAPSHOT_MAX_TRIPS=1000
+# Trip yang berangkat lebih dari N menit lalu di-skip dari snapshot
+SCHEDULE_SNAPSHOT_GRACE_MINUTES=60
+
+# ─────────────────────────────────────────
 # HOLD & BOOKING CONFIG
 # ─────────────────────────────────────────
+# CSO terminal hold (detik)
 HOLD_TTL_SHORT_SECONDS=300      # 5 menit (hold saat pilih kursi)
 HOLD_TTL_LONG_SECONDS=1800      # 30 menit (hold saat proses pembayaran)
+# Public API hold per channel (menit)
+OTA_HOLD_TTL_MINUTES=20         # OTA / TransityConsole
+WEB_HOLD_TTL_MINUTES=20         # Web direct
+APP_HOLD_TTL_MINUTES=15         # Mobile App
+# Auto-cleanup booking pending non-OTA (Console mengelola lifecycle OTA sendiri)
 PENDING_BOOKING_AUTO_RELEASE=true
 ```
+
+> **Whitelabel:** Stack Docker Compose memakai `${OPERATOR_SLUG}` dan `${HOST_PORT}` sehingga satu file `docker-compose.yml` dipakai untuk semua operator. Cukup ganti nilai `OPERATOR_SLUG` + `HOST_PORT` per VPS/operator. Network bersama `transity-terminals-net` (`docker network create transity-terminals-net`) memungkinkan Nginx host atau service lain berkomunikasi dengan container terminal.
+
+> **Deploy script:** `./deploy.sh` di root project memvalidasi `.env`, melakukan `git pull` (yang trigger `scripts/post-merge.sh` untuk `npm install` + `npm run db:push`), lalu `docker compose up -d --build --remove-orphans` dan prune image lama.
 
 > Generate JWT_SECRET: `openssl rand -base64 32`
 
