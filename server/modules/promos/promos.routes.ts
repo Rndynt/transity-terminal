@@ -11,6 +11,8 @@ export function registerPromosRoutes(app: FastifyInstance, storage: IStorage) {
   app.post('/api/promotions', { preHandler: [requireFlag('master.promos')] }, async (req, reply) => promosController.createPromotion(req, reply));
   app.patch('/api/promotions/:id', { preHandler: [requireFlag('master.promos')] }, async (req, reply) => promosController.updatePromotion(req, reply));
   app.delete('/api/promotions/:id', { preHandler: [requireFlag('master.promos')] }, async (req, reply) => promosController.deletePromotion(req, reply));
+  app.get('/api/promotions/:id/conditions', async (req, reply) => promosController.getPromoConditions(req, reply));
+  app.put('/api/promotions/:id/conditions', { preHandler: [requireFlag('master.promos')] }, async (req, reply) => promosController.replacePromoConditions(req, reply));
   app.get('/api/vouchers', async (req, reply) => promosController.getVouchers(req, reply));
   app.post('/api/vouchers/generate', { preHandler: [requireFlag('master.promos')] }, async (req, reply) => promosController.generateVouchers(req, reply));
   app.patch('/api/vouchers/:id/revoke', { preHandler: [requireFlag('master.promos')] }, async (req, reply) => promosController.revokeVoucher(req, reply));

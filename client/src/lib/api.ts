@@ -375,8 +375,11 @@ export const promotionsApi = {
   create: (data: any) => apiRequest('POST', '/api/promotions', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PATCH', `/api/promotions/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/promotions/${id}`),
-  validate: (data: { code: string; subtotal: number; channel?: string; tripId?: string; patternId?: string }) =>
+  validate: (data: { code: string; subtotal: number; channel?: string; tripId?: string; patternId?: string; outletId?: string; salesChannelCode?: string; departureDate?: string }) =>
     apiRequest('POST', '/api/promos/validate', data).then(res => res.json()),
+  getConditions: (promoId: string) => fetch(`/api/promotions/${promoId}/conditions`).then(r => assertOk<Array<{ id: string; promoId: string; type: string; values: string[] }>>(r)),
+  replaceConditions: (promoId: string, conditions: Array<{ type: string; values: string[] }>) =>
+    apiRequest('PUT', `/api/promotions/${promoId}/conditions`, conditions).then(res => res.json()),
 };
 
 // Vouchers API

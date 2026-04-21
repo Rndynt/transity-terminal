@@ -1,7 +1,7 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { PromosService } from "./promos.service";
 import { IStorage } from "@server/storage.interface";
-import { insertPromotionSchema } from "@shared/schema";
+import { insertPromotionSchema, promoConditionInputSchema } from "@shared/schema";
 import { z } from "zod";
 
 export class PromosController {
@@ -39,6 +39,19 @@ export class PromosController {
     const { id } = req.params as { id: string };
     await this.service.deletePromotion(id);
     reply.code(204).send();
+  }
+
+  async getPromoConditions(req: FastifyRequest, reply: FastifyReply) {
+    const { id } = req.params as { id: string };
+    const conditions = await this.service.getConditions(id);
+    reply.send(conditions);
+  }
+
+  async replacePromoConditions(req: FastifyRequest, reply: FastifyReply) {
+    const { id } = req.params as { id: string };
+    const conditions = z.array(promoConditionInputSchema).parse(req.body);
+    const result = await this.service.replaceConditions(id, conditions);
+    reply.send(result);
   }
 
   async getVouchers(req: FastifyRequest, reply: FastifyReply) {

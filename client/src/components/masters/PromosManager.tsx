@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { promotionsApi, vouchersApi, tripPatternsApi, tripsApi } from '@/lib/api';
+import { promotionsApi, vouchersApi, tripPatternsApi, tripsApi, outletsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { Tag, Plus, Pencil, Trash2, Ticket, Copy, Ban, ChevronDown, ChevronUp, Percent, DollarSign, Check, Search, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Ticket, Copy, Ban, ChevronDown, ChevronUp, Percent, DollarSign, Check, Search, X } from 'lucide-react';
 import { RowActionsMenu } from './RowActionsMenu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,13 +15,15 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
-import type { Promotion, Voucher, TripPattern, TripWithDetails } from '@shared/schema';
+import type { Promotion, Voucher, TripPattern, TripWithDetails, Outlet } from '@shared/schema';
 
-const SCOPE_OPTIONS = [
-  { value: 'global', label: 'Global (Semua)' },
-  { value: 'pattern', label: 'Rute Tertentu' },
-  { value: 'trip', label: 'Trip Tertentu' },
-  { value: 'channel', label: 'Channel Tertentu' },
+const CONDITION_TYPE_OPTIONS = [
+  { value: 'route', label: 'Rute' },
+  { value: 'trip', label: 'Trip' },
+  { value: 'channel', label: 'Channel' },
+  { value: 'outlet', label: 'Outlet' },
+  { value: 'sales_channel', label: 'Sales Channel (OTA)' },
+  { value: 'day_of_week', label: 'Hari' },
 ];
 
 const CHANNEL_OPTIONS = [
@@ -31,6 +33,21 @@ const CHANNEL_OPTIONS = [
   { value: 'OTA', label: 'OTA' },
 ];
 
+const DAY_OPTIONS = [
+  { value: '1', label: 'Senin' },
+  { value: '2', label: 'Selasa' },
+  { value: '3', label: 'Rabu' },
+  { value: '4', label: 'Kamis' },
+  { value: '5', label: 'Jumat' },
+  { value: '6', label: 'Sabtu' },
+  { value: '0', label: 'Minggu' },
+];
+
+interface ConditionDraft {
+  type: string;
+  values: string[];
+}
+
 const defaultForm = {
   code: '',
   name: '',
@@ -39,9 +56,6 @@ const defaultForm = {
   discountValue: '',
   minPurchase: '',
   maxDiscount: '',
-  scope: 'global',
-  scopeRefIds: [] as string[],
-  applicableChannels: [] as string[],
   usageLimit: '',
   perUserLimit: '',
   requireVoucher: false,
@@ -51,19 +65,9 @@ const defaultForm = {
   validTo: '',
 };
 
-function parseScopeRefIds(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [raw];
-  } catch {
-    return raw ? [raw] : [];
-  }
-}
-
 interface MSOption { value: string; label: string; sub?: string }
 interface MultiSearchSelectProps {
-  label: string;
+  label?: string;
   options: MSOption[];
   selected: string[];
   onToggle: (value: string) => void;
@@ -83,8 +87,8 @@ function MultiSearchSelect({ label, options, selected, onToggle, placeholder = '
 
   return (
     <div>
-      <Label>{label}</Label>
-      <div className="mt-1">
+      {label && <Label>{label}</Label>}
+      <div className={label ? 'mt-1' : ''}>
         <button
           type="button"
           onClick={() => setOpen(!open)}
@@ -159,6 +163,184 @@ function MultiSearchSelect({ label, options, selected, onToggle, placeholder = '
   );
 }
 
+interface ConditionRowProps {
+  index: number;
+  condition: ConditionDraft;
+  usedTypes: string[];
+  tripPatterns: TripPattern[];
+  allTrips: TripWithDetails[];
+  outlets: Outlet[];
+  onChange: (i: number, next: ConditionDraft) => void;
+  onRemove: (i: number) => void;
+}
+
+function ConditionRow({ index, condition, usedTypes, tripPatterns, allTrips, outlets, onChange, onRemove }: ConditionRowProps) {
+  const [salesInput, setSalesInput] = useState('');
+  const typeOptions = CONDITION_TYPE_OPTIONS.filter(o => o.value === condition.type || !usedTypes.includes(o.value));
+
+  const toggle = (value: string) => {
+    const next = condition.values.includes(value)
+      ? condition.values.filter(v => v !== value)
+      : [...condition.values, value];
+    onChange(index, { ...condition, values: next });
+  };
+
+  const setType = (newType: string) => {
+    onChange(index, { type: newType, values: [] });
+    setSalesInput('');
+  };
+
+  const addSalesChannel = () => {
+    const v = salesInput.trim();
+    if (!v || condition.values.includes(v)) return;
+    onChange(index, { ...condition, values: [...condition.values, v] });
+    setSalesInput('');
+  };
+
+  return (
+    <div className="border rounded-lg p-3 bg-muted/30 space-y-2" data-testid={`condition-row-${index}`}>
+      <div className="flex items-start gap-2">
+        <div className="flex-1">
+          <Label className="text-xs">Tipe Kondisi</Label>
+          <SearchableSelect
+            value={condition.type}
+            onChange={setType}
+            options={typeOptions}
+            placeholder="Pilih kondisi"
+            data-testid={`select-condition-type-${index}`}
+          />
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 text-red-600 mt-5"
+          onClick={() => onRemove(index)}
+          data-testid={`btn-remove-condition-${index}`}
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </div>
+
+      {condition.type === 'route' && (
+        <MultiSearchSelect
+          options={tripPatterns.map(tp => ({ value: tp.id, label: tp.name, sub: tp.code || undefined }))}
+          selected={condition.values}
+          onToggle={toggle}
+          placeholder="Pilih rute..."
+          emptyText="Belum ada pola rute"
+          testId={`condition-route-${index}`}
+        />
+      )}
+
+      {condition.type === 'trip' && (
+        <MultiSearchSelect
+          options={allTrips.map(t => ({
+            value: t.id,
+            label: `${t.patternName || 'Trip'} — ${t.serviceDate}`,
+            sub: t.vehiclePlate || t.vehicleCode || undefined,
+          }))}
+          selected={condition.values}
+          onToggle={toggle}
+          placeholder="Pilih trip..."
+          emptyText="Belum ada trip"
+          testId={`condition-trip-${index}`}
+        />
+      )}
+
+      {condition.type === 'channel' && (
+        <ChipPicker
+          options={CHANNEL_OPTIONS}
+          selected={condition.values}
+          onToggle={toggle}
+          testId={`condition-channel-${index}`}
+        />
+      )}
+
+      {condition.type === 'outlet' && (
+        <MultiSearchSelect
+          options={outlets.map(o => ({ value: o.id, label: o.name }))}
+          selected={condition.values}
+          onToggle={toggle}
+          placeholder="Pilih outlet..."
+          emptyText="Belum ada outlet"
+          testId={`condition-outlet-${index}`}
+        />
+      )}
+
+      {condition.type === 'sales_channel' && (
+        <div>
+          <Label className="text-xs">Kode Sales Channel (mis. TRAVELOKA, TIKETCOM)</Label>
+          <div className="flex gap-2 mt-1">
+            <Input
+              value={salesInput}
+              onChange={(e) => setSalesInput(e.target.value.toUpperCase())}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSalesChannel(); } }}
+              placeholder="Ketik kode lalu Enter atau klik +"
+              className="font-mono"
+              data-testid={`input-sales-channel-${index}`}
+            />
+            <Button type="button" size="sm" onClick={addSalesChannel} data-testid={`btn-add-sales-channel-${index}`}>
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+          {condition.values.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {condition.values.map(v => (
+                <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono font-medium">
+                  {v}
+                  <X className="w-3 h-3 cursor-pointer hover:text-blue-900" onClick={() => toggle(v)} />
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {condition.type === 'day_of_week' && (
+        <ChipPicker
+          options={DAY_OPTIONS}
+          selected={condition.values}
+          onToggle={toggle}
+          testId={`condition-dow-${index}`}
+        />
+      )}
+
+      {condition.values.length === 0 && condition.type && (
+        <p className="text-xs text-amber-600">Pilih minimal 1 nilai, atau hapus baris ini.</p>
+      )}
+    </div>
+  );
+}
+
+function ChipPicker({ options, selected, onToggle, testId }: { options: { value: string; label: string }[]; selected: string[]; onToggle: (v: string) => void; testId: string }) {
+  return (
+    <div className="flex flex-wrap gap-2" data-testid={`${testId}-list`}>
+      {options.map(opt => {
+        const active = selected.includes(opt.value);
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onToggle(opt.value)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors ${
+              active ? 'bg-blue-50 border-blue-400 text-blue-700' : 'border-gray-200 hover:border-gray-300'
+            }`}
+            data-testid={`${testId}-${opt.value}`}
+          >
+            <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${
+              active ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
+            }`}>
+              {active && <Check className="w-2.5 h-2.5 text-white" />}
+            </div>
+            <span className="text-sm font-medium">{opt.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function PromosManager() {
   const { toast } = useToast();
   const [editId, setEditId] = useState<string | null>(null);
@@ -167,9 +349,8 @@ export default function PromosManager() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [expandedPromo, setExpandedPromo] = useState<string | null>(null);
   const [form, setForm] = useState(defaultForm);
-
-  const [showVoucherGen, setShowVoucherGen] = useState(false);
-  const [voucherGenForm, setVoucherGenForm] = useState({ count: '', prefix: '', assignedTo: '' });
+  const [conditions, setConditions] = useState<ConditionDraft[]>([]);
+  const [conditionsLoading, setConditionsLoading] = useState(false);
 
   const { data: promotions = [], isLoading } = useQuery<Promotion[]>({
     queryKey: ['/api/promotions'],
@@ -186,8 +367,24 @@ export default function PromosManager() {
     queryFn: () => tripsApi.getAll(),
   });
 
+  const { data: outlets = [] } = useQuery<Outlet[]>({
+    queryKey: ['/api/outlets'],
+    queryFn: outletsApi.getAll,
+  });
+
+  const saveConditions = async (promoId: string) => {
+    const cleaned = conditions
+      .filter(c => c.type && c.values.length > 0)
+      .map(c => ({ type: c.type, values: c.values }));
+    await promotionsApi.replaceConditions(promoId, cleaned);
+  };
+
   const createMutation = useMutation({
-    mutationFn: (data: any) => promotionsApi.create(data),
+    mutationFn: async (data: any) => {
+      const promo = await promotionsApi.create(data);
+      await saveConditions(promo.id);
+      return promo;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/promotions'] });
       toast({ title: 'Berhasil', description: 'Promo berhasil dibuat' });
@@ -197,9 +394,14 @@ export default function PromosManager() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => promotionsApi.update(id, data),
-    onSuccess: () => {
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const promo = await promotionsApi.update(id, data);
+      await saveConditions(id);
+      return promo;
+    },
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/promotions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/promotions', variables.id, 'conditions'] });
       toast({ title: 'Berhasil', description: 'Promo diperbarui' });
       resetForm();
     },
@@ -217,11 +419,15 @@ export default function PromosManager() {
 
   const resetForm = () => {
     setForm(defaultForm);
+    setConditions([]);
+    setConditionsLoading(false);
     setEditId(null);
     setShowForm(false);
   };
 
-  const startEdit = (p: Promotion) => {
+  const startEdit = async (p: Promotion) => {
+    setConditions([]);
+    setConditionsLoading(true);
     setForm({
       code: p.code,
       name: p.name,
@@ -230,9 +436,6 @@ export default function PromosManager() {
       discountValue: p.discountValue,
       minPurchase: p.minPurchase || '',
       maxDiscount: p.maxDiscount || '',
-      scope: 'global',
-      scopeRefIds: [],
-      applicableChannels: [],
       usageLimit: p.usageLimit?.toString() || '',
       perUserLimit: p.perUserLimit?.toString() || '',
       requireVoucher: p.requireVoucher ?? false,
@@ -243,30 +446,51 @@ export default function PromosManager() {
     });
     setEditId(p.id);
     setShowForm(true);
+    try {
+      const existing = await promotionsApi.getConditions(p.id);
+      setEditId(currentId => {
+        if (currentId === p.id) {
+          setConditions(existing.map(c => ({ type: c.type, values: c.values })));
+        }
+        return currentId;
+      });
+    } catch {
+      // Keep empty on fetch failure
+    } finally {
+      setEditId(currentId => {
+        if (currentId === p.id) setConditionsLoading(false);
+        return currentId;
+      });
+    }
   };
 
-  const toggleScopeRef = (id: string) => {
-    setForm(f => ({
-      ...f,
-      scopeRefIds: f.scopeRefIds.includes(id)
-        ? f.scopeRefIds.filter(x => x !== id)
-        : [...f.scopeRefIds, id],
-    }));
+  const addCondition = () => {
+    const used = conditions.map(c => c.type);
+    const next = CONDITION_TYPE_OPTIONS.find(o => !used.includes(o.value));
+    if (!next) return;
+    setConditions([...conditions, { type: next.value, values: [] }]);
   };
 
-  const toggleChannel = (ch: string) => {
-    setForm(f => ({
-      ...f,
-      applicableChannels: f.applicableChannels.includes(ch)
-        ? f.applicableChannels.filter(x => x !== ch)
-        : [...f.applicableChannels, ch],
-    }));
+  const updateCondition = (i: number, next: ConditionDraft) => {
+    setConditions(cs => cs.map((c, idx) => idx === i ? next : c));
+  };
+
+  const removeCondition = (i: number) => {
+    setConditions(cs => cs.filter((_, idx) => idx !== i));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.code.trim() || !form.name.trim() || !form.discountValue) return;
-    const scopeRefId = form.scopeRefIds.length > 0 ? JSON.stringify(form.scopeRefIds) : null;
+    if (conditionsLoading) {
+      toast({ title: 'Mohon tunggu', description: 'Kondisi promo masih dimuat.', variant: 'destructive' });
+      return;
+    }
+    const invalid = conditions.find(c => c.type && c.values.length === 0);
+    if (invalid) {
+      toast({ title: 'Kondisi belum lengkap', description: `Kondisi "${invalid.type}" tidak punya nilai. Hapus atau isi nilainya.`, variant: 'destructive' });
+      return;
+    }
     const payload: any = {
       code: form.code.trim().toUpperCase(),
       name: form.name.trim(),
@@ -275,9 +499,6 @@ export default function PromosManager() {
       discountValue: form.discountValue,
       minPurchase: form.minPurchase || '0',
       maxDiscount: form.maxDiscount || null,
-      scope: form.scope,
-      scopeRefId,
-      applicableChannels: form.applicableChannels.length > 0 ? form.applicableChannels : null,
       usageLimit: form.usageLimit ? parseInt(form.usageLimit) : null,
       perUserLimit: form.perUserLimit ? parseInt(form.perUserLimit) : null,
       requireVoucher: form.requireVoucher,
@@ -309,7 +530,9 @@ export default function PromosManager() {
     return new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  const isPending = createMutation.isPending || updateMutation.isPending;
+  const isPending = createMutation.isPending || updateMutation.isPending || conditionsLoading;
+  const usedTypes = conditions.map(c => c.type);
+  const canAddCondition = usedTypes.length < CONDITION_TYPE_OPTIONS.length;
 
   return (
     <div className="space-y-4">
@@ -462,88 +685,59 @@ export default function PromosManager() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label>Min. Pembelian</Label>
-            <Input
-              type="number"
-              value={form.minPurchase}
-              onChange={(e) => setForm({ ...form, minPurchase: e.target.value })}
-              placeholder="0"
-              data-testid="input-min-purchase"
-            />
-          </div>
-          <div>
-            <Label>Scope</Label>
-            <SearchableSelect
-              value={form.scope}
-              onChange={(v) => setForm({ ...form, scope: v, scopeRefIds: [] })}
-              options={SCOPE_OPTIONS}
-              placeholder="Pilih scope"
-              data-testid="select-promo-scope"
-            />
-          </div>
+        <div>
+          <Label>Min. Pembelian</Label>
+          <Input
+            type="number"
+            value={form.minPurchase}
+            onChange={(e) => setForm({ ...form, minPurchase: e.target.value })}
+            placeholder="0"
+            data-testid="input-min-purchase"
+          />
         </div>
 
-        {form.scope === 'pattern' && (
-          <MultiSearchSelect
-            label="Pilih Rute (bisa pilih lebih dari satu)"
-            options={tripPatterns.map(tp => ({ value: tp.id, label: tp.name, sub: tp.code || undefined }))}
-            selected={form.scopeRefIds}
-            onToggle={toggleScopeRef}
-            placeholder="Cari rute..."
-            emptyText="Belum ada pola rute"
-            testId="scope-pattern"
-          />
-        )}
+        <div className="border rounded-xl p-3 space-y-3 bg-muted/10" data-testid="conditions-builder">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="mb-0">Kondisi Berlaku</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Semua kondisi harus terpenuhi (AND). Kosongkan = berlaku untuk semua transaksi.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={addCondition}
+              disabled={!canAddCondition}
+              data-testid="btn-add-condition"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" /> Tambah Kondisi
+            </Button>
+          </div>
 
-        {form.scope === 'trip' && (
-          <MultiSearchSelect
-            label="Pilih Trip (bisa pilih lebih dari satu)"
-            options={allTrips.map(t => ({
-              value: t.id,
-              label: `${t.patternName || 'Trip'} — ${t.serviceDate}`,
-              sub: t.vehiclePlate || t.vehicleCode || undefined,
-            }))}
-            selected={form.scopeRefIds}
-            onToggle={toggleScopeRef}
-            placeholder="Cari trip..."
-            emptyText="Belum ada trip"
-            testId="scope-trip"
-          />
-        )}
-
-        {form.scope === 'channel' && (
-          <div>
-            <Label>Pilih Channel (bisa pilih lebih dari satu)</Label>
-            <div className="flex flex-wrap gap-2 mt-1" data-testid="scope-channel-list">
-              {CHANNEL_OPTIONS.map(ch => (
-                <label
-                  key={ch.value}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
-                    form.applicableChannels.includes(ch.value)
-                      ? 'bg-blue-50 border-blue-400 text-blue-700'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  data-testid={`scope-channel-${ch.value}`}
-                >
-                  <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${
-                    form.applicableChannels.includes(ch.value) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
-                  }`}>
-                    {form.applicableChannels.includes(ch.value) && <Check className="w-2.5 h-2.5 text-white" />}
-                  </div>
-                  <span className="text-sm font-medium">{ch.label}</span>
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={form.applicableChannels.includes(ch.value)}
-                    onChange={() => toggleChannel(ch.value)}
-                  />
-                </label>
+          {conditions.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic text-center py-3">
+              Tidak ada kondisi — promo berlaku global.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {conditions.map((c, i) => (
+                <ConditionRow
+                  key={i}
+                  index={i}
+                  condition={c}
+                  usedTypes={usedTypes}
+                  tripPatterns={tripPatterns}
+                  allTrips={allTrips}
+                  outlets={outlets}
+                  onChange={updateCondition}
+                  onRemove={removeCondition}
+                />
               ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>

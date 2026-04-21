@@ -1,5 +1,5 @@
 import { IStorage } from "@server/storage.interface";
-import { type Promotion, type Voucher, type InsertPromotion, type InsertVoucher } from "@shared/schema";
+import { type Promotion, type Voucher, type InsertPromotion, type InsertVoucher, type PromoCondition, type PromoConditionInput } from "@shared/schema";
 import crypto from "crypto";
 
 export interface PromoValidationResult {
@@ -39,6 +39,16 @@ export class PromosService {
 
   async deletePromotion(id: string): Promise<void> {
     return this.storage.deletePromotion(id);
+  }
+
+  async getConditions(promoId: string): Promise<PromoCondition[]> {
+    return this.storage.getPromoConditions(promoId);
+  }
+
+  async replaceConditions(promoId: string, conditions: PromoConditionInput[]): Promise<PromoCondition[]> {
+    const promo = await this.storage.getPromotionById(promoId);
+    if (!promo) throw new Error('Promotion not found');
+    return this.storage.replacePromoConditions(promoId, conditions);
   }
 
   async getVouchers(promoId?: string): Promise<Voucher[]> {
