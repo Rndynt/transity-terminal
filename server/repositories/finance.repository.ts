@@ -2,11 +2,13 @@ import { db } from "@server/db";
 import { eq, desc, inArray } from "drizzle-orm";
 import {
   tripCostTemplates, tripCostItems, promotions, promotionConditions, vouchers,
+  bookingPromoApplications,
   type TripCostTemplate, type InsertTripCostTemplate,
   type TripCostItem, type InsertTripCostItem,
   type Promotion, type InsertPromotion,
   type PromoCondition, type PromoConditionInput,
-  type Voucher, type InsertVoucher
+  type Voucher, type InsertVoucher,
+  type BookingPromoApplication, type InsertBookingPromoApplication
 } from "@shared/schema";
 import { sql } from "drizzle-orm";
 
@@ -116,6 +118,19 @@ export class FinanceRepository {
 
   async incrementPromoUsage(id: string): Promise<void> {
     await db.update(promotions).set({ usageCount: sql`${promotions.usageCount} + 1` }).where(eq(promotions.id, id));
+  }
+
+  async createBookingPromoApplications(rows: InsertBookingPromoApplication[]): Promise<BookingPromoApplication[]> {
+    if (rows.length === 0) return [];
+    return await db.insert(bookingPromoApplications).values(rows).returning();
+  }
+
+  async getBookingPromoApplications(bookingId: string): Promise<BookingPromoApplication[]> {
+    return await db.select().from(bookingPromoApplications).where(eq(bookingPromoApplications.bookingId, bookingId));
+  }
+
+  async deleteBookingPromoApplications(bookingId: string): Promise<void> {
+    await db.delete(bookingPromoApplications).where(eq(bookingPromoApplications.bookingId, bookingId));
   }
 
   async getVouchers(promoId?: string): Promise<Voucher[]> {

@@ -13,7 +13,8 @@ import type {
   TripCostItem, InsertTripCostItem,
   CsoAvailableTrip, CargoAvailableTrip,
   Promotion, InsertPromotion, PromoCondition, PromoConditionInput,
-  Voucher, InsertVoucher
+  Voucher, InsertVoucher,
+  BookingPromoApplication, InsertBookingPromoApplication
 } from "@shared/schema";
 
 export interface ManifestEntry {
@@ -219,6 +220,9 @@ export interface IStorage {
   updatePromotion(id: string, data: Partial<InsertPromotion>): Promise<Promotion>;
   deletePromotion(id: string): Promise<void>;
   incrementPromoUsage(id: string): Promise<void>;
+  createBookingPromoApplications(rows: InsertBookingPromoApplication[]): Promise<BookingPromoApplication[]>;
+  getBookingPromoApplications(bookingId: string): Promise<BookingPromoApplication[]>;
+  deleteBookingPromoApplications(bookingId: string): Promise<void>;
   getPromoConditions(promoId: string): Promise<PromoCondition[]>;
   getPromoConditionsForPromos(promoIds: string[]): Promise<Map<string, PromoCondition[]>>;
   replacePromoConditions(promoId: string, conditions: PromoConditionInput[]): Promise<PromoCondition[]>;

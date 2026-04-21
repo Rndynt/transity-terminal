@@ -8,6 +8,9 @@ export interface PromoValidationResult {
   voucher?: Voucher;
   discountAmount: number;
   error?: string;
+  // Stacking: bila auto-promo ikut digabung (kedua promo stackable=true)
+  autoPromotion?: Promotion;
+  autoDiscountAmount?: number;
 }
 
 export class PromosService {
@@ -99,6 +102,7 @@ export class PromosService {
       outletId?: string;
       salesChannelCode?: string;
       departureDate?: Date | string;
+      autoPromoId?: string;
     } = {}
   ): Promise<PromoValidationResult> {
     const { channel, tripId, patternId, outletId, salesChannelCode, departureDate } = ctx;
@@ -155,13 +159,40 @@ export class PromosService {
       return { valid: false, discountAmount: 0, error: condError };
     }
 
-    const discountAmount = this.computeDiscount(promo, subtotal);
+    const voucherDiscount = this.computeDiscount(promo, subtotal);
+
+    // Stacking: jika autoPromoId disertakan & kedua promo stackable, gabungkan diskon.
+    let autoPromotion: Promotion | undefined;
+    let autoDiscountAmount = 0;
+    if (ctx.autoPromoId && ctx.autoPromoId !== promo.id) {
+      const autoPromo = await this.storage.getPromotionById(ctx.autoPromoId);
+      if (autoPromo && promo.stackable && autoPromo.stackable && autoPromo.isActive && !autoPromo.requireVoucher) {
+        const now = new Date();
+        const validWindow =
+          (!autoPromo.validFrom || new Date(autoPromo.validFrom) <= now) &&
+          (!autoPromo.validTo || new Date(autoPromo.validTo) >= now);
+        const quotaOk = autoPromo.usageLimit === null || (autoPromo.usageCount ?? 0) < autoPromo.usageLimit;
+        const minOk = subtotal >= Number(autoPromo.minPurchase || 0);
+        if (validWindow && quotaOk && minOk) {
+          const autoConditions = await this.storage.getPromoConditions(autoPromo.id);
+          if (this.checkConditions(autoConditions, ctx) === null) {
+            autoDiscountAmount = this.computeDiscount(autoPromo, subtotal);
+            if (autoDiscountAmount > 0) autoPromotion = autoPromo;
+          }
+        }
+      }
+    }
+
+    let discountAmount = voucherDiscount + autoDiscountAmount;
+    if (discountAmount > subtotal) discountAmount = subtotal;
 
     return {
       valid: true,
       promotion: promo,
       voucher: voucher || undefined,
-      discountAmount
+      discountAmount,
+      autoPromotion,
+      autoDiscountAmount: autoPromotion ? autoDiscountAmount : undefined,
     };
   }
 

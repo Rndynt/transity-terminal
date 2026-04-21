@@ -15,7 +15,8 @@ import type {
   CargoShipment, InsertCargoShipment, CargoType, InsertCargoType,
   CargoRate, InsertCargoRate, CsoAvailableTrip, CargoAvailableTrip,
   TripCostTemplate, InsertTripCostTemplate, TripCostItem, InsertTripCostItem,
-  Promotion, InsertPromotion, PromoCondition, PromoConditionInput, Voucher, InsertVoucher
+  Promotion, InsertPromotion, PromoCondition, PromoConditionInput, Voucher, InsertVoucher,
+  BookingPromoApplication, InsertBookingPromoApplication
 } from "@shared/schema";
 
 export class DatabaseStorage implements IStorage {
@@ -176,6 +177,9 @@ export class DatabaseStorage implements IStorage {
   updatePromotion(id: string, data: Partial<InsertPromotion>): Promise<Promotion> { return this.finance.updatePromotion(id, data); }
   deletePromotion(id: string): Promise<void> { return this.finance.deletePromotion(id); }
   incrementPromoUsage(id: string): Promise<void> { return this.finance.incrementPromoUsage(id); }
+  createBookingPromoApplications(rows: InsertBookingPromoApplication[]): Promise<BookingPromoApplication[]> { return this.finance.createBookingPromoApplications(rows); }
+  getBookingPromoApplications(bookingId: string): Promise<BookingPromoApplication[]> { return this.finance.getBookingPromoApplications(bookingId); }
+  deleteBookingPromoApplications(bookingId: string): Promise<void> { return this.finance.deleteBookingPromoApplications(bookingId); }
   getPromoConditions(promoId: string): Promise<PromoCondition[]> { return this.finance.getPromoConditions(promoId); }
   getPromoConditionsForPromos(promoIds: string[]): Promise<Map<string, PromoCondition[]>> { return this.finance.getPromoConditionsForPromos(promoIds); }
   replacePromoConditions(promoId: string, conditions: PromoConditionInput[]): Promise<PromoCondition[]> { return this.finance.replacePromoConditions(promoId, conditions); }

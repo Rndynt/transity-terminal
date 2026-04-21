@@ -6,6 +6,7 @@ import { bookingStatusEnum, channelEnum, paymentMethodEnum, paymentStatusEnum, p
 import { trips } from "./scheduling";
 import { stops, outlets } from "./network";
 import { appUsers } from "./app-users";
+import { promotions, vouchers } from "./promo";
 
 export const bookingGroups = pgTable("booking_groups", {
   id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -73,6 +74,28 @@ export const bookings = pgTable("bookings", {
 export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, createdAt: true });
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
+
+// Aplikasi promo per booking — 1 baris per promo (mendukung stacking & audit).
+// bookingCode/ticketNumber tidak di-snapshot di sini krn bisa di-join dari bookings/passengers via bookingId.
+export const bookingPromoApplications = pgTable("booking_promo_applications", {
+  id:              uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId:       uuid("booking_id").notNull().references(() => bookings.id, { onDelete: 'cascade' }),
+  promoId:         uuid("promo_id").notNull().references(() => promotions.id),
+  promoCode:       text("promo_code").notNull(),         // snapshot kode promo
+  voucherId:       uuid("voucher_id").references(() => vouchers.id),
+  voucherCode:     text("voucher_code"),                  // snapshot kode voucher (jika ada)
+  source:          text("source").notNull(),              // 'auto' | 'manual'
+  discountAmount:  numeric("discount_amount", { precision: 12, scale: 2 }).notNull(),
+  createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  idxBpaBookingId: sql`CREATE INDEX IF NOT EXISTS idx_bpa_booking_id ON ${table} (booking_id)`,
+  idxBpaPromoId:   sql`CREATE INDEX IF NOT EXISTS idx_bpa_promo_id ON ${table} (promo_id)`,
+  uniqBpaBookingPromo: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_bpa_booking_promo ON ${table} (booking_id, promo_id)`,
+}));
+
+export const insertBookingPromoApplicationSchema = createInsertSchema(bookingPromoApplications).omit({ id: true, createdAt: true });
+export type BookingPromoApplication = typeof bookingPromoApplications.$inferSelect;
+export type InsertBookingPromoApplication = z.infer<typeof insertBookingPromoApplicationSchema>;
 
 export const passengers = pgTable("passengers", {
   id:             uuid("id").primaryKey().default(sql`gen_random_uuid()`),
