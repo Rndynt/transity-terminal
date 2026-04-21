@@ -389,6 +389,7 @@ export class SchedulingRepository {
       SELECT
         et.id AS trip_id,
         et.base_id,
+        et.pattern_id,
         tp.code AS pattern_code,
         v.code AS vehicle_code,
         v.plate AS vehicle_plate,
@@ -1156,6 +1157,7 @@ export class SchedulingRepository {
       trips.push({
         tripId: row.trip_id,
         baseId: row.base_id || undefined,
+        patternId: row.pattern_id || undefined,
         isVirtual: false,
         patternCode: row.pattern_code,
         patternPath: patternPathMap.get(row.pattern_id) || 'Unknown Route',
@@ -1254,6 +1256,7 @@ export class SchedulingRepository {
 
         virtualTrips.push({
           baseId: base.id,
+          patternId: base.patternId,
           isVirtual: true,
           patternCode: pattern.code,
           patternPath: patternPathMap.get(base.patternId) || '',

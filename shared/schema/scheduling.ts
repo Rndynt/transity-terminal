@@ -145,6 +145,7 @@ export type CsoAvailableTrip = {
 export type CargoAvailableTrip = {
   tripId?: string;
   baseId?: string;
+  patternId?: string;
   isVirtual: boolean;
   patternCode: string;
   patternPath: string;

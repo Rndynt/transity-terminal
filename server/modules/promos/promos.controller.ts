@@ -65,9 +65,7 @@ export class PromosController {
       departureDate: z.string().optional(),
     });
     const ctx = schema.parse(req.body);
-    console.log('[autoApply] ctx=', JSON.stringify(ctx));
     const best = await this.service.findBestAutoApplicablePromo(ctx.subtotal, ctx);
-    console.log('[autoApply] result=', best ? `${best.promotion.code} -${best.discountAmount}` : 'null');
     reply.send(best);
   }
 

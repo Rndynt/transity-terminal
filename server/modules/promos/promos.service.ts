@@ -238,16 +238,10 @@ export class PromosService {
     const conditionsMap = await this.storage.getPromoConditionsForPromos(candidates.map(p => p.id));
 
     let best: { promotion: Promotion; discountAmount: number } | null = null;
-    console.log('[findBestAutoApplicablePromo] candidates=', candidates.map(c => c.code), 'ctx=', JSON.stringify(ctx));
     for (const promo of candidates) {
       const conditions = conditionsMap.get(promo.id) ?? [];
-      const condErr = this.checkConditions(conditions, ctx);
-      if (condErr !== null) {
-        console.log(`[findBestAutoApplicablePromo] ${promo.code} skip: ${condErr}; conditions=`, conditions.map(c => ({ type: c.type, values: c.values })));
-        continue;
-      }
+      if (this.checkConditions(conditions, ctx) !== null) continue;
       const discountAmount = this.computeDiscount(promo, subtotal);
-      console.log(`[findBestAutoApplicablePromo] ${promo.code} OK discount=${discountAmount}`);
       if (discountAmount <= 0) continue;
       if (!best || discountAmount > best.discountAmount) {
         best = { promotion: promo, discountAmount };
