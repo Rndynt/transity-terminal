@@ -415,6 +415,7 @@ export class SchedulingRepository {
     return (result.rows as any[]).map(row => ({
       tripId: row.trip_id,
       baseId: row.base_id || undefined,
+      patternId: row.pattern_id || undefined,
       isVirtual: false,
       patternCode: row.pattern_code,
       patternPath: row.pattern_stops || 'Unknown Route',
@@ -514,6 +515,7 @@ export class SchedulingRepository {
 
         virtualTrips.push({
           baseId: base.id,
+          patternId: base.patternId,
           isVirtual: true,
           patternCode: pattern.code,
           patternPath,

@@ -125,6 +125,7 @@ export type TripWithDetails = Trip & {
 export type CsoAvailableTrip = {
   tripId?: string;
   baseId?: string;
+  patternId?: string;
   isVirtual: boolean;
   patternCode: string;
   patternPath: string;
