@@ -376,7 +376,7 @@ export default function CsoPage() {
     updateState({
       trip: {
         id: csoTrip.tripId || '',
-        patternId: '',
+        patternId: csoTrip.patternId || '',
         vehicleId: '',
         serviceDate: selectedDate,
         capacity: csoTrip.capacity || 0,
