@@ -177,6 +177,7 @@ export class DatabaseStorage implements IStorage {
   deletePromotion(id: string): Promise<void> { return this.finance.deletePromotion(id); }
   incrementPromoUsage(id: string): Promise<void> { return this.finance.incrementPromoUsage(id); }
   getPromoConditions(promoId: string): Promise<PromoCondition[]> { return this.finance.getPromoConditions(promoId); }
+  getPromoConditionsForPromos(promoIds: string[]): Promise<Map<string, PromoCondition[]>> { return this.finance.getPromoConditionsForPromos(promoIds); }
   replacePromoConditions(promoId: string, conditions: PromoConditionInput[]): Promise<PromoCondition[]> { return this.finance.replacePromoConditions(promoId, conditions); }
   getVouchers(promoId?: string): Promise<Voucher[]> { return this.finance.getVouchers(promoId); }
   getVoucherById(id: string): Promise<Voucher | undefined> { return this.finance.getVoucherById(id); }

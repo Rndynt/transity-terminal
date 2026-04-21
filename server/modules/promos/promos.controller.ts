@@ -54,6 +54,21 @@ export class PromosController {
     reply.send(result);
   }
 
+  async autoApplyPromo(req: FastifyRequest, reply: FastifyReply) {
+    const schema = z.object({
+      subtotal: z.number().nonnegative(),
+      channel: z.string().optional(),
+      tripId: z.string().optional(),
+      patternId: z.string().optional(),
+      outletId: z.string().optional(),
+      salesChannelCode: z.string().optional(),
+      departureDate: z.string().optional(),
+    });
+    const ctx = schema.parse(req.body);
+    const best = await this.service.findBestAutoApplicablePromo(ctx.subtotal, ctx);
+    reply.send(best);
+  }
+
   async getVouchers(req: FastifyRequest, reply: FastifyReply) {
     const { promoId } = req.query as { promoId?: string };
     const vouchers = await this.service.getVouchers(promoId);

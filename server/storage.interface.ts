@@ -220,6 +220,7 @@ export interface IStorage {
   deletePromotion(id: string): Promise<void>;
   incrementPromoUsage(id: string): Promise<void>;
   getPromoConditions(promoId: string): Promise<PromoCondition[]>;
+  getPromoConditionsForPromos(promoIds: string[]): Promise<Map<string, PromoCondition[]>>;
   replacePromoConditions(promoId: string, conditions: PromoConditionInput[]): Promise<PromoCondition[]>;
 
   getVouchers(promoId?: string): Promise<Voucher[]>;

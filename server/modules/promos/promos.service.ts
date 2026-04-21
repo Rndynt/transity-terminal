@@ -150,6 +150,25 @@ export class PromosService {
     }
 
     const conditions = await this.storage.getPromoConditions(promo.id);
+    const condError = this.checkConditions(conditions, ctx);
+    if (condError) {
+      return { valid: false, discountAmount: 0, error: condError };
+    }
+
+    const discountAmount = this.computeDiscount(promo, subtotal);
+
+    return {
+      valid: true,
+      promotion: promo,
+      voucher: voucher || undefined,
+      discountAmount
+    };
+  }
+
+  private checkConditions(
+    conditions: PromoCondition[],
+    ctx: { channel?: string; tripId?: string; patternId?: string; outletId?: string; salesChannelCode?: string; departureDate?: Date | string }
+  ): string | null {
     const errorByType: Record<string, string> = {
       route: 'Promo tidak berlaku untuk rute ini',
       trip: 'Promo tidak berlaku untuk trip ini',
@@ -159,48 +178,76 @@ export class PromosService {
       day_of_week: 'Promo tidak berlaku untuk hari ini',
     };
     const ctxValueByType: Record<string, string | undefined> = {
-      route: patternId,
-      trip: tripId,
-      channel: channel,
-      outlet: outletId,
-      sales_channel: salesChannelCode,
-      day_of_week: departureDate
-        ? String(new Date(departureDate).getDay())
-        : undefined,
+      route: ctx.patternId,
+      trip: ctx.tripId,
+      channel: ctx.channel,
+      outlet: ctx.outletId,
+      sales_channel: ctx.salesChannelCode,
+      day_of_week: ctx.departureDate ? String(new Date(ctx.departureDate).getDay()) : undefined,
     };
     for (const cond of conditions) {
       const values = (cond.values as string[]) || [];
       if (values.length === 0) continue;
       const ctxValue = ctxValueByType[cond.type];
-      if (!ctxValue) {
-        return { valid: false, discountAmount: 0, error: errorByType[cond.type] ?? 'Konteks promo tidak lengkap' };
-      }
-      if (!values.includes(ctxValue)) {
-        return { valid: false, discountAmount: 0, error: errorByType[cond.type] ?? 'Konteks promo tidak cocok' };
-      }
+      if (!ctxValue) return errorByType[cond.type] ?? 'Konteks promo tidak lengkap';
+      if (!values.includes(ctxValue)) return errorByType[cond.type] ?? 'Konteks promo tidak cocok';
     }
+    return null;
+  }
 
+  private computeDiscount(promo: Promotion, subtotal: number): number {
     let discountAmount = 0;
     if (promo.type === 'percentage') {
       discountAmount = Math.round(subtotal * Number(promo.discountValue) / 100);
       const maxDiscount = promo.maxDiscount ? Number(promo.maxDiscount) : null;
-      if (maxDiscount && discountAmount > maxDiscount) {
-        discountAmount = maxDiscount;
-      }
+      if (maxDiscount && discountAmount > maxDiscount) discountAmount = maxDiscount;
     } else {
       discountAmount = Number(promo.discountValue);
     }
+    if (discountAmount > subtotal) discountAmount = subtotal;
+    return discountAmount;
+  }
 
-    if (discountAmount > subtotal) {
-      discountAmount = subtotal;
+  /**
+   * Cari promo auto-apply terbaik (requireVoucher=false, isActive, valid, kondisi cocok).
+   * Returns promo dengan discount terbesar untuk subtotal yang diberikan.
+   */
+  async findBestAutoApplicablePromo(
+    subtotal: number,
+    ctx: {
+      channel?: string;
+      tripId?: string;
+      patternId?: string;
+      outletId?: string;
+      salesChannelCode?: string;
+      departureDate?: Date | string;
+    } = {}
+  ): Promise<{ promotion: Promotion; discountAmount: number } | null> {
+    const all = await this.storage.getPromotions();
+    const now = new Date();
+    const candidates = all.filter(p =>
+      p.isActive &&
+      !p.requireVoucher &&
+      (!p.validFrom || new Date(p.validFrom) <= now) &&
+      (!p.validTo || new Date(p.validTo) >= now) &&
+      (p.usageLimit === null || (p.usageCount ?? 0) < p.usageLimit) &&
+      subtotal >= Number(p.minPurchase || 0)
+    );
+
+    // Bulk-fetch semua kondisi sekaligus (hindari N+1)
+    const conditionsMap = await this.storage.getPromoConditionsForPromos(candidates.map(p => p.id));
+
+    let best: { promotion: Promotion; discountAmount: number } | null = null;
+    for (const promo of candidates) {
+      const conditions = conditionsMap.get(promo.id) ?? [];
+      if (this.checkConditions(conditions, ctx) !== null) continue;
+      const discountAmount = this.computeDiscount(promo, subtotal);
+      if (discountAmount <= 0) continue;
+      if (!best || discountAmount > best.discountAmount) {
+        best = { promotion: promo, discountAmount };
+      }
     }
-
-    return {
-      valid: true,
-      promotion: promo,
-      voucher: voucher || undefined,
-      discountAmount
-    };
+    return best;
   }
 
   async markUsed(promoId: string, voucherId?: string, bookingId?: string): Promise<void> {

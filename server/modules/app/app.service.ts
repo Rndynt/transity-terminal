@@ -903,10 +903,11 @@ export class AppService {
 
     await validateBoardingAlighting(this.storage, resolvedTripId, params.originSeq, params.destinationSeq);
 
-    const { fareQuote, total: totalAmount } = await calculateBookingTotal(
+    const { fareQuote, total: totalAmount, promo: promoResult } = await calculateBookingTotal(
       this.storage, resolvedTripId, params.originSeq, params.destinationSeq,
       params.passengers.length, params.channel, params.promoCode,
-      undefined, params.salesChannelCode
+      undefined, params.salesChannelCode,
+      { autoApplyIfNoCode: true }
     );
 
     const legIndexes = computeLegIndexes(params.originSeq, params.destinationSeq);
@@ -947,7 +948,9 @@ export class AppService {
         status: 'pending',
         pendingExpiresAt: holdExpiresAt,
         totalAmount: totalAmount.toString(),
-        discountAmount: '0',
+        discountAmount: (promoResult.discountAmount || 0).toString(),
+        promoId: promoResult.promoId ?? null,
+        voucherCode: promoResult.voucherCode ?? null,
         ...snapshots,
         createdBy,
         salesChannelCode: channel === 'OTA' ? params.salesChannelCode ?? null : null,
@@ -1552,6 +1555,10 @@ export class AppService {
         usedVoucherId = v.id;
         usedPromoId = v.promoId;
       }
+    } else if (booking.promoId) {
+      // Auto-applied promo (atau promo non-voucher) sudah dicatat saat createAppBooking → preserve
+      usedPromoId = booking.promoId;
+      discountAmount = Number(booking.discountAmount || 0);
     }
 
     const finalAmount = Math.max(0, totalAmount - discountAmount);

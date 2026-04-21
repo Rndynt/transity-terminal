@@ -1,5 +1,5 @@
 import { db } from "@server/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import {
   tripCostTemplates, tripCostItems, promotions, promotionConditions, vouchers,
   type TripCostTemplate, type InsertTripCostTemplate,
@@ -89,6 +89,19 @@ export class FinanceRepository {
 
   async getPromoConditions(promoId: string): Promise<PromoCondition[]> {
     return await db.select().from(promotionConditions).where(eq(promotionConditions.promoId, promoId));
+  }
+
+  async getPromoConditionsForPromos(promoIds: string[]): Promise<Map<string, PromoCondition[]>> {
+    const map = new Map<string, PromoCondition[]>();
+    if (promoIds.length === 0) return map;
+    const rows = await db.select().from(promotionConditions).where(inArray(promotionConditions.promoId, promoIds));
+    for (const id of promoIds) map.set(id, []);
+    for (const row of rows) {
+      const list = map.get(row.promoId) ?? [];
+      list.push(row);
+      map.set(row.promoId, list);
+    }
+    return map;
   }
 
   async replacePromoConditions(promoId: string, conditions: PromoConditionInput[]): Promise<PromoCondition[]> {

@@ -377,6 +377,8 @@ export const promotionsApi = {
   delete: (id: string) => apiRequest('DELETE', `/api/promotions/${id}`),
   validate: (data: { code: string; subtotal: number; channel?: string; tripId?: string; patternId?: string; outletId?: string; salesChannelCode?: string; departureDate?: string }) =>
     apiRequest('POST', '/api/promos/validate', data).then(res => res.json()),
+  autoApply: (data: { subtotal: number; channel?: string; tripId?: string; patternId?: string; outletId?: string; salesChannelCode?: string; departureDate?: string }) =>
+    apiRequest('POST', '/api/promos/auto-apply', data).then(res => res.json()) as Promise<{ promotion: { id: string; code: string; name: string; type: string; discountValue: string }; discountAmount: number } | null>,
   getConditions: (promoId: string) => fetch(`/api/promotions/${promoId}/conditions`).then(r => assertOk<Array<{ id: string; promoId: string; type: string; values: string[] }>>(r)),
   replaceConditions: (promoId: string, conditions: Array<{ type: string; values: string[] }>) =>
     apiRequest('PUT', `/api/promotions/${promoId}/conditions`, conditions).then(res => res.json()),

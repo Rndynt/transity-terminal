@@ -27,6 +27,10 @@ export function useBookingFlow() {
 
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
+  // Tandai sumber promo: 'manual' (user input kode) vs 'auto' (otomatis dari kondisi)
+  const promoSourceRef = useRef<'manual' | 'auto' | null>(null);
+  // Token untuk auto-apply request — cegah respons stale menimpa state terbaru / pilihan manual
+  const autoApplyTokenRef = useRef(0);
 
   const updateState = useCallback((updates: Partial<BookingFlowState>) => {
     setState(current => ({ ...current, ...updates }));
@@ -231,6 +235,9 @@ export function useBookingFlow() {
 
   const applyPromoCode = useCallback(async (code: string): Promise<void> => {
     if (!code.trim()) {
+      promoSourceRef.current = null;
+      // Invalidasi auto-apply request yg sedang berjalan
+      autoApplyTokenRef.current++;
       setState(current => ({
         ...current,
         promoCode: undefined,
@@ -256,19 +263,26 @@ export function useBookingFlow() {
       patternId: trip.patternId || undefined,
     });
 
-    setState(current => ({
-      ...current,
-      promoCode: result.valid ? code.trim().toUpperCase() : undefined,
-      discountAmount: result.valid ? result.discountAmount : undefined,
-      promoValidation: result,
-    }));
-
     if (!result.valid) {
+      // Jangan promote ke 'manual' kalau gagal — auto-apply masih boleh jalan
       throw new Error(result.error || 'Kode promo tidak valid');
     }
+
+    // Promote ke manual SETELAH sukses + invalidasi auto-apply yg in-flight
+    promoSourceRef.current = 'manual';
+    autoApplyTokenRef.current++;
+
+    setState(current => ({
+      ...current,
+      promoCode: code.trim().toUpperCase(),
+      discountAmount: result.discountAmount,
+      promoValidation: result,
+    }));
   }, [calculateTotalAmount]);
 
   const clearPromoCode = useCallback(() => {
+    promoSourceRef.current = null;
+    autoApplyTokenRef.current++;
     setState(current => ({
       ...current,
       promoCode: undefined,
@@ -276,6 +290,64 @@ export function useBookingFlow() {
       promoValidation: undefined,
     }));
   }, []);
+
+  // Auto-apply promo: cari promo terbaik dgn requireVoucher=false yg cocok ctx CSO.
+  // Jangan override kalau user sudah input kode manual.
+  useEffect(() => {
+    const tripId = state.trip?.id;
+    const seatCount = state.selectedSeats.length;
+    const originSeq = state.originSeq;
+    const destinationSeq = state.destinationSeq;
+    if (!tripId || originSeq === undefined || destinationSeq === undefined || seatCount === 0) return;
+    if (promoSourceRef.current === 'manual') return;
+
+    const myToken = ++autoApplyTokenRef.current;
+    const isStale = () =>
+      myToken !== autoApplyTokenRef.current || promoSourceRef.current === 'manual';
+
+    (async () => {
+      try {
+        const subtotal = await calculateTotalAmount();
+        if (isStale()) return;
+        const trip = state.trip as { patternId?: string; serviceDate?: string };
+        const best = await promotionsApi.autoApply({
+          subtotal,
+          channel: 'CSO',
+          tripId,
+          patternId: trip.patternId || undefined,
+          outletId: state.outlet?.id,
+          departureDate: trip.serviceDate || undefined,
+        });
+        if (isStale()) return;
+
+        if (best && best.discountAmount > 0) {
+          promoSourceRef.current = 'auto';
+          setState(current => ({
+            ...current,
+            promoCode: best.promotion.code,
+            discountAmount: best.discountAmount,
+            promoValidation: {
+              valid: true,
+              discountAmount: best.discountAmount,
+              promotion: best.promotion,
+              auto: true,
+            } as any,
+          }));
+        } else if (promoSourceRef.current === 'auto') {
+          // Sebelumnya auto-applied, sekarang sudah tidak match → bersihkan
+          promoSourceRef.current = null;
+          setState(current => ({
+            ...current,
+            promoCode: undefined,
+            discountAmount: undefined,
+            promoValidation: undefined,
+          }));
+        }
+      } catch (err) {
+        console.warn('Auto-apply promo failed:', err);
+      }
+    })();
+  }, [state.trip?.id, state.outlet?.id, state.originSeq, state.destinationSeq, state.selectedSeats.length, calculateTotalAmount]);
 
   const createBooking = useCallback(async (overrides?: BookingOverrides): Promise<BookingResult> => {
     const s = { ...stateRef.current, ...overrides };
@@ -349,6 +421,8 @@ export function useBookingFlow() {
   }, [toast, calculateTotalAmount, validateBookingData]);
 
   const resetFlow = useCallback(() => {
+    promoSourceRef.current = null;
+    autoApplyTokenRef.current++;
     setState({
       selectedSeats: [],
       passengers: [],

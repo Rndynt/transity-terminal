@@ -783,6 +783,27 @@ export default function PromosManager() {
           </div>
         </div>
 
+        <div className="border rounded-xl p-3 bg-amber-50/40 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <Label className="mb-0 text-sm font-semibold">Cara Pakai</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {form.requireVoucher
+                  ? 'User harus input kode voucher manual saat booking. Generate voucher di bawah setelah simpan.'
+                  : 'Promo otomatis diterapkan ke booking yang cocok dengan kondisi di atas (tanpa input kode).'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Switch
+                checked={form.requireVoucher}
+                onCheckedChange={(v) => setForm({ ...form, requireVoucher: v })}
+                data-testid="switch-require-voucher"
+              />
+              <Label className="mb-0 text-sm">Perlu Voucher</Label>
+            </div>
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-center gap-6">
           <div className="flex items-center gap-2">
             <Switch
@@ -791,14 +812,6 @@ export default function PromosManager() {
               data-testid="switch-is-active"
             />
             <Label className="mb-0">Aktif</Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={form.requireVoucher}
-              onCheckedChange={(v) => setForm({ ...form, requireVoucher: v })}
-              data-testid="switch-require-voucher"
-            />
-            <Label className="mb-0">Perlu Voucher</Label>
           </div>
           <div className="flex items-center gap-2">
             <Switch

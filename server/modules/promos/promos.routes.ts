@@ -18,4 +18,5 @@ export function registerPromosRoutes(app: FastifyInstance, storage: IStorage) {
   app.patch('/api/vouchers/:id/revoke', { preHandler: [requireFlag('master.promos')] }, async (req, reply) => promosController.revokeVoucher(req, reply));
   app.delete('/api/vouchers/:id', { preHandler: [requireFlag('master.promos')] }, async (req, reply) => promosController.deleteVoucher(req, reply));
   app.post('/api/promos/validate', async (req, reply) => promosController.validatePromoCode(req, reply));
+  app.post('/api/promos/auto-apply', async (req, reply) => promosController.autoApplyPromo(req, reply));
 }

@@ -324,7 +324,8 @@ export async function calculateBookingTotal(
   channel?: string,
   promoCode?: string,
   outletId?: string,
-  salesChannelCode?: string
+  salesChannelCode?: string,
+  opts?: { autoApplyIfNoCode?: boolean }
 ): Promise<{ fareQuote: Awaited<ReturnType<PricingService['quoteFare']>>; subtotal: number; total: number; promo: PromoResult }> {
   const fareQuote = await quoteFareForBooking(storage, tripId, originSeq, destinationSeq);
   const subtotal = Number(fareQuote.total) * passengerCount;
@@ -334,9 +335,16 @@ export async function calculateBookingTotal(
   let voucherCode: string | undefined;
   let promoValidation: any;
 
+  // Lazy-load trip hanya kalau dibutuhkan promo flow
+  const promosService = new PromosService(storage);
+  let tripCached: Awaited<ReturnType<IStorage['getTripById']>> | undefined;
+  const getTrip = async () => {
+    if (tripCached === undefined) tripCached = await storage.getTripById(tripId);
+    return tripCached;
+  };
+
   if (promoCode) {
-    const promosService = new PromosService(storage);
-    const trip = await storage.getTripById(tripId);
+    const trip = await getTrip();
     promoValidation = await promosService.validateAndCalculateDiscount(
       promoCode,
       subtotal,
@@ -356,6 +364,24 @@ export async function calculateBookingTotal(
     promoId = promoValidation.promotion?.id;
     if (promoValidation.voucher) {
       voucherCode = promoValidation.voucher.code;
+    }
+  } else if (opts?.autoApplyIfNoCode) {
+    try {
+      const trip = await getTrip();
+      const best = await promosService.findBestAutoApplicablePromo(subtotal, {
+        channel,
+        tripId,
+        patternId: trip?.patternId || undefined,
+        outletId,
+        salesChannelCode,
+        departureDate: trip?.serviceDate || undefined,
+      });
+      if (best) {
+        discountAmount = best.discountAmount;
+        promoId = best.promotion.id;
+      }
+    } catch (err) {
+      console.warn('[calculateBookingTotal] auto-apply lookup failed:', err);
     }
   }
 
