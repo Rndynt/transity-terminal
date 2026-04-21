@@ -1,6 +1,15 @@
 import { IStorage } from "@server/storage.interface";
-import { type Promotion, type Voucher, type InsertPromotion, type InsertVoucher, type PromoCondition, type PromoConditionInput } from "@shared/schema";
+import { type Promotion, type Voucher, type InsertPromotion, type InsertVoucher, type PromoCondition, type PromoConditionInput, type InsertBookingPromoApplication } from "@shared/schema";
 import crypto from "crypto";
+
+export interface PromoApplicationItem {
+  promoId: string;
+  promoCode: string;
+  voucherId?: string;
+  voucherCode?: string;
+  source: 'manual' | 'auto';
+  discountAmount: number;
+}
 
 export interface PromoValidationResult {
   valid: boolean;
@@ -11,6 +20,17 @@ export interface PromoValidationResult {
   // Stacking: bila auto-promo ikut digabung (kedua promo stackable=true)
   autoPromotion?: Promotion;
   autoDiscountAmount?: number;
+  // Daftar aplikasi promo yang akan dipersist ke booking_promo_applications
+  applications?: PromoApplicationItem[];
+}
+
+export interface PromoContext {
+  channel?: string;
+  tripId?: string;
+  patternId?: string;
+  outletId?: string;
+  salesChannelCode?: string;
+  departureDate?: Date | string;
 }
 
 export class PromosService {
@@ -95,17 +115,8 @@ export class PromosService {
   async validateAndCalculateDiscount(
     code: string,
     subtotal: number,
-    ctx: {
-      channel?: string;
-      tripId?: string;
-      patternId?: string;
-      outletId?: string;
-      salesChannelCode?: string;
-      departureDate?: Date | string;
-      autoPromoId?: string;
-    } = {}
+    ctx: PromoContext = {}
   ): Promise<PromoValidationResult> {
-    const { channel, tripId, patternId, outletId, salesChannelCode, departureDate } = ctx;
     const upperCode = code.toUpperCase();
 
     const voucher = await this.storage.getVoucherByCode(upperCode);
@@ -159,46 +170,57 @@ export class PromosService {
       return { valid: false, discountAmount: 0, error: condError };
     }
 
-    const voucherDiscount = this.computeDiscount(promo, subtotal);
+    const manualDiscount = this.computeDiscount(promo, subtotal);
 
-    // Stacking: jika autoPromoId disertakan & kedua promo stackable, gabungkan diskon.
+    const applications: PromoApplicationItem[] = [{
+      promoId: promo.id,
+      promoCode: promo.code,
+      voucherId: voucher?.id,
+      voucherCode: voucher?.code,
+      source: 'manual',
+      discountAmount: manualDiscount,
+    }];
+
+    // Stacking: jika promo manual stackable, cari auto-applicable promo lain yg juga stackable.
     let autoPromotion: Promotion | undefined;
     let autoDiscountAmount = 0;
-    if (ctx.autoPromoId && ctx.autoPromoId !== promo.id) {
-      const autoPromo = await this.storage.getPromotionById(ctx.autoPromoId);
-      if (autoPromo && promo.stackable && autoPromo.stackable && autoPromo.isActive && !autoPromo.requireVoucher) {
-        const now = new Date();
-        const validWindow =
-          (!autoPromo.validFrom || new Date(autoPromo.validFrom) <= now) &&
-          (!autoPromo.validTo || new Date(autoPromo.validTo) >= now);
-        const quotaOk = autoPromo.usageLimit === null || (autoPromo.usageCount ?? 0) < autoPromo.usageLimit;
-        const minOk = subtotal >= Number(autoPromo.minPurchase || 0);
-        if (validWindow && quotaOk && minOk) {
-          const autoConditions = await this.storage.getPromoConditions(autoPromo.id);
-          if (this.checkConditions(autoConditions, ctx) === null) {
-            autoDiscountAmount = this.computeDiscount(autoPromo, subtotal);
-            if (autoDiscountAmount > 0) autoPromotion = autoPromo;
-          }
-        }
+    if (promo.stackable) {
+      const companion = await this.findBestAutoApplicablePromo(subtotal, ctx, { excludePromoId: promo.id, requireStackable: true });
+      if (companion) {
+        autoPromotion = companion.promotion;
+        autoDiscountAmount = companion.discountAmount;
+        applications.push({
+          promoId: companion.promotion.id,
+          promoCode: companion.promotion.code,
+          source: 'auto',
+          discountAmount: autoDiscountAmount,
+        });
       }
     }
 
-    let discountAmount = voucherDiscount + autoDiscountAmount;
-    if (discountAmount > subtotal) discountAmount = subtotal;
+    let totalDiscount = manualDiscount + autoDiscountAmount;
+    if (totalDiscount > subtotal && totalDiscount > 0) {
+      const factor = subtotal / totalDiscount;
+      for (const app of applications) {
+        app.discountAmount = Math.round(app.discountAmount * factor);
+      }
+      totalDiscount = applications.reduce((s, a) => s + a.discountAmount, 0);
+    }
 
     return {
       valid: true,
       promotion: promo,
       voucher: voucher || undefined,
-      discountAmount,
+      discountAmount: totalDiscount,
       autoPromotion,
       autoDiscountAmount: autoPromotion ? autoDiscountAmount : undefined,
+      applications,
     };
   }
 
   private checkConditions(
     conditions: PromoCondition[],
-    ctx: { channel?: string; tripId?: string; patternId?: string; outletId?: string; salesChannelCode?: string; departureDate?: Date | string }
+    ctx: PromoContext
   ): string | null {
     const errorByType: Record<string, string> = {
       route: 'Promo tidak berlaku untuk rute ini',
@@ -245,27 +267,22 @@ export class PromosService {
    */
   async findBestAutoApplicablePromo(
     subtotal: number,
-    ctx: {
-      channel?: string;
-      tripId?: string;
-      patternId?: string;
-      outletId?: string;
-      salesChannelCode?: string;
-      departureDate?: Date | string;
-    } = {}
+    ctx: PromoContext = {},
+    opts: { excludePromoId?: string; requireStackable?: boolean } = {}
   ): Promise<{ promotion: Promotion; discountAmount: number } | null> {
     const all = await this.storage.getPromotions();
     const now = new Date();
     const candidates = all.filter(p =>
       p.isActive &&
       !p.requireVoucher &&
+      (!opts.excludePromoId || p.id !== opts.excludePromoId) &&
+      (!opts.requireStackable || p.stackable) &&
       (!p.validFrom || new Date(p.validFrom) <= now) &&
       (!p.validTo || new Date(p.validTo) >= now) &&
       (p.usageLimit === null || (p.usageCount ?? 0) < p.usageLimit) &&
       subtotal >= Number(p.minPurchase || 0)
     );
 
-    // Bulk-fetch semua kondisi sekaligus (hindari N+1)
     const conditionsMap = await this.storage.getPromoConditionsForPromos(candidates.map(p => p.id));
 
     let best: { promotion: Promotion; discountAmount: number } | null = null;
@@ -279,6 +296,78 @@ export class PromosService {
       }
     }
     return best;
+  }
+
+  /**
+   * Public API: list promo aktif yang berlaku utk konteks (channel/outlet/trip/pattern/dst).
+   * Termasuk promo yang membutuhkan voucher (requireVoucher=true) sehingga partner OTA
+   * bisa menampilkan daftar promo yang bisa user redeem dgn voucher.
+   * Jika `subtotal` diberikan, hitung juga estimasi diskon per promo.
+   */
+  async listScopedPromotions(
+    ctx: PromoContext = {},
+    opts: { subtotal?: number; includeRequireVoucher?: boolean } = {}
+  ): Promise<Array<{ promotion: Promotion; estimatedDiscount?: number; eligible: boolean; reason?: string }>> {
+    const all = await this.storage.getPromotions();
+    const now = new Date();
+
+    const baseFiltered = all.filter(p =>
+      p.isActive &&
+      (opts.includeRequireVoucher !== false || !p.requireVoucher) &&
+      (!p.validFrom || new Date(p.validFrom) <= now) &&
+      (!p.validTo || new Date(p.validTo) >= now) &&
+      (p.usageLimit === null || (p.usageCount ?? 0) < p.usageLimit)
+    );
+
+    const conditionsMap = await this.storage.getPromoConditionsForPromos(baseFiltered.map(p => p.id));
+    const subtotal = opts.subtotal;
+
+    return baseFiltered.map(promo => {
+      const conditions = conditionsMap.get(promo.id) ?? [];
+      const condError = this.checkConditions(conditions, ctx);
+      if (condError) return { promotion: promo, eligible: false, reason: condError };
+      if (subtotal !== undefined && subtotal < Number(promo.minPurchase || 0)) {
+        return { promotion: promo, eligible: false, reason: `Minimum pembelian Rp ${Number(promo.minPurchase).toLocaleString('id-ID')}` };
+      }
+      const estimatedDiscount = subtotal !== undefined ? this.computeDiscount(promo, subtotal) : undefined;
+      return { promotion: promo, eligible: true, estimatedDiscount };
+    });
+  }
+
+  /**
+   * Persist semua aplikasi promo ke booking_promo_applications. Dipanggil setelah
+   * booking di-insert. Tidak menambah promo usage — itu dilakukan saat booking confirm/paid.
+   */
+  async persistApplications(bookingId: string, applications: PromoApplicationItem[]): Promise<void> {
+    if (!applications || applications.length === 0) return;
+    const rows: InsertBookingPromoApplication[] = applications.map(a => ({
+      bookingId,
+      promoId: a.promoId,
+      promoCode: a.promoCode,
+      voucherId: a.voucherId ?? null,
+      voucherCode: a.voucherCode ?? null,
+      source: a.source,
+      discountAmount: a.discountAmount.toString(),
+    }));
+    await this.storage.createBookingPromoApplications(rows);
+  }
+
+  /**
+   * Increment usage utk semua promo yang diaplikasikan ke booking, dan tandai voucher
+   * sebagai used. Dipanggil saat booking transit ke status confirmed/paid.
+   */
+  async markApplicationsUsed(bookingId: string): Promise<void> {
+    const apps = await this.storage.getBookingPromoApplications(bookingId);
+    for (const app of apps) {
+      await this.storage.incrementPromoUsage(app.promoId);
+      if (app.voucherId) {
+        await this.storage.updateVoucher(app.voucherId, {
+          status: 'used',
+          usedAt: new Date(),
+          usedByBookingId: bookingId,
+        } as any);
+      }
+    }
   }
 
   async markUsed(promoId: string, voucherId?: string, bookingId?: string): Promise<void> {

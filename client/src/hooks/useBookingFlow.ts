@@ -331,6 +331,12 @@ export function useBookingFlow() {
               discountAmount: best.discountAmount,
               promotion: best.promotion,
               auto: true,
+              applications: [{
+                promoId: best.promotion.id,
+                promoCode: best.promotion.code,
+                source: 'auto',
+                discountAmount: best.discountAmount,
+              }],
             } as any,
           }));
         } else if (promoSourceRef.current === 'auto') {

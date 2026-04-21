@@ -1164,6 +1164,7 @@ export default function CsoPage() {
                       promoCode={state.promoCode}
                       discountAmount={state.discountAmount || 0}
                       isAutoPromo={!!(state.promoValidation as any)?.auto}
+                      promoApplications={(state.promoValidation as any)?.applications}
                       onApplyPromo={applyPromoCode}
                       onClearPromo={clearPromoCode}
                     />
@@ -1300,6 +1301,7 @@ export default function CsoPage() {
                     promoCode={state.promoCode}
                     discountAmount={state.discountAmount || 0}
                     isAutoPromo={!!(state.promoValidation as any)?.auto}
+                    promoApplications={(state.promoValidation as any)?.applications}
                     onApplyPromo={applyPromoCode}
                     onClearPromo={clearPromoCode}
                   />

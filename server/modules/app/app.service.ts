@@ -4,7 +4,7 @@ import {
   appUsers, reviews, bookings, payments, trips, tripPatterns, 
   tripStopTimes, stops, patternStops, vehicles, cargoShipments, cargoTypes,
   seatInventory, tripLegs, seatHolds, tripBases, scheduleExceptions,
-  operatorSettings, vouchers, promotions, passengers,
+  operatorSettings, vouchers, promotions, passengers, bookingPromoApplications,
   type AppUser, type InsertAppUser, type Review, type InsertReview
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, lte, inArray, gt, isNull, not } from "drizzle-orm";
@@ -957,6 +957,21 @@ export class AppService {
         salesChannelName: channel === 'OTA' ? params.salesChannelName ?? null : null
       }).returning({ id: bookings.id });
 
+      // Persist semua aplikasi promo (auto / manual / stacked)
+      if (promoResult.applications && promoResult.applications.length > 0) {
+        await tx.insert(bookingPromoApplications).values(
+          promoResult.applications.map(a => ({
+            bookingId: booking.id,
+            promoId: a.promoId,
+            promoCode: a.promoCode,
+            voucherId: a.voucherId ?? null,
+            voucherCode: a.voucherCode ?? null,
+            source: a.source,
+            discountAmount: a.discountAmount.toString(),
+          }))
+        );
+      }
+
       await insertPassengerRows(tx, booking.id, params.passengers, fareQuote);
       await createSeatHoldsForBooking(tx, resolvedTripId, booking.id, seatNos, legIndexes, params.userId, holdExpiresAt);
 
@@ -1070,9 +1085,15 @@ export class AppService {
         throw new Error(`Seat ${bookedSeat.seat_no} is no longer available. Booking canceled.`);
       }
 
-      await tx.update(bookings)
+      // Idempotency guard: hanya satu path (webhook ATAU payBooking) memenangkan
+      // transisi pending→confirmed → mencegah double-increment promo usage.
+      const [bookingUpdate] = await tx.update(bookings)
         .set({ status: 'confirmed' })
-        .where(eq(bookings.id, booking.id));
+        .where(and(eq(bookings.id, booking.id), eq(bookings.status, 'pending')))
+        .returning({ id: bookings.id });
+      if (!bookingUpdate) {
+        throw new Error('Booking sudah dikonfirmasi atau dibatalkan');
+      }
 
       await tx.update(seatInventory)
         .set({ booked: true, holdRef: null })
@@ -1091,6 +1112,34 @@ export class AppService {
       await tx.update(payments)
         .set({ status: 'success', paidAt: new Date() })
         .where(eq(payments.id, payment.id));
+
+      // Increment usage utk semua promo yang ter-apply ke booking ini.
+      const apps = await tx.select().from(bookingPromoApplications)
+        .where(eq(bookingPromoApplications.bookingId, booking.id));
+      for (const app of apps) {
+        const [promoUpdate] = await tx.update(promotions)
+          .set({ usageCount: sql`COALESCE(${promotions.usageCount}, 0) + 1` })
+          .where(and(
+            eq(promotions.id, app.promoId),
+            eq(promotions.isActive, true),
+            sql`(${promotions.usageLimit} IS NULL OR ${promotions.usageCount} < ${promotions.usageLimit})`
+          ))
+          .returning({ id: promotions.id });
+        if (!promoUpdate) {
+          throw new Error('Promo sudah tidak tersedia atau kuota habis');
+        }
+        if (app.voucherId) {
+          const [voucherUpdate] = await tx.update(vouchers).set({
+            status: 'used',
+            usedAt: new Date(),
+            usedByBookingId: booking.id,
+          }).where(and(eq(vouchers.id, app.voucherId), eq(vouchers.status, 'active')))
+            .returning({ id: vouchers.id });
+          if (!voucherUpdate) {
+            throw new Error('Voucher sudah digunakan');
+          }
+        }
+      }
     });
 
     // Realtime: payment webhook sukses → kursi confirmed, refresh seatmap CSO
@@ -1541,24 +1590,72 @@ export class AppService {
     }
 
     let discountAmount = 0;
-    let usedVoucherId: string | null = null;
     let usedPromoId: string | null = null;
     const totalAmount = Number(booking.totalAmount);
 
-    if (voucherCode) {
-      const voucherResult = await this.validateVoucher(voucherCode, totalAmount);
-      discountAmount = voucherResult.calculatedDiscount ?? 0;
+    // Stacking-aware: jika user input voucher pada saat bayar, validate ulang
+    // dengan memperhitungkan auto-promo yg sudah ter-apply ke booking saat pending.
+    // Hasilnya jadi sumber kebenaran utk applications + diskon final.
+    type PendingApplication = {
+      promoId: string;
+      promoCode: string;
+      voucherId: string | null;
+      voucherCode: string | null;
+      source: 'manual' | 'auto';
+      discountAmount: number;
+    };
+    let pendingApplications: PendingApplication[] = [];
 
-      const [v] = await db.select().from(vouchers)
-        .where(eq(vouchers.code, voucherCode.toUpperCase())).limit(1);
-      if (v) {
-        usedVoucherId = v.id;
-        usedPromoId = v.promoId;
+    if (voucherCode) {
+      const { PromosService } = await import('@modules/promos/promos.service');
+      const promosService = new PromosService(this.storage);
+      const trip = await this.storage.getTripById(booking.tripId);
+      const validation = await promosService.validateAndCalculateDiscount(
+        voucherCode,
+        totalAmount,
+        {
+          channel: booking.channel || undefined,
+          tripId: booking.tripId,
+          patternId: trip?.patternId || undefined,
+          outletId: booking.outletId || undefined,
+          salesChannelCode: booking.salesChannelCode || undefined,
+          departureDate: trip?.serviceDate || undefined,
+        }
+      );
+      if (!validation.valid) {
+        throw new Error(validation.error || 'Kode voucher tidak valid');
       }
-    } else if (booking.promoId) {
-      // Auto-applied promo (atau promo non-voucher) sudah dicatat saat createAppBooking → preserve
-      usedPromoId = booking.promoId;
-      discountAmount = Number(booking.discountAmount || 0);
+      discountAmount = validation.discountAmount;
+      usedPromoId = validation.promotion?.id ?? null;
+      pendingApplications = (validation.applications ?? []).map(a => ({
+        promoId: a.promoId,
+        promoCode: a.promoCode,
+        voucherId: a.voucherId ?? null,
+        voucherCode: a.voucherCode ?? null,
+        source: a.source,
+        discountAmount: a.discountAmount,
+      }));
+    } else {
+      // Tidak ada voucher baru — preserve aplikasi yg sudah dicatat saat createAppBooking
+      const existing = await this.storage.getBookingPromoApplications(bookingId);
+      pendingApplications = existing.map(e => ({
+        promoId: e.promoId,
+        promoCode: e.promoCode,
+        voucherId: e.voucherId,
+        voucherCode: e.voucherCode,
+        source: e.source as 'manual' | 'auto',
+        discountAmount: Number(e.discountAmount),
+      }));
+      discountAmount = pendingApplications.reduce((s, a) => s + a.discountAmount, 0);
+      // Fallback ke booking.promoId/discountAmount kalau tabel applications kosong (booking lama)
+      if (pendingApplications.length === 0 && booking.promoId) {
+        usedPromoId = booking.promoId;
+        discountAmount = Number(booking.discountAmount || 0);
+      } else {
+        usedPromoId = pendingApplications.find(a => a.source === 'manual')?.promoId
+          ?? pendingApplications[0]?.promoId
+          ?? null;
+      }
     }
 
     const finalAmount = Math.max(0, totalAmount - discountAmount);
@@ -1597,12 +1694,38 @@ export class AppService {
       }).returning({ id: payments.id });
       paymentId = payment.id;
 
-      await tx.update(bookings).set({
+      // Status guard: hanya satu path (payBooking ATAU webhook) yang boleh
+      // memenangkan transisi pending→confirmed. Mencegah double-increment usage.
+      const [bookingUpdate] = await tx.update(bookings).set({
         status: 'confirmed',
         discountAmount: discountAmount.toString(),
-        voucherCode: voucherCode?.toUpperCase() || null,
+        voucherCode: voucherCode?.toUpperCase() || booking.voucherCode || null,
         promoId: usedPromoId,
-      }).where(eq(bookings.id, bookingId));
+      }).where(and(eq(bookings.id, bookingId), eq(bookings.status, 'pending')))
+        .returning({ id: bookings.id });
+      if (!bookingUpdate) {
+        throw new Error('Booking sudah dikonfirmasi atau dibatalkan');
+      }
+
+      // Sinkronkan applications: hapus yg lama, insert hasil pay-time validation.
+      // Jika user tidak input voucher baru, pendingApplications adalah copy dari
+      // existing rows → re-insert idempotent.
+      if (voucherCode) {
+        await tx.delete(bookingPromoApplications).where(eq(bookingPromoApplications.bookingId, bookingId));
+        if (pendingApplications.length > 0) {
+          await tx.insert(bookingPromoApplications).values(
+            pendingApplications.map(a => ({
+              bookingId,
+              promoId: a.promoId,
+              promoCode: a.promoCode,
+              voucherId: a.voucherId,
+              voucherCode: a.voucherCode,
+              source: a.source,
+              discountAmount: a.discountAmount.toString(),
+            }))
+          );
+        }
+      }
 
       await tx.update(seatInventory)
         .set({ booked: true, holdRef: null })
@@ -1618,19 +1741,31 @@ export class AppService {
           inArray(seatHolds.seatNo, seatNos)
         ));
 
-      if (usedVoucherId) {
-        await tx.update(vouchers).set({
-          status: 'used',
-          usedAt: new Date(),
-          usedByBookingId: bookingId,
-        }).where(eq(vouchers.id, usedVoucherId));
-      }
-
-      if (usedPromoId) {
-        await tx.execute(sql`
-          UPDATE promotions SET usage_count = COALESCE(usage_count, 0) + 1
-          WHERE id = ${usedPromoId}
-        `);
+      // Increment usage utk SETIAP applied promo dgn guard usageLimit + active.
+      // Pola sama dgn bookings.service.ts createBooking utk konsistensi.
+      for (const app of pendingApplications) {
+        const [promoUpdate] = await tx.update(promotions)
+          .set({ usageCount: sql`COALESCE(${promotions.usageCount}, 0) + 1` })
+          .where(and(
+            eq(promotions.id, app.promoId),
+            eq(promotions.isActive, true),
+            sql`(${promotions.usageLimit} IS NULL OR ${promotions.usageCount} < ${promotions.usageLimit})`
+          ))
+          .returning({ id: promotions.id });
+        if (!promoUpdate) {
+          throw new Error('Promo sudah tidak tersedia atau kuota habis');
+        }
+        if (app.voucherId) {
+          const [voucherUpdate] = await tx.update(vouchers).set({
+            status: 'used',
+            usedAt: new Date(),
+            usedByBookingId: bookingId,
+          }).where(and(eq(vouchers.id, app.voucherId), eq(vouchers.status, 'active')))
+            .returning({ id: vouchers.id });
+          if (!voucherUpdate) {
+            throw new Error('Voucher sudah digunakan');
+          }
+        }
       }
     });
 

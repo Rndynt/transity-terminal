@@ -66,6 +66,7 @@ interface PassengerFormProps {
   promoCode?: string;
   discountAmount?: number;
   isAutoPromo?: boolean;
+  promoApplications?: Array<{ promoCode: string; source: 'manual' | 'auto'; discountAmount: number }>;
   onApplyPromo?: (code: string) => Promise<void>;
   onClearPromo?: () => void;
 
@@ -91,6 +92,7 @@ export default function PassengerForm({
   promoCode,
   discountAmount = 0,
   isAutoPromo = false,
+  promoApplications,
   onApplyPromo,
   onClearPromo,
   // round-trip
@@ -367,7 +369,7 @@ export default function PassengerForm({
               <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold flex items-center gap-1">
                 <Tag className="w-3 h-3" /> Kode Promo / Voucher
               </p>
-              {promoCode && (
+              {promoCode && (!promoApplications || promoApplications.length <= 1) && (
                 <div className="flex items-center justify-between px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
                   <div className="flex items-center gap-1.5">
                     <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -382,6 +384,32 @@ export default function PassengerForm({
                       <X className="w-3.5 h-3.5 text-emerald-600" />
                     </button>
                   )}
+                </div>
+              )}
+              {promoApplications && promoApplications.length > 1 && (
+                <div className="px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Promo digabung</span>
+                    </div>
+                    <button onClick={handleClearPromo} className="p-0.5 hover:bg-emerald-100 rounded" data-testid="btn-clear-promo-cso">
+                      <X className="w-3.5 h-3.5 text-emerald-600" />
+                    </button>
+                  </div>
+                  {promoApplications.map((app, idx) => (
+                    <div key={`${app.promoCode}-${idx}`} className="flex items-center justify-between pl-5" data-testid={`row-promo-app-${app.source}`}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-bold text-xs text-emerald-700">{app.promoCode}</span>
+                        <span className="text-[9px] text-emerald-600/70 italic">{app.source === 'auto' ? 'otomatis' : 'voucher'}</span>
+                      </div>
+                      <span className="text-[10px] text-emerald-600 font-semibold font-mono">-{fmtCurrency(app.discountAmount)}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between pt-1 border-t border-emerald-200/60 pl-5">
+                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">Total diskon</span>
+                    <span className="text-xs font-bold text-emerald-700 font-mono">-{fmtCurrency(discountAmount)}</span>
+                  </div>
                 </div>
               )}
               {(!promoCode || isAutoPromo) && (

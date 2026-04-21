@@ -19,4 +19,9 @@ export function registerPromosRoutes(app: FastifyInstance, storage: IStorage) {
   app.delete('/api/vouchers/:id', { preHandler: [requireFlag('master.promos')] }, async (req, reply) => promosController.deleteVoucher(req, reply));
   app.post('/api/promos/validate', async (req, reply) => promosController.validatePromoCode(req, reply));
   app.post('/api/promos/auto-apply', async (req, reply) => promosController.autoApplyPromo(req, reply));
+
+  // Public scoped API — partner OTA / app frontend bisa fetch promo yg berlaku utk konteks-nya.
+  app.get('/api/public/promotions', async (req, reply) => promosController.listScopedPromotions(req, reply));
+  app.post('/api/public/promotions/validate', async (req, reply) => promosController.validatePromoCode(req, reply));
+  app.post('/api/public/promotions/auto-apply', async (req, reply) => promosController.autoApplyPromo(req, reply));
 }

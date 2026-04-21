@@ -4,7 +4,7 @@ import { HoldsService } from "@modules/holds/holds.service";
 import { AtomicHoldService } from "./atomicHold.service";
 import { PrintService } from "@modules/printing/print.service";
 import { db } from "@server/db";
-import { bookings as bookingsTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable } from "@shared/schema";
+import { bookings as bookingsTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable, bookingPromoApplications as bookingPromoApplicationsTable } from "@shared/schema";
 import { eq, and, inArray, gt, lt, sql, not } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
 import {
@@ -141,6 +141,21 @@ export class BookingsService {
         ...snapshots,
       }).returning();
 
+      // Persist semua aplikasi promo (auto / manual / stacked)
+      if (promo.applications && promo.applications.length > 0) {
+        await tx.insert(bookingPromoApplicationsTable).values(
+          promo.applications.map(a => ({
+            bookingId: newBooking.id,
+            promoId: a.promoId,
+            promoCode: a.promoCode,
+            voucherId: a.voucherId ?? null,
+            voucherCode: a.voucherCode ?? null,
+            source: a.source,
+            discountAmount: a.discountAmount.toString(),
+          }))
+        );
+      }
+
       await insertPassengerRows(tx, newBooking.id, passengers, fareQuote);
       await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);
 
@@ -155,11 +170,12 @@ export class BookingsService {
         status: 'queued'
       });
 
-      if (promo.promoId && promo.promoValidation) {
+      // Increment usage utk SETIAP applied promo + tandai voucher (jika ada)
+      for (const app of (promo.applications ?? [])) {
         const [promoUpdate] = await tx.update(promotionsTable)
           .set({ usageCount: sql`${promotionsTable.usageCount} + 1` })
           .where(and(
-            eq(promotionsTable.id, promo.promoId),
+            eq(promotionsTable.id, app.promoId),
             eq(promotionsTable.isActive, true),
             sql`(${promotionsTable.usageLimit} IS NULL OR ${promotionsTable.usageCount} < ${promotionsTable.usageLimit})`
           ))
@@ -167,11 +183,11 @@ export class BookingsService {
         if (!promoUpdate) {
           throw new Error('Promo is no longer available or usage limit reached');
         }
-        if (promo.promoValidation.voucher?.id) {
+        if (app.voucherId) {
           const [voucherUpdate] = await tx.update(vouchersTable)
             .set({ status: 'used', usedAt: new Date(), usedByBookingId: newBooking.id })
             .where(and(
-              eq(vouchersTable.id, promo.promoValidation.voucher.id),
+              eq(vouchersTable.id, app.voucherId),
               eq(vouchersTable.status, 'active')
             ))
             .returning({ id: vouchersTable.id });
@@ -306,6 +322,21 @@ export class BookingsService {
         pendingExpiresAt,
         ...snapshots,
       }).returning();
+
+      // Persist applications (tanpa increment usage — itu saat pay/confirm)
+      if (pendingPromo.applications && pendingPromo.applications.length > 0) {
+        await tx.insert(bookingPromoApplicationsTable).values(
+          pendingPromo.applications.map(a => ({
+            bookingId: newBooking.id,
+            promoId: a.promoId,
+            promoCode: a.promoCode,
+            voucherId: a.voucherId ?? null,
+            voucherCode: a.voucherCode ?? null,
+            source: a.source,
+            discountAmount: a.discountAmount.toString(),
+          }))
+        );
+      }
 
       await insertPassengerRows(tx, newBooking.id, passengers, fareQuote);
       await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);

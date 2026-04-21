@@ -1,6 +1,6 @@
 import { IStorage } from "@server/storage.interface";
 import { PricingService } from "@modules/pricing/pricing.service";
-import { PromosService } from "@modules/promos/promos.service";
+import { PromosService, type PromoApplicationItem } from "@modules/promos/promos.service";
 import { passengers as passengersTable, seatInventory, seatHolds } from "@shared/schema";
 import { scheduleStopExceptions } from "@shared/schema/scheduling";
 import { generateBookingCode, generateTicketNumber } from "@server/utils/codeGenerator";
@@ -313,6 +313,7 @@ export interface PromoResult {
   promoId: string | undefined;
   voucherCode: string | undefined;
   promoValidation: any;
+  applications: PromoApplicationItem[];
 }
 
 export async function calculateBookingTotal(
@@ -334,6 +335,7 @@ export async function calculateBookingTotal(
   let promoId: string | undefined;
   let voucherCode: string | undefined;
   let promoValidation: any;
+  let applications: PromoApplicationItem[] = [];
 
   // Lazy-load trip hanya kalau dibutuhkan promo flow
   const promosService = new PromosService(storage);
@@ -365,6 +367,7 @@ export async function calculateBookingTotal(
     if (promoValidation.voucher) {
       voucherCode = promoValidation.voucher.code;
     }
+    applications = promoValidation.applications ?? [];
   } else if (opts?.autoApplyIfNoCode) {
     try {
       const trip = await getTrip();
@@ -379,6 +382,12 @@ export async function calculateBookingTotal(
       if (best) {
         discountAmount = best.discountAmount;
         promoId = best.promotion.id;
+        applications = [{
+          promoId: best.promotion.id,
+          promoCode: best.promotion.code,
+          source: 'auto',
+          discountAmount: best.discountAmount,
+        }];
       }
     } catch (err) {
       console.warn('[calculateBookingTotal] auto-apply lookup failed:', err);
@@ -389,6 +398,6 @@ export async function calculateBookingTotal(
     fareQuote,
     subtotal,
     total: subtotal - discountAmount,
-    promo: { discountAmount, promoId, voucherCode, promoValidation },
+    promo: { discountAmount, promoId, voucherCode, promoValidation, applications },
   };
 }

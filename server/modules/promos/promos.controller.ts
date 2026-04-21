@@ -54,6 +54,34 @@ export class PromosController {
     reply.send(result);
   }
 
+  async listScopedPromotions(req: FastifyRequest, reply: FastifyReply) {
+    const schema = z.object({
+      channel: z.string().optional(),
+      tripId: z.string().optional(),
+      patternId: z.string().optional(),
+      outletId: z.string().optional(),
+      salesChannelCode: z.string().optional(),
+      departureDate: z.string().optional(),
+      subtotal: z.coerce.number().nonnegative().optional(),
+      includeRequireVoucher: z.coerce.boolean().optional(),
+      onlyEligible: z.coerce.boolean().optional(),
+    });
+    const q = schema.parse(req.query);
+    const list = await this.service.listScopedPromotions(
+      {
+        channel: q.channel,
+        tripId: q.tripId,
+        patternId: q.patternId,
+        outletId: q.outletId,
+        salesChannelCode: q.salesChannelCode,
+        departureDate: q.departureDate,
+      },
+      { subtotal: q.subtotal, includeRequireVoucher: q.includeRequireVoucher }
+    );
+    const filtered = q.onlyEligible ? list.filter(x => x.eligible) : list;
+    reply.send(filtered);
+  }
+
   async autoApplyPromo(req: FastifyRequest, reply: FastifyReply) {
     const schema = z.object({
       subtotal: z.number().nonnegative(),
