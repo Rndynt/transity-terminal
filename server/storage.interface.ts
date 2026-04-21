@@ -12,7 +12,7 @@ import type {
   TripCostTemplate, InsertTripCostTemplate,
   TripCostItem, InsertTripCostItem,
   CsoAvailableTrip, CargoAvailableTrip,
-  Promotion, InsertPromotion,
+  Promotion, InsertPromotion, PromoCondition, PromoConditionInput,
   Voucher, InsertVoucher
 } from "@shared/schema";
 
@@ -219,6 +219,8 @@ export interface IStorage {
   updatePromotion(id: string, data: Partial<InsertPromotion>): Promise<Promotion>;
   deletePromotion(id: string): Promise<void>;
   incrementPromoUsage(id: string): Promise<void>;
+  getPromoConditions(promoId: string): Promise<PromoCondition[]>;
+  replacePromoConditions(promoId: string, conditions: PromoConditionInput[]): Promise<PromoCondition[]>;
 
   getVouchers(promoId?: string): Promise<Voucher[]>;
   getVoucherById(id: string): Promise<Voucher | undefined>;

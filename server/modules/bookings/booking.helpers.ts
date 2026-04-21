@@ -322,7 +322,9 @@ export async function calculateBookingTotal(
   destinationSeq: number,
   passengerCount: number,
   channel?: string,
-  promoCode?: string
+  promoCode?: string,
+  outletId?: string,
+  salesChannelCode?: string
 ): Promise<{ fareQuote: Awaited<ReturnType<PricingService['quoteFare']>>; subtotal: number; total: number; promo: PromoResult }> {
   const fareQuote = await quoteFareForBooking(storage, tripId, originSeq, destinationSeq);
   const subtotal = Number(fareQuote.total) * passengerCount;
@@ -338,9 +340,14 @@ export async function calculateBookingTotal(
     promoValidation = await promosService.validateAndCalculateDiscount(
       promoCode,
       subtotal,
-      channel,
-      tripId,
-      trip?.patternId || undefined
+      {
+        channel,
+        tripId,
+        patternId: trip?.patternId || undefined,
+        outletId,
+        salesChannelCode,
+        departureDate: trip?.serviceDate || undefined,
+      }
     );
     if (!promoValidation.valid) {
       throw new Error(promoValidation.error || 'Kode promo tidak valid');

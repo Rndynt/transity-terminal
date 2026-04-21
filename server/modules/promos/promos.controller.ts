@@ -77,11 +77,21 @@ export class PromosController {
       subtotal: z.number().min(0),
       channel: z.string().optional(),
       tripId: z.string().optional(),
-      patternId: z.string().optional()
+      patternId: z.string().optional(),
+      outletId: z.string().optional(),
+      salesChannelCode: z.string().optional(),
+      departureDate: z.string().optional(),
     });
     const data = schema.parse(req.body);
     const result = await this.service.validateAndCalculateDiscount(
-      data.code, data.subtotal, data.channel, data.tripId, data.patternId
+      data.code, data.subtotal, {
+        channel: data.channel,
+        tripId: data.tripId,
+        patternId: data.patternId,
+        outletId: data.outletId,
+        salesChannelCode: data.salesChannelCode,
+        departureDate: data.departureDate,
+      }
     );
     reply.send(result);
   }

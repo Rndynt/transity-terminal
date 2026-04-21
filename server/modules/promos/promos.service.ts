@@ -82,10 +82,16 @@ export class PromosService {
   async validateAndCalculateDiscount(
     code: string,
     subtotal: number,
-    channel?: string,
-    tripId?: string,
-    patternId?: string
+    ctx: {
+      channel?: string;
+      tripId?: string;
+      patternId?: string;
+      outletId?: string;
+      salesChannelCode?: string;
+      departureDate?: Date | string;
+    } = {}
   ): Promise<PromoValidationResult> {
+    const { channel, tripId, patternId, outletId, salesChannelCode, departureDate } = ctx;
     const upperCode = code.toUpperCase();
 
     const voucher = await this.storage.getVoucherByCode(upperCode);
@@ -133,26 +139,34 @@ export class PromosService {
       return { valid: false, discountAmount: 0, error: `Minimum pembelian Rp ${minPurchase.toLocaleString('id-ID')}` };
     }
 
-    if (promo.applicableChannels && promo.applicableChannels.length > 0 && channel) {
-      if (!promo.applicableChannels.includes(channel)) {
-        return { valid: false, discountAmount: 0, error: 'Promo tidak berlaku untuk channel ini' };
+    const conditions = await this.storage.getPromoConditions(promo.id);
+    const errorByType: Record<string, string> = {
+      route: 'Promo tidak berlaku untuk rute ini',
+      trip: 'Promo tidak berlaku untuk trip ini',
+      channel: 'Promo tidak berlaku untuk channel ini',
+      outlet: 'Promo tidak berlaku untuk outlet ini',
+      sales_channel: 'Promo tidak berlaku untuk sales channel ini',
+      day_of_week: 'Promo tidak berlaku untuk hari ini',
+    };
+    const ctxValueByType: Record<string, string | undefined> = {
+      route: patternId,
+      trip: tripId,
+      channel: channel,
+      outlet: outletId,
+      sales_channel: salesChannelCode,
+      day_of_week: departureDate
+        ? String(new Date(departureDate).getDay())
+        : undefined,
+    };
+    for (const cond of conditions) {
+      const values = (cond.values as string[]) || [];
+      if (values.length === 0) continue;
+      const ctxValue = ctxValueByType[cond.type];
+      if (!ctxValue) {
+        return { valid: false, discountAmount: 0, error: errorByType[cond.type] ?? 'Konteks promo tidak lengkap' };
       }
-    }
-
-    if (promo.scope !== 'global' && promo.scopeRefId) {
-      let refIds: string[] = [];
-      try {
-        const parsed = JSON.parse(promo.scopeRefId);
-        refIds = Array.isArray(parsed) ? parsed : [promo.scopeRefId];
-      } catch {
-        refIds = [promo.scopeRefId];
-      }
-
-      if (promo.scope === 'trip' && tripId && !refIds.includes(tripId)) {
-        return { valid: false, discountAmount: 0, error: 'Promo tidak berlaku untuk trip ini' };
-      }
-      if (promo.scope === 'pattern' && patternId && !refIds.includes(patternId)) {
-        return { valid: false, discountAmount: 0, error: 'Promo tidak berlaku untuk rute ini' };
+      if (!values.includes(ctxValue)) {
+        return { valid: false, discountAmount: 0, error: errorByType[cond.type] ?? 'Konteks promo tidak cocok' };
       }
     }
 

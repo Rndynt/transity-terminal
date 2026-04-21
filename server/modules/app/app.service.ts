@@ -897,6 +897,7 @@ export class AppService {
     channel?: 'APP' | 'OTA' | 'WEB';
     salesChannelCode?: string;
     salesChannelName?: string;
+    promoCode?: string;
   }): Promise<BookingDetailResponse> {
     const resolvedTripId = await this.resolveTripId(params.tripId, params.serviceDate);
 
@@ -904,7 +905,8 @@ export class AppService {
 
     const { fareQuote, total: totalAmount } = await calculateBookingTotal(
       this.storage, resolvedTripId, params.originSeq, params.destinationSeq,
-      params.passengers.length
+      params.passengers.length, params.channel, params.promoCode,
+      undefined, params.salesChannelCode
     );
 
     const legIndexes = computeLegIndexes(params.originSeq, params.destinationSeq);

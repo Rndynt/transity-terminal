@@ -114,7 +114,8 @@ export class BookingsService {
       validateHoldOwnership(bookingData.tripId, seatNos, legIndexes, operatorId),
       calculateBookingTotal(
         this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq,
-        passengers.length, bookingData.channel || undefined, promoCode
+        passengers.length, bookingData.channel || undefined, promoCode,
+        bookingData.outletId || undefined, bookingData.salesChannelCode || undefined
       ),
       fetchBookingSnapshots(this.storage, bookingData.tripId, bookingData.originStopId, bookingData.destinationStopId, bookingData.outletId, bookingData.originSeq),
     ]);
