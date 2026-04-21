@@ -65,6 +65,7 @@ interface PassengerFormProps {
   payment?: { method: string; amount: number } | null;
   promoCode?: string;
   discountAmount?: number;
+  isAutoPromo?: boolean;
   onApplyPromo?: (code: string) => Promise<void>;
   onClearPromo?: () => void;
 
@@ -89,6 +90,7 @@ export default function PassengerForm({
   payment,
   promoCode,
   discountAmount = 0,
+  isAutoPromo = false,
   onApplyPromo,
   onClearPromo,
   // round-trip
@@ -365,23 +367,29 @@ export default function PassengerForm({
               <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold flex items-center gap-1">
                 <Tag className="w-3 h-3" /> Kode Promo / Voucher
               </p>
-              {promoCode ? (
+              {promoCode && (
                 <div className="flex items-center justify-between px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
                   <div className="flex items-center gap-1.5">
                     <Check className="w-3.5 h-3.5 text-emerald-600" />
                     <span className="font-mono font-bold text-xs text-emerald-700" data-testid="text-applied-promo-cso">{promoCode}</span>
                     <span className="text-[10px] text-emerald-600 font-semibold">-{fmtCurrency(discountAmount)}</span>
+                    {isAutoPromo && (
+                      <span className="text-[9px] text-emerald-600/70 italic ml-0.5">otomatis</span>
+                    )}
                   </div>
-                  <button onClick={handleClearPromo} className="p-0.5 hover:bg-emerald-100 rounded" data-testid="btn-clear-promo-cso">
-                    <X className="w-3.5 h-3.5 text-emerald-600" />
-                  </button>
+                  {!isAutoPromo && (
+                    <button onClick={handleClearPromo} className="p-0.5 hover:bg-emerald-100 rounded" data-testid="btn-clear-promo-cso">
+                      <X className="w-3.5 h-3.5 text-emerald-600" />
+                    </button>
+                  )}
                 </div>
-              ) : (
+              )}
+              {(!promoCode || isAutoPromo) && (
                 <div className="flex gap-1.5">
                   <input
                     value={promoInput}
                     onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError(''); }}
-                    placeholder="Masukkan kode"
+                    placeholder={isAutoPromo ? 'Pakai kode voucher (opsional)' : 'Masukkan kode'}
                     className="flex-1 h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-xs font-mono text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
                     onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
                     data-testid="input-promo-code-cso"
