@@ -115,7 +115,8 @@ export class BookingsService {
       calculateBookingTotal(
         this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq,
         passengers.length, bookingData.channel || undefined, promoCode,
-        bookingData.outletId || undefined, bookingData.salesChannelCode || undefined
+        bookingData.outletId || undefined, bookingData.salesChannelCode || undefined,
+        { autoApplyIfNoCode: true }
       ),
       fetchBookingSnapshots(this.storage, bookingData.tripId, bookingData.originStopId, bookingData.destinationStopId, bookingData.outletId, bookingData.originSeq),
     ]);
@@ -280,9 +281,11 @@ export class BookingsService {
 
     await validateHoldOwnership(bookingData.tripId, seatNos, legIndexes, operatorId);
 
-    const { fareQuote, total: expectedTotal } = await calculateBookingTotal(
+    const { fareQuote, total: expectedTotal, promo: pendingPromo } = await calculateBookingTotal(
       this.storage, bookingData.tripId, bookingData.originSeq, bookingData.destinationSeq,
-      passengers.length
+      passengers.length, bookingData.channel || undefined, undefined,
+      bookingData.outletId || undefined, bookingData.salesChannelCode || undefined,
+      { autoApplyIfNoCode: true }
     );
 
     const now = new Date();
@@ -296,6 +299,10 @@ export class BookingsService {
         bookingCode: generateBookingCode(),
         status: 'pending',
         totalAmount: expectedTotal.toString(),
+        // Catat hasil auto-apply agar saat pay-later, promo + diskon tidak hilang
+        discountAmount: (pendingPromo.discountAmount || 0).toString(),
+        promoId: pendingPromo.promoId || null,
+        voucherCode: pendingPromo.voucherCode || null,
         pendingExpiresAt,
         ...snapshots,
       }).returning();
