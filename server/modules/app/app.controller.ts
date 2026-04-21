@@ -22,6 +22,9 @@ const searchSchema = z.object({
   passengers: z.coerce.number().int().min(1).optional(),
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(50).optional(),
+  // Sales channel code OTA partner — opsional; mempengaruhi pemilihan auto-promo
+  // (mis. promo yang hanya berlaku utk salesChannelCode tertentu).
+  salesChannelCode: z.string().min(1).max(64).optional(),
 });
 
 const createBookingSchema = z.object({
@@ -179,7 +182,12 @@ export class AppController {
   async searchTrips(req: FastifyRequest, reply: FastifyReply) {
     const parsed = searchSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", code: 'VALIDATION_ERROR', details: parsed.error.flatten() });
-    const result = await this.service.searchTrips(parsed.data);
+    const isServiceClient = (req as any).isServiceClient === true;
+    const channel: 'OTA' | 'APP' = isServiceClient ? 'OTA' : 'APP';
+    const result = await this.service.searchTrips({
+      ...parsed.data,
+      channel,
+    });
     if (req.log.level === 'debug' || req.log.level === 'trace') {
       for (const trip of result.data) {
         req.log.debug({ tripId: trip.tripId, pattern: trip.patternCode, stops: trip.stops }, '[searchTrips] trip');

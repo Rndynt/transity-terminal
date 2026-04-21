@@ -46,6 +46,15 @@ interface TripStopPointWithCity extends TripStopPoint {
   canDrop?: boolean;
 }
 
+interface AppliedPromoSummary {
+  code: string;
+  name: string;
+  type: 'percentage' | 'fixed';
+  discountValue: number;
+  source: 'auto';
+  stackable: boolean;
+}
+
 interface TripSearchResult {
   tripId: string;
   serviceDate: string;
@@ -58,7 +67,16 @@ interface TripSearchResult {
   origin: TripStopPoint;
   destination: TripStopPoint;
   availableSeats: number;
+  /** Harga asli per orang (sebelum diskon promo). Backward-compat field. */
   farePerPerson: number;
+  /** Harga asli per orang — alias eksplisit utk farePerPerson. */
+  originalFarePerPerson: number;
+  /** Diskon per orang dari auto-promo terbaik untuk konteks request. 0 jika tidak ada. */
+  discountPerPerson: number;
+  /** Harga final per orang setelah diskon (= originalFarePerPerson - discountPerPerson). */
+  discountedFarePerPerson: number;
+  /** Detail promo yang diaplikasikan; null jika tidak ada promo otomatis yang cocok. */
+  appliedPromo: AppliedPromoSummary | null;
   stops: TripStopPointWithCity[];
   isVirtual?: boolean;
 }
@@ -323,6 +341,8 @@ export class AppService {
     passengers?: number;
     page?: number;
     limit?: number;
+    channel?: string;
+    salesChannelCode?: string;
   }): Promise<{
     data: TripSearchResult[];
     total: number;
@@ -374,9 +394,87 @@ export class AppService {
 
     const total = all.length;
     const offset = (page - 1) * limit;
-    const data = all.slice(offset, offset + limit);
+    const pageSlice = all.slice(offset, offset + limit);
+
+    // Hitung auto-promo per trip pada slice yang ditampilkan saja (efisien).
+    // Konteks promo: channel (OTA/APP), patternId (perlu lookup), departureDate.
+    const data = await this.enrichTripsWithPromo(pageSlice, {
+      channel: params.channel,
+      salesChannelCode: params.salesChannelCode,
+    });
 
     return { data, total, page, limit, hasMore: offset + data.length < total };
+  }
+
+  private async enrichTripsWithPromo(
+    list: TripSearchResult[],
+    ctx: { channel?: string; salesChannelCode?: string }
+  ): Promise<TripSearchResult[]> {
+    if (list.length === 0) return list;
+    const { PromosService } = await import('@modules/promos/promos.service');
+    const promosService = new PromosService(this.storage);
+
+    // patternId per trip — virtual sudah punya patternCode tapi tidak patternId; ambil dari DB.
+    // Untuk performa, batch lookup pattern by code utk virtual trips.
+    const virtualPatternCodes = Array.from(new Set(
+      list.filter(t => t.isVirtual).map(t => t.patternCode).filter(Boolean)
+    ));
+    const realTripIds = list.filter(t => !t.isVirtual).map(t => t.tripId);
+
+    let realTripPatternMap = new Map<string, string>();
+    if (realTripIds.length > 0) {
+      const rows = await db.select({ id: trips.id, patternId: trips.patternId })
+        .from(trips).where(inArray(trips.id, realTripIds));
+      for (const r of rows) realTripPatternMap.set(r.id, r.patternId);
+    }
+    let virtualPatternIdMap = new Map<string, string>();
+    if (virtualPatternCodes.length > 0) {
+      const rows = await db.select({ id: tripPatterns.id, code: tripPatterns.code })
+        .from(tripPatterns).where(inArray(tripPatterns.code, virtualPatternCodes));
+      for (const r of rows) virtualPatternIdMap.set(r.code, r.id);
+    }
+
+    return Promise.all(list.map(async (trip) => {
+      const original = trip.farePerPerson;
+      const patternId = trip.isVirtual
+        ? virtualPatternIdMap.get(trip.patternCode)
+        : realTripPatternMap.get(trip.tripId);
+
+      let appliedPromo: AppliedPromoSummary | null = null;
+      let discount = 0;
+      if (original > 0) {
+        try {
+          const best = await promosService.findBestAutoApplicablePromo(original, {
+            channel: ctx.channel,
+            tripId: trip.isVirtual ? undefined : trip.tripId,
+            patternId,
+            salesChannelCode: ctx.salesChannelCode,
+            departureDate: trip.serviceDate,
+          });
+          if (best) {
+            discount = best.discountAmount;
+            appliedPromo = {
+              code: best.promotion.code,
+              name: best.promotion.name,
+              type: best.promotion.type as 'percentage' | 'fixed',
+              discountValue: Number(best.promotion.discountValue),
+              source: 'auto',
+              stackable: !!best.promotion.stackable,
+            };
+          }
+        } catch (err) {
+          console.warn('[searchTrips] promo lookup failed for trip', trip.tripId, err);
+        }
+      }
+
+      return {
+        ...trip,
+        originalFarePerPerson: original,
+        discountPerPerson: discount,
+        discountedFarePerPerson: Math.max(0, original - discount),
+        appliedPromo,
+      };
+    }));
   }
 
   private async searchRealTrips(
@@ -493,6 +591,10 @@ export class AppService {
         destination: { stopId: destST.stopId, name: destST.stopName, code: destST.stopCode, sequence: destST.stopSequence, arriveAt: destST.arriveAt },
         availableSeats,
         farePerPerson: fareQuote,
+        originalFarePerPerson: fareQuote,
+        discountPerPerson: 0,
+        discountedFarePerPerson: fareQuote,
+        appliedPromo: null,
         stops: stopTimesForTrip.map(st => ({
           stopId: st.stopId,
           name: st.stopName,
@@ -671,6 +773,10 @@ export class AppService {
         },
         availableSeats: base.capacity || 14,
         farePerPerson: fareQuote,
+        originalFarePerPerson: fareQuote,
+        discountPerPerson: 0,
+        discountedFarePerPerson: fareQuote,
+        appliedPromo: null,
         stops: stopsData,
         isVirtual: true,
       });

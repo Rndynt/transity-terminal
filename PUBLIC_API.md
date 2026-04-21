@@ -261,6 +261,7 @@ Cari jadwal perjalanan berdasarkan kota asal, kota tujuan, dan tanggal. Menggabu
 | `passengers` | `integer ≥ 1` | ❌ | Jumlah penumpang (default: 1, belum difilter ketersediaan) |
 | `page` | `integer ≥ 1` | ❌ | Nomor halaman (default: 1) |
 | `limit` | `integer 1-50` | ❌ | Jumlah hasil per halaman (default: 20, maks: 50) |
+| `salesChannelCode` | `string` | ❌ | Kode sales channel partner (mis. `OTA-TIKETCOM`). Opsional; mempengaruhi pemilihan auto-promo bila promo dibatasi per sales channel. |
 
 **Request:**
 ```http
@@ -299,6 +300,17 @@ X-Service-Key: sk_live_xxx
       },
       "availableSeats": 25,
       "farePerPerson": 85000,
+      "originalFarePerPerson": 85000,
+      "discountPerPerson": 8500,
+      "discountedFarePerPerson": 76500,
+      "appliedPromo": {
+        "code": "EARLYBIRD10",
+        "name": "Early Bird Diskon 10%",
+        "type": "percentage",
+        "discountValue": 10,
+        "source": "auto",
+        "stackable": true
+      },
       "stops": [
         {
           "stopId": "550e8400-e29b-41d4-a716-111111111111",
@@ -357,11 +369,28 @@ X-Service-Key: sk_live_xxx
 | `destination.sequence` | `integer` | Nomor urut stop tujuan (`destinationSeq` untuk booking) |
 | `destination.arriveAt` | `string \| null` | Waktu kedatangan (ISO 8601 UTC) |
 | `availableSeats` | `integer` | Kursi tersedia untuk segmen ini |
-| `farePerPerson` | `integer` | Tarif per penumpang dalam Rupiah |
+| `farePerPerson` | `integer` | **Harga asli** per penumpang dalam Rupiah (sebelum diskon). Backward-compat. |
+| `originalFarePerPerson` | `integer` | Alias eksplisit untuk `farePerPerson` — harga asli sebelum diskon (untuk strike-through di UI). |
+| `discountPerPerson` | `integer` | Diskon per penumpang dari auto-promo terbaik untuk konteks request. `0` jika tidak ada promo cocok. |
+| `discountedFarePerPerson` | `integer` | Harga final per penumpang setelah diskon (`originalFarePerPerson - discountPerPerson`). Tampilkan ini sebagai harga utama; tampilkan `originalFarePerPerson` di-coret bila `discountPerPerson > 0`. |
+| `appliedPromo` | `object \| null` | Detail promo otomatis terbaik (lihat tabel di bawah). `null` jika tidak ada promo aktif yang cocok. |
 | `stops` | `array` | Seluruh stop dalam rute (bukan hanya asal-tujuan) |
 | `isVirtual` | `boolean` | `true` = trip belum ada di DB, akan dimaterialize saat booking |
 | `total` | `integer` | Total hasil (semua halaman) |
 | `hasMore` | `boolean` | Masih ada halaman berikutnya |
+
+**Field `appliedPromo`:**
+
+| Field | Tipe | Keterangan |
+|-------|------|------------|
+| `code` | `string` | Kode promo (mis. `EARLYBIRD10`) |
+| `name` | `string` | Nama promo untuk ditampilkan |
+| `type` | `'percentage' \| 'fixed'` | Tipe diskon |
+| `discountValue` | `number` | Nilai diskon (persen jika `percentage`, Rupiah jika `fixed`) |
+| `source` | `'auto'` | Selalu `auto` di endpoint search (promo otomatis tanpa voucher) |
+| `stackable` | `boolean` | `true` jika promo ini bisa digabung dgn voucher lain (lihat bagian [Promo & Voucher](#promo--voucher)) |
+
+> **Catatan strike-price UI:** Bila `discountPerPerson > 0`, partner disarankan menampilkan `originalFarePerPerson` dengan style coret (strike-through) dan `discountedFarePerPerson` sebagai harga utama, dengan badge nama promo dari `appliedPromo.name`. Bila `appliedPromo === null`, cukup tampilkan `farePerPerson` saja.
 
 > **Penting tentang `tripId` virtual:** Trip dengan `tripId` berformat `"virtual-<uuid>"` adalah trip yang dijadwalkan tapi belum ada di database. Sebelum bisa mengambil seatmap atau detail trip, trip virtual **harus dimaterialize** terlebih dahulu menggunakan endpoint `POST /api/app/trips/materialize`. Lihat bagian [Materialize Trip](#post-apiapptripsmaterialize) di bawah.
 
