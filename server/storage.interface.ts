@@ -222,6 +222,8 @@ export interface IStorage {
   incrementPromoUsage(id: string): Promise<void>;
   createBookingPromoApplications(rows: InsertBookingPromoApplication[]): Promise<BookingPromoApplication[]>;
   getBookingPromoApplications(bookingId: string): Promise<BookingPromoApplication[]>;
+  getBookingPromoApplicationsWithName(bookingId: string): Promise<Array<BookingPromoApplication & { promoName: string }>>;
+  getBookingPromoApplicationsWithNameForBookings(bookingIds: string[]): Promise<Array<BookingPromoApplication & { promoName: string }>>;
   deleteBookingPromoApplications(bookingId: string): Promise<void>;
   getPromoConditions(promoId: string): Promise<PromoCondition[]>;
   getPromoConditionsForPromos(promoIds: string[]): Promise<Map<string, PromoCondition[]>>;

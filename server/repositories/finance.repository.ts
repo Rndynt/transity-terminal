@@ -129,6 +129,34 @@ export class FinanceRepository {
     return await db.select().from(bookingPromoApplications).where(eq(bookingPromoApplications.bookingId, bookingId));
   }
 
+  // Variasi yang ikut sertakan nama promo (join ke promotions). Dipakai untuk
+  // menampilkan nama promo di UI (mis. detail booking & detail kursi) tanpa
+  // menampilkan kode promo internal.
+  async getBookingPromoApplicationsWithName(bookingId: string): Promise<Array<BookingPromoApplication & { promoName: string }>> {
+    const rows = await db
+      .select({
+        application: bookingPromoApplications,
+        promoName: promotions.name,
+      })
+      .from(bookingPromoApplications)
+      .innerJoin(promotions, eq(promotions.id, bookingPromoApplications.promoId))
+      .where(eq(bookingPromoApplications.bookingId, bookingId));
+    return rows.map(r => ({ ...r.application, promoName: r.promoName }));
+  }
+
+  async getBookingPromoApplicationsWithNameForBookings(bookingIds: string[]): Promise<Array<BookingPromoApplication & { promoName: string }>> {
+    if (bookingIds.length === 0) return [];
+    const rows = await db
+      .select({
+        application: bookingPromoApplications,
+        promoName: promotions.name,
+      })
+      .from(bookingPromoApplications)
+      .innerJoin(promotions, eq(promotions.id, bookingPromoApplications.promoId))
+      .where(inArray(bookingPromoApplications.bookingId, bookingIds));
+    return rows.map(r => ({ ...r.application, promoName: r.promoName }));
+  }
+
   async deleteBookingPromoApplications(bookingId: string): Promise<void> {
     await db.delete(bookingPromoApplications).where(eq(bookingPromoApplications.bookingId, bookingId));
   }

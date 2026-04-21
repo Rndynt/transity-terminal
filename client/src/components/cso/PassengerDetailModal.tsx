@@ -20,6 +20,13 @@ interface OtherPassenger {
   fareAmount?: string | number | null;
 }
 
+interface PromoApplicationView {
+  promoName: string;
+  source: 'auto' | 'manual';
+  discountAmount: number;
+  voucherCode?: string | null;
+}
+
 interface BookingDetail {
   id: string;
   bookingCode?: string;
@@ -28,6 +35,7 @@ interface BookingDetail {
   totalAmount?: string | number;
   discountAmount?: string | number;
   voucherCode?: string;
+  promoApplications?: PromoApplicationView[];
   createdAt?: string;
   createdBy?: string;
   salesChannelCode?: string | null;
@@ -210,8 +218,11 @@ export default function PassengerDetailModal({
                               <p className="text-muted-foreground">Total</p>
                               <p className="font-semibold text-emerald-700 mt-0.5">{fmtCurrency(b.totalAmount ?? 0)}</p>
                               {b.discountAmount && parseFloat(String(b.discountAmount)) > 0 && (
-                                <p className="text-[11px] text-orange-600 mt-0.5">
-                                  Diskon: -{fmtCurrency(b.discountAmount)} {b.voucherCode ? `(${b.voucherCode})` : ''}
+                                <p className="text-[11px] text-orange-600 mt-0.5" data-testid={`text-discount-summary-${b.id}`}>
+                                  Diskon: -{fmtCurrency(b.discountAmount)}
+                                  {Array.isArray(b.promoApplications) && b.promoApplications.length > 0
+                                    ? ` (${b.promoApplications.map(a => a.promoName).join(' + ')})`
+                                    : ''}
                                 </p>
                               )}
                             </div>
@@ -338,10 +349,19 @@ export default function PassengerDetailModal({
                                   <span className="text-muted-foreground">Subtotal</span>
                                   <span className="font-mono">{fmtCurrency(subtotal)}</span>
                                 </div>
-                                <div className="flex justify-between text-orange-600">
-                                  <span>Diskon {b.voucherCode ? <span className="font-mono text-[10px]">({b.voucherCode})</span> : ''}</span>
-                                  <span className="font-mono">-{fmtCurrency(discount)}</span>
-                                </div>
+                                {Array.isArray(b.promoApplications) && b.promoApplications.length > 0 ? (
+                                  b.promoApplications.map((a, i) => (
+                                    <div key={i} className="flex justify-between text-orange-600" data-testid={`text-discount-detail-${b.id}-${i}`}>
+                                      <span>Diskon <span className="text-xs">({a.promoName})</span></span>
+                                      <span className="font-mono">-{fmtCurrency(a.discountAmount)}</span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="flex justify-between text-orange-600">
+                                    <span>Diskon</span>
+                                    <span className="font-mono">-{fmtCurrency(discount)}</span>
+                                  </div>
+                                )}
                                 <Separator />
                                 <div className="flex justify-between font-semibold">
                                   <span>Total Bayar</span>

@@ -37,13 +37,13 @@ export class BookingsService {
     return await this.storage.getBookingsPaginated(options);
   }
 
-  async getBookingById(id: string): Promise<Booking & { passengers?: any[]; payments?: any[]; tripDetails?: any; originStop?: any; destinationStop?: any; outlet?: any; vehicle?: any; departAt?: any; arriveAt?: any }> {
+  async getBookingById(id: string): Promise<Booking & { passengers?: any[]; payments?: any[]; tripDetails?: any; originStop?: any; destinationStop?: any; outlet?: any; vehicle?: any; departAt?: any; arriveAt?: any; promoApplications?: any[] }> {
     const booking = await this.storage.getBookingById(id);
     if (!booking) {
       throw new Error(`Booking with id ${id} not found`);
     }
     
-    const [passengers, payments, trip, tripStopTimes, originStop, destinationStop, outlet] = await Promise.all([
+    const [passengers, payments, trip, tripStopTimes, originStop, destinationStop, outlet, promoApplications] = await Promise.all([
       this.storage.getPassengers(booking.id),
       this.storage.getPayments(booking.id),
       this.storage.getTripById(booking.tripId),
@@ -51,6 +51,7 @@ export class BookingsService {
       booking.originStopId ? this.storage.getStopById(booking.originStopId) : null,
       booking.destinationStopId ? this.storage.getStopById(booking.destinationStopId) : null,
       booking.outletId ? this.storage.getOutletById(booking.outletId) : null,
+      this.storage.getBookingPromoApplicationsWithName(booking.id),
     ]);
     
     const vehicle = trip?.vehicleId ? await this.storage.getVehicleById(trip.vehicleId) : null;
@@ -78,7 +79,15 @@ export class BookingsService {
       outlet,
       vehicle,
       departAt,
-      arriveAt
+      arriveAt,
+      // Daftar promo yang diterapkan ke booking ini (sudah join nama promo).
+      // UI sebaiknya menampilkan `promoName` saja, bukan `promoCode`.
+      promoApplications: (promoApplications || []).map(a => ({
+        promoName: a.promoName,
+        source: a.source as 'auto' | 'manual',
+        discountAmount: Number(a.discountAmount),
+        voucherCode: a.voucherCode,
+      })),
     };
   }
 

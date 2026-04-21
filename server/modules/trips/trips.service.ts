@@ -417,12 +417,24 @@ export class TripsService {
       const outletIds = [...new Set(matchingBookings.map(b => b.outletId).filter(Boolean))] as string[];
 
       const matchingBookingIds = matchingBookings.map(b => b.id);
-      const [stopsData, outletsData, allPayments, vehicle] = await Promise.all([
+      const [stopsData, outletsData, allPayments, vehicle, allPromoApps] = await Promise.all([
         this.storage.getStopsByIds(stopIds),
         outletIds.length > 0 ? this.storage.getOutletsByIds(outletIds) : Promise.resolve([]),
         this.storage.getPaymentsByBookingIds(matchingBookingIds),
-        trip?.vehicleId ? this.storage.getVehicleById(trip.vehicleId) : Promise.resolve(null)
+        trip?.vehicleId ? this.storage.getVehicleById(trip.vehicleId) : Promise.resolve(null),
+        this.storage.getBookingPromoApplicationsWithNameForBookings(matchingBookingIds),
       ]);
+      const promoAppsByBooking = new Map<string, Array<{ promoName: string; source: 'auto' | 'manual'; discountAmount: number; voucherCode: string | null }>>();
+      for (const a of allPromoApps) {
+        const list = promoAppsByBooking.get(a.bookingId) || [];
+        list.push({
+          promoName: a.promoName,
+          source: a.source as 'auto' | 'manual',
+          discountAmount: Number(a.discountAmount),
+          voucherCode: a.voucherCode,
+        });
+        promoAppsByBooking.set(a.bookingId, list);
+      }
 
       const stopsMap = new Map<string, any>();
       stopsData.forEach((s: any) => { if (s) stopsMap.set(s.id, s); });
@@ -490,8 +502,9 @@ export class TripsService {
             outlet,
             vehicle,
             departAt,
-            arriveAt
-          },
+            arriveAt,
+            promoApplications: promoAppsByBooking.get(booking.id) || [],
+          } as any,
           passenger: seatPassenger,
           otherPassengers,
           payments

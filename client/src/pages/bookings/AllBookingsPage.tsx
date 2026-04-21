@@ -46,6 +46,12 @@ type BookingDetail = Booking & {
   vehicle?: any;
   departAt?: string | null;
   arriveAt?: string | null;
+  promoApplications?: Array<{
+    promoName: string;
+    source: 'auto' | 'manual';
+    discountAmount: number;
+    voucherCode?: string | null;
+  }>;
 };
 
 
@@ -151,8 +157,11 @@ function BookingDetailModal({
                   <p className="text-muted-foreground">Total</p>
                   <p className="font-semibold text-emerald-700 mt-0.5">{fmtCurrency(detail.totalAmount ?? 0)}</p>
                   {detail.discountAmount && parseFloat(String(detail.discountAmount)) > 0 && (
-                    <p className="text-[11px] text-orange-600 mt-0.5">
-                      Diskon: -{fmtCurrency(detail.discountAmount)} {detail.voucherCode ? `(${detail.voucherCode})` : ''}
+                    <p className="text-[11px] text-orange-600 mt-0.5" data-testid="text-discount-summary">
+                      Diskon: -{fmtCurrency(detail.discountAmount)}
+                      {Array.isArray(detail.promoApplications) && detail.promoApplications.length > 0
+                        ? ` (${detail.promoApplications.map((a: any) => a.promoName).join(' + ')})`
+                        : ''}
                     </p>
                   )}
                 </div>
@@ -300,10 +309,19 @@ function BookingDetailModal({
                           <span className="text-muted-foreground">Subtotal</span>
                           <span className="font-mono">{fmtCurrency(subtotal)}</span>
                         </div>
-                        <div className="flex justify-between text-orange-600" data-testid="text-discount-detail">
-                          <span>Diskon {detail.voucherCode ? <span className="font-mono text-[10px]">({detail.voucherCode})</span> : ''}</span>
-                          <span className="font-mono">-{fmtCurrency(discount)}</span>
-                        </div>
+                        {Array.isArray(detail.promoApplications) && detail.promoApplications.length > 0 ? (
+                          detail.promoApplications.map((a: any, i: number) => (
+                            <div key={i} className="flex justify-between text-orange-600" data-testid={`text-discount-detail-${i}`}>
+                              <span>Diskon <span className="text-xs">({a.promoName})</span></span>
+                              <span className="font-mono">-{fmtCurrency(a.discountAmount)}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="flex justify-between text-orange-600" data-testid="text-discount-detail">
+                            <span>Diskon</span>
+                            <span className="font-mono">-{fmtCurrency(discount)}</span>
+                          </div>
+                        )}
                         <Separator />
                       </>
                     )}
