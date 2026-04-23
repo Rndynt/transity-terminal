@@ -76,6 +76,7 @@ async function call<T>(
   const headers: Record<string, string> = {
     "X-Engine-Signature": sig,
     "X-Engine-Timestamp": String(ts),
+    "X-Service-Id": process.env.RESERVATION_ENGINE_SERVICE_ID ?? "terminal",
   };
   if (rawBody.length > 0) headers["Content-Type"] = "application/json";
   if (method === "POST") {
