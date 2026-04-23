@@ -1,101 +1,137 @@
 # Reservation Engine — deploy guide
 
-Engine adalah Rust sidecar yang opsional untuk operator besar (>1.000
-booking/hari atau >10 CSO konkuren). Operator kecil tinggal biarkan
-`RESERVATION_ENGINE_ENABLED=false` — TT pakai jalur Node lama, byte-identical.
+Engine = Rust sidecar opsional untuk operator besar. Operator kecil biarkan
+`RESERVATION_ENGINE_ENABLED=false` — TT pakai jalur Node lama, identik perilaku.
+
+**Penting**: `deploy.sh` di root TT TIDAK menyentuh engine. Engine punya
+command-nya sendiri di bawah supaya rebuild/restart TT sehari-hari tetap
+secepat sebelumnya tanpa risiko nyentuh engine.
+
+---
 
 ## Arsitektur per VPS operator
 
 ```
-[VPS Operator]
+[VPS]
   network: transity-terminals-net
-  ├── transity-terminal-<slug>   (Node, exposed via Nginx)
-  └── transity-engine-<slug>     (Rust, internal-only, port 8000)
+  ├── transity-terminal-<slug>   (Node, dikelola oleh ./deploy.sh seperti biasa)
+  └── transity-engine-<slug>     (Rust, image dari GHCR, dikelola manual via command di bawah)
         ↓ keduanya ke
         DATABASE_URL  (Neon project operator)
 ```
 
-Engine tidak pernah terekspos ke internet. Hanya container `terminal` yang
-bisa hit `http://engine:8000` lewat docker network internal.
+Engine port 8000 internal-only, gak terekspos ke host.
 
 ---
 
-## Setup awal per VPS (sekali saja)
+## Setup awal per VPS (sekali doang)
 
 ```bash
-# 1. Pastikan docker network shared sudah ada
+cd /path/to/TransityTerminal
+git pull   # ambil deploy/engine/
+
+# 1. Network shared (idempotent)
 docker network create transity-terminals-net 2>/dev/null || true
 
-# 2. Login ke GHCR supaya bisa pull image engine (kalau image private)
-echo "$GITHUB_PAT" | docker login ghcr.io -u <github-username> --password-stdin
-# PAT cukup scope: read:packages
+# 2. Login GHCR (kalau image private — skip kalau public)
+echo "$READONLY_PAT" | docker login ghcr.io -u <github-user> --password-stdin
 
-# 3. Append var engine ke .env operator
+# 3. Append var engine ke .env operator yang sudah ada
 cat deploy/engine/.env.engine.example >> .env
-# Lalu edit .env, isi:
-#   RESERVATION_ENGINE_HMAC_SECRET (openssl rand -hex 32)
-#   ENGINE_IMAGE_TAG               (mis. v1.0.0)
+nano .env
+#   isi RESERVATION_ENGINE_HMAC_SECRET (openssl rand -hex 32)
+#   isi ENGINE_IMAGE_TAG=v1.0.0
+#   biarkan RESERVATION_ENGINE_ENABLED=false dulu
 ```
 
 ---
 
-## Deploy / update
+## Workflow harian (TT vs engine, terpisah)
 
-Cukup `./deploy.sh` di root TT seperti biasa. Script otomatis stack overlay
-engine kalau `RESERVATION_ENGINE_ENABLED` ada di `.env`. Engine container akan
-boot, jalankan migrasi, dan probe schema fail-fast.
+### Restart / rebuild TT seperti biasa
 
 ```bash
 ./deploy.sh
 ```
 
-Cek engine sehat dari dalam network:
+Identik dengan sebelumnya: pull git → rebuild image TT → up -d. Engine
+container TIDAK disentuh sama sekali.
+
+### Bring up engine sidecar (sekali, atau saat ENGINE_IMAGE_TAG berubah)
+
 ```bash
-docker compose exec terminal wget -qO- http://engine:8000/api/v1/healthz
-# Harus: {"status":"ok",...}
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/engine/docker-compose.engine.yml \
+  pull engine
+
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/engine/docker-compose.engine.yml \
+  up -d engine
 ```
+
+`pull engine` ambil image baru dari GHCR. `up -d engine` cuma recreate engine.
+TT tidak ke-restart.
+
+### Restart engine doang (mis. setelah ganti env engine)
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/engine/docker-compose.engine.yml \
+  restart engine
+```
+
+### Cek log / status engine
+
+```bash
+docker compose -f docker-compose.yml -f deploy/engine/docker-compose.engine.yml logs -f engine
+docker compose -f docker-compose.yml -f deploy/engine/docker-compose.engine.yml ps engine
+```
+
+### Stop engine total (rollback ke TT-only)
+
+```bash
+docker compose -f docker-compose.yml -f deploy/engine/docker-compose.engine.yml stop engine
+docker compose -f docker-compose.yml -f deploy/engine/docker-compose.engine.yml rm -f engine
+```
+
+TT tetap jalan tanpa terganggu. Set `RESERVATION_ENGINE_ENABLED=false` di
+`.env`, lalu `./deploy.sh` untuk restart TT supaya kembali ke jalur Node.
 
 ---
 
-## Cutover flag (per operator, tanpa rebuild)
+## Cutover flag (per operator)
 
-Engine soak idle dulu 1–3 hari sambil flag `false`. Saat siap cutover:
+Engine soak idle 1–3 hari dulu sambil flag `false`. Saat siap cutover:
 
 ```bash
-# edit .env operator
 sed -i 's/^RESERVATION_ENGINE_ENABLED=false/RESERVATION_ENGINE_ENABLED=true/' .env
-
-# restart TT saja (~2 detik), engine tetap jalan
-docker compose -f docker-compose.yml -f deploy/engine/docker-compose.engine.yml \
-  restart terminal
+./deploy.sh    # restart TT supaya baca .env baru — engine TIDAK disentuh
 ```
 
-Rollback = balik ke `false` + restart terminal. Hold yang sedang aktif tetap
-valid karena tabel `seat_holds` sama-sama dipakai kedua mode.
+Rollback = balik ke `false`, `./deploy.sh` lagi. Hold yang aktif tetap valid.
 
 ---
 
-## Smoke test post-deploy
+## Smoke test
 
 ```bash
 ENGINE_BASE_URL=http://127.0.0.1:8000 \
 ENGINE_HMAC_SECRET="$(grep RESERVATION_ENGINE_HMAC_SECRET .env | cut -d= -f2)" \
-TRIP_ID=<trip-uuid> SEAT_NO=1A OPERATOR_ID=<operator-uuid> \
-  docker compose exec engine /usr/bin/env bash -lc \
-  "$(cat scripts/engine-smoke-test.sh)"
+TRIP_ID=<trip-uuid> SEAT_NO=1A OPERATOR_ID=<op-uuid> \
+  bash scripts/engine-smoke-test.sh
 ```
-
-Exit non-zero = gagal. Cek `docker compose logs engine` untuk detail.
 
 ---
 
 ## Operasional
 
-- **Memori**: idle ~15 MB, peak ~50–80 MB.
-- **Compensation queue**: kalau engine drop tepat saat TT post-commit, baris
-  masuk `engine_compensation_queue`. Scheduler retry tiap menit. Audit:
+- **Memory**: idle ~15 MB, peak ~80 MB.
+- **Compensation queue audit**:
   ```sql
   SELECT * FROM engine_compensation_queue WHERE attempts >= 50;
   ```
-- **Logs**: `docker compose logs -f engine` (structured JSON).
-- **Ganti image**: edit `ENGINE_IMAGE_TAG` di `.env`, lalu `./deploy.sh`.
+- **Update image**: edit `ENGINE_IMAGE_TAG` di `.env`, lalu jalankan blok
+  "Bring up engine sidecar" di atas.
