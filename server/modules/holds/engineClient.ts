@@ -11,12 +11,13 @@
 //   rawBody     = exact JSON string sent (or "" for GET/DELETE without body)
 //
 // Headers sent on every request:
-//   X-Engine-Signature: <hex sha256>
-//   X-Engine-Timestamp: <ts>
+//   X-Service-Id:       terminal
+//   X-Signature:        <hex sha256>
+//   X-Timestamp:        <ts>
 //   Idempotency-Key:    <uuid>   (for POSTs only; engine caches 24h)
 //   Content-Type:       application/json (only when body present)
 
-import { createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import type {
   HoldRequest,
   HoldOk,
@@ -58,8 +59,9 @@ export class EngineError extends Error {
 
 function sign(ts: number, method: string, path: string, rawBody: string): string {
   const secret = getSecret();
+  const bodySha = createHash("sha256").update(rawBody).digest("hex");
   const h = createHmac("sha256", secret);
-  h.update(`${ts}.${method.toUpperCase()}.${path}.${rawBody}`);
+  h.update(`${ts}.${method.toUpperCase()}.${path}.${bodySha}`);
   return h.digest("hex");
 }
 
@@ -74,8 +76,8 @@ async function call<T>(
   const sig = sign(ts, method, path, rawBody);
 
   const headers: Record<string, string> = {
-    "X-Engine-Signature": sig,
-    "X-Engine-Timestamp": String(ts),
+    "X-Signature": sig,
+    "X-Timestamp": String(ts),
     "X-Service-Id": process.env.RESERVATION_ENGINE_SERVICE_ID ?? "terminal",
   };
   if (rawBody.length > 0) headers["Content-Type"] = "application/json";
