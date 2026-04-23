@@ -24,7 +24,7 @@ services:
 
   engine:
     image: ${ENGINE_IMAGE:-ghcr.io/rndynt/transity-engine}:${ENGINE_IMAGE_TAG:-latest}
-    container_name: transity-engine-${OPERATOR_SLUG}
+    container_name: transity-terminal-${OPERATOR_SLUG}-engine
     restart: unless-stopped
     expose:
       - "8000"
