@@ -264,3 +264,50 @@ Environment variables required:
 - `TERMINAL_SERVICE_KEY` — service key for X-Service-Key auth
 - `PAYMENT_WEBHOOK_SECRET` — HMAC secret for webhook verification
 
+
+## Reservation Engine (Sidecar — Optional)
+
+For high-volume operators who want stronger seat-conflict guarantees and
+out-of-process reaping, TT can offload hold/release/cancel-seats inventory
+writes to a Rust **Reservation Engine** sidecar (separate repo). The sidecar
+runs alongside the `terminal` container in the same Docker network, owns its
+own DB tx for the `seat_holds` / `seat_inventory` tables, and exposes a small
+HTTP API authenticated with HMAC-SHA256.
+
+### How to enable
+Set in `.env`:
+```
+RESERVATION_ENGINE_ENABLED=true
+RESERVATION_ENGINE_URL=http://engine:8000
+RESERVATION_ENGINE_HMAC_SECRET=<openssl rand -hex 32, must match engine>
+```
+Then layer the engine compose overlay on top of the standard TT compose.
+
+### What is wired (this PR)
+The dispatcher lives in `server/modules/holds/holdsAdapter.ts` and routes:
+- `POST hold` → `bookings.service.ts createHold`
+- `DELETE release` → `bookings.service.ts releaseHold`
+- `POST cancel-seats` → `bookings.routes.ts` ticket cancel + `unseat.service.ts`
+   (`unseatPassenger`, `unseatAllPassengers`)
+
+When the flag is **off**, every code path is byte-for-byte identical to before
+(adapter falls through to `AtomicHoldService`). Local hold reaper and orphan-
+ref cleanup in `server/scheduler.ts` are auto-disabled when the flag is on
+(the engine reaps); the pending-booking cleanup keeps running.
+
+### What is NOT wired yet (do not enable in production)
+1. **`confirmSeatsBooked` in `booking.helpers.ts`** still flips
+   `seat_inventory.booked=true` directly. Routing it requires restructuring
+   `createBooking()` so the engine confirm runs OUTSIDE the booking tx.
+2. **`reschedule.service.ts` seat-swap** still writes inventory directly. The
+   engine has no "book directly" primitive; routing requires a hold→confirm
+   orchestration.
+
+If the flag is enabled before (1) and (2) ship, confirmed seat writes will
+race the engine's reaper and you can lose seats. The adapter file header
+documents this; the scheduler logs a warning at boot.
+
+### Spec
+See `engine/docs/TT_HOLDS_ADAPTER_INSTRUCTIONS.md` and
+`engine/docs/TRANSITY_TERMINAL_INTEGRATION.md` in the engine repo for
+endpoint contracts, signing, and error codes.

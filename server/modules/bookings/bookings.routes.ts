@@ -138,13 +138,22 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
         .returning();
 
       if (passengerRow.seatNo && legIndexes.length > 0) {
-        await tx.update(seatInventory)
-          .set({ booked: false, holdRef: null })
-          .where(and(
-            eq(seatInventory.tripId, booking.tripId),
-            eq(seatInventory.seatNo, passengerRow.seatNo),
-            inArray(seatInventory.legIndex, legIndexes)
-          ));
+        // When the reservation engine sidecar owns inventory writes
+        // (RESERVATION_ENGINE_ENABLED=true), the engine's HTTP cancel-seats
+        // endpoint runs in its own DB tx — we can't compose it inside this
+        // outer tx safely. Defer the release to AFTER tx.commit() below.
+        // When the flag is off, do the legacy inline SQL inside the tx so
+        // behavior is unchanged.
+        const { isEngineEnabled } = await import("@modules/holds/holdsAdapter");
+        if (!isEngineEnabled()) {
+          await tx.update(seatInventory)
+            .set({ booked: false, holdRef: null })
+            .where(and(
+              eq(seatInventory.tripId, booking.tripId),
+              eq(seatInventory.seatNo, passengerRow.seatNo),
+              inArray(seatInventory.legIndex, legIndexes)
+            ));
+        }
       }
 
       await tx.insert(bookingHistory).values({
@@ -169,6 +178,36 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
 
       return updated;
     });
+
+    // Engine-mode: release the seat back to inventory via the engine AFTER
+    // the local booking-state tx has committed. The engine runs its own DB
+    // tx, so composing it inside the outer tx would either deadlock or
+    // produce inconsistent state on partial failure. Doing it post-commit
+    // matches how cancel-seats works in single-writer Node mode (the SQL
+    // and the booking row update are functionally one logical operation).
+    if (passengerRow.seatNo && legIndexes.length > 0) {
+      const { isEngineEnabled } = await import("@modules/holds/holdsAdapter");
+      if (isEngineEnabled()) {
+        try {
+          const { HoldsAdapter } = await import("@modules/holds/holdsAdapter");
+          const { AtomicHoldService } = await import("./atomicHold.service");
+          const adapter = new HoldsAdapter(new AtomicHoldService(storage));
+          await adapter.cancelSeats({
+            tripId: booking.tripId,
+            seatNo: passengerRow.seatNo,
+            legIndexes,
+          });
+        } catch (e) {
+          // Booking is already marked cancelled in TT; surface engine error
+          // so operator can retry. The reaper will eventually reconcile if
+          // the engine call succeeded server-side but the response was lost.
+          console.error('[BOOKINGS] engine cancelSeats failed after tx commit:', e);
+          return reply.code(502).send({
+            error: 'Booking marked cancelled but engine seat-release failed; retry or contact support.',
+          });
+        }
+      }
+    }
 
     if (passengerRow.seatNo) {
       for (const legIdx of legIndexes) {

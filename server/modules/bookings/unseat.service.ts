@@ -35,13 +35,19 @@ export class UnseatService {
         .where(eq(passengers.id, passengerId))
         .returning();
 
-      await tx.update(seatInventory)
-        .set({ booked: false, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, booking.tripId),
-          eq(seatInventory.seatNo, passenger.seatNo),
-          inArray(seatInventory.legIndex, legIndexes)
-        ));
+      // Engine mode: defer the seat release to AFTER tx commit; the engine
+      // owns inventory writes and runs its own tx. Flag-off mode keeps the
+      // legacy inline SQL inside the outer tx for unchanged behavior.
+      const { isEngineEnabled } = await import("@modules/holds/holdsAdapter");
+      if (!isEngineEnabled()) {
+        await tx.update(seatInventory)
+          .set({ booked: false, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, booking.tripId),
+            eq(seatInventory.seatNo, passenger.seatNo),
+            inArray(seatInventory.legIndex, legIndexes)
+          ));
+      }
 
       await tx.insert(bookingHistory).values({
         bookingId: booking.id,
@@ -67,6 +73,22 @@ export class UnseatService {
 
       return updatedP;
     });
+
+    // Engine mode: now that the local booking-state tx is committed, ask
+    // the engine to release the seat back to inventory. See holdsAdapter
+    // and the long-form comment in bookings.routes.ts cancel handler.
+    {
+      const { isEngineEnabled, HoldsAdapter } = await import("@modules/holds/holdsAdapter");
+      if (isEngineEnabled()) {
+        const { AtomicHoldService } = await import("./atomicHold.service");
+        const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+        await adapter.cancelSeats({
+          tripId: booking.tripId,
+          seatNo: passenger.seatNo,
+          legIndexes,
+        });
+      }
+    }
 
     for (const legIdx of legIndexes) {
       webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, [legIdx]);
@@ -99,13 +121,17 @@ export class UnseatService {
           .set({ ticketStatus: 'unseated' })
           .where(eq(passengers.id, p.id));
 
-        await tx.update(seatInventory)
-          .set({ booked: false, holdRef: null })
-          .where(and(
-            eq(seatInventory.tripId, booking.tripId),
-            eq(seatInventory.seatNo, p.seatNo),
-            inArray(seatInventory.legIndex, legIndexes)
-          ));
+        // See comment in unseatPassenger() about engine-mode deferral.
+        const { isEngineEnabled } = await import("@modules/holds/holdsAdapter");
+        if (!isEngineEnabled()) {
+          await tx.update(seatInventory)
+            .set({ booked: false, holdRef: null })
+            .where(and(
+              eq(seatInventory.tripId, booking.tripId),
+              eq(seatInventory.seatNo, p.seatNo),
+              inArray(seatInventory.legIndex, legIndexes)
+            ));
+        }
 
         await tx.insert(bookingHistory).values({
           bookingId: booking.id,
@@ -124,6 +150,29 @@ export class UnseatService {
         .set({ status: 'unseated' })
         .where(eq(bookings.id, booking.id));
     });
+
+    // Engine mode: per-seat cancel after tx commit. Engine endpoint is
+    // per-seat only, so we iterate. If any one fails, log and continue —
+    // the engine reaper will not auto-reconcile booked rows, so the
+    // operator may need to retry the failing seat manually.
+    {
+      const { isEngineEnabled, HoldsAdapter } = await import("@modules/holds/holdsAdapter");
+      if (isEngineEnabled()) {
+        const { AtomicHoldService } = await import("./atomicHold.service");
+        const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+        for (const p of activePax) {
+          try {
+            await adapter.cancelSeats({
+              tripId: booking.tripId,
+              seatNo: p.seatNo,
+              legIndexes,
+            });
+          } catch (e) {
+            console.error(`[UNSEAT] engine cancelSeats failed for seat ${p.seatNo}:`, e);
+          }
+        }
+      }
+    }
 
     for (const p of activePax) {
       for (const legIdx of legIndexes) {

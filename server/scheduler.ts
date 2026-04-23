@@ -173,13 +173,25 @@ export class Scheduler {
 
   start(): void {
     const config = getConfig();
-    
+    const engineOwnsHolds =
+      (process.env.RESERVATION_ENGINE_ENABLED ?? 'false').toLowerCase() === 'true';
+
+    if (engineOwnsHolds) {
+      console.log(
+        '[SCHEDULER] RESERVATION_ENGINE_ENABLED=true — local hold reaper ' +
+          'and orphan-ref cleanup are DISABLED. The engine sidecar owns ' +
+          'reaping. Pending-booking cleanup remains active.',
+      );
+    }
+
     // Run cleanup every 60 seconds. Wrap each job in a Postgres advisory lock
     // so multi-instance deployments do not run the same cleanup multiple times.
     this.intervalId = setInterval(async () => {
       try {
-        await withAdvisoryLock(LOCK_HOLDS_CLEANUP, () => this.cleanupExpiredHolds());
-        await withAdvisoryLock(LOCK_ORPHAN_REFS, () => this.cleanupOrphanHoldRefs());
+        if (!engineOwnsHolds) {
+          await withAdvisoryLock(LOCK_HOLDS_CLEANUP, () => this.cleanupExpiredHolds());
+          await withAdvisoryLock(LOCK_ORPHAN_REFS, () => this.cleanupOrphanHoldRefs());
+        }
 
         if (config.pendingBookingAutoRelease) {
           await withAdvisoryLock(LOCK_PENDING_BOOK, async () => {
@@ -194,8 +206,10 @@ export class Scheduler {
 
     console.log('[SCHEDULER] Cleanup scheduler started (runs every 1 minute)');
 
-    // Run immediately on start
-    this.cleanupExpiredHolds();
+    // Run immediately on start (only if Node still owns reaping).
+    if (!engineOwnsHolds) {
+      this.cleanupExpiredHolds();
+    }
 
     // Periodic schedule snapshot push to Console — this is the safety net so
     // that even if every fire-and-forget delivery fails (e.g. Console is down
