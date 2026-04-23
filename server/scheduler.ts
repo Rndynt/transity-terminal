@@ -11,6 +11,7 @@ const LOCK_HOLDS_CLEANUP = 8240_001;
 const LOCK_ORPHAN_REFS   = 8240_002;
 const LOCK_PENDING_BOOK  = 8240_003;
 const LOCK_SNAPSHOT_PUSH = 8240_004;
+const LOCK_ENGINE_COMP   = 8240_005;
 
 // IMPORTANT: session-level pg advisory locks are bound to a *single
 // connection*. The default `db` client uses a connection pool — two separate
@@ -197,6 +198,20 @@ export class Scheduler {
           await withAdvisoryLock(LOCK_PENDING_BOOK, async () => {
             console.log('[SCHEDULER] Running expired pending bookings cleanup...');
             await this.bookingsService.cleanupExpiredPendingBookings();
+          });
+        }
+
+        // Drain queued engine compensations (cancel-seats calls that
+        // failed after a local tx commit). No-op when flag is off.
+        if (engineOwnsHolds) {
+          await withAdvisoryLock(LOCK_ENGINE_COMP, async () => {
+            const { runOnce } = await import('@modules/holds/compensationQueue');
+            const r = await runOnce();
+            if (r.attempted > 0) {
+              console.log(
+                `[SCHEDULER] engine compensation queue: ${r.succeeded}/${r.attempted} drained`,
+              );
+            }
           });
         }
       } catch (error) {

@@ -309,12 +309,36 @@ cleanup keeps running.
   If the local tx then fails, the adapter runs a best-effort compensating
   `cancel-seats` to free what was already booked in the engine. Compensation
   is logged but never throws.
-- `reschedule` frees the **old** seat AFTER the local tx commits. If that
-  call fails, the reschedule is still considered successful on TT side; the
-  orphaned engine seat must be cleared manually (call cancel-seats again or
-  use the engine's admin tooling).
+- `reschedule`, `unseat`, ticket-cancel and pending-booking cleanup all free
+  seats in the engine **after** the local tx commits. If that call fails,
+  the row is enqueued to `engine_compensation_queue` (migration `0009`) and
+  the scheduler retries it every minute under advisory lock
+  `LOCK_ENGINE_COMP`. Hard cap: 50 attempts per row — exceeded rows stay in
+  the table with `attempts >= 50` and `last_error` populated for SQL audit;
+  they are never silently dropped.
+- Retry SLA: a transient engine outage of up to ~50 minutes is fully
+  self-healing. Longer outages need an operator to clear queue rows by hand
+  (`SELECT * FROM engine_compensation_queue WHERE attempts >= 50;`).
+- Cancel-handler 502 response means the booking **is** cancelled but the
+  seat-release was queued; the seat reappears on sale within ~1 minute.
 - Booking IDs are pre-generated with `crypto.randomUUID()` so engine and TT
   agree on the canonical id before either side persists state.
+- WebSocket emits: in engine mode the adapter is the **single source** of
+  inventory-update events (it emits internally on hold / release /
+  cancelSeats / holdAndConfirmShort). Caller-side `emitInventoryUpdated`
+  loops are gated behind `!engineMode` so each seat change broadcasts
+  exactly once.
+
+### Engine startup safety
+On boot the engine probes `seat_holds` and `seat_inventory` with a 0-row
+`SELECT` listing every column it expects. If the database is the wrong
+Neon project (no TT migrations) the process exits 1 immediately with a
+descriptive error, instead of waiting until first traffic to fail.
+
+### Smoke test
+`scripts/engine-smoke-test.sh` runs hold → confirm → cancel-seats against
+a live engine sidecar; intended to be wired into the deploy pipeline as a
+gate after each operator's container is rolled.
 
 ### Spec
 See `engine/docs/TT_HOLDS_ADAPTER_INSTRUCTIONS.md` and

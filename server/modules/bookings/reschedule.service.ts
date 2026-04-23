@@ -176,25 +176,35 @@ export class RescheduleService {
     });
     } catch (err) {
       // Local tx failed AFTER we already booked the new seat in the engine.
-      // Compensate by freeing the new seat so it doesn't leak.
+      // Compensate by freeing the new seat so it doesn't leak. If the
+      // compensating engine call ALSO fails (rare double-failure), enqueue
+      // it so the scheduler retries — never give up silently.
       if (engineMode && engineNewSeatBooked) {
         const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
-        await adapter.cancelSeats({
-          tripId: newTripId,
-          seatNo: newSeatNo,
-          legIndexes: newLegIndexes,
-        }).catch((e) =>
-          console.error('[RESCHEDULE] compensation cancelSeats(new) failed:', e),
-        );
+        try {
+          await adapter.cancelSeats({
+            tripId: newTripId,
+            seatNo: newSeatNo,
+            legIndexes: newLegIndexes,
+          });
+        } catch (e) {
+          console.error('[RESCHEDULE] compensation cancelSeats(new) failed, enqueuing:', e);
+          const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
+          await enqueueCancelSeats({
+            tripId: newTripId,
+            seatNo: newSeatNo,
+            legIndexes: newLegIndexes,
+            context: { source: 'reschedulePassenger.compensation', passengerId, originalBookingId: booking.id },
+          });
+        }
       }
       throw err;
     }
 
     // Engine mode: now that the local state is consistent with the new
-    // booking, free the OLD seat in the engine. If this fails, log it —
-    // the reschedule is already complete on TT side, and an operator can
-    // manually cancel the orphaned engine seat by calling cancel-seats
-    // again. (We deliberately do not roll back the new seat here.)
+    // booking, free the OLD seat in the engine. If this fails, enqueue it
+    // for asynchronous retry — the reschedule itself is already complete
+    // on TT side and we do not want to roll the new seat back.
     if (engineMode) {
       const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
       try {
@@ -204,15 +214,27 @@ export class RescheduleService {
           legIndexes: oldLegIndexes,
         });
       } catch (e) {
-        console.error('[RESCHEDULE] engine cancelSeats(old) failed; old seat may remain booked in engine:', e);
+        console.error('[RESCHEDULE] engine cancelSeats(old) failed, enqueuing for retry:', e);
+        const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
+        await enqueueCancelSeats({
+          tripId: oldTripId,
+          seatNo: oldSeatNo,
+          legIndexes: oldLegIndexes,
+          context: { source: 'reschedulePassenger.cancelOld', passengerId, originalBookingId: booking.id },
+        });
       }
     }
 
-    for (const legIdx of oldLegIndexes) {
-      webSocketService.emitInventoryUpdated(oldTripId, oldSeatNo, [legIdx]);
-    }
-    for (const legIdx of newLegIndexes) {
-      webSocketService.emitInventoryUpdated(newTripId, newSeatNo, [legIdx]);
+    // In engine mode the adapter.cancelSeats() and holdAndConfirmShort()
+    // calls already emitted per-seat inventory events. Skip the duplicate
+    // caller-side broadcast to keep WS traffic lean.
+    if (!engineMode) {
+      for (const legIdx of oldLegIndexes) {
+        webSocketService.emitInventoryUpdated(oldTripId, oldSeatNo, [legIdx]);
+      }
+      for (const legIdx of newLegIndexes) {
+        webSocketService.emitInventoryUpdated(newTripId, newSeatNo, [legIdx]);
+      }
     }
 
     const updatedBooking = await this.storage.getBookingById(resultBookingId);
@@ -409,20 +431,32 @@ export class RescheduleService {
         });
         } catch (txErr) {
           // Compensate: free the new seat we already booked in the engine.
+          // Enqueue if even the compensating call fails so the scheduler
+          // can drain it later.
           if (engineMode && engineNewBooked) {
             const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
-            await adapter.cancelSeats({
-              tripId: newTripId,
-              seatNo: targetSeat!,
-              legIndexes: newLegIndexes,
-            }).catch((e) =>
-              console.error('[RESCHEDULE_BATCH] compensation cancelSeats(new) failed:', e),
-            );
+            try {
+              await adapter.cancelSeats({
+                tripId: newTripId,
+                seatNo: targetSeat!,
+                legIndexes: newLegIndexes,
+              });
+            } catch (e) {
+              console.error('[RESCHEDULE_BATCH] compensation cancelSeats(new) failed, enqueuing:', e);
+              const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
+              await enqueueCancelSeats({
+                tripId: newTripId,
+                seatNo: targetSeat!,
+                legIndexes: newLegIndexes,
+                context: { source: 'batchReschedule.compensation', passengerId: pax.id },
+              });
+            }
           }
           throw txErr;
         }
 
-        // Engine mode: free the old seat after tx commit. Best-effort.
+        // Engine mode: free the old seat after tx commit. On failure,
+        // enqueue for scheduler retry (do not roll back the new seat).
         if (engineMode) {
           const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
           try {
@@ -433,18 +467,28 @@ export class RescheduleService {
             });
           } catch (e) {
             console.error(
-              `[RESCHEDULE_BATCH] engine cancelSeats(old) failed for pax ${pax.id}; old seat may remain booked in engine:`,
+              `[RESCHEDULE_BATCH] engine cancelSeats(old) failed for pax ${pax.id}, enqueuing:`,
               e,
             );
+            const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
+            await enqueueCancelSeats({
+              tripId: oldTripId,
+              seatNo: pax.seatNo,
+              legIndexes: oldLegIndexes,
+              context: { source: 'batchReschedule.cancelOld', passengerId: pax.id },
+            });
           }
         }
 
-        const oldLegIdx = getLegIndexes(pax.originSeq, pax.destinationSeq);
-        for (const legIdx of oldLegIdx) {
-          webSocketService.emitInventoryUpdated(oldTripId, pax.seatNo, [legIdx]);
-        }
-        for (const legIdx of newLegIndexes) {
-          webSocketService.emitInventoryUpdated(newTripId, targetSeat, [legIdx]);
+        // Adapter already emitted per-seat WS events in engine mode.
+        if (!engineMode) {
+          const oldLegIdx = getLegIndexes(pax.originSeq, pax.destinationSeq);
+          for (const legIdx of oldLegIdx) {
+            webSocketService.emitInventoryUpdated(oldTripId, pax.seatNo, [legIdx]);
+          }
+          for (const legIdx of newLegIndexes) {
+            webSocketService.emitInventoryUpdated(newTripId, targetSeat, [legIdx]);
+          }
         }
 
         succeeded.push({ ...pax, newSeatNo: targetSeat });

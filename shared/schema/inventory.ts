@@ -23,6 +23,42 @@ export const insertSeatInventorySchema = createInsertSchema(seatInventory).omit(
 export type SeatInventory = typeof seatInventory.$inferSelect;
 export type InsertSeatInventory = z.infer<typeof insertSeatInventorySchema>;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// engine_compensation_queue — durable retry queue for best-effort engine
+// inventory operations that failed AFTER the local TT transaction already
+// committed. Without this, a transient engine outage would leak seats: the
+// local booking state would be consistent (e.g. ticket cancelled, passenger
+// unseated, reschedule completed) but the engine would still consider the
+// seat booked, removing it from sale.
+//
+// The scheduler picks pending rows every minute (only when
+// RESERVATION_ENGINE_ENABLED=true) and retries the cancel-seats call.
+// Successful rows are deleted; failed rows have their attempt counter
+// incremented and the latest error stored. Rows that exceed a hard cap
+// (default 50 attempts) are kept around with `attempts >= cap` so an
+// operator can spot them via SQL — they are never silently dropped.
+// ─────────────────────────────────────────────────────────────────────────────
+export const engineCompensationQueue = pgTable("engine_compensation_queue", {
+  id:            uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Operation type. Currently only 'cancel_seats' is supported. Stored as
+  // text (not enum) to keep follow-up extensibility cheap.
+  opType:        text("op_type").notNull(),
+  tripId:        uuid("trip_id").notNull(),
+  seatNo:        text("seat_no").notNull(),
+  legIndexes:    integer("leg_indexes").array().notNull(),
+  // Free-form context for forensics (originating booking id, source code path).
+  context:       jsonb("context"),
+  attempts:      integer("attempts").notNull().default(0),
+  lastError:     text("last_error"),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  createdAt:     timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  // Worker reads "oldest first, attempts < cap" — composite index covers it.
+  idxQueueReady: index("idx_eng_comp_queue_ready").on(table.attempts, table.createdAt),
+}));
+
+export type EngineCompensationQueueRow = typeof engineCompensationQueue.$inferSelect;
+
 export const seatHolds = pgTable("seat_holds", {
   id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   holdRef:     text("hold_ref").notNull().unique(),

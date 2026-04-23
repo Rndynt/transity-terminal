@@ -34,7 +34,7 @@ import { randomUUID } from "node:crypto";
 export const isEngineEnabled = (): boolean =>
   (process.env.RESERVATION_ENGINE_ENABLED ?? "false").toLowerCase() === "true";
 
-export interface CancelSeatLocalInput {
+interface CancelSeatLocalInput {
   tripId: string;
   seatNo: string;
   legIndexes: number[];
@@ -42,13 +42,15 @@ export interface CancelSeatLocalInput {
 
 /**
  * Local fallback for cancelSeats — same SQL the legacy paths inlined,
- * extracted so both adapter branches share one code path.
+ * extracted so both adapter branches share one code path. Module-private
+ * by design: callers must always go through HoldsAdapter.cancelSeats so
+ * the engine-flag routing decision is made in exactly one place.
  *
  * Caller is responsible for emitting WebSocket events; this helper only
  * touches seat_inventory + seat_holds so it can be composed inside any
  * outer transaction OR run standalone.
  */
-export async function releaseConfirmedSeatLocal(
+async function releaseConfirmedSeatLocal(
   input: CancelSeatLocalInput,
 ): Promise<void> {
   await db
@@ -258,13 +260,17 @@ export class HoldsAdapter {
   /**
    * Compensation helper for the caller: free a previously-confirmed set of
    * seats in the engine when the caller's downstream DB tx fails. Best-effort;
-   * never throws (so it does not mask the original error).
+   * never throws (so it does not mask the original error). On failure the
+   * row is enqueued in engine_compensation_queue so the scheduler retries
+   * it asynchronously — without that the seat would leak.
    */
   async compensateConfirms(
     tripId: string,
     confirmed: Array<{ seatNo: string; holdRef: string }>,
     legIndexes: number[],
+    context?: Record<string, unknown>,
   ): Promise<void> {
+    const { enqueueCancelSeats } = await import("./compensationQueue");
     for (const c of confirmed) {
       try {
         await engineClient.cancelSeats({
@@ -274,9 +280,15 @@ export class HoldsAdapter {
         });
       } catch (e) {
         console.error(
-          `[HOLDS_ADAPTER] post-tx compensation cancelSeats failed for ${c.seatNo}:`,
+          `[HOLDS_ADAPTER] post-tx compensation cancelSeats failed for ${c.seatNo}, enqueuing for retry:`,
           e,
         );
+        await enqueueCancelSeats({
+          tripId,
+          seatNo: c.seatNo,
+          legIndexes,
+          context: { source: "compensateConfirms", ...(context ?? {}) },
+        });
       }
     }
   }

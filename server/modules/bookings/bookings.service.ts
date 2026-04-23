@@ -465,8 +465,12 @@ export class BookingsService {
     const seatNos = passengers.map(p => p.seatNo);
     const legIndexes = computeLegIndexes(booking.originSeq, booking.destinationSeq);
 
+    // Engine mode owns inventory writes — skip the inline SQL and let the
+    // post-tx engine cancel-seats call handle the seat release per-seat.
+    const engineMode = isEngineEnabled();
+
     await db.transaction(async (tx) => {
-      if (seatNos.length > 0) {
+      if (!engineMode && seatNos.length > 0) {
         await tx
           .update(seatInventory)
           .set({ booked: false, holdRef: null })
@@ -484,8 +488,35 @@ export class BookingsService {
 
     await this.holdsService.releaseHoldsByOwner(operatorId, bookingId);
 
-    for (const passenger of passengers) {
-      webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
+    if (engineMode && seatNos.length > 0) {
+      // Per-seat cancel via adapter; failures enqueue for scheduler retry
+      // so a transient engine outage cannot leak seats from sale.
+      const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
+      for (const passenger of passengers) {
+        try {
+          await this.holdsAdapter.cancelSeats({
+            tripId: booking.tripId,
+            seatNo: passenger.seatNo,
+            legIndexes,
+          });
+        } catch (e) {
+          console.error(
+            `[RELEASE_PENDING] engine cancelSeats failed for ${passenger.seatNo}, enqueuing:`,
+            e,
+          );
+          await enqueueCancelSeats({
+            tripId: booking.tripId,
+            seatNo: passenger.seatNo,
+            legIndexes,
+            context: { source: 'releasePendingBooking', bookingId, passengerId: passenger.id },
+          });
+        }
+      }
+    } else {
+      // Adapter already emitted in engine path; only emit here for legacy.
+      for (const passenger of passengers) {
+        webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
+      }
     }
   }
 
@@ -513,6 +544,11 @@ export class BookingsService {
       passengersByBooking.set(p.bookingId, list);
     }
 
+    const engineMode = isEngineEnabled();
+    const enqueueCancel = engineMode
+      ? (await import('@modules/holds/compensationQueue')).enqueueCancelSeats
+      : null;
+
     for (const booking of expiredPendingBookings) {
       try {
         const bookingPassengers = passengersByBooking.get(booking.id) || [];
@@ -520,7 +556,8 @@ export class BookingsService {
         const legIndexes = computeLegIndexes(booking.originSeq, booking.destinationSeq);
 
         await db.transaction(async (tx) => {
-          if (seatNos.length > 0) {
+          if (!engineMode && seatNos.length > 0) {
+            // Engine owns inventory writes — see release path above.
             await tx
               .update(seatInventory)
               .set({ booked: false, holdRef: null })
@@ -536,8 +573,31 @@ export class BookingsService {
             .where(eq(bookingsTable.id, booking.id));
         });
 
-        for (const passenger of bookingPassengers) {
-          webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
+        if (engineMode && seatNos.length > 0) {
+          for (const passenger of bookingPassengers) {
+            try {
+              await this.holdsAdapter.cancelSeats({
+                tripId: booking.tripId,
+                seatNo: passenger.seatNo,
+                legIndexes,
+              });
+            } catch (e) {
+              console.error(
+                `[CLEANUP] engine cancelSeats failed for booking=${booking.id} seat=${passenger.seatNo}, enqueuing:`,
+                e,
+              );
+              await enqueueCancel!({
+                tripId: booking.tripId,
+                seatNo: passenger.seatNo,
+                legIndexes,
+                context: { source: 'cleanupExpiredPendingBookings', bookingId: booking.id, passengerId: passenger.id },
+              });
+            }
+          }
+        } else {
+          for (const passenger of bookingPassengers) {
+            webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
+          }
         }
 
         console.log(`[CLEANUP] Expired pending booking ${booking.id} canceled and seats released`);

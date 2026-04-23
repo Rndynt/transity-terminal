@@ -75,23 +75,40 @@ export class UnseatService {
     });
 
     // Engine mode: now that the local booking-state tx is committed, ask
-    // the engine to release the seat back to inventory. See holdsAdapter
-    // and the long-form comment in bookings.routes.ts cancel handler.
+    // the engine to release the seat back to inventory. On failure,
+    // enqueue for asynchronous retry — the unseat is already done on TT
+    // side and we don't want to roll it back.
+    let engineModeUnseat = false;
     {
       const { isEngineEnabled, HoldsAdapter } = await import("@modules/holds/holdsAdapter");
-      if (isEngineEnabled()) {
+      engineModeUnseat = isEngineEnabled();
+      if (engineModeUnseat) {
         const { AtomicHoldService } = await import("./atomicHold.service");
         const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
-        await adapter.cancelSeats({
-          tripId: booking.tripId,
-          seatNo: passenger.seatNo,
-          legIndexes,
-        });
+        try {
+          await adapter.cancelSeats({
+            tripId: booking.tripId,
+            seatNo: passenger.seatNo,
+            legIndexes,
+          });
+        } catch (e) {
+          console.error('[UNSEAT] engine cancelSeats failed, enqueuing:', e);
+          const { enqueueCancelSeats } = await import("@modules/holds/compensationQueue");
+          await enqueueCancelSeats({
+            tripId: booking.tripId,
+            seatNo: passenger.seatNo,
+            legIndexes,
+            context: { source: 'unseatPassenger', passengerId, bookingId: booking.id },
+          });
+        }
       }
     }
 
-    for (const legIdx of legIndexes) {
-      webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, [legIdx]);
+    // Adapter.cancelSeats already emitted per-seat WS in engine mode.
+    if (!engineModeUnseat) {
+      for (const legIdx of legIndexes) {
+        webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, [legIdx]);
+      }
     }
 
     return {
@@ -152,13 +169,15 @@ export class UnseatService {
     });
 
     // Engine mode: per-seat cancel after tx commit. Engine endpoint is
-    // per-seat only, so we iterate. If any one fails, log and continue —
-    // the engine reaper will not auto-reconcile booked rows, so the
-    // operator may need to retry the failing seat manually.
+    // per-seat only, so we iterate. Each failure is enqueued for the
+    // scheduler so a transient engine outage cannot leak seats.
+    let engineModeBatch = false;
     {
       const { isEngineEnabled, HoldsAdapter } = await import("@modules/holds/holdsAdapter");
-      if (isEngineEnabled()) {
+      engineModeBatch = isEngineEnabled();
+      if (engineModeBatch) {
         const { AtomicHoldService } = await import("./atomicHold.service");
+        const { enqueueCancelSeats } = await import("@modules/holds/compensationQueue");
         const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
         for (const p of activePax) {
           try {
@@ -168,15 +187,24 @@ export class UnseatService {
               legIndexes,
             });
           } catch (e) {
-            console.error(`[UNSEAT] engine cancelSeats failed for seat ${p.seatNo}:`, e);
+            console.error(`[UNSEAT] engine cancelSeats failed for seat ${p.seatNo}, enqueuing:`, e);
+            await enqueueCancelSeats({
+              tripId: booking.tripId,
+              seatNo: p.seatNo,
+              legIndexes,
+              context: { source: 'unseatAllPassengers', passengerId: p.id, bookingId: booking.id },
+            });
           }
         }
       }
     }
 
-    for (const p of activePax) {
-      for (const legIdx of legIndexes) {
-        webSocketService.emitInventoryUpdated(booking.tripId, p.seatNo, [legIdx]);
+    // Adapter already emitted per-seat WS in engine mode.
+    if (!engineModeBatch) {
+      for (const p of activePax) {
+        for (const legIdx of legIndexes) {
+          webSocketService.emitInventoryUpdated(booking.tripId, p.seatNo, [legIdx]);
+        }
       }
     }
 

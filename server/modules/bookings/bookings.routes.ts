@@ -185,9 +185,11 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
     // produce inconsistent state on partial failure. Doing it post-commit
     // matches how cancel-seats works in single-writer Node mode (the SQL
     // and the booking row update are functionally one logical operation).
+    let engineModeCancel = false;
     if (passengerRow.seatNo && legIndexes.length > 0) {
       const { isEngineEnabled } = await import("@modules/holds/holdsAdapter");
-      if (isEngineEnabled()) {
+      engineModeCancel = isEngineEnabled();
+      if (engineModeCancel) {
         try {
           const { HoldsAdapter } = await import("@modules/holds/holdsAdapter");
           const { AtomicHoldService } = await import("./atomicHold.service");
@@ -198,18 +200,27 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
             legIndexes,
           });
         } catch (e) {
-          // Booking is already marked cancelled in TT; surface engine error
-          // so operator can retry. The reaper will eventually reconcile if
-          // the engine call succeeded server-side but the response was lost.
-          console.error('[BOOKINGS] engine cancelSeats failed after tx commit:', e);
+          // Booking is already marked cancelled in TT; engine call failed.
+          // Enqueue for the scheduler to retry asynchronously, then surface
+          // a 502 so the operator knows the seat may not be sellable yet.
+          // The retry guarantees we never leak the seat permanently.
+          console.error('[BOOKINGS] engine cancelSeats failed after tx commit, enqueuing:', e);
+          const { enqueueCancelSeats } = await import("@modules/holds/compensationQueue");
+          await enqueueCancelSeats({
+            tripId: booking.tripId,
+            seatNo: passengerRow.seatNo,
+            legIndexes,
+            context: { source: 'bookings.routes.cancel', bookingId: booking.id, passengerId: passengerRow.id },
+          });
           return reply.code(502).send({
-            error: 'Booking marked cancelled but engine seat-release failed; retry or contact support.',
+            error: 'Booking marked cancelled. Seat release queued for retry — it will become available within a minute.',
           });
         }
       }
     }
 
-    if (passengerRow.seatNo) {
+    // Adapter.cancelSeats already emitted per-seat WS in engine mode.
+    if (passengerRow.seatNo && !engineModeCancel) {
       for (const legIdx of legIndexes) {
         webSocketService.emitInventoryUpdated(booking.tripId, passengerRow.seatNo, [legIdx]);
       }
