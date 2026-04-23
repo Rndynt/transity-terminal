@@ -4,6 +4,9 @@ import { eq, and, inArray } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
 import { IStorage } from "@server/storage.interface";
 import { generateBookingCode } from "@server/utils/codeGenerator";
+import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
+import { AtomicHoldService } from "./atomicHold.service";
+import { randomUUID } from "node:crypto";
 
 function getLegIndexes(originSeq: number, destinationSeq: number): number[] {
   const legs: number[] = [];
@@ -64,22 +67,49 @@ export class RescheduleService {
 
     let resultBookingId = booking.id;
 
-    await db.transaction(async (tx) => {
-      await tx.update(seatInventory)
-        .set({ booked: false, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, oldTripId),
-          eq(seatInventory.seatNo, oldSeatNo),
-          inArray(seatInventory.legIndex, oldLegIndexes)
-        ));
+    // Engine mode: book the new seat (hold→confirm) BEFORE the local tx, so
+    // the engine owns the inventory write. We pre-generate the new booking
+    // ID if the reschedule will split into a new booking, so the engine
+    // confirm can carry the canonical id forward. Old seat is freed AFTER
+    // the local tx commits (so a tx-fail compensation only has to revert
+    // the new seat, not also re-book the old one).
+    const engineMode = isEngineEnabled();
+    const engineOperatorId = booking.createdBy || performedBy;
+    const willSplit = !(isSoleActivePassenger || !tripChanged);
+    const preGenNewBookingId = engineMode && willSplit ? randomUUID() : undefined;
+    let engineNewSeatBooked = false;
+    if (engineMode) {
+      const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+      await adapter.holdAndConfirmShort({
+        bookingId: preGenNewBookingId ?? booking.id,
+        tripId: newTripId,
+        seatNo: newSeatNo,
+        legIndexes: newLegIndexes,
+        operatorId: engineOperatorId,
+      });
+      engineNewSeatBooked = true;
+    }
 
-      await tx.update(seatInventory)
-        .set({ booked: true, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, newTripId),
-          eq(seatInventory.seatNo, newSeatNo),
-          inArray(seatInventory.legIndex, newLegIndexes)
-        ));
+    try {
+    await db.transaction(async (tx) => {
+      // Inventory writes are owned by the engine when the flag is on.
+      if (!engineMode) {
+        await tx.update(seatInventory)
+          .set({ booked: false, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, oldTripId),
+            eq(seatInventory.seatNo, oldSeatNo),
+            inArray(seatInventory.legIndex, oldLegIndexes)
+          ));
+
+        await tx.update(seatInventory)
+          .set({ booked: true, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, newTripId),
+            eq(seatInventory.seatNo, newSeatNo),
+            inArray(seatInventory.legIndex, newLegIndexes)
+          ));
+      }
 
       if (isSoleActivePassenger || !tripChanged) {
         await tx.update(passengers)
@@ -97,6 +127,7 @@ export class RescheduleService {
           .where(eq(bookings.id, booking.id));
       } else {
         const [newBooking] = await tx.insert(bookings).values({
+          ...(preGenNewBookingId ? { id: preGenNewBookingId } : {}),
           bookingCode: generateBookingCode(),
           tripId: newTripId,
           originStopId: newOriginStopId,
@@ -143,6 +174,39 @@ export class RescheduleService {
         performedBy
       });
     });
+    } catch (err) {
+      // Local tx failed AFTER we already booked the new seat in the engine.
+      // Compensate by freeing the new seat so it doesn't leak.
+      if (engineMode && engineNewSeatBooked) {
+        const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+        await adapter.cancelSeats({
+          tripId: newTripId,
+          seatNo: newSeatNo,
+          legIndexes: newLegIndexes,
+        }).catch((e) =>
+          console.error('[RESCHEDULE] compensation cancelSeats(new) failed:', e),
+        );
+      }
+      throw err;
+    }
+
+    // Engine mode: now that the local state is consistent with the new
+    // booking, free the OLD seat in the engine. If this fails, log it —
+    // the reschedule is already complete on TT side, and an operator can
+    // manually cancel the orphaned engine seat by calling cancel-seats
+    // again. (We deliberately do not roll back the new seat here.)
+    if (engineMode) {
+      const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+      try {
+        await adapter.cancelSeats({
+          tripId: oldTripId,
+          seatNo: oldSeatNo,
+          legIndexes: oldLegIndexes,
+        });
+      } catch (e) {
+        console.error('[RESCHEDULE] engine cancelSeats(old) failed; old seat may remain booked in engine:', e);
+      }
+    }
 
     for (const legIdx of oldLegIndexes) {
       webSocketService.emitInventoryUpdated(oldTripId, oldSeatNo, [legIdx]);
@@ -231,22 +295,51 @@ export class RescheduleService {
       try {
         const oldLegIndexes = getLegIndexes(pax.originSeq, pax.destinationSeq);
 
-        await db.transaction(async (tx) => {
-          await tx.update(seatInventory)
-            .set({ booked: false, holdRef: null })
-            .where(and(
-              eq(seatInventory.tripId, oldTripId),
-              eq(seatInventory.seatNo, pax.seatNo),
-              inArray(seatInventory.legIndex, oldLegIndexes)
-            ));
+        // Engine mode: book the new seat (hold→confirm) BEFORE the local
+        // tx, on a per-pax basis. We pre-decide whether this pax will keep
+        // its existing booking row or land on a freshly-split one so the
+        // engine confirm carries the right canonical booking_id. Old seat
+        // is freed AFTER the local tx commits; failures are logged.
+        const engineMode = isEngineEnabled();
+        const siblingsForPax = passengersByBooking.get(pax.bookingId) || [];
+        const allSiblingsInBatchForPax = siblingsForPax.every(s =>
+          activePassengers.some(ap => ap.id === s.id),
+        );
+        const willSplit = !allSiblingsInBatchForPax;
+        const preGenSplitBookingId =
+          engineMode && willSplit ? randomUUID() : undefined;
+        let engineNewBooked = false;
+        if (engineMode) {
+          const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+          await adapter.holdAndConfirmShort({
+            bookingId: preGenSplitBookingId ?? pax.bookingId,
+            tripId: newTripId,
+            seatNo: targetSeat!,
+            legIndexes: newLegIndexes,
+            operatorId: performedBy,
+          });
+          engineNewBooked = true;
+        }
 
-          await tx.update(seatInventory)
-            .set({ booked: true, holdRef: null })
-            .where(and(
-              eq(seatInventory.tripId, newTripId),
-              eq(seatInventory.seatNo, targetSeat!),
-              inArray(seatInventory.legIndex, newLegIndexes)
-            ));
+        try {
+        await db.transaction(async (tx) => {
+          if (!engineMode) {
+            await tx.update(seatInventory)
+              .set({ booked: false, holdRef: null })
+              .where(and(
+                eq(seatInventory.tripId, oldTripId),
+                eq(seatInventory.seatNo, pax.seatNo),
+                inArray(seatInventory.legIndex, oldLegIndexes)
+              ));
+
+            await tx.update(seatInventory)
+              .set({ booked: true, holdRef: null })
+              .where(and(
+                eq(seatInventory.tripId, newTripId),
+                eq(seatInventory.seatNo, targetSeat!),
+                inArray(seatInventory.legIndex, newLegIndexes)
+              ));
+          }
 
           await tx.update(passengers)
             .set({ seatNo: targetSeat! })
@@ -270,6 +363,7 @@ export class RescheduleService {
           } else {
             const oldBooking = await this.storage.getBookingById(pax.bookingId);
             const [newBooking] = await tx.insert(bookings).values({
+              ...(preGenSplitBookingId ? { id: preGenSplitBookingId } : {}),
               bookingCode: generateBookingCode(),
               tripId: newTripId,
               originStopId: newOriginStopId,
@@ -313,6 +407,37 @@ export class RescheduleService {
             performedBy,
           });
         });
+        } catch (txErr) {
+          // Compensate: free the new seat we already booked in the engine.
+          if (engineMode && engineNewBooked) {
+            const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+            await adapter.cancelSeats({
+              tripId: newTripId,
+              seatNo: targetSeat!,
+              legIndexes: newLegIndexes,
+            }).catch((e) =>
+              console.error('[RESCHEDULE_BATCH] compensation cancelSeats(new) failed:', e),
+            );
+          }
+          throw txErr;
+        }
+
+        // Engine mode: free the old seat after tx commit. Best-effort.
+        if (engineMode) {
+          const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+          try {
+            await adapter.cancelSeats({
+              tripId: oldTripId,
+              seatNo: pax.seatNo,
+              legIndexes: oldLegIndexes,
+            });
+          } catch (e) {
+            console.error(
+              `[RESCHEDULE_BATCH] engine cancelSeats(old) failed for pax ${pax.id}; old seat may remain booked in engine:`,
+              e,
+            );
+          }
+        }
 
         const oldLegIdx = getLegIndexes(pax.originSeq, pax.destinationSeq);
         for (const legIdx of oldLegIdx) {

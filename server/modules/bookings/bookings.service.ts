@@ -2,7 +2,8 @@ import { IStorage } from "@server/storage.interface";
 import { InsertBooking, Booking } from "@shared/schema";
 import { HoldsService } from "@modules/holds/holds.service";
 import { AtomicHoldService } from "./atomicHold.service";
-import { HoldsAdapter } from "@modules/holds/holdsAdapter";
+import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
+import { randomUUID } from "node:crypto";
 import { PrintService } from "@modules/printing/print.service";
 import { db } from "@server/db";
 import { bookings as bookingsTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable, bookingPromoApplications as bookingPromoApplicationsTable } from "@shared/schema";
@@ -138,10 +139,28 @@ export class BookingsService {
       throw new Error(`Payment amount ${paymentAmount} does not match expected total ${expectedTotal}`);
     }
 
+    // Engine mode: pre-generate booking ID and confirm seats in the engine
+    // BEFORE opening the local DB tx. The engine has its own DB tx and we
+    // cannot compose them. If the engine confirm fails, we exit before any
+    // TT state changes; if the local tx below later fails, we run a
+    // best-effort compensating cancel-seats call (see catch block).
+    const preGeneratedBookingId = isEngineEnabled() ? randomUUID() : undefined;
+    let engineConfirmed: Array<{ seatNo: string; holdRef: string }> = [];
+    if (preGeneratedBookingId) {
+      engineConfirmed = await this.holdsAdapter.confirmForBooking({
+        bookingId: preGeneratedBookingId,
+        tripId: bookingData.tripId,
+        seatNos,
+        legIndexes,
+        operatorId,
+      });
+    }
+
     let booking: Booking;
     try {
       booking = await db.transaction(async (tx) => {
       const [newBooking] = await tx.insert(bookingsTable).values({
+        ...(preGeneratedBookingId ? { id: preGeneratedBookingId } : {}),
         ...bookingData,
         bookingCode: generateBookingCode(),
         status: 'paid',
@@ -169,7 +188,11 @@ export class BookingsService {
       }
 
       await insertPassengerRows(tx, newBooking.id, passengers, fareQuote);
-      await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);
+      // In engine mode, the engine already marked seats booked via
+      // confirmForBooking() above. Skip the local SQL to avoid double-write.
+      if (!preGeneratedBookingId) {
+        await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);
+      }
 
       await tx.insert(paymentsTable).values({
         method: payment.method,
@@ -229,10 +252,30 @@ export class BookingsService {
           .where(eq(bookingsTable.idempotencyKey, idempotencyKey))
           .limit(1);
         if (existing) {
+          // Engine-mode race: we already confirmed seats in the engine but
+          // the local insert lost the idempotency race. The winning request
+          // holds the canonical seat→booking_id linkage in the engine; OUR
+          // confirms point at a non-existent booking_id. Compensate by
+          // freeing what we confirmed so the winner's seats remain intact.
+          if (engineConfirmed.length > 0) {
+            await this.holdsAdapter.compensateConfirms(
+              bookingData.tripId,
+              engineConfirmed,
+              legIndexes,
+            );
+          }
           const bookingWithRelations = await this.getBookingById(existing.id);
           const printPayload = await this.printService.generatePrintPayload(existing.id);
           return { booking: bookingWithRelations, printPayload };
         }
+      }
+      // Any other tx failure with engine confirms in flight: compensate.
+      if (engineConfirmed.length > 0) {
+        await this.holdsAdapter.compensateConfirms(
+          bookingData.tripId,
+          engineConfirmed,
+          legIndexes,
+        );
       }
       throw err;
     }
@@ -321,8 +364,26 @@ export class BookingsService {
 
     const snapshots = await fetchBookingSnapshots(this.storage, bookingData.tripId, bookingData.originStopId, bookingData.destinationStopId, bookingData.outletId, bookingData.originSeq);
 
-    const booking = await db.transaction(async (tx) => {
+    // Engine mode: confirm seats BEFORE the local tx (see createPaidBooking
+    // for the full rationale). Pre-generate booking ID so engine and TT
+    // agree on the canonical id.
+    const preGeneratedPendingId = isEngineEnabled() ? randomUUID() : undefined;
+    let pendingEngineConfirmed: Array<{ seatNo: string; holdRef: string }> = [];
+    if (preGeneratedPendingId) {
+      pendingEngineConfirmed = await this.holdsAdapter.confirmForBooking({
+        bookingId: preGeneratedPendingId,
+        tripId: bookingData.tripId,
+        seatNos,
+        legIndexes,
+        operatorId,
+      });
+    }
+
+    let booking;
+    try {
+      booking = await db.transaction(async (tx) => {
       const [newBooking] = await tx.insert(bookingsTable).values({
+        ...(preGeneratedPendingId ? { id: preGeneratedPendingId } : {}),
         ...bookingData,
         bookingCode: generateBookingCode(),
         status: 'pending',
@@ -351,10 +412,23 @@ export class BookingsService {
       }
 
       await insertPassengerRows(tx, newBooking.id, passengers, fareQuote);
-      await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);
+      // Engine mode: seats already confirmed via confirmForBooking() above.
+      if (!preGeneratedPendingId) {
+        await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);
+      }
 
       return newBooking;
-    });
+      });
+    } catch (err) {
+      if (pendingEngineConfirmed.length > 0) {
+        await this.holdsAdapter.compensateConfirms(
+          bookingData.tripId,
+          pendingEngineConfirmed,
+          legIndexes,
+        );
+      }
+      throw err;
+    }
 
     const bookingWithRelations = await this.getBookingById(booking.id);
     return { booking: bookingWithRelations, pendingExpiresAt };

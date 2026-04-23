@@ -283,29 +283,38 @@ RESERVATION_ENGINE_HMAC_SECRET=<openssl rand -hex 32, must match engine>
 ```
 Then layer the engine compose overlay on top of the standard TT compose.
 
-### What is wired (this PR)
-The dispatcher lives in `server/modules/holds/holdsAdapter.ts` and routes:
+### What is wired
+All seat-inventory writes go through the adapter
+(`server/modules/holds/holdsAdapter.ts`):
 - `POST hold` → `bookings.service.ts createHold`
 - `DELETE release` → `bookings.service.ts releaseHold`
-- `POST cancel-seats` → `bookings.routes.ts` ticket cancel + `unseat.service.ts`
-   (`unseatPassenger`, `unseatAllPassengers`)
+- `POST confirm` (multi-seat with compensation) → `bookings.service.ts`
+   `createPaidBooking` & `createPendingBooking` (pre-tx, with `cancelSeats`
+   compensation if the local booking insert fails)
+- `POST cancel-seats` → `bookings.routes.ts` ticket cancel +
+   `unseat.service.ts` (`unseatPassenger`, `unseatAllPassengers`)
+- `POST hold` + `POST confirm` + `POST cancel-seats` → `reschedule.service.ts`
+   (`reschedulePassenger`, `batchRescheduleForTripClose`) via the
+   `holdAndConfirmShort()` helper for the new seat and `cancelSeats()` for
+   the old seat, with per-pax compensation
 
-When the flag is **off**, every code path is byte-for-byte identical to before
-(adapter falls through to `AtomicHoldService`). Local hold reaper and orphan-
-ref cleanup in `server/scheduler.ts` are auto-disabled when the flag is on
-(the engine reaps); the pending-booking cleanup keeps running.
+When the flag is **off**, every code path is byte-for-byte identical to
+before (adapter falls through to `AtomicHoldService` and the legacy inline
+SQL). Local hold reaper and orphan-ref cleanup in `server/scheduler.ts` are
+auto-disabled when the flag is on (the engine reaps); the pending-booking
+cleanup keeps running.
 
-### What is NOT wired yet (do not enable in production)
-1. **`confirmSeatsBooked` in `booking.helpers.ts`** still flips
-   `seat_inventory.booked=true` directly. Routing it requires restructuring
-   `createBooking()` so the engine confirm runs OUTSIDE the booking tx.
-2. **`reschedule.service.ts` seat-swap** still writes inventory directly. The
-   engine has no "book directly" primitive; routing requires a hold→confirm
-   orchestration.
-
-If the flag is enabled before (1) and (2) ship, confirmed seat writes will
-race the engine's reaper and you can lose seats. The adapter file header
-documents this; the scheduler logs a warning at boot.
+### Operational caveats (engine mode)
+- Engine `confirm` and `hold` calls happen **before** the local booking tx.
+  If the local tx then fails, the adapter runs a best-effort compensating
+  `cancel-seats` to free what was already booked in the engine. Compensation
+  is logged but never throws.
+- `reschedule` frees the **old** seat AFTER the local tx commits. If that
+  call fails, the reschedule is still considered successful on TT side; the
+  orphaned engine seat must be cleared manually (call cancel-seats again or
+  use the engine's admin tooling).
+- Booking IDs are pre-generated with `crypto.randomUUID()` so engine and TT
+  agree on the canonical id before either side persists state.
 
 ### Spec
 See `engine/docs/TT_HOLDS_ADAPTER_INSTRUCTIONS.md` and

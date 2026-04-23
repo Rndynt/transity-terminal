@@ -6,24 +6,18 @@
 // used unchanged — guaranteeing zero behavior change for operators who
 // don't opt in.
 //
-// SCOPE OF THIS PR (intentional):
+// SCOPE:
 //   ✅ hold        — wired into bookings.service.ts createHold
 //   ✅ release     — wired into bookings.service.ts releaseHold
 //   ✅ cancelSeats — wired into bookings.routes.ts (ticket cancel) and
 //                    unseat.service.ts (unseat passenger / unseat all)
-//   ⚠️ confirm     — adapter method exists and is correct, but is NOT yet
-//                    wired into booking.helpers.confirmSeatsBooked. Wiring
-//                    it requires restructuring createBooking() to call the
-//                    engine OUTSIDE the booking transaction (engine has its
-//                    own DB tx). Tracked as follow-up; see replit.md.
-//   ⚠️ reschedule  — reschedule.service.ts seat-swap (cancel-old + book-new)
-//                    is NOT routed. The engine has no "book directly"
-//                    primitive; routing requires hold→confirm orchestration.
-//                    Tracked as follow-up.
-//
-// IMPORTANT: do NOT enable the flag in production until the follow-ups
-// above are also completed. With the flag on AND the unrouted paths still
-// writing directly to seat_inventory, you can race the engine's reaper.
+//   ✅ confirm     — exposed as confirmForBooking() and called from
+//                    bookings.service.ts createPaidBooking / createPendingBooking
+//                    BEFORE opening the booking DB tx, with compensating
+//                    cancel-seats on tx failure.
+//   ✅ reschedule  — reschedule.service.ts uses holdAndConfirmShort() to
+//                    book the new seat (hold→confirm) and cancelSeats() to
+//                    free the old seat, with compensation.
 
 import {
   AtomicHoldService,
@@ -33,8 +27,9 @@ import {
 import { engineClient, EngineError } from "./engineClient";
 import { db } from "@server/db";
 import { seatInventory, seatHolds } from "@shared/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gt, inArray } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
+import { randomUUID } from "node:crypto";
 
 export const isEngineEnabled = (): boolean =>
   (process.env.RESERVATION_ENGINE_ENABLED ?? "false").toLowerCase() === "true";
@@ -160,9 +155,8 @@ export class HoldsAdapter {
   }
 
   // ────────────────────────────────────────────────────────────
-  // CONFIRM — exposed but NOT YET wired into booking.helpers.
-  //   Caller resolves seat_no → hold_ref before invoking. Engine confirms
-  //   one hold_ref at a time. Idempotent for 24h via Idempotency-Key.
+  // CONFIRM (single hold) — used internally by confirmForBooking and
+  // by reschedule. Idempotent for 24h on the engine via Idempotency-Key.
   // ────────────────────────────────────────────────────────────
   async confirm(holdRef: string, bookingId: string, idemKey?: string): Promise<void> {
     if (!isEngineEnabled()) {
@@ -172,6 +166,174 @@ export class HoldsAdapter {
       );
     }
     await engineClient.confirm(holdRef, { booking_id: bookingId }, idemKey);
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // CONFIRM-FOR-BOOKING — multi-seat confirm with compensation.
+  //
+  // Replaces booking.helpers.confirmSeatsBooked() under engine mode.
+  // Must be called BEFORE opening the booking DB tx — the engine runs its
+  // own tx and we cannot compose them. The caller pre-generates the
+  // booking UUID so the engine confirm can carry it forward; the same UUID
+  // is then used for the bookings INSERT.
+  //
+  // Steps:
+  //   1. Look up live hold_refs for (tripId, seatNos, operatorId).
+  //   2. For each seat: engine.confirm(holdRef, {booking_id}). Idempotency
+  //      key is derived deterministically from bookingId+seatNo so a
+  //      retry within 24h returns the cached response (engine §3.3).
+  //   3. On any failure mid-loop: cancel-seats every confirm we already did,
+  //      then throw. The caller's pre-tx exit means no TT state changed.
+  //
+  // Returns the list of confirmed (seatNo, holdRef) so the caller can run
+  // compensation if its OWN downstream tx fails.
+  // ────────────────────────────────────────────────────────────
+  async confirmForBooking(opts: {
+    bookingId: string;
+    tripId: string;
+    seatNos: string[];
+    legIndexes: number[];
+    operatorId: string;
+  }): Promise<Array<{ seatNo: string; holdRef: string }>> {
+    if (!isEngineEnabled()) {
+      throw new Error(
+        "HoldsAdapter.confirmForBooking called while RESERVATION_ENGINE_ENABLED=false",
+      );
+    }
+
+    // Resolve seat → live hold_ref owned by this operator.
+    const liveHolds = await db
+      .select()
+      .from(seatHolds)
+      .where(
+        and(
+          eq(seatHolds.tripId, opts.tripId),
+          inArray(seatHolds.seatNo, opts.seatNos),
+          eq(seatHolds.operatorId, opts.operatorId),
+          gt(seatHolds.expiresAt, new Date()),
+        ),
+      );
+
+    const refBySeat = new Map<string, string>();
+    for (const h of liveHolds) refBySeat.set(h.seatNo, h.holdRef);
+    for (const seatNo of opts.seatNos) {
+      if (!refBySeat.has(seatNo)) {
+        throw new Error(
+          `Seat ${seatNo} hold ownership lost (expired or grabbed by another operator) — cannot confirm via engine`,
+        );
+      }
+    }
+
+    const confirmed: Array<{ seatNo: string; holdRef: string }> = [];
+    try {
+      for (const seatNo of opts.seatNos) {
+        const ref = refBySeat.get(seatNo)!;
+        // Deterministic idem-key: same booking + same seat = same key,
+        // so a retry inside the 24h window returns the cached engine response.
+        const idemKey = `${opts.bookingId}:${seatNo}`;
+        await engineClient.confirm(ref, { booking_id: opts.bookingId }, idemKey);
+        confirmed.push({ seatNo, holdRef: ref });
+      }
+    } catch (e) {
+      // Compensate: cancel every seat we already confirmed in this loop.
+      for (const c of confirmed) {
+        try {
+          await engineClient.cancelSeats({
+            trip_id: opts.tripId,
+            seat_no: c.seatNo,
+            leg_indexes: opts.legIndexes,
+          });
+        } catch (cancelErr) {
+          console.error(
+            `[HOLDS_ADAPTER] compensation cancelSeats failed for ${c.seatNo}:`,
+            cancelErr,
+          );
+        }
+      }
+      throw e;
+    }
+    return confirmed;
+  }
+
+  /**
+   * Compensation helper for the caller: free a previously-confirmed set of
+   * seats in the engine when the caller's downstream DB tx fails. Best-effort;
+   * never throws (so it does not mask the original error).
+   */
+  async compensateConfirms(
+    tripId: string,
+    confirmed: Array<{ seatNo: string; holdRef: string }>,
+    legIndexes: number[],
+  ): Promise<void> {
+    for (const c of confirmed) {
+      try {
+        await engineClient.cancelSeats({
+          trip_id: tripId,
+          seat_no: c.seatNo,
+          leg_indexes: legIndexes,
+        });
+      } catch (e) {
+        console.error(
+          `[HOLDS_ADAPTER] post-tx compensation cancelSeats failed for ${c.seatNo}:`,
+          e,
+        );
+      }
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // HOLD-AND-CONFIRM (short TTL) — used by reschedule to book a seat
+  // directly when the operator never explicitly created a hold first.
+  //
+  // The engine has no "book directly" primitive: the only way to mark a
+  // seat as booked=true is hold → confirm. We do both atomically here
+  // (with compensation) so reschedule callers get a single async helper.
+  // ────────────────────────────────────────────────────────────
+  async holdAndConfirmShort(opts: {
+    bookingId: string;
+    tripId: string;
+    seatNo: string;
+    legIndexes: number[];
+    operatorId: string;
+  }): Promise<{ holdRef: string }> {
+    if (!isEngineEnabled()) {
+      throw new Error(
+        "HoldsAdapter.holdAndConfirmShort called while RESERVATION_ENGINE_ENABLED=false",
+      );
+    }
+
+    const holdRes = await engineClient.hold(
+      {
+        trip_id: opts.tripId,
+        seat_no: opts.seatNo,
+        leg_indexes: opts.legIndexes,
+        operator_id: opts.operatorId,
+        ttl_class: "short",
+      },
+      randomUUID(),
+    );
+
+    try {
+      await engineClient.confirm(
+        holdRes.hold_ref,
+        { booking_id: opts.bookingId },
+        `${opts.bookingId}:${opts.seatNo}`,
+      );
+    } catch (e) {
+      // Roll back the hold so it doesn't linger to expiry.
+      try {
+        await engineClient.release(holdRes.hold_ref);
+      } catch (relErr) {
+        console.error(
+          `[HOLDS_ADAPTER] holdAndConfirmShort: release after confirm failure failed for ${opts.seatNo}:`,
+          relErr,
+        );
+      }
+      throw e;
+    }
+
+    webSocketService.emitInventoryUpdated(opts.tripId, opts.seatNo, opts.legIndexes);
+    return { holdRef: holdRes.hold_ref };
   }
 
   // ────────────────────────────────────────────────────────────
