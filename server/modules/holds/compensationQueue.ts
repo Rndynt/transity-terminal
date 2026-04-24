@@ -142,10 +142,21 @@ export async function runOnce(): Promise<{
         // Persist the error message for forensics; attempt counter was
         // already incremented in the claim tx above.
         const msg = e instanceof Error ? e.message : String(e);
+        const newAttempts = row.attempts + 1;
+        const justEnteredDlq = newAttempts >= MAX_ATTEMPTS;
+
+        // S2-04: kalau attempts mencapai MAX, tandai DLQ sekali (idempotent
+        // via WHERE dead_lettered_at IS NULL) lalu emit alert structured
+        // satu kali. Tick berikutnya skip karena attempts >= MAX_ATTEMPTS.
         await db
           .execute(
             sql`UPDATE engine_compensation_queue
-                  SET last_error = ${msg.slice(0, 500)}
+                  SET last_error = ${msg.slice(0, 500)},
+                      dead_lettered_at = CASE
+                        WHEN ${justEnteredDlq}::boolean AND dead_lettered_at IS NULL
+                          THEN now()
+                        ELSE dead_lettered_at
+                      END
                 WHERE id = ${row.id}::uuid`,
           )
           .catch((upErr) =>
@@ -154,10 +165,30 @@ export async function runOnce(): Promise<{
               upErr,
             ),
           );
-        console.error(
-          `[ENGINE_COMP_QUEUE] retry failed trip=${row.trip_id} seat=${row.seat_no} attempt=${row.attempts + 1}/${MAX_ATTEMPTS}:`,
-          msg,
-        );
+
+        if (justEnteredDlq) {
+          // Structured single-line JSON yang gampang di-pickup Sentry,
+          // Datadog, Grafana Loki, atau grep manual. Field `alert` sengaja
+          // pakai snake_case supaya stabil sebagai alert key.
+          console.error(
+            `[ALERT] ${JSON.stringify({
+              alert: "engine_compensation_dlq",
+              queueId: row.id,
+              opType: row.op_type,
+              tripId: row.trip_id,
+              seatNo: row.seat_no,
+              legIndexes: row.leg_indexes,
+              attempts: newAttempts,
+              maxAttempts: MAX_ATTEMPTS,
+              lastError: msg.slice(0, 200),
+            })}`,
+          );
+        } else {
+          console.error(
+            `[ENGINE_COMP_QUEUE] retry failed trip=${row.trip_id} seat=${row.seat_no} attempt=${newAttempts}/${MAX_ATTEMPTS}:`,
+            msg,
+          );
+        }
       }
     }
   } catch (e) {
@@ -171,4 +202,33 @@ export async function runOnce(): Promise<{
     client.release();
   }
   return { attempted, succeeded };
+}
+
+/**
+ * S2-04: count baris yang sedang stuck (sudah masuk DLQ atau attempts
+ * sudah mendekati cap). Dipakai oleh /api/health/deep dan scheduler heartbeat
+ * untuk memberi sinyal kalau backlog menumpuk.
+ */
+export async function getStuckCount(): Promise<{
+  deadLettered: number;
+  nearCap: number;
+}> {
+  if (!isEngineEnabled()) return { deadLettered: 0, nearCap: 0 };
+  try {
+    const result: any = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE dead_lettered_at IS NOT NULL)::int    AS dead_lettered,
+        COUNT(*) FILTER (WHERE dead_lettered_at IS NULL
+                          AND attempts >= ${Math.floor(MAX_ATTEMPTS * 0.8)})::int AS near_cap
+        FROM engine_compensation_queue
+    `);
+    const row = (result.rows?.[0] ?? result[0]) as { dead_lettered: number; near_cap: number };
+    return {
+      deadLettered: Number(row?.dead_lettered ?? 0),
+      nearCap: Number(row?.near_cap ?? 0),
+    };
+  } catch (e) {
+    console.error("[ENGINE_COMP_QUEUE] getStuckCount failed:", e);
+    return { deadLettered: 0, nearCap: 0 };
+  }
 }

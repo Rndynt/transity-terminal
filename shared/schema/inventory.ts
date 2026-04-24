@@ -51,6 +51,10 @@ export const engineCompensationQueue = pgTable("engine_compensation_queue", {
   attempts:      integer("attempts").notNull().default(0),
   lastError:     text("last_error"),
   lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  // S2-04: timestamp ketika row resmi masuk DLQ (attempts mencapai MAX).
+  // NULL = masih retry-able. Non-NULL = parked, butuh intervensi manual.
+  // Set sekali (idempotent) supaya alert tidak di-emit berulang setiap tick.
+  deadLetteredAt: timestamp("dead_lettered_at", { withTimezone: true }),
   createdAt:     timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   // Worker reads "oldest first, attempts < cap" — composite index covers it.

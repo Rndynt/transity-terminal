@@ -102,6 +102,21 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
       } catch (e) {
         checks.engine = { status: 'fail', latencyMs: Date.now() - t0, detail: (e as Error).message };
       }
+
+      // S2-04: compensation queue backlog. dead_lettered > 0 = degraded
+      // (butuh intervensi); near_cap > 0 = warning (engine flaky).
+      const tCq = Date.now();
+      try {
+        const { getStuckCount } = await import('./modules/holds/compensationQueue');
+        const stuck = await getStuckCount();
+        checks.compensationQueue = {
+          status: stuck.deadLettered > 0 ? 'fail' : 'ok',
+          latencyMs: Date.now() - tCq,
+          detail: `dlq=${stuck.deadLettered} nearCap=${stuck.nearCap}`,
+        };
+      } catch (e) {
+        checks.compensationQueue = { status: 'fail', latencyMs: Date.now() - tCq, detail: (e as Error).message };
+      }
     } else {
       checks.engine = { status: 'skip', detail: 'engine disabled' };
     }

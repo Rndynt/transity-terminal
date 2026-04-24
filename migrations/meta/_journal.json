@@ -85,6 +85,13 @@
       "when": 1782000060000,
       "tag": "0011_cargo_tracking_secret",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782000120000,
+      "tag": "0012_engine_compensation_dlq",
+      "breakpoints": true
     }
   ]
 }
