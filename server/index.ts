@@ -17,6 +17,8 @@ if (_envExists(_envPath)) {
 import Fastify from "fastify";
 import { ZodError } from "zod";
 import rateLimit from "@fastify/rate-limit";
+import helmet from "@fastify/helmet";
+import cors from "@fastify/cors";
 import { createRateLimitRedisClient } from "./realtime/redis";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -56,6 +58,45 @@ app.register(rateLimit, {
   timeWindow: process.env.RATE_LIMIT_WINDOW || '1 minute',
   allowList: (req) => req.url === '/api/health' || req.url === '/health',
   ...(_rateLimitRedis ? { redis: _rateLimitRedis, nameSpace: 'transity-rl:' } : {}),
+});
+
+// Security headers (helmet). CSP dimatikan supaya tidak konflik dengan Vite dev / inline.
+app.register(helmet, {
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+});
+
+// Unified CORS. Origin yang tidak ada di whitelist ditolak (kecuali same-origin / no Origin header).
+const _corsOriginsRaw = (process.env.APP_CORS_ORIGINS || process.env.CORS_ORIGINS || '').trim();
+const _corsAllowAll = _corsOriginsRaw === '*';
+const _corsAllowList = _corsOriginsRaw && !_corsAllowAll
+  ? _corsOriginsRaw.split(',').map((s) => s.trim()).filter(Boolean)
+  : [];
+const _isProd = process.env.NODE_ENV === 'production';
+
+if (_isProd && _corsAllowAll) {
+  console.warn('[cors] APP_CORS_ORIGINS="*" di production — strongly discouraged. Set whitelist eksplisit.');
+}
+if (_isProd && !_corsAllowAll && _corsAllowList.length === 0) {
+  console.warn('[cors] APP_CORS_ORIGINS / CORS_ORIGINS kosong di production. Cross-origin requests akan ditolak.');
+}
+
+app.register(cors, {
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // same-origin navigation / curl
+    if (_corsAllowAll) return cb(null, true);
+    if (_corsAllowList.includes(origin)) return cb(null, true);
+    // Dev: izinkan semua origin supaya Vite HMR + same-origin fetch
+    // (localhost:5000, *.replit.dev) tidak terblokir. Production tetap
+    // strict — wajib via whitelist.
+    if (!_isProd) return cb(null, true);
+    return cb(new Error(`Origin ${origin} not allowed by CORS`), false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-access-token', 'X-Operator-Slug'],
+  exposedHeaders: ['X-Total-Count'],
 });
 
 app.register(import("@fastify/middie"));
@@ -146,7 +187,50 @@ app.setErrorHandler((err: Error & { status?: number; statusCode?: number; code?:
   }
 });
 
+function assertProductionEnv() {
+  if (process.env.NODE_ENV !== 'production') return;
+
+  const required: Array<[string, string]> = [
+    ['JWT_SECRET', 'Secret untuk signing JWT. Generate: openssl rand -hex 32'],
+    ['DATABASE_URL', 'Postgres connection string'],
+  ];
+
+  // Realmio integration wajib hanya jika BASE_URL diset (artinya integrasi aktif).
+  // Kalau dua-duanya kosong, integrasi memang sengaja di-disable.
+  const realmioBase = process.env.REALMIO_BASE_URL?.trim();
+  const realmioKey = process.env.REALMIO_API_KEY?.trim();
+  if (realmioBase || realmioKey) {
+    required.push(['REALMIO_BASE_URL', 'URL Realmio API (kosongkan keduanya untuk disable integrasi)']);
+    required.push(['REALMIO_API_KEY', 'API key Realmio (kosongkan keduanya untuk disable integrasi)']);
+  }
+
+  if (process.env.RESERVATION_ENGINE_ENABLED === 'true') {
+    required.push(['RESERVATION_ENGINE_HMAC_SECRET', 'HMAC secret untuk reservation engine adapter']);
+  }
+
+  const missing = required.filter(([k]) => !process.env[k]?.trim()).map(([k, hint]) => `  - ${k}: ${hint}`);
+  if (missing.length > 0) {
+    console.error('\n[boot] FATAL — Missing required production env vars:\n' + missing.join('\n') + '\n');
+    process.exit(1);
+  }
+
+  if (process.env.DEV_BYPASS_AUTH === 'true') {
+    console.error('\n[boot] FATAL — DEV_BYPASS_AUTH=true dilarang di production.\n');
+    process.exit(1);
+  }
+
+  if ((process.env.JWT_SECRET || '').length < 32) {
+    console.error('\n[boot] FATAL — JWT_SECRET terlalu pendek (<32 chars). Gunakan: openssl rand -hex 32\n');
+    process.exit(1);
+  }
+
+  console.log('[boot] Production env guard passed.');
+}
+
 (async () => {
+  // 0. Production safety: pastikan env wajib ada, tolak DEV_BYPASS_AUTH.
+  assertProductionEnv();
+
   // 1. Jalankan SQL migration files (membuat semua tabel dari nol di fresh DB,
   //    atau hanya migration baru jika DB sudah ada sebelumnya)
   await runSchemaMigrations();
