@@ -34,8 +34,8 @@ export class ReportsController {
       const filters = parseFilters(req);
       const data = await reportsService.getRevenueSummary(filters);
       reply.send(data);
-    } catch (e: any) {
-      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
+    } catch (e) {
+      if (e instanceof Error && e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
       req.log.error({ err: e }, '[reports] revenue error');
       reply.code(500).send({ error: 'Gagal memuat laporan pendapatan' });
     }
@@ -46,8 +46,8 @@ export class ReportsController {
       const filters = parseFilters(req);
       const data = await reportsService.getSalesReport(filters);
       reply.send(data);
-    } catch (e: any) {
-      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
+    } catch (e) {
+      if (e instanceof Error && e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
       req.log.error({ err: e }, '[reports] sales error');
       reply.code(500).send({ error: 'Gagal memuat laporan penjualan' });
     }
@@ -58,8 +58,8 @@ export class ReportsController {
       const filters = parseFilters(req);
       const data = await reportsService.getTripProfitability(filters);
       reply.send(data);
-    } catch (e: any) {
-      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
+    } catch (e) {
+      if (e instanceof Error && e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
       req.log.error({ err: e }, '[reports] trip-profitability error');
       reply.code(500).send({ error: 'Gagal memuat laporan laba rugi' });
     }
@@ -70,8 +70,8 @@ export class ReportsController {
       const filters = parseFilters(req);
       const data = await reportsService.getLoadFactor(filters);
       reply.send(data);
-    } catch (e: any) {
-      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
+    } catch (e) {
+      if (e instanceof Error && e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
       req.log.error({ err: e }, '[reports] load-factor error');
       reply.code(500).send({ error: 'Gagal memuat laporan load factor' });
     }
@@ -82,8 +82,8 @@ export class ReportsController {
       const filters = parseFilters(req);
       const data = await reportsService.getCancellationsReport(filters);
       reply.send(data);
-    } catch (e: any) {
-      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
+    } catch (e) {
+      if (e instanceof Error && e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
       req.log.error({ err: e }, '[reports] cancellations error');
       reply.code(500).send({ error: 'Gagal memuat laporan pembatalan' });
     }
@@ -94,8 +94,8 @@ export class ReportsController {
       const filters = parseFilters(req);
       const data = await reportsService.getCargoReport(filters);
       reply.send(data);
-    } catch (e: any) {
-      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
+    } catch (e) {
+      if (e instanceof Error && e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
       req.log.error({ err: e }, '[reports] cargo error');
       reply.code(500).send({ error: 'Gagal memuat laporan kargo' });
     }
@@ -106,8 +106,8 @@ export class ReportsController {
       const filters = parseFilters(req);
       const data = await reportsService.getPaymentsReport(filters);
       reply.send(data);
-    } catch (e: any) {
-      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
+    } catch (e) {
+      if (e instanceof Error && e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
       req.log.error({ err: e }, '[reports] payments error');
       reply.code(500).send({ error: 'Gagal memuat laporan pembayaran' });
     }
@@ -118,8 +118,8 @@ export class ReportsController {
       const filters = parseFilters(req);
       const data = await reportsService.getCommercialFeeReport(filters);
       reply.send(data);
-    } catch (e: any) {
-      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
+    } catch (e) {
+      if (e instanceof Error && e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });
       req.log.error({ err: e }, '[reports] commercial-fee error');
       reply.code(500).send({ error: 'Gagal memuat laporan commercial fee' });
     }
@@ -129,7 +129,7 @@ export class ReportsController {
     try {
       const data = await reportsService.getFilterOptions();
       reply.send(data);
-    } catch (e: any) {
+    } catch (e) {
       req.log.error({ err: e }, '[reports] filter-options error');
       reply.code(500).send({ error: 'Gagal memuat opsi filter' });
     }
