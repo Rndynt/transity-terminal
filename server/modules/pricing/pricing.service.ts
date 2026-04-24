@@ -6,7 +6,15 @@ export class PricingService {
   async quoteFare(tripId: string, originSeq: number, destinationSeq: number, seatClass?: string): Promise<{
     total: number;
     perPassenger: number;
-    breakdown: any;
+    breakdown: {
+      base: number;
+      legs: number;
+      pricePerLeg: number;
+      pricingMode: string;
+      multiplier: number;
+      ruleId: string;
+      ruleScope: string;
+    };
   }> {
     const trip = await this.storage.getTripById(tripId);
     if (!trip) throw new Error('TRIP_NOT_FOUND');
@@ -17,7 +25,7 @@ export class PricingService {
     }
 
     const rule = rules[0];
-    const ruleData = rule.rule as any;
+    const ruleData = rule.rule as { basePricePerLeg?: number; multiplier?: number; pricingMode?: string };
     const basePricePerLeg: number = ruleData.basePricePerLeg ?? 0;
     const multiplier: number = ruleData.multiplier ?? 1;
     const pricingMode: string = ruleData.pricingMode ?? 'per_leg';
