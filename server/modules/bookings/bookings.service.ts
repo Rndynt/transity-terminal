@@ -61,7 +61,7 @@ export class BookingsService {
     return await this.storage.getBookingsPaginated(options);
   }
 
-  async getBookingById(id: string): Promise<Booking & { passengers?: any[]; payments?: any[]; tripDetails?: any; originStop?: any; destinationStop?: any; outlet?: any; vehicle?: any; departAt?: any; arriveAt?: any; promoApplications?: any[] }> {
+  async getBookingById(id: string): Promise<Booking & { passengers?: Awaited<ReturnType<IStorage['getPassengers']>>; payments?: Awaited<ReturnType<IStorage['getPayments']>>; tripDetails?: Awaited<ReturnType<IStorage['getTripById']>>; originStop?: Awaited<ReturnType<IStorage['getStopById']>> | null; destinationStop?: Awaited<ReturnType<IStorage['getStopById']>> | null; outlet?: Awaited<ReturnType<IStorage['getOutletById']>> | null; vehicle?: Awaited<ReturnType<IStorage['getVehicleById']>> | null; departAt?: string | Date | null; arriveAt?: string | Date | null; promoApplications?: Array<{ promoName: string; source: 'auto' | 'manual'; discountAmount: number; voucherCode?: string | null }> }> {
     const booking = await this.storage.getBookingById(id);
     if (!booking) {
       throw new Error(`Booking with id ${id} not found`);
@@ -122,7 +122,7 @@ export class BookingsService {
     idempotencyKey: string | undefined,
     promoCode: string | undefined,
     ctx: ServiceContext
-  ): Promise<{ booking: Booking; printPayload: any }> {
+  ): Promise<{ booking: Booking; printPayload: Awaited<ReturnType<PrintService['generatePrintPayload']>> }> {
     requirePermission(ctx, "action.booking.create");
 
     // B1: Idempotency — if same key was already used, return the existing booking
