@@ -467,10 +467,18 @@ export class AppController {
 
   async trackCargo(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const result = await this.service.trackCargo((req.params as { waybillNumber: string }).waybillNumber);
+      const waybillNumber = (req.params as { waybillNumber: string }).waybillNumber;
+      // S1-06: secret bisa dikirim via query (?secret=) atau header X-Tracking-Secret.
+      const q = (req.query as any) || {};
+      const headerSecret = (req.headers['x-tracking-secret'] as string | undefined) || undefined;
+      const secret: string | undefined = q.secret || q.s || headerSecret;
+      const result = await this.service.trackCargo(waybillNumber, secret);
       reply.send(result);
     } catch (e: unknown) {
-      reply.code(404).send({ error: errMsg(e) });
+      const msg = errMsg(e);
+      // 401 untuk secret salah, 404 untuk waybill tidak ada.
+      if (msg.includes('Tracking secret')) return reply.code(401).send({ error: msg });
+      reply.code(404).send({ error: msg });
     }
   }
 

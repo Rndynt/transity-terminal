@@ -129,7 +129,18 @@ export class CargoService {
     } catch {
       waybillNumber = this.generateWaybillNumber();
     }
-    return await this.storage.createCargoShipment({ ...data, waybillNumber });
+
+    // S1-06: server-side tracking secret. Public tracking endpoint butuh
+    // (waybill, secret) supaya tidak bisa di-enumerate. Secret di-print
+    // di label pengirim — tidak pernah expose ke daftar admin/operator.
+    const { randomBytes } = await import("node:crypto");
+    const trackingSecret = randomBytes(8).toString("hex");
+
+    return await this.storage.createCargoShipment({
+      ...data,
+      waybillNumber,
+      trackingSecret,
+    } as any);
   }
 
   async updateShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment> {

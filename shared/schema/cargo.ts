@@ -71,6 +71,10 @@ export const cargoShipments = pgTable("cargo_shipments", {
   paymentMethod:      paymentMethodEnum("payment_method"),
   paidAt:             timestamp("paid_at", { withTimezone: true }),
   notes:              text("notes"),
+  // S1-06: secret yang harus disertakan saat tracking publik (mencegah
+  // enumerasi waybill). Di-generate server-side, tidak pernah expose ke
+  // operator UI; tercetak di label pengirim/penerima.
+  trackingSecret:     text("tracking_secret").notNull().default(''),
   createdBy:          text("created_by"),
   createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
@@ -96,7 +100,7 @@ export const cargoShipmentsRelations = relations(cargoShipments, ({ one }) => ({
 
 const numericCoerce = z.union([z.string(), z.number().transform(String)]);
 export const insertCargoShipmentSchema = createInsertSchema(cargoShipments)
-  .omit({ id: true, createdAt: true })
+  .omit({ id: true, createdAt: true, trackingSecret: true })
   .extend({
     weightKg: numericCoerce.optional().nullable(),
     lengthCm: numericCoerce.optional().nullable(),

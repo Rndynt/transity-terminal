@@ -2013,7 +2013,7 @@ export class AppService {
     return result;
   }
 
-  async trackCargo(waybillNumber: string): Promise<{
+  async trackCargo(waybillNumber: string, trackingSecret?: string | null): Promise<{
     waybillNumber: string;
     status: string | null;
     origin: { name: string; code: string; city: string | null } | null;
@@ -2029,6 +2029,20 @@ export class AppService {
   }> {
     const shipment = await this.storage.getCargoShipmentByWaybill(waybillNumber);
     if (!shipment) throw new Error("Shipment not found");
+
+    // S1-06: validasi tracking secret. Constant-time compare via Buffer
+    // supaya tidak rawan timing attack. Backfilled rows yang sengaja punya
+    // secret kosong tetap di-tolak — operator harus regenerate label.
+    const expected = (shipment as any).trackingSecret as string | undefined;
+    const provided = (trackingSecret || '').trim();
+    if (!expected || !provided) {
+      throw new Error("Tracking secret diperlukan");
+    }
+    const a = Buffer.from(expected);
+    const b = Buffer.from(provided);
+    if (a.length !== b.length) throw new Error("Tracking secret tidak valid");
+    const { timingSafeEqual } = await import("node:crypto");
+    if (!timingSafeEqual(a, b)) throw new Error("Tracking secret tidak valid");
 
     const [origin, dest, trip] = await Promise.all([
       this.storage.getStopById(shipment.originStopId),
