@@ -221,6 +221,63 @@ interface WebhookResult {
   idempotent?: boolean;
 }
 
+/**
+ * Shape of one element in `trip_bases.default_stop_times` (jsonb).
+ * Mirrors the editor-side `DefaultStopTime` in `TripBaseFormDialog.tsx`
+ * and the identically-named type in `scheduling.repository.ts`.
+ */
+interface DefaultStopTime {
+  stopSequence: number;
+  stopName?: string;
+  stopCode?: string;
+  arriveAt?: string | null;
+  departAt?: string | null;
+}
+
+/**
+ * Shape of `price_rules.rule` jsonb payload that the app currently
+ * honours. Extra keys are ignored so downstream consumers stay
+ * forward-compatible with richer rule shapes.
+ */
+interface PriceRuleData {
+  basePricePerLeg?: number;
+  multiplier?: number;
+  pricingMode?: 'flat' | 'per_leg' | string;
+}
+
+/**
+ * Summary row returned by `getUserBookings` / `getBookingsByIds` /
+ * `listBookings`. The drizzle select projects the listed columns;
+ * `holdExpiresAt` + `finalAmount` + optional origin/destination/
+ * passengerCount are decorations computed per-row.
+ */
+interface BookingListItem {
+  id: string;
+  tripId: string;
+  serviceDate: string | null;
+  patternCode?: string | null;
+  patternName?: string | null;
+  originStopId: string | null;
+  destinationStopId: string | null;
+  originSeq?: number | null;
+  destinationSeq?: number | null;
+  status: string | null;
+  totalAmount: string | null;
+  discountAmount: string | null;
+  channel: string | null;
+  pendingExpiresAt: Date | null;
+  createdAt: Date | null;
+  bookingCode?: string | null;
+  voucherCode?: string | null;
+  snapOriginStopName?: string | null;
+  snapDestinationStopName?: string | null;
+  origin?: { name: string; code: string; city: string | null } | null;
+  destination?: { name: string; code: string; city: string | null } | null;
+  passengerCount?: number;
+  holdExpiresAt: string | null;
+  finalAmount: string;
+}
+
 export class AppService {
   constructor(private storage: IStorage) {}
 
@@ -720,7 +777,7 @@ export class AppService {
       if (!pattern) continue;
 
       const pStops = patternStopsMap.get(base.patternId) || [];
-      const defaultTimes = (base.defaultStopTimes as any[]) || [];
+      const defaultTimes = (base.defaultStopTimes as DefaultStopTime[] | null) || [];
 
       const hasOrigin = pStops.some(ps => originStopIds.includes(ps.stopId));
       const hasDestAfterOrigin = pStops.some(ps => {
@@ -735,8 +792,8 @@ export class AppService {
       const destPS = destPSList.length > 0 ? destPSList[destPSList.length - 1] : null;
       if (!originPS || !destPS) continue;
 
-      const originTime = defaultTimes.find((t: any) => t.stopSequence === originPS.stopSequence);
-      const destTime = defaultTimes.find((t: any) => t.stopSequence === destPS.stopSequence);
+      const originTime = defaultTimes.find(t => t.stopSequence === originPS.stopSequence);
+      const destTime = defaultTimes.find(t => t.stopSequence === destPS.stopSequence);
 
       const originDepartUtc = originTime?.departAt ? fromZonedHHMMToUtc(params.date, originTime.departAt, 'Asia/Jakarta') : null;
       const destArriveUtc = destTime?.arriveAt ? fromZonedHHMMToUtc(params.date, destTime.arriveAt, 'Asia/Jakarta') : null;
@@ -748,7 +805,7 @@ export class AppService {
       let fareQuote = 0;
       const cachedRule = priceRulesByPattern.get(base.patternId);
       if (cachedRule) {
-        const ruleData = cachedRule as any;
+        const ruleData = cachedRule as PriceRuleData | null;
         const basePricePerLeg: number = ruleData?.basePricePerLeg ?? 0;
         const multiplier: number = ruleData?.multiplier ?? 1;
         const pricingMode: string = ruleData?.pricingMode ?? 'per_leg';
@@ -761,14 +818,14 @@ export class AppService {
       }
 
       const stopsData: TripStopPointWithCity[] = pStops.map(ps => {
-        const t = defaultTimes.find((dt: any) => dt.stopSequence === ps.stopSequence);
+        const t = defaultTimes.find(dt => dt.stopSequence === ps.stopSequence);
         const departUtc = t?.departAt ? fromZonedHHMMToUtc(params.date, t.departAt, 'Asia/Jakarta') : null;
         const arriveUtc = t?.arriveAt ? fromZonedHHMMToUtc(params.date, t.arriveAt, 'Asia/Jakarta') : null;
         return {
           stopId: ps.stopId,
-          name: (ps as any).stop?.name || '',
-          code: (ps as any).stop?.code || '',
-          city: (ps as any).stop?.city || undefined,
+          name: ps.stop?.name || '',
+          code: ps.stop?.code || '',
+          city: ps.stop?.city || undefined,
           sequence: ps.stopSequence,
           departAt: departUtc?.toISOString() || null,
           arriveAt: arriveUtc?.toISOString() || null,
@@ -789,16 +846,16 @@ export class AppService {
         operatorLogo: null,
         origin: {
           stopId: originPS.stopId,
-          name: (originPS as any).stop?.name || '',
-          code: (originPS as any).stop?.code || '',
+          name: originPS.stop?.name || '',
+          code: originPS.stop?.code || '',
           sequence: originPS.stopSequence,
           departAt: originDepartUtc?.toISOString() || null,
           arriveAt: null,
         },
         destination: {
           stopId: destPS.stopId,
-          name: (destPS as any).stop?.name || '',
-          code: (destPS as any).stop?.code || '',
+          name: destPS.stop?.name || '',
+          code: destPS.stop?.code || '',
           sequence: destPS.stopSequence,
           departAt: null,
           arriveAt: destArriveUtc?.toISOString() || null,
@@ -827,9 +884,9 @@ export class AppService {
         ORDER BY priority ASC
         LIMIT 1
       `);
-      const result = Array.isArray(rows) ? rows : (rows as any).rows || [];
-      if (result.length > 0) {
-        const ruleData = result[0].rule as any;
+      const rowList = (Array.isArray(rows) ? rows : rows.rows) as Array<{ rule: unknown }>;
+      if (rowList.length > 0) {
+        const ruleData = rowList[0].rule as PriceRuleData | null;
         const basePricePerLeg: number = ruleData?.basePricePerLeg ?? 0;
         const multiplier: number = ruleData?.multiplier ?? 1;
         const pricingMode: string = ruleData?.pricingMode ?? 'per_leg';
@@ -902,7 +959,7 @@ export class AppService {
       this.storage.getTripStopTimesWithEffectiveFlags(resolvedId)
     ]);
 
-    const stopIdsForDetail = [...new Set(stopTimes.map((st: any) => st.stopId))];
+    const stopIdsForDetail = [...new Set(stopTimes.map((st: { stopId: string }) => st.stopId))];
     const allStopsForDetail = await this.storage.getStopsByIds(stopIdsForDetail);
     const stopsDetailMap = new Map(allStopsForDetail.map(s => [s.id, s]));
 
@@ -1573,7 +1630,7 @@ export class AppService {
       .where(and(
         eq(bookings.tripId, tripId),
         eq(bookings.channel, 'OTA'),
-        inArray(bookings.status, ['pending', 'confirmed'] as any[])
+        inArray(bookings.status, ['pending', 'confirmed'])
       ))
       .orderBy(
         sql`CASE WHEN ${bookings.status} = 'pending' THEN 0 ELSE 1 END`,
@@ -1612,7 +1669,7 @@ export class AppService {
     };
   }
 
-  async getUserBookings(userId: string): Promise<any[]> {
+  async getUserBookings(userId: string): Promise<BookingListItem[]> {
     const result = await db.select({
       id: bookings.id,
       tripId: bookings.tripId,
@@ -2211,7 +2268,7 @@ export class AppService {
     page?: number;
     limit?: number;
   }): Promise<{
-    data: any[];
+    data: BookingListItem[];
     total: number;
     page: number;
     limit: number;
@@ -2222,7 +2279,7 @@ export class AppService {
 
     const conditions = [];
     if (filters.status) {
-      conditions.push(eq(bookings.status, filters.status as any));
+      conditions.push(eq(bookings.status, filters.status as typeof bookings.status.enumValues[number]));
     }
     if (filters.date) {
       conditions.push(eq(trips.serviceDate, filters.date));
@@ -2290,7 +2347,7 @@ export class AppService {
   // T-CON-03: batch fetch — kembalikan ringkasan booking utk N IDs dalam 1
   // round-trip DB (Console reconciler polling per-booking → batch). Skip ID
   // yang tidak ditemukan, tidak melempar error. Caller wajib limit ids.length.
-  async getBookingsByIds(ids: string[]): Promise<{ bookings: any[] }> {
+  async getBookingsByIds(ids: string[]): Promise<{ bookings: BookingListItem[] }> {
     if (ids.length === 0) return { bookings: [] };
 
     const result = await db.select({
@@ -2396,7 +2453,7 @@ export class AppService {
     // S1-06: validasi tracking secret. Constant-time compare via Buffer
     // supaya tidak rawan timing attack. Backfilled rows yang sengaja punya
     // secret kosong tetap di-tolak — operator harus regenerate label.
-    const expected = (shipment as any).trackingSecret as string | undefined;
+    const expected = shipment.trackingSecret;
     const provided = (trackingSecret || '').trim();
     if (!expected || !provided) {
       throw new Error("Tracking secret diperlukan");
