@@ -16,7 +16,13 @@ import { PricingService } from "@modules/pricing/pricing.service";
 import { PrintService } from "@modules/printing/print.service";
 import { IStorage } from "@server/storage.interface";
 import { Booking, BookingGroup } from "@shared/schema";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 
+/**
+ * S1-09 (Sprint 2): round-trip booking sama dengan dua booking sekaligus
+ * jadi guard `action.booking.create` harus aktif walaupun service
+ * dipanggil langsung (mis. dari batch import OTA di masa depan).
+ */
 export class RoundTripService {
   private pricingService: PricingService;
   private printService: PrintService;
@@ -26,7 +32,8 @@ export class RoundTripService {
     this.printService = new PrintService();
   }
 
-  async createRoundTripBooking(data: any, operatorId: string) {
+  async createRoundTripBooking(data: any, operatorId: string, ctx: ServiceContext) {
+    requirePermission(ctx, "action.booking.create");
     const { outbound, return: returnData, payment } = data;
 
     // 1. Validasi jumlah seats outbound == return

@@ -5,6 +5,7 @@ import { RescheduleService } from "./reschedule.service";
 import { IStorage } from "@server/storage.interface";
 import { insertBookingSchema, insertPassengerSchema, insertPaymentSchema } from "@shared/schema";
 import { z } from "zod";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 
 const createBookingSchema = z.object({
   tripId: z.string().uuid(),
@@ -171,7 +172,8 @@ export class BookingsController {
         passengers,
         payment,
         idempotencyKey,
-        promoCode
+        promoCode,
+        buildServiceContext(req)
       );
       
       reply.code(201).send(result);
@@ -330,7 +332,8 @@ export class BookingsController {
       const result = await this.bookingsService.createPendingBooking(
         bookingDataWithStringAmount,
         passengers,
-        operatorId
+        operatorId,
+        buildServiceContext(req)
       );
       
       reply.code(201).send(result);
@@ -374,7 +377,7 @@ export class BookingsController {
       const { id } = req.params as { id: string };
       const operatorId = req.user?.id ?? 'system';
       
-      await this.bookingsService.releasePendingBooking(id, operatorId);
+      await this.bookingsService.releasePendingBooking(id, operatorId, buildServiceContext(req));
       reply.code(204).send();
     } catch (error: any) {
       req.log.error({ err: error }, 'Release pending booking error');
@@ -391,7 +394,7 @@ export class BookingsController {
       const { passengerId } = req.params as { passengerId: string };
       const { reason } = unseatPassengerSchema.parse(req.body || {});
       const performedBy = req.user?.id ?? 'system';
-      const result = await this.unseatService.unseatPassenger(passengerId, performedBy, reason);
+      const result = await this.unseatService.unseatPassenger(passengerId, performedBy, reason, buildServiceContext(req));
       reply.send(result);
     } catch (error: any) {
       req.log.error({ err: error }, 'Unseat passenger error');
@@ -407,7 +410,7 @@ export class BookingsController {
       const { bookingId } = req.params as { bookingId: string };
       const { reason } = unseatPassengerSchema.parse(req.body || {});
       const performedBy = req.user?.id ?? 'system';
-      const result = await this.unseatService.unseatAllPassengers(bookingId, performedBy, reason);
+      const result = await this.unseatService.unseatAllPassengers(bookingId, performedBy, reason, buildServiceContext(req));
       reply.send(result);
     } catch (error: any) {
       req.log.error({ err: error }, 'Unseat all passengers error');
@@ -433,7 +436,8 @@ export class BookingsController {
         data.newOriginSeq,
         data.newDestinationSeq,
         performedBy,
-        data.reason
+        data.reason,
+        buildServiceContext(req)
       );
       reply.send(result);
     } catch (error: any) {
@@ -452,7 +456,7 @@ export class BookingsController {
       const { passengerId } = req.params as { passengerId: string };
       const { newSeatNo } = z.object({ newSeatNo: z.string() }).parse(req.body);
       const performedBy = req.user?.id ?? 'system';
-      const result = await this.unseatService.assignSeatToUnseated(passengerId, newSeatNo, performedBy);
+      const result = await this.unseatService.assignSeatToUnseated(passengerId, newSeatNo, performedBy, buildServiceContext(req));
       reply.send(result);
     } catch (error: any) {
       req.log.error({ err: error }, 'Assign seat to unseated error');

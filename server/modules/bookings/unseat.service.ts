@@ -3,6 +3,15 @@ import { bookings, passengers, seatInventory, bookingHistory } from "@shared/sch
 import { eq, and, inArray } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
 import { IStorage } from "@server/storage.interface";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+
+/**
+ * S1-09 (Sprint 2): unseat & re-assign kursi memengaruhi inventory dan
+ * status tiket. Service-layer guard memastikan caller internal pun
+ * harus memiliki flag yang sesuai.
+ *   - unseatPassenger / unseatAllPassengers → `action.passenger.unseat`
+ *   - assignSeatToUnseated                  → `action.passenger.assign_seat`
+ */
 
 function getLegIndexes(originSeq: number, destinationSeq: number): number[] {
   const legs: number[] = [];
@@ -16,8 +25,10 @@ export class UnseatService {
   async unseatPassenger(
     passengerId: string,
     performedBy: string,
-    reason?: string
+    reason: string | undefined,
+    ctx: ServiceContext
   ): Promise<{ success: boolean; booking: any; passenger: any }> {
+    requirePermission(ctx, "action.passenger.unseat");
     const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
     if (!passenger) throw new Error("Penumpang tidak ditemukan");
     if (passenger.ticketStatus === 'unseated' || passenger.ticketStatus === 'cancelled') {
@@ -121,8 +132,10 @@ export class UnseatService {
   async unseatAllPassengers(
     bookingId: string,
     performedBy: string,
-    reason?: string
+    reason: string | undefined,
+    ctx: ServiceContext
   ): Promise<{ success: boolean; booking: any }> {
+    requirePermission(ctx, "action.passenger.unseat");
     const booking = await this.storage.getBookingById(bookingId);
     if (!booking) throw new Error("Booking tidak ditemukan");
 
@@ -218,8 +231,10 @@ export class UnseatService {
   async assignSeatToUnseated(
     passengerId: string,
     newSeatNo: string,
-    performedBy: string
+    performedBy: string,
+    ctx: ServiceContext
   ): Promise<{ success: boolean; passenger: any; booking: any }> {
+    requirePermission(ctx, "action.passenger.assign_seat");
     const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
     if (!passenger) throw new Error("Penumpang tidak ditemukan");
     if (passenger.ticketStatus !== 'unseated') {

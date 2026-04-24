@@ -7,6 +7,14 @@ import { generateBookingCode } from "@server/utils/codeGenerator";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
 import { AtomicHoldService } from "./atomicHold.service";
 import { randomUUID } from "node:crypto";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+
+/**
+ * S1-09 (Sprint 2): operasi reschedule berisiko ganti kursi & buat
+ * booking baru, jadi tetap di-guard di service-layer.
+ *   - reschedulePassenger        → `action.passenger.reschedule`
+ *   - batchRescheduleForTripClose → `action.trip.batch_reschedule`
+ */
 
 function getLegIndexes(originSeq: number, destinationSeq: number): number[] {
   const legs: number[] = [];
@@ -26,8 +34,10 @@ export class RescheduleService {
     newOriginSeq: number,
     newDestinationSeq: number,
     performedBy: string,
-    reason?: string
+    reason: string | undefined,
+    ctx: ServiceContext
   ): Promise<{ success: boolean; oldBooking: any; newBooking: any }> {
+    requirePermission(ctx, "action.passenger.reschedule");
     const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
     if (!passenger) throw new Error("Penumpang tidak ditemukan");
     if (passenger.ticketStatus === 'unseated' || passenger.ticketStatus === 'cancelled') {
@@ -253,8 +263,10 @@ export class RescheduleService {
     newOriginSeq: number,
     newDestinationSeq: number,
     performedBy: string,
-    reason: string
+    reason: string,
+    ctx: ServiceContext
   ): Promise<{ succeeded: any[]; failed: any[] }> {
+    requirePermission(ctx, "action.trip.batch_reschedule");
     const activePassengers = await this.storage.getActivePassengersForTrip(oldTripId);
     if (activePassengers.length === 0) {
       return { succeeded: [], failed: [] };

@@ -3,6 +3,7 @@ import { TripBasesController } from "./tripBases.controller";
 import { TripBasesService } from "./tripBases.service";
 import { IStorage } from "@server/storage.interface";
 import { requireFlag, requireAnyFlag } from "@modules/rbac/rbac.middleware";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 import { RescheduleService } from "@modules/bookings/reschedule.service";
 import { webSocketService } from "@server/realtime/ws";
 
@@ -57,7 +58,8 @@ export function registerTripBasesRoutes(app: FastifyInstance, storage: IStorage)
         body.newOriginSeq,
         body.newDestinationSeq,
         performedBy,
-        reason
+        reason,
+        buildServiceContext(req)
       );
 
       const trip = await service.closeTrip(id);

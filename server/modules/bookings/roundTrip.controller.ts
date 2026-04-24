@@ -2,6 +2,7 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import { RoundTripService } from "./roundTrip.service";
 import { IStorage } from "@server/storage.interface";
 import { z } from "zod";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 
 const roundTripSchema = z.object({
   outbound: z.object({
@@ -52,7 +53,7 @@ export class RoundTripController {
       }
 
       const operatorId = req.user?.id ?? 'system';
-      const result = await this.roundTripService.createRoundTripBooking(validatedData, operatorId);
+      const result = await this.roundTripService.createRoundTripBooking(validatedData, operatorId, buildServiceContext(req));
       
       reply.code(201).send(result);
     } catch (error: any) {
