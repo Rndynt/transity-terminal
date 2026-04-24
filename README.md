@@ -952,7 +952,7 @@ server/
     reports/                 ReportsService + ReportsController (8 report types) + ReportsRepository
     promos/                  PromosService + PromosController (promo & voucher)
     payments/                PaymentsController
-    holds/                   HoldsService (seat hold management)
+    holds/                   HoldsAdapter (engine-routed) + HoldsService.releaseHoldsByOwner + compensationQueue
     drivers/                 DriversController + DriversService + performance endpoint
     vehicles/                VehiclesController + VehiclesService
     stops/                   StopsController + StopsService
