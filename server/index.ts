@@ -34,9 +34,15 @@ import { existsSync } from "fs";
 import { join, resolve } from "path";
 import { runSchemaMigrations } from "./migrator";
 
+// T-CON-05: aktifkan request-id propagation. Fastify auto-generate kalau
+// header tidak ada; kalau ada (mis. dari Console / load balancer), pakai
+// nilai yang masuk. Header response juga di-set lewat onSend hook di bawah
+// supaya client bisa correlate request ↔ log entry.
 const app = Fastify({
   logger: false,
   bodyLimit: 1024 * 1024,
+  requestIdHeader: 'x-request-id',
+  requestIdLogLabel: 'request_id',
 });
 
 const LOG_RESPONSE_BODIES =
@@ -182,10 +188,21 @@ app.addHook('onResponse', async (request, reply) => {
 });
 
 app.addHook('onSend', async (request, reply, payload) => {
+  // T-CON-05: echo request-id ke response header. Header ditambah utk
+  // SEMUA request (termasuk non-/api) supaya client mana pun bisa correlate
+  // log entry tanpa harus tau path mana saja yang propagate.
+  const reqId = request.id;
+  if (reqId && !reply.getHeader('x-request-id')) {
+    reply.header('x-request-id', String(reqId));
+  }
+
   const path = request.url;
   if (path.startsWith("/api")) {
     const duration = Math.round(reply.elapsedTime);
     let logLine = `${request.method} ${path} ${reply.statusCode} in ${duration}ms`;
+    if (reqId) {
+      logLine += ` [${String(reqId).slice(0, 8)}]`;
+    }
 
     if (LOG_RESPONSE_BODIES && payload && typeof payload === 'string') {
       try {
