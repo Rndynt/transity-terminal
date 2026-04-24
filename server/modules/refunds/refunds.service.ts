@@ -6,9 +6,6 @@ import {
   trips,
   bookingHistory,
   seatInventory,
-  bookingPromoApplications,
-  promotions,
-  vouchers,
 } from "@shared/schema";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { isEngineEnabled, HoldsAdapter } from "@modules/holds/holdsAdapter";
@@ -17,6 +14,7 @@ import { enqueueCancelSeats } from "@modules/holds/compensationQueue";
 import { storage } from "@server/storage";
 import { webSocketService } from "@server/realtime/ws";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { revertPromoApplicationsForBooking } from "@modules/promos/promoRevert";
 
 function getRows(result: any): any[] {
   return Array.isArray(result) ? result : (result as any).rows || [];
@@ -209,19 +207,10 @@ export class RefundsService {
           .where(eq(bookings.id, booking.id));
 
         // 4. Decrement promo usage + revert voucher (S1-03 piggyback).
-        // GREATEST(0, n-1) supaya tidak negatif kalau ada race condition.
-        const apps = await tx.select().from(bookingPromoApplications)
-          .where(eq(bookingPromoApplications.bookingId, booking.id));
-        for (const app of apps) {
-          await tx.update(promotions)
-            .set({ usageCount: sql`GREATEST(0, ${promotions.usageCount} - 1)` })
-            .where(eq(promotions.id, app.promoId));
-          if (app.voucherId) {
-            await tx.update(vouchers)
-              .set({ status: 'active', usedAt: null, usedByBookingId: null })
-              .where(eq(vouchers.id, app.voucherId));
-          }
-        }
+        // Shared helper keeps GREATEST-guarded decrement + voucher revert
+        // identical across bookings.service, unseat.service, and this path
+        // (P2 §5 unification).
+        await revertPromoApplicationsForBooking(tx, booking.id);
       }
     });
 

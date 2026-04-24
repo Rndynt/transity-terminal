@@ -4,14 +4,12 @@ import {
   passengers,
   seatInventory,
   bookingHistory,
-  bookingPromoApplications as bpaTable,
-  promotions as promotionsTable,
-  vouchers as vouchersTable,
 } from "@shared/schema";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
 import { IStorage } from "@server/storage.interface";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { revertPromoApplicationsForBooking } from "@modules/promos/promoRevert";
 
 /**
  * S1-09 (Sprint 2): unseat & re-assign kursi memengaruhi inventory dan
@@ -349,22 +347,9 @@ export class UnseatService {
 
         // S1-03: when the booking flips to cancelled, decrement every
         // applied promo's usageCount and mark any spent voucher as
-        // active again. GREATEST(0, ...) so concurrent refunds cannot
-        // push usageCount negative. Same logic as app.service.cancelBooking,
-        // bookings.service.cancelBooking and roundTrip.service — P2 §5
-        // follow-up will unify all four into a shared helper; for now we
-        // just lift it out of the route handler into the right layer.
-        const apps = await tx.select().from(bpaTable).where(eq(bpaTable.bookingId, booking.id));
-        for (const app of apps) {
-          await tx.update(promotionsTable)
-            .set({ usageCount: sql`GREATEST(0, ${promotionsTable.usageCount} - 1)` })
-            .where(eq(promotionsTable.id, app.promoId));
-          if (app.voucherId) {
-            await tx.update(vouchersTable)
-              .set({ status: 'active', usedAt: null, usedByBookingId: null })
-              .where(eq(vouchersTable.id, app.voucherId));
-          }
-        }
+        // active again. Shared helper keeps the semantics in sync across
+        // bookings.service, refunds.service, and this path (P2 §5).
+        await revertPromoApplicationsForBooking(tx, booking.id);
       }
 
       return updated;
