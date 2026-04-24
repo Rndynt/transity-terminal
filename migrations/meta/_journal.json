@@ -92,6 +92,13 @@
       "when": 1782000120000,
       "tag": "0012_engine_compensation_dlq",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1782000180000,
+      "tag": "0013_partial_unique_trip_base_date",
+      "breakpoints": true
     }
   ]
 }

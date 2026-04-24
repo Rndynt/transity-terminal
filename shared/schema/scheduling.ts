@@ -97,7 +97,7 @@ export const trips = pgTable("trips", {
   createdAt:                timestamp("created_at", { withTimezone: true }).defaultNow(),
   deletedAt:                timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
-  uniqTripBasePerDay: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_trip_base_per_day ON ${table} (base_id, service_date) WHERE base_id IS NOT NULL`,
+  uniqTripBasePerDay: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_trip_base_per_day ON ${table} (base_id, service_date) WHERE base_id IS NOT NULL AND deleted_at IS NULL`,
   idxTripsServiceDate: sql`CREATE INDEX IF NOT EXISTS idx_trips_service_date ON ${table} (service_date)`,
   idxTripsPatternId: sql`CREATE INDEX IF NOT EXISTS idx_trips_pattern_id ON ${table} (pattern_id)`,
   idxTripsStatus: sql`CREATE INDEX IF NOT EXISTS idx_trips_status ON ${table} (status)`,
