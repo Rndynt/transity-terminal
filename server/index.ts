@@ -21,6 +21,7 @@ import { registerGlobalErrorHandler } from "./errorHandler";
 initSentry();
 
 import Fastify from "fastify";
+import { createHash } from "node:crypto";
 import rateLimit from "@fastify/rate-limit";
 import helmet from "@fastify/helmet";
 import cors from "@fastify/cors";
@@ -83,8 +84,10 @@ app.register(rateLimit, {
     const incomingKey = req.headers['x-service-key'] as string | undefined;
     const expected = process.env.TERMINAL_SERVICE_KEY || '';
     if (expected && incomingKey && incomingKey === expected) {
-      // Bucket per service-key (prefix saja, tidak full key, supaya log aman).
-      return `service:${incomingKey.slice(0, 8)}`;
+      // Bucket id = SHA256(key).slice(0,12) — non-reversible, tidak ada
+      // material rahasia di Redis keyspace / metric label / log.
+      const digest = createHash('sha256').update(incomingKey).digest('hex');
+      return `service:${digest.slice(0, 12)}`;
     }
     return req.ip;
   },

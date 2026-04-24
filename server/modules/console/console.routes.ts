@@ -1,5 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { createHash } from "node:crypto";
+import { sql, inArray, and } from "drizzle-orm";
+import { db } from "@server/db";
+import { bookings } from "@shared/schema/booking";
 import type { IStorage } from "@server/storage.interface";
 import { buildScheduleSnapshot } from "@server/lib/scheduleSnapshot";
 
@@ -43,19 +46,56 @@ export function registerConsoleRoutes(app: FastifyInstance, storage: IStorage) {
       });
     }
 
-    // Lightweight ETag fingerprint: sha1(channel|limit|serviceDate|tripCount|maxUpdatedAt).
-    // Hindari rebuild snapshot mahal kalau client polling dgn If-None-Match.
-    // Trade-off: booking/seat changes dlm window 60s tidak invalidate ETag —
-    // konsisten dgn Cache-Control max-age=60 di bawah.
-    let maxUpdatedTs = 0;
+    // ETag fingerprint berdasarkan signal yang invalidate KETIKA seat
+    // availability berubah, tidak hanya trip metadata. Komponen:
+    //   - channel + limit + serviceDate + tripCount + max(trips.updatedAt)
+    //   - active booking count (pending|confirmed|paid) untuk trip2 hari ini
+    //   - max(bookings.createdAt) untuk trip2 hari ini
+    // Booking insert (createdAt baru) atau cancel (count berubah) → fingerprint
+    // berbeda → ETag baru → 304 tidak akan stale walaupun seatmap berubah.
+    let maxTripUpdatedTs = 0;
     for (const t of allTripsForDay) {
       const u = (t as { updatedAt?: Date | string | null }).updatedAt;
       if (u) {
         const ts = u instanceof Date ? u.getTime() : Date.parse(String(u));
-        if (Number.isFinite(ts) && ts > maxUpdatedTs) maxUpdatedTs = ts;
+        if (Number.isFinite(ts) && ts > maxTripUpdatedTs) maxTripUpdatedTs = ts;
       }
     }
-    const fingerprint = `${channelParam}|${limit}|${serviceDate}|${allTripsForDay.length}|${maxUpdatedTs}`;
+
+    // Sub-query 1 round-trip ke DB utk ambil booking signal hari ini.
+    // Filter status active supaya cancel/expired langsung change count.
+    let activeBookingCount = 0;
+    let maxBookingCreatedTs = 0;
+    if (allTripsForDay.length > 0) {
+      const tripIds = allTripsForDay.map((t) => t.id);
+      const sigRows = await db
+        .select({
+          cnt: sql<number>`count(*)::int`,
+          maxCreated: sql<Date | null>`max(${bookings.createdAt})`,
+        })
+        .from(bookings)
+        .where(
+          and(
+            inArray(bookings.tripId, tripIds),
+            inArray(bookings.status, ["pending", "confirmed", "paid"] as any[])
+          )
+        );
+      activeBookingCount = sigRows[0]?.cnt ?? 0;
+      const mc = sigRows[0]?.maxCreated;
+      if (mc) {
+        maxBookingCreatedTs = mc instanceof Date ? mc.getTime() : Date.parse(String(mc));
+      }
+    }
+
+    const fingerprint = [
+      channelParam,
+      limit,
+      serviceDate,
+      allTripsForDay.length,
+      maxTripUpdatedTs,
+      activeBookingCount,
+      maxBookingCreatedTs,
+    ].join("|");
     const etag = `W/"sched-${createHash("sha1").update(fingerprint).digest("hex").slice(0, 16)}"`;
 
     // Always set cache headers regardless of cache hit/miss
