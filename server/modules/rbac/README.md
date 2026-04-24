@@ -70,7 +70,9 @@ import { SYSTEM_CONTEXT } from "@modules/rbac/rbac.guard";
 await cargoService.createShipment(data, SYSTEM_CONTEXT);
 ```
 
-## Flag mapping (5 modul kritis)
+## Flag mapping
+
+### Sprint 1 (S1-09 awal — 5 modul kritis)
 
 | Service | Method | Flag |
 |---|---|---|
@@ -84,17 +86,55 @@ await cargoService.createShipment(data, SYSTEM_CONTEXT);
 | `CargoService` | createShipment | `action.cargo.create` |
 | `CargoService` | updateShipment / updateShipmentStatus | `action.cargo.manage` |
 
-Read methods (drivers/vehicles/cargo getAll/getById) **belum** di-guard
-karena route memang membolehkan dibaca tanpa flag tertentu.
+### Sprint 2 (Task #6 — modul operator: booking, payment, promo, voucher, outlet, schedule, tariff)
+
+| Service | Method | Flag |
+|---|---|---|
+| `BookingsService` | createBooking, createPendingBooking | `action.booking.create` |
+| `BookingsService` | releasePendingBooking | `action.booking.cancel` |
+| `BookingsService` | cleanupExpiredPendingBookings | *cron internal — dipanggil dari `server/scheduler.ts`, tidak di-guard* |
+| `RoundTripService` | createRoundTripBooking | `action.booking.create` |
+| `RescheduleService` | reschedulePassenger | `action.passenger.reschedule` |
+| `RescheduleService` | batchRescheduleForTripClose | `action.trip.batch_reschedule` |
+| `UnseatService` | unseatPassenger, unseatAllPassengers | `action.passenger.unseat` |
+| `UnseatService` | assignSeatToUnseated | `action.passenger.assign_seat` |
+| `PaymentsService` | createPayment | `action.payment.create` |
+| `PromosService` | createPromotion / updatePromotion / deletePromotion | `master.promos` |
+| `PromosService` | replaceConditions | `master.promos` |
+| `PromosService` | generateVouchers / revokeVoucher / deleteVoucher | `master.promos` |
+| `OutletsService` | createOutlet / updateOutlet / deleteOutlet | `master.outlets` |
+| `PriceRulesService` | create / update / delete | `master.price_rules` |
+| `TripPatternsService` | create / update / delete | `master.trip_patterns` |
+
+Read methods (`getAll*`, `getBy*`, `validateAndCalculateDiscount`,
+`findBestAutoApplicablePromo`, `getPaymentsByBooking`, `getPatternStops`,
+`getActiveTripsForPattern`, `getActiveBookingCountForPattern`,
+`isHoldOwner`, `createHold`, `releaseHold`) **tidak** di-guard di
+service-layer karena route HTTP-nya sudah memutuskan policy yang sesuai
+(mis. customer-app boleh membaca daftar promo tanpa flag staff RBAC,
+hold/release dipakai juga oleh customer-app yang sudah lewat
+`requireAppAuth`).
+
+### Caller internal yang harus eksplisit pakai `SYSTEM_CONTEXT`
+
+- `server/modules/app/app.service.ts` → memanggil `PromosService` hanya
+  untuk method read (validateAndCalculateDiscount,
+  findBestAutoApplicablePromo). Tidak butuh ctx.
+- `server/modules/bookings/booking.helpers.ts` → instansiasi
+  `PromosService` untuk persist/markUsed (read+write tanpa guard, sudah
+  di-cover oleh guard `action.booking.create` di caller-nya).
 
 ## Test integrasi
 
-Lihat `tests/sprint2-rbac-service-guards.test.ts` untuk bukti bahwa
-memanggil setiap service tanpa ctx atau dengan flag yang tidak sesuai
-selalu dilempar `PermissionDeniedError`.
+Dua file test menutup pemetaan flag di atas:
 
 ```bash
+# Sprint 1: drivers, vehicles, refunds, cashier, cargo
 npx vitest run tests/sprint2-rbac-service-guards.test.ts
+
+# Sprint 2 / Task #6: bookings, reschedule, unseat, payments, promos,
+# outlets, priceRules, tripPatterns, roundTrip
+npx vitest run tests/sprint2-rbac-service-guards-extended.test.ts
 ```
 
 ## Cara menambah modul baru
@@ -102,7 +142,9 @@ npx vitest run tests/sprint2-rbac-service-guards.test.ts
 1. Tambahkan `ctx: ServiceContext` sebagai argumen terakhir pada method
    service yang sensitif.
 2. Panggil `requirePermission(ctx, '<flag>')` di awal method.
-3. Update controller agar memanggil `buildServiceContext(req)`.
-4. Tambah test di `tests/sprint2-rbac-service-guards.test.ts` untuk
-   ketiga skenario (no ctx, ctx tanpa flag, ctx dengan flag).
+3. Update controller agar memanggil `buildServiceContext(req)`. Caller
+   internal (scheduler/cron/customer-app) yang sah pakai
+   `SYSTEM_CONTEXT` secara eksplisit.
+4. Tambah test untuk ketiga skenario (no ctx, ctx tanpa flag, ctx
+   dengan flag) di file extended atau bikin file baru.
 5. Update bagian "Flag mapping" di file README ini.
