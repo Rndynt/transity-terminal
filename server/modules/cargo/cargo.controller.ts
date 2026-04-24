@@ -2,6 +2,7 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import { CargoService } from "./cargo.service";
 import { IStorage } from "@server/storage.interface";
 import { insertCargoShipmentSchema, insertCargoTypeSchema, insertCargoRateSchema } from "@shared/schema";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 
 export class CargoController {
   private cargoService: CargoService;
@@ -50,14 +51,14 @@ export class CargoController {
     if (scopedOutlet) {
       validated.outletId = scopedOutlet;
     }
-    const shipment = await this.cargoService.createShipment(validated);
+    const shipment = await this.cargoService.createShipment(validated, buildServiceContext(req));
     reply.code(201).send(shipment);
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
     const validated = insertCargoShipmentSchema.partial().parse(req.body);
-    const shipment = await this.cargoService.updateShipment(id, validated);
+    const shipment = await this.cargoService.updateShipment(id, validated, buildServiceContext(req));
     reply.send(shipment);
   }
 
@@ -68,7 +69,7 @@ export class CargoController {
       return reply.code(400).send({ error: 'Status is required' });
     }
     try {
-      const shipment = await this.cargoService.updateShipmentStatus(id, status);
+      const shipment = await this.cargoService.updateShipmentStatus(id, status, buildServiceContext(req));
       reply.send(shipment);
     } catch (error: unknown) {
       const err = error as Error;

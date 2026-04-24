@@ -322,6 +322,7 @@ describe("S2-11 / refunds integration", () => {
     });
 
     const { RefundsService } = await import("@modules/refunds/refunds.service");
+    const { SYSTEM_CONTEXT } = await import("@modules/rbac/rbac.guard");
     const svc = new RefundsService(storageMock as any);
 
     const created = await svc.create({
@@ -330,12 +331,12 @@ describe("S2-11 / refunds integration", () => {
       refundAmount: "90000",
       adminFee: "10000",
       reason: "passenger no-show",
-    }, "ops-1");
+    }, "ops-1", SYSTEM_CONTEXT);
     expect(created.id).toBe("r1");
     expect(created.status).toBe("pending");
 
     // reject() hanya update — tidak ada return row, mock chain swallow.
-    const rejected = await svc.reject("r1", "tidak memenuhi syarat");
+    const rejected = await svc.reject("r1", "tidak memenuhi syarat", SYSTEM_CONTEXT);
     expect(rejected.success).toBe(true);
   });
 });

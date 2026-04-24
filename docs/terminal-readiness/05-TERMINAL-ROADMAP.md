@@ -23,7 +23,7 @@
 | S1-06 | Cargo waybill: add `tracking_secret` requirement | 0.5 hari | Mid | 🟠 | ✅ `e68098b` |
 | S1-07 | Production boot guard: fail-fast jika secrets hilang (`DEV_BYPASS_AUTH`, `REALMIO_*`, engine secret) | 2 jam | Senior | 🟠 | ✅ `d3a74c2` (digabung) |
 | S1-08 | Install `@fastify/helmet` global + consolidate CORS handling | 2 jam | Mid | 🟠 | ✅ `d3a74c2` |
-| S1-09 | Move RBAC check ke service layer (drivers, vehicles, +5 modul) | 1 hari | Mid | 🟠 | ⏭️ DEFERRED → project task `#2` |
+| S1-09 | Move RBAC check ke service layer (drivers, vehicles, refunds, cashier, cargo) — guard `requirePermission` di service kelas, integration tests, dan README. | 1 hari | Mid | 🟠 | ✅ this task |
 | S1-10 | **Write 5 unit tests** untuk fix di S1-01 dan S1-02 | 0.5 hari | Senior | — | ✅ `398c256` |
 
 **Total**: ~5 hari work × 2 dev = 1 minggu kalender

@@ -1,5 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { CashierService } from "./cashier.service";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 
 export class CashierController {
   private service: CashierService;
@@ -16,7 +17,7 @@ export class CashierController {
     const outletId = (req as any).rbac?.outletId;
     const staffId = this.resolveStaffId(req);
     if (!outletId || !staffId) return reply.send(null);
-    const session = await this.service.getActiveSession(outletId, staffId);
+    const session = await this.service.getActiveSession(outletId, staffId, buildServiceContext(req));
     reply.send(session);
   }
 
@@ -24,7 +25,7 @@ export class CashierController {
     const outletId = (req as any).rbac?.outletId;
     const staffId = this.resolveStaffId(req);
     if (!outletId || !staffId) return reply.send({ session: null, summary: [], transactions: [] });
-    const result = await this.service.getActiveSummary(outletId, staffId);
+    const result = await this.service.getActiveSummary(outletId, staffId, buildServiceContext(req));
     reply.send(result);
   }
 
@@ -38,7 +39,10 @@ export class CashierController {
     if (!staffId) return reply.code(400).send({ error: 'Staff ID tidak ditemukan — sesi tidak dapat dibuka' });
 
     try {
-      const session = await this.service.openSession({ outletId, staffId, staffName, openingBalance, notes });
+      const session = await this.service.openSession(
+        { outletId, staffId, staffName, openingBalance, notes },
+        buildServiceContext(req),
+      );
       reply.send(session);
     } catch (err: any) {
       reply.code(400).send({ error: err.message });
@@ -49,15 +53,16 @@ export class CashierController {
     const { sessionId, settlements, notes } = req.body as any;
     const outletId = (req as any).rbac?.outletId;
     const staffId = this.resolveStaffId(req);
+    const ctx = buildServiceContext(req);
     if (outletId && staffId) {
-      const session = await this.service.getActiveSession(outletId, staffId);
+      const session = await this.service.getActiveSession(outletId, staffId, ctx);
       // Hanya bisa menutup sesi milik sendiri (atau via approve flow utk supervisor).
       if (!session || session.id !== sessionId) {
         return reply.code(403).send({ error: 'Tidak bisa menutup sesi milik staff lain' });
       }
     }
     try {
-      const result = await this.service.closeSession(sessionId, settlements, notes);
+      const result = await this.service.closeSession(sessionId, settlements, notes, ctx);
       reply.send(result);
     } catch (err: any) {
       reply.code(400).send({ error: err.message });
@@ -67,26 +72,27 @@ export class CashierController {
   async approve(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
     const outletId = (req as any).rbac?.outletId;
-    const detail = await this.service.getDetail(id);
+    const ctx = buildServiceContext(req);
+    const detail = await this.service.getDetail(id, ctx);
     if (outletId && detail.session && detail.session.outletId !== outletId) {
       return reply.code(403).send({ error: 'Tidak bisa approve sesi outlet lain' });
     }
     const approvedBy = (req as any).user?.email || 'Unknown';
-    const result = await this.service.approveSession(id, approvedBy);
+    const result = await this.service.approveSession(id, approvedBy, ctx);
     reply.send(result);
   }
 
   async getHistory(req: FastifyRequest, reply: FastifyReply) {
     const outletId = (req as any).rbac?.outletId;
     const staffId = (req.query as any)?.staffId; // optional supervisor filter
-    const rows = await this.service.getHistory(outletId, staffId);
+    const rows = await this.service.getHistory(outletId, staffId, buildServiceContext(req));
     reply.send(rows);
   }
 
   async getDetail(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
     const outletId = (req as any).rbac?.outletId;
-    const detail = await this.service.getDetail(id);
+    const detail = await this.service.getDetail(id, buildServiceContext(req));
     if (outletId && detail.session && detail.session.outletId !== outletId) {
       return reply.code(403).send({ error: 'Tidak bisa melihat sesi outlet lain' });
     }

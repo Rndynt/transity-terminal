@@ -2157,8 +2157,13 @@ export class AppService {
     notes?: string;
   }): Promise<Record<string, unknown>> {
     const { CargoService } = await import("../cargo/cargo.service");
+    const { SYSTEM_CONTEXT } = await import("../rbac/rbac.guard");
     const cargoService = new CargoService(this.storage);
 
+    // Customer-app booking flow: customer punya app-auth sendiri (lihat
+    // app.auth.ts), bukan staf RBAC, jadi pakai SYSTEM_CONTEXT secara
+    // eksplisit. Otorisasi customer dilakukan di route layer
+    // (`requireAppAuth`) sebelum sampai ke method ini.
     const shipment = await cargoService.createShipment({
       tripId: params.tripId,
       originStopId: params.originStopId,
@@ -2175,7 +2180,7 @@ export class AppService {
       channel: 'APP',
       createdBy: `app:${params.userId}`,
       notes: params.notes
-    });
+    }, SYSTEM_CONTEXT);
 
     return shipment;
   }

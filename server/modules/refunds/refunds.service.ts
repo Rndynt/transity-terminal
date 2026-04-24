@@ -16,6 +16,7 @@ import { AtomicHoldService } from "@modules/bookings/atomicHold.service";
 import { enqueueCancelSeats } from "@modules/holds/compensationQueue";
 import { storage } from "@server/storage";
 import { webSocketService } from "@server/realtime/ws";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 
 function getRows(result: any): any[] {
   return Array.isArray(result) ? result : (result as any).rows || [];
@@ -23,8 +24,17 @@ function getRows(result: any): any[] {
 
 const INACTIVE_TICKET_STATUSES = ['cancelled', 'refunded', 'no_show', 'unseated'] as const;
 
+/**
+ * S1-09: lihat `server/modules/rbac/README.md` untuk pola
+ * `requirePermission(ctx, perm)`. Mapping flag:
+ *   - getAll/getById  → page.refunds
+ *   - create          → action.refund.create
+ *   - approve/reject  → action.refund.approve
+ *   - process         → action.refund.process
+ */
 export class RefundsService {
-  async getAll() {
+  async getAll(ctx: ServiceContext) {
+    requirePermission(ctx, "page.refunds");
     const result = await db.execute(sql`
       SELECT r.*, b.booking_code, p.full_name AS passenger_name
       FROM refunds r
@@ -36,7 +46,8 @@ export class RefundsService {
     return getRows(result);
   }
 
-  async getById(id: string) {
+  async getById(id: string, ctx: ServiceContext) {
+    requirePermission(ctx, "page.refunds");
     const result = await db.execute(sql`
       SELECT r.*, b.booking_code, b.total_amount AS booking_total, b.status AS booking_status,
              p.full_name AS passenger_name, p.ticket_number
@@ -60,7 +71,8 @@ export class RefundsService {
     bankAccount?: string;
     bankName?: string;
     notes?: string;
-  }, requestedBy: string) {
+  }, requestedBy: string, ctx: ServiceContext) {
+    requirePermission(ctx, "action.refund.create");
     const [row] = await db.insert(refunds).values({
       bookingId: data.bookingId,
       passengerId: data.passengerId || null,
@@ -87,7 +99,8 @@ export class RefundsService {
    *   6. Decrement promo usageCount + revert voucher 'active' (S1-03).
    *   7. WS emit inventory.updated supaya seatmap CSO/WEB refresh otomatis.
    */
-  async approve(id: string, approvedBy: string) {
+  async approve(id: string, approvedBy: string, ctx: ServiceContext) {
+    requirePermission(ctx, "action.refund.approve");
     // S1-01 race-safety: pre-flight check untuk error message bagus + early
     // exit kalau sudah approved (idempotent). Tapi keputusan resmi tetap di
     // dalam transaction via compare-and-swap.
@@ -255,14 +268,16 @@ export class RefundsService {
     };
   }
 
-  async process(id: string, processedBy: string) {
+  async process(id: string, processedBy: string, ctx: ServiceContext) {
+    requirePermission(ctx, "action.refund.process");
     await db.update(refunds)
       .set({ status: 'processed', processedBy, processedAt: new Date() })
       .where(eq(refunds.id, id));
     return { success: true };
   }
 
-  async reject(id: string, notes?: string) {
+  async reject(id: string, notes: string | undefined, ctx: ServiceContext) {
+    requirePermission(ctx, "action.refund.approve");
     await db.update(refunds)
       .set({ status: 'rejected', notes })
       .where(eq(refunds.id, id));

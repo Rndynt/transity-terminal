@@ -2,6 +2,19 @@ import { IStorage } from "@server/storage.interface";
 import { InsertCargoShipment, CargoShipment, CargoAvailableTrip, cargoStatusEnum, cargoShipments } from "@shared/schema";
 import { db } from "@server/db";
 import { sql, eq } from "drizzle-orm";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+
+/**
+ * S1-09: lihat `server/modules/rbac/README.md`. Mapping flag:
+ *   - createShipment                            → action.cargo.create
+ *   - updateShipment / updateShipmentStatus     → action.cargo.manage
+ * Read methods (getAll/getById/getByWaybill) tetap terbuka karena route
+ * juga membolehkan publik untuk tracking — sumber otoritatif.
+ *
+ * Catatan: customer-app booking memanggil `createShipment` lewat
+ * `app.service.createAppCargo`. Karena customer bukan staf RBAC, caller
+ * itu memakai `SYSTEM_CONTEXT` secara eksplisit.
+ */
 
 const VALID_STATUSES = cargoStatusEnum.enumValues;
 type CargoStatus = typeof VALID_STATUSES[number];
@@ -102,7 +115,11 @@ export class CargoService {
     return shipment;
   }
 
-  async createShipment(data: Omit<InsertCargoShipment, 'waybillNumber'>): Promise<CargoShipment> {
+  async createShipment(
+    data: Omit<InsertCargoShipment, 'waybillNumber'>,
+    ctx: ServiceContext,
+  ): Promise<CargoShipment> {
+    requirePermission(ctx, "action.cargo.create");
     if (data.cargoTypeId && data.originStopId && data.destinationStopId && data.weightKg) {
       const weight = parseFloat(String(data.weightKg));
       if (weight > 0) {
@@ -146,7 +163,12 @@ export class CargoService {
     return await this.storage.createCargoShipment(payload);
   }
 
-  async updateShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment> {
+  async updateShipment(
+    id: string,
+    data: Partial<InsertCargoShipment>,
+    ctx: ServiceContext,
+  ): Promise<CargoShipment> {
+    requirePermission(ctx, "action.cargo.manage");
     // B4: lock + update in the SAME transaction. Using tx.update keeps the
     // write on the same connection that holds the row lock — calling the
     // global storage.updateCargoShipment would go through `db` (different
@@ -166,7 +188,12 @@ export class CargoService {
     });
   }
 
-  async updateShipmentStatus(id: string, newStatus: string): Promise<CargoShipment> {
+  async updateShipmentStatus(
+    id: string,
+    newStatus: string,
+    ctx: ServiceContext,
+  ): Promise<CargoShipment> {
+    requirePermission(ctx, "action.cargo.manage");
     if (!VALID_STATUSES.includes(newStatus as CargoStatus)) {
       throw new Error(`Invalid status: ${newStatus}. Valid: ${VALID_STATUSES.join(', ')}`);
     }

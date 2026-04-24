@@ -1,6 +1,13 @@
 import { db } from "@server/db";
 import { cashierSessions, cashierSettlements } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+
+/**
+ * S1-09: setiap method butuh `ctx: ServiceContext` dan akan menolak
+ * dengan PermissionDeniedError kalau ctx tidak punya `page.cashier`.
+ * Pemanggilan dari modul internal harus pakai `SYSTEM_CONTEXT`.
+ */
 
 /**
  * Sesi kasir sekarang per (outletId, staffId). Multiple kasir bisa buka sesi
@@ -19,7 +26,8 @@ export class CashierService {
    * Ambil sesi 'open' untuk (outletId, staffId). staffId WAJIB — kalau caller
    * sengaja mau lihat semua sesi di outlet, panggil `getActiveSessionsByOutlet`.
    */
-  async getActiveSession(outletId: string, staffId: string) {
+  async getActiveSession(outletId: string, staffId: string, ctx: ServiceContext) {
+    requirePermission(ctx, "page.cashier");
     const [session] = await db.select().from(cashierSessions)
       .where(and(
         eq(cashierSessions.outletId, outletId),
@@ -31,13 +39,18 @@ export class CashierService {
   }
 
   /** Untuk supervisor view: semua sesi 'open' di sebuah outlet. */
-  async getActiveSessionsByOutlet(outletId: string) {
+  async getActiveSessionsByOutlet(outletId: string, ctx: ServiceContext) {
+    requirePermission(ctx, "page.cashier");
     return db.select().from(cashierSessions)
       .where(and(eq(cashierSessions.outletId, outletId), eq(cashierSessions.status, 'open')))
       .orderBy(desc(cashierSessions.openedAt));
   }
 
-  async openSession(data: { outletId: string; staffId: string; staffName: string; openingBalance: number; notes?: string }) {
+  async openSession(
+    data: { outletId: string; staffId: string; staffName: string; openingBalance: number; notes?: string },
+    ctx: ServiceContext,
+  ) {
+    requirePermission(ctx, "page.cashier");
     if (!data.staffId) throw new Error('staffId wajib untuk membuka sesi kasir');
 
     // Guard application-level (UNIQUE INDEX partial di-DB sebagai second line of defense).
@@ -91,8 +104,9 @@ export class CashierService {
         `;
   }
 
-  async getActiveSummary(outletId: string, staffId: string) {
-    const session = await this.getActiveSession(outletId, staffId);
+  async getActiveSummary(outletId: string, staffId: string, ctx: ServiceContext) {
+    requirePermission(ctx, "page.cashier");
+    const session = await this.getActiveSession(outletId, staffId, ctx);
     if (!session) return { session: null, summary: [], transactions: [] };
 
     const summaryResult = await db.execute(sql`
@@ -117,7 +131,13 @@ export class CashierService {
     return { session, summary, transactions };
   }
 
-  async closeSession(sessionId: string, settlements: Array<{ paymentMethod: string; actualAmount: number; notes?: string }>, notes?: string) {
+  async closeSession(
+    sessionId: string,
+    settlements: Array<{ paymentMethod: string; actualAmount: number; notes?: string }>,
+    notes: string | undefined,
+    ctx: ServiceContext,
+  ) {
+    requirePermission(ctx, "page.cashier");
     const [session] = await db.select().from(cashierSessions).where(eq(cashierSessions.id, sessionId));
     if (!session) throw new Error('Sesi tidak ditemukan');
     if (session.status !== 'open') throw new Error('Sesi sudah ditutup');
@@ -159,7 +179,8 @@ export class CashierService {
     return { success: true };
   }
 
-  async approveSession(id: string, approvedBy: string) {
+  async approveSession(id: string, approvedBy: string, ctx: ServiceContext) {
+    requirePermission(ctx, "page.cashier");
     await db.update(cashierSessions)
       .set({ status: 'approved', approvedBy, approvedAt: new Date() })
       .where(eq(cashierSessions.id, id));
@@ -167,7 +188,8 @@ export class CashierService {
     return { success: true };
   }
 
-  async getHistory(outletId?: string, staffId?: string) {
+  async getHistory(outletId: string | undefined, staffId: string | undefined, ctx: ServiceContext) {
+    requirePermission(ctx, "page.cashier");
     const conds = [];
     if (outletId) conds.push(eq(cashierSessions.outletId, outletId));
     if (staffId) conds.push(eq(cashierSessions.staffId, staffId));
@@ -178,7 +200,8 @@ export class CashierService {
     return rows;
   }
 
-  async getDetail(id: string) {
+  async getDetail(id: string, ctx: ServiceContext) {
+    requirePermission(ctx, "page.cashier");
     const [session] = await db.select().from(cashierSessions).where(eq(cashierSessions.id, id));
     const settlements = await db.select().from(cashierSettlements).where(eq(cashierSettlements.sessionId, id));
 
