@@ -121,6 +121,56 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
       checks.engine = { status: 'skip', detail: 'engine disabled' };
     }
 
+    // 3. Redis (S3-06). Skip kalau REDIS_URL tidak diset (single-instance OK
+    // tanpa Redis). Pakai client yang sudah dibuat di realtime/redis.ts.
+    if (process.env.REDIS_URL) {
+      const tR = Date.now();
+      try {
+        const { createRateLimitRedisClient } = await import('./realtime/redis');
+        const client = createRateLimitRedisClient();
+        if (client) {
+          // ioredis: ping returns "PONG"
+          const pong = await (client as { ping: () => Promise<string> }).ping();
+          checks.redis = {
+            status: pong === 'PONG' ? 'ok' : 'fail',
+            latencyMs: Date.now() - tR,
+            detail: `pong=${pong}`,
+          };
+        } else {
+          checks.redis = { status: 'skip', detail: 'REDIS_URL set tapi client gagal init' };
+        }
+      } catch (e) {
+        checks.redis = { status: 'fail', latencyMs: Date.now() - tR, detail: (e as Error).message };
+      }
+    } else {
+      checks.redis = { status: 'skip', detail: 'REDIS_URL not set (single-instance mode)' };
+    }
+
+    // 4. Realmio (S3-06). Skip kalau integrasi tidak dikonfigurasi. Kalau
+    // diset, ping endpoint dengan timeout pendek supaya health check tidak
+    // di-blok lama oleh Realmio yang lambat.
+    const realmioBase = process.env.REALMIO_BASE_URL?.trim();
+    if (realmioBase) {
+      const tRm = Date.now();
+      try {
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 3000);
+        const res = await fetch(`${realmioBase.replace(/\/$/, '')}/health`, {
+          signal: ctrl.signal,
+          headers: { 'user-agent': 'transity-terminal-healthcheck' },
+        }).finally(() => clearTimeout(to));
+        checks.realmio = {
+          status: res.ok ? 'ok' : 'fail',
+          latencyMs: Date.now() - tRm,
+          detail: `status=${res.status}`,
+        };
+      } catch (e) {
+        checks.realmio = { status: 'fail', latencyMs: Date.now() - tRm, detail: (e as Error).message };
+      }
+    } else {
+      checks.realmio = { status: 'skip', detail: 'REALMIO_BASE_URL not set' };
+    }
+
     const overall = Object.values(checks).every(c => c.status !== 'fail') ? 'ok' : 'degraded';
     reply.code(overall === 'ok' ? 200 : 503).send({
       status: overall,
