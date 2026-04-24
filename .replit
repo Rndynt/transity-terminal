@@ -70,7 +70,12 @@ waitForPort = 5000
 
 [userenv.shared]
 PORT = "5000"
-NODE_ENV = "development"
 HOLD_TTL_SHORT_SECONDS = "60"
 HOLD_TTL_LONG_SECONDS = "1200"
 PENDING_BOOKING_AUTO_RELEASE = "true"
+
+[userenv.development]
+NODE_ENV = "development"
+
+[userenv.production]
+NODE_ENV = "production"
