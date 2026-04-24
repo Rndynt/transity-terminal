@@ -752,7 +752,7 @@ export class SchedulingRepository {
     await db.update(tripStopTimes).set({ deletedAt: new Date() }).where(eq(tripStopTimes.id, id));
   }
 
-  async getTripStopTimesWithEffectiveFlags(tripId: string): Promise<any[]> {
+  async getTripStopTimesWithEffectiveFlags(tripId: string): Promise<import("@server/storage.interface").TripStopTimeWithEffectiveFlags[]> {
     const result = await db
       .select({
         id: tripStopTimes.id,
@@ -788,7 +788,7 @@ export class SchedulingRepository {
     }));
   }
 
-  async bulkUpsertTripStopTimes(tripId: string, stopTimes: any[]): Promise<void> {
+  async bulkUpsertTripStopTimes(tripId: string, stopTimes: import("@server/storage.interface").BulkUpsertStopTimeInput[]): Promise<void> {
     await db.transaction(async (tx) => {
       await tx.update(tripStopTimes).set({ deletedAt: new Date() }).where(
         and(eq(tripStopTimes.tripId, tripId), isNull(tripStopTimes.deletedAt))

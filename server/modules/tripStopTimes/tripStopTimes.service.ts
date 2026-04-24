@@ -1,4 +1,4 @@
-import { IStorage } from "@server/storage.interface";
+import { IStorage, TripStopTimeWithEffectiveFlags, BulkUpsertStopTimeInput } from "@server/storage.interface";
 import { InsertTripStopTime, TripStopTime, Trip } from "@shared/schema";
 import { TripLegsService } from "@modules/tripLegs/tripLegs.service";
 import { SeatInventoryService } from "@modules/seatInventory/seatInventory.service";
@@ -26,7 +26,7 @@ export class TripStopTimesService {
     await this.storage.deleteTripStopTime(id);
   }
 
-  async getTripStopTimesWithEffectiveFlags(tripId: string): Promise<any[]> {
+  async getTripStopTimesWithEffectiveFlags(tripId: string): Promise<TripStopTimeWithEffectiveFlags[]> {
     const existing = await this.storage.getTripStopTimesWithEffectiveFlags(tripId);
     if (existing.length > 0) return existing;
 
@@ -80,7 +80,7 @@ export class TripStopTimesService {
     return { synced: true, stopCount: patternStops.length };
   }
 
-  async bulkUpsertTripStopTimes(tripId: string, stopTimes: any[]): Promise<void> {
+  async bulkUpsertTripStopTimes(tripId: string, stopTimes: BulkUpsertStopTimeInput[]): Promise<void> {
     await this.storage.bulkUpsertTripStopTimes(tripId, stopTimes);
   }
 

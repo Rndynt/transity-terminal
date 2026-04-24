@@ -310,7 +310,10 @@ export class RescheduleService {
     }
 
     for (const pax of activePassengers) {
-      const preferredSeat = pax.seatNo;
+      // Active (non-unseated) passengers always have a seat; the storage
+      // contract returns `seatNo: string | null` because the column is
+      // nullable, but the SQL filter excludes unseated tickets.
+      const preferredSeat = pax.seatNo!;
       let targetSeat: string | null = null;
 
       if (fullyAvailableSeats.includes(preferredSeat)) {
@@ -362,7 +365,7 @@ export class RescheduleService {
               .set({ booked: false, holdRef: null })
               .where(and(
                 eq(seatInventory.tripId, oldTripId),
-                eq(seatInventory.seatNo, pax.seatNo),
+                eq(seatInventory.seatNo, preferredSeat),
                 inArray(seatInventory.legIndex, oldLegIndexes)
               ));
 
@@ -406,7 +409,7 @@ export class RescheduleService {
               destinationSeq: newDestinationSeq,
               channel: oldBooking?.channel || 'CSO',
               outletId: oldBooking?.outletId,
-              totalAmount: pax.fareAmount,
+              totalAmount: pax.fareAmount ?? '0',
               discountAmount: '0',
               currency: oldBooking?.currency || 'IDR',
               createdBy: performedBy,
@@ -474,7 +477,7 @@ export class RescheduleService {
           try {
             await adapter.cancelSeats({
               tripId: oldTripId,
-              seatNo: pax.seatNo,
+              seatNo: preferredSeat,
               legIndexes: oldLegIndexes,
             });
           } catch (e) {
@@ -485,7 +488,7 @@ export class RescheduleService {
             const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
             await enqueueCancelSeats({
               tripId: oldTripId,
-              seatNo: pax.seatNo,
+              seatNo: preferredSeat,
               legIndexes: oldLegIndexes,
               context: { source: 'batchReschedule.cancelOld', passengerId: pax.id },
             });
@@ -496,7 +499,7 @@ export class RescheduleService {
         if (!engineMode) {
           const oldLegIdx = getLegIndexes(pax.originSeq, pax.destinationSeq);
           for (const legIdx of oldLegIdx) {
-            webSocketService.emitInventoryUpdated(oldTripId, pax.seatNo, [legIdx]);
+            webSocketService.emitInventoryUpdated(oldTripId, preferredSeat, [legIdx]);
           }
           for (const legIdx of newLegIndexes) {
             webSocketService.emitInventoryUpdated(newTripId, targetSeat, [legIdx]);

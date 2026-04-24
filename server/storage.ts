@@ -1,4 +1,8 @@
-import { IStorage, ManifestEntry, ManifestFull, ManifestCargoEntry } from "./storage.interface";
+import {
+  IStorage, ManifestEntry, ManifestFull, ManifestCargoEntry,
+  TripStopTimeWithEffectiveFlags, BulkUpsertStopTimeInput,
+  ActivePassengerForTrip, UnseatedPassengerForTrip,
+} from "./storage.interface";
 import {
   FleetRepository, NetworkRepository, SchedulingRepository,
   BookingRepository, CargoRepository, FinanceRepository
@@ -93,8 +97,8 @@ export class DatabaseStorage implements IStorage {
   createTripStopTime(data: InsertTripStopTime): Promise<TripStopTime> { return this.scheduling.createTripStopTime(data); }
   updateTripStopTime(id: string, data: Partial<InsertTripStopTime>): Promise<TripStopTime> { return this.scheduling.updateTripStopTime(id, data); }
   deleteTripStopTime(id: string): Promise<void> { return this.scheduling.deleteTripStopTime(id); }
-  getTripStopTimesWithEffectiveFlags(tripId: string): Promise<any[]> { return this.scheduling.getTripStopTimesWithEffectiveFlags(tripId); }
-  bulkUpsertTripStopTimes(tripId: string, stopTimes: any[]): Promise<void> { return this.scheduling.bulkUpsertTripStopTimes(tripId, stopTimes); }
+  getTripStopTimesWithEffectiveFlags(tripId: string): Promise<TripStopTimeWithEffectiveFlags[]> { return this.scheduling.getTripStopTimesWithEffectiveFlags(tripId); }
+  bulkUpsertTripStopTimes(tripId: string, stopTimes: BulkUpsertStopTimeInput[]): Promise<void> { return this.scheduling.bulkUpsertTripStopTimes(tripId, stopTimes); }
   getTripLegs(tripId: string): Promise<TripLeg[]> { return this.scheduling.getTripLegs(tripId); }
   createTripLeg(data: InsertTripLeg): Promise<TripLeg> { return this.scheduling.createTripLeg(data); }
   deleteTripLegs(tripId: string): Promise<void> { return this.scheduling.deleteTripLegs(tripId); }
@@ -133,8 +137,8 @@ export class DatabaseStorage implements IStorage {
   getPassengerByTicketNumber(ticketNumber: string): Promise<Passenger | undefined> { return this.booking.getPassengerByTicketNumber(ticketNumber); }
   createPassenger(data: InsertPassenger): Promise<Passenger> { return this.booking.createPassenger(data); }
   updatePassenger(id: string, data: Partial<InsertPassenger>): Promise<Passenger> { return this.booking.updatePassenger(id, data); }
-  getActivePassengersForTrip(tripId: string): Promise<any[]> { return this.booking.getActivePassengersForTrip(tripId); }
-  getUnseatedPassengers(tripId: string): Promise<any[]> { return this.booking.getUnseatedPassengers(tripId); }
+  getActivePassengersForTrip(tripId: string): Promise<ActivePassengerForTrip[]> { return this.booking.getActivePassengersForTrip(tripId); }
+  getUnseatedPassengers(tripId: string): Promise<UnseatedPassengerForTrip[]> { return this.booking.getUnseatedPassengers(tripId); }
   getPayments(bookingId: string): Promise<Payment[]> { return this.booking.getPayments(bookingId); }
   getPaymentsByBookingIds(bookingIds: string[]): Promise<Payment[]> { return this.booking.getPaymentsByBookingIds(bookingIds); }
   createPayment(data: InsertPayment): Promise<Payment> { return this.booking.createPayment(data); }
