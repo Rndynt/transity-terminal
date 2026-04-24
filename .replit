@@ -17,53 +17,19 @@ externalPort = 3000
 
 [[ports]]
 localPort = 3001
-externalPort = 3001
+externalPort = 3003
 
 [[ports]]
 localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 5001
-externalPort = 6800
-
-[[ports]]
-localPort = 5173
-externalPort = 5173
-
-[[ports]]
-localPort = 5174
-externalPort = 5000
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
-externalPort = 8081
-
-[[ports]]
-localPort = 8082
-externalPort = 3003
-
-[[ports]]
-localPort = 23636
-
-[[ports]]
 localPort = 23637
-
-[[ports]]
-localPort = 23638
-externalPort = 4200
+externalPort = 5000
 
 [[ports]]
 localPort = 24679
 externalPort = 3002
-
-[[ports]]
-localPort = 26040
-externalPort = 6000
 
 [env]
 PORT = "5000"
@@ -100,18 +66,7 @@ waitForPort = 5000
 
 [userenv.shared]
 PORT = "5000"
+NODE_ENV = "development"
 HOLD_TTL_SHORT_SECONDS = "60"
 HOLD_TTL_LONG_SECONDS = "1200"
 PENDING_BOOKING_AUTO_RELEASE = "true"
-
-[userenv.development]
-NODE_ENV = "development"
-DEV_BYPASS_AUTH = "true"
-TERMINAL_SERVICE_KEY = "sk_dev_test_key_12345"
-
-[userenv.production]
-NODE_ENV = "production"
-
-[postMerge]
-path = "scripts/post-merge.sh"
-timeoutMs = 20000
