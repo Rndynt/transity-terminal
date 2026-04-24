@@ -428,6 +428,44 @@ export class BookingsController {
     }
   }
 
+  async cancelPassenger(req: FastifyRequest, reply: FastifyReply) {
+    try {
+      const { id } = req.params as { id: string };
+      const { reason } = cancelTicketSchema.parse(req.body || {});
+      const performedBy = req.user?.id ?? 'system';
+      const result = await this.unseatService.cancelPassengerTicket(
+        id,
+        reason,
+        performedBy,
+        buildServiceContext(req),
+      );
+      reply.send(result.passenger);
+    } catch (error: any) {
+      if (error?.statusCode === 403) throw error;
+
+      // Engine seat-release deferred — booking is already cancelled but
+      // the seat is not yet sellable. 502 matches the pre-refactor
+      // behavior so the CSO client keeps showing its existing retry UX.
+      if (error?.name === 'EngineCancelDeferredError') {
+        req.log.warn({ err: error }, 'Cancel passenger: engine release deferred');
+        return reply.code(502).send({ error: error.message, code: 'ENGINE_DEFERRED' });
+      }
+
+      if (error.name === 'ZodError') {
+        return reply.code(400).send({
+          error: error.issues?.[0]?.message || 'Validation failed',
+          code: 'VALIDATION_ERROR',
+        });
+      }
+
+      req.log.error({ err: error }, 'Cancel passenger error');
+      reply.code(error.message.includes('tidak ditemukan') ? 404 : 400).send({
+        error: error.message,
+        code: 'CANCEL_ERROR',
+      });
+    }
+  }
+
 
   async reschedulePassenger(req: FastifyRequest, reply: FastifyReply) {
     try {
