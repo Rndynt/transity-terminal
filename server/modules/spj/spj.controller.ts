@@ -18,13 +18,18 @@ const updateCostLineSchema = z.object({
   notes: z.string().max(500).nullable().optional(),
 });
 
+/** Narrow an unknown caught error to a string message safely. */
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 export class SpjController {
   async getAll(req: FastifyRequest, reply: FastifyReply) {
     try {
       const list = await spjService.getAll();
       reply.send(list);
-    } catch (e: any) {
-      reply.code(500).send({ error: e.message });
+    } catch (e) {
+      reply.code(500).send({ error: errorMessage(e) });
     }
   }
 
@@ -34,8 +39,8 @@ export class SpjController {
       const spj = await spjService.getById(id);
       if (!spj) return reply.code(404).send({ error: "SPJ tidak ditemukan" });
       reply.send(spj);
-    } catch (e: any) {
-      reply.code(500).send({ error: e.message });
+    } catch (e) {
+      reply.code(500).send({ error: errorMessage(e) });
     }
   }
 
@@ -44,8 +49,8 @@ export class SpjController {
       const { tripId } = req.params as { tripId: string };
       const spj = await spjService.getByTripId(tripId);
       reply.send(spj);
-    } catch (e: any) {
-      reply.code(500).send({ error: e.message });
+    } catch (e) {
+      reply.code(500).send({ error: errorMessage(e) });
     }
   }
 
@@ -55,8 +60,8 @@ export class SpjController {
       if (!tripId) return reply.code(400).send({ error: "tripId wajib diisi" });
       const spj = await spjService.create(tripId, { driverId, vehicleId, notes });
       reply.code(201).send(spj);
-    } catch (e: any) {
-      reply.code(400).send({ error: e.message });
+    } catch (e) {
+      reply.code(400).send({ error: errorMessage(e) });
     }
   }
 
@@ -65,8 +70,8 @@ export class SpjController {
       const { id } = req.params as { id: string };
       const spj = await spjService.updateStatus(id, 'issued');
       reply.send(spj);
-    } catch (e: any) {
-      reply.code(400).send({ error: e.message });
+    } catch (e) {
+      reply.code(400).send({ error: errorMessage(e) });
     }
   }
 
@@ -75,8 +80,8 @@ export class SpjController {
       const { id } = req.params as { id: string };
       const spj = await spjService.updateStatus(id, 'settled');
       reply.send(spj);
-    } catch (e: any) {
-      reply.code(400).send({ error: e.message });
+    } catch (e) {
+      reply.code(400).send({ error: errorMessage(e) });
     }
   }
 
@@ -86,8 +91,8 @@ export class SpjController {
       const { notes } = (req.body ?? {}) as { notes?: string };
       const spj = await spjService.updateNotes(id, notes || '');
       reply.send(spj);
-    } catch (e: any) {
-      reply.code(400).send({ error: e.message });
+    } catch (e) {
+      reply.code(400).send({ error: errorMessage(e) });
     }
   }
 
@@ -96,30 +101,32 @@ export class SpjController {
       const { id } = req.params as { id: string };
       await spjService.delete(id);
       reply.send({ success: true });
-    } catch (e: any) {
-      reply.code(400).send({ error: e.message });
+    } catch (e) {
+      reply.code(400).send({ error: errorMessage(e) });
     }
   }
 
   async updateCostLine(req: FastifyRequest, reply: FastifyReply) {
     try {
       const parsed = updateCostLineSchema.parse(req.body);
-      const line = await spjService.updateCostLine((req.params as any).id, parsed);
+      const { id } = req.params as { id: string };
+      const line = await spjService.updateCostLine(id, parsed);
       reply.send(line);
-    } catch (e: any) {
-      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Invalid input', details: e.errors });
-      reply.code(400).send({ error: e.message });
+    } catch (e) {
+      if (e instanceof z.ZodError) return reply.code(400).send({ error: 'Invalid input', details: e.errors });
+      reply.code(400).send({ error: errorMessage(e) });
     }
   }
 
   async addCostLine(req: FastifyRequest, reply: FastifyReply) {
     try {
       const parsed = addCostLineSchema.parse(req.body);
-      const line = await spjService.addCostLine((req.params as any).spjId, parsed);
+      const { spjId } = req.params as { spjId: string };
+      const line = await spjService.addCostLine(spjId, parsed);
       reply.code(201).send(line);
-    } catch (e: any) {
-      if (e.name === 'ZodError') return reply.code(400).send({ error: 'Invalid input', details: e.errors });
-      reply.code(400).send({ error: e.message });
+    } catch (e) {
+      if (e instanceof z.ZodError) return reply.code(400).send({ error: 'Invalid input', details: e.errors });
+      reply.code(400).send({ error: errorMessage(e) });
     }
   }
 
@@ -128,8 +135,8 @@ export class SpjController {
       const { id } = req.params as { id: string };
       await spjService.deleteCostLine(id);
       reply.send({ success: true });
-    } catch (e: any) {
-      reply.code(400).send({ error: e.message });
+    } catch (e) {
+      reply.code(400).send({ error: errorMessage(e) });
     }
   }
 
@@ -138,8 +145,8 @@ export class SpjController {
       const { tripId } = req.params as { tripId: string };
       const profit = await spjService.getTripProfit(tripId);
       reply.send(profit);
-    } catch (e: any) {
-      reply.code(500).send({ error: e.message });
+    } catch (e) {
+      reply.code(500).send({ error: errorMessage(e) });
     }
   }
 }
