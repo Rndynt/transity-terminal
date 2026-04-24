@@ -2,7 +2,7 @@ import { db } from "@server/db";
 import { eq, and, desc, sql, isNull } from "drizzle-orm";
 import {
   cargoShipments, cargoTypes, cargoRates, stops, trips,
-  type CargoShipment, type InsertCargoShipment,
+  type CargoShipment, type CargoShipmentListItem, type InsertCargoShipment,
   type CargoType, type InsertCargoType,
   type CargoRate, type InsertCargoRate
 } from "@shared/schema";
@@ -124,7 +124,7 @@ export class CargoRepository {
     return globalFallback;
   }
 
-  async getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]> {
+  async getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipmentListItem[]> {
     const originStop = db.select({ id: stops.id, code: stops.code, name: stops.name }).from(stops).as('origin_stop');
     const destStop = db.select({ id: stops.id, code: stops.code, name: stops.name }).from(stops).as('dest_stop');
 

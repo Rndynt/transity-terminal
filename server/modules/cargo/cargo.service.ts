@@ -1,5 +1,5 @@
 import { IStorage } from "@server/storage.interface";
-import { InsertCargoShipment, CargoShipment, CargoAvailableTrip, cargoStatusEnum, cargoShipments } from "@shared/schema";
+import { InsertCargoShipment, CargoShipment, CargoShipmentListItem, CargoAvailableTrip, cargoStatusEnum, cargoShipments } from "@shared/schema";
 import { db } from "@server/db";
 import { sql, eq } from "drizzle-orm";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
@@ -99,7 +99,7 @@ export class CargoService {
     return this.storage.getCargoAvailableTrips(serviceDate, originStopId, destinationStopId);
   }
 
-  async getAllShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]> {
+  async getAllShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipmentListItem[]> {
     return await this.storage.getCargoShipments(filters);
   }
 

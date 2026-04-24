@@ -114,3 +114,16 @@ export const insertCargoShipmentSchema = createInsertSchema(cargoShipments)
   });
 export type CargoShipment = typeof cargoShipments.$inferSelect;
 export type InsertCargoShipment = z.infer<typeof insertCargoShipmentSchema>;
+
+// S1-06: row shape khusus listing kargo untuk operator. Sengaja DROP
+// `trackingSecret` (rahasia hanya muncul di label & endpoint tracking publik)
+// dan menambahkan kolom join origin/destination stop yang dipakai UI daftar.
+// Pisahkan dari `CargoShipment` agar mismatch select object langsung
+// tertangkap TypeScript kalau ada yang menyelipkan/menghapus kolom di
+// `getCargoShipments` (server/repositories/cargo.repository.ts).
+export type CargoShipmentListItem = Omit<CargoShipment, 'trackingSecret'> & {
+  originStopCode: string | null;
+  originStopName: string | null;
+  destinationStopCode: string | null;
+  destinationStopName: string | null;
+};
