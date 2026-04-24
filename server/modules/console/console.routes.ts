@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { createHash } from "node:crypto";
 import type { IStorage } from "@server/storage.interface";
 import { buildScheduleSnapshot } from "@server/lib/scheduleSnapshot";
 
@@ -42,6 +43,34 @@ export function registerConsoleRoutes(app: FastifyInstance, storage: IStorage) {
       });
     }
 
+    // Lightweight ETag fingerprint: sha1(channel|limit|serviceDate|tripCount|maxUpdatedAt).
+    // Hindari rebuild snapshot mahal kalau client polling dgn If-None-Match.
+    // Trade-off: booking/seat changes dlm window 60s tidak invalidate ETag —
+    // konsisten dgn Cache-Control max-age=60 di bawah.
+    let maxUpdatedTs = 0;
+    for (const t of allTripsForDay) {
+      const u = (t as { updatedAt?: Date | string | null }).updatedAt;
+      if (u) {
+        const ts = u instanceof Date ? u.getTime() : Date.parse(String(u));
+        if (Number.isFinite(ts) && ts > maxUpdatedTs) maxUpdatedTs = ts;
+      }
+    }
+    const fingerprint = `${channelParam}|${limit}|${serviceDate}|${allTripsForDay.length}|${maxUpdatedTs}`;
+    const etag = `W/"sched-${createHash("sha1").update(fingerprint).digest("hex").slice(0, 16)}"`;
+
+    // Always set cache headers regardless of cache hit/miss
+    reply.header("Cache-Control", "private, max-age=60, must-revalidate");
+    reply.header("ETag", etag);
+
+    const ifNoneMatch = req.headers["if-none-match"];
+    if (typeof ifNoneMatch === "string" && ifNoneMatch === etag) {
+      req.log.info(
+        { serviceDate, channels: channelParam, etag },
+        "console.schedules.snapshot.304"
+      );
+      return reply.code(304).send();
+    }
+
     const t0 = Date.now();
     const snapshot = await buildScheduleSnapshot(storage, serviceDate, allTripsForDay);
     const t1 = Date.now();
@@ -52,6 +81,7 @@ export function registerConsoleRoutes(app: FastifyInstance, storage: IStorage) {
         skippedPast: allTripsForDay.length - snapshot.length,
         ms: t1 - t0,
         serviceDate,
+        etag,
       },
       "console.schedules.snapshot.built"
     );
