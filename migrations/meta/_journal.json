@@ -71,6 +71,20 @@
       "when": 1774700000000,
       "tag": "0009_engine_compensation_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782000000000,
+      "tag": "0010_cashier_session_per_staff",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782000060000,
+      "tag": "0011_cargo_tracking_secret",
+      "breakpoints": true
     }
   ]
 }
