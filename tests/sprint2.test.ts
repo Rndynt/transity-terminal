@@ -266,6 +266,53 @@ describe("AppService.cancelBooking (S2-02)", () => {
 });
 
 // =====================================================================
+// S2-09: AppService.processPaymentWebhook — replay-safe idempotency
+// =====================================================================
+describe("AppService.processPaymentWebhook (S2-09)", () => {
+  it("replay event yang sudah success return 200 idempotent (bukan throw)", async () => {
+    // payment lookup → status='success' (sudah diproses)
+    pushSelectResult([{ id: "p1", bookingId: "b1", status: "success", providerRef: "PAY-X" }]);
+    storageMock.getBookingById.mockResolvedValue({ id: "b1", status: "confirmed" });
+
+    const { AppService } = await import("@modules/app/app.service");
+    const svc = new AppService(storageMock as any);
+    const result = await svc.processPaymentWebhook("PAY-X", "success");
+    expect(result).toEqual({ status: "success", bookingId: "b1", idempotent: true });
+  });
+
+  it("replay event yang sudah failed return 200 idempotent (bukan throw)", async () => {
+    pushSelectResult([{ id: "p1", bookingId: "b1", status: "failed", providerRef: "PAY-Y" }]);
+    storageMock.getBookingById.mockResolvedValue({ id: "b1", status: "cancelled" });
+
+    const { AppService } = await import("@modules/app/app.service");
+    const svc = new AppService(storageMock as any);
+    const result = await svc.processPaymentWebhook("PAY-Y", "failed");
+    expect(result).toEqual({ status: "failed", bookingId: "b1", idempotent: true });
+  });
+
+  it("event untuk providerRef yang tidak ada tetap throw (bukan replay)", async () => {
+    pushSelectResult([]);
+    const { AppService } = await import("@modules/app/app.service");
+    const svc = new AppService(storageMock as any);
+    await expect(svc.processPaymentWebhook("PAY-MISSING", "success")).rejects.toThrow(/not found/i);
+  });
+});
+
+// S2-09: HMAC signature verification (constant-time) — diuji terpisah dari
+// service karena ada di controller. Test memastikan crypto.timingSafeEqual
+// dipakai (bukan === string compare) dan length-check ada sebelum
+// timingSafeEqual (kalau tidak, timingSafeEqual throw).
+describe("Payment webhook HMAC (S2-09)", () => {
+  it("crypto.timingSafeEqual dipakai untuk konstan-waktu compare", async () => {
+    // Smoke check: import controller source dan verify signature regex muncul.
+    const fs = await import("fs/promises");
+    const src = await fs.readFile("server/modules/app/app.controller.ts", "utf8");
+    expect(src).toMatch(/timingSafeEqual/);
+    expect(src).toMatch(/length\s*!==\s*expectedSig\.length/);
+  });
+});
+
+// =====================================================================
 // S2-04 regression: compensationQueue DLQ contract
 // Memastikan getStuckCount export & alert format snake_case stable.
 // =====================================================================

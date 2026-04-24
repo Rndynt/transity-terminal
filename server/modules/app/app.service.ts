@@ -215,6 +215,8 @@ interface PaymentStatusResponse {
 interface WebhookResult {
   status: 'success' | 'failed';
   bookingId: string;
+  // S2-09: di-set true kalau webhook re-delivered (replay-safe response).
+  idempotent?: boolean;
 }
 
 export class AppService {
@@ -1104,7 +1106,22 @@ export class AppService {
   async processPaymentWebhook(providerRef: string, gatewayStatus: 'success' | 'failed'): Promise<WebhookResult> {
     const [payment] = await db.select().from(payments).where(eq(payments.providerRef, providerRef)).limit(1);
     if (!payment) throw new Error("Payment not found");
-    if (payment.status !== 'pending') throw new Error("Payment already processed");
+
+    // S2-09: replay-safe idempotency. Webhook payment gateway sering re-deliver
+    // event yang sama (network retry, manual replay dari dashboard). Untuk
+    // event yang sudah diproses, kita harus return 200 + idempotent flag
+    // supaya gateway tidak menganggap kita gagal terus dan akhirnya
+    // mark integration broken. Kebenaran finansial dijaga oleh status
+    // payment sendiri — tidak ada side-effect karena tidak masuk transaction.
+    if (payment.status !== 'pending') {
+      const replayBooking = await this.storage.getBookingById(payment.bookingId);
+      const finalStatus: 'success' | 'failed' = payment.status === 'success' ? 'success' : 'failed';
+      return {
+        status: finalStatus,
+        bookingId: replayBooking?.id ?? payment.bookingId,
+        idempotent: true,
+      };
+    }
 
     const booking = await this.storage.getBookingById(payment.bookingId);
     if (!booking) throw new Error("Booking not found");
