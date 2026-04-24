@@ -4,6 +4,7 @@ import { SchedulerService } from "./scheduler.service";
 import { TripsService } from "@modules/trips/trips.service";
 import { z } from "zod";
 import { requireFlag } from "@modules/rbac/rbac.middleware";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 import { webSocketService } from "@server/realtime/ws";
 
 export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage) {
@@ -47,14 +48,15 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
       parsed.data.baseId,
       parsed.data.exceptionDate,
       parsed.data.reason,
-      user?.id || null,
+      user?.id || undefined,
+      buildServiceContext(req),
     );
     reply.code(201).send(exception);
   });
 
   app.delete('/api/scheduler/exceptions/:id', { preHandler: [requireFlag('action.trip.close')] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
-    await schedulerService.removeException(id);
+    await schedulerService.removeException(id, buildServiceContext(req));
     reply.send({ success: true });
   });
 
@@ -92,7 +94,8 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
       parsed.data.disableBoarding,
       parsed.data.disableAlighting,
       parsed.data.reason,
-      user?.id || null,
+      user?.id || undefined,
+      buildServiceContext(req),
     );
     webSocketService.broadcast('STOP_EXCEPTION_CHANGED', {
       baseId: parsed.data.baseId,
@@ -105,7 +108,7 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
   app.delete('/api/scheduler/stop-exceptions/:id', { preHandler: [requireFlag('action.trip.close')] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const exception = await schedulerService.getStopExceptionById(id);
-    await schedulerService.removeStopException(id);
+    await schedulerService.removeStopException(id, buildServiceContext(req));
     if (exception) {
       webSocketService.broadcast('STOP_EXCEPTION_CHANGED', {
         baseId: exception.baseId,

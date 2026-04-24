@@ -105,6 +105,8 @@ await cargoService.createShipment(data, SYSTEM_CONTEXT);
 | `OutletsService` | createOutlet / updateOutlet / deleteOutlet | `master.outlets` |
 | `PriceRulesService` | create / update / delete | `master.price_rules` |
 | `TripPatternsService` | create / update / delete | `master.trip_patterns` |
+| `SchedulerService` | addException / removeException | `action.trip.close` |
+| `SchedulerService` | addStopException / removeStopException | `action.trip.close` |
 
 Read methods (`getAll*`, `getBy*`, `validateAndCalculateDiscount`,
 `findBestAutoApplicablePromo`, `getPaymentsByBooking`, `getPatternStops`,

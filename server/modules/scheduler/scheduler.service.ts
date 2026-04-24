@@ -8,6 +8,7 @@ import { scheduleExceptions, patternStops, scheduleStopExceptions } from "@share
 import { stops } from "@shared/schema/network";
 import { fireAndForget } from "@server/lib/consoleWebhook";
 import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 
 export type CalendarItem = {
   id: string;
@@ -186,7 +187,8 @@ export class SchedulerService {
     return map;
   }
 
-  async addException(baseId: string, exceptionDate: string, reason?: string, createdBy?: string) {
+  async addException(baseId: string, exceptionDate: string, reason: string | undefined, createdBy: string | undefined, ctx: ServiceContext) {
+    requirePermission(ctx, 'action.trip.close');
     const [inserted] = await db.insert(scheduleExceptions).values({
       baseId,
       exceptionDate,
@@ -217,11 +219,13 @@ export class SchedulerService {
     }
   }
 
-  async removeException(exceptionId: string) {
+  async removeException(exceptionId: string, ctx: ServiceContext) {
+    requirePermission(ctx, 'action.trip.close');
     await db.delete(scheduleExceptions).where(eq(scheduleExceptions.id, exceptionId));
   }
 
-  async addStopException(baseId: string, exceptionDate: string, stopId: string, disableBoarding: boolean, disableAlighting: boolean, reason?: string, createdBy?: string) {
+  async addStopException(baseId: string, exceptionDate: string, stopId: string, disableBoarding: boolean, disableAlighting: boolean, reason: string | undefined, createdBy: string | undefined, ctx: ServiceContext) {
+    requirePermission(ctx, 'action.trip.close');
     const [inserted] = await db.insert(scheduleStopExceptions).values({
       baseId,
       exceptionDate,
@@ -242,7 +246,8 @@ export class SchedulerService {
     return row || null;
   }
 
-  async removeStopException(exceptionId: string) {
+  async removeStopException(exceptionId: string, ctx: ServiceContext) {
+    requirePermission(ctx, 'action.trip.close');
     await db.delete(scheduleStopExceptions).where(eq(scheduleStopExceptions.id, exceptionId));
   }
 

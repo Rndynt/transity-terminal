@@ -510,6 +510,55 @@ describe("UnseatService — service-layer guard (Task #6)", () => {
 });
 
 // =====================================================================
+// SchedulerService — service-layer guard (Task #6)
+// Mutating methods: addException, removeException, addStopException,
+// removeStopException → semua butuh action.trip.close.
+// =====================================================================
+describe("SchedulerService — service-layer guard (Task #6)", () => {
+  function makeStorage() {
+    return {
+      getTripByBaseAndDate: vi.fn(async () => null),
+    };
+  }
+
+  it("addException tanpa ctx → 403 (PermissionDeniedError)", async () => {
+    const { SchedulerService } = await import("@modules/scheduler/scheduler.service");
+    const svc = new SchedulerService(makeStorage() as any);
+    await expect(svc.addException("base-1", "2026-05-01", undefined, undefined, undefined as any))
+      .rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+
+  it("addException dgn ctx tanpa flag → ditolak", async () => {
+    const { SchedulerService } = await import("@modules/scheduler/scheduler.service");
+    const svc = new SchedulerService(makeStorage() as any);
+    await expect(svc.addException("base-1", "2026-05-01", undefined, undefined, ctxWith("page.cso")))
+      .rejects.toMatchObject({ requiredFlags: ["action.trip.close"] });
+  });
+
+  it("removeException butuh action.trip.close", async () => {
+    const { SchedulerService } = await import("@modules/scheduler/scheduler.service");
+    const svc = new SchedulerService(makeStorage() as any);
+    await expect(svc.removeException("ex-1", undefined as any))
+      .rejects.toBeInstanceOf(PermissionDeniedError);
+    await expect(svc.removeException("ex-1", ctxWith("master.outlets")))
+      .rejects.toMatchObject({ requiredFlags: ["action.trip.close"] });
+  });
+
+  it("addStopException + removeStopException butuh action.trip.close", async () => {
+    const { SchedulerService } = await import("@modules/scheduler/scheduler.service");
+    const svc = new SchedulerService(makeStorage() as any);
+    await expect(svc.addStopException("base-1", "2026-05-01", "stop-1", true, false, undefined, undefined, undefined as any))
+      .rejects.toBeInstanceOf(PermissionDeniedError);
+    await expect(svc.addStopException("base-1", "2026-05-01", "stop-1", true, false, undefined, undefined, ctxWith("page.cso")))
+      .rejects.toMatchObject({ requiredFlags: ["action.trip.close"] });
+    await expect(svc.removeStopException("ex-1", undefined as any))
+      .rejects.toBeInstanceOf(PermissionDeniedError);
+    await expect(svc.removeStopException("ex-1", ctxWith("page.cso")))
+      .rejects.toMatchObject({ requiredFlags: ["action.trip.close"] });
+  });
+});
+
+// =====================================================================
 // HTTP-level propagation — pastikan PermissionDeniedError yang dilempar
 // service tetap muncul sebagai 403 ke klien (tidak ter-flatten ke 500
 // oleh catch-all controller). Ini menutup gap yang ditemukan architect
