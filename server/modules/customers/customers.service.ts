@@ -1,10 +1,11 @@
 import { db } from "@server/db";
-import { customerProfiles } from "@shared/schema";
+import { customerProfiles, type CustomerProfile, type InsertCustomerProfile } from "@shared/schema";
 import { eq, desc, ilike, or, sql } from "drizzle-orm";
 
 export class CustomersService {
-  private getRows(result: any): any[] {
-    return Array.isArray(result) ? result : (result as any).rows || [];
+  private getRows(result: unknown): Array<Record<string, unknown>> {
+    if (Array.isArray(result)) return result as Array<Record<string, unknown>>;
+    return ((result as { rows?: unknown[] })?.rows || []) as Array<Record<string, unknown>>;
   }
 
   async getAll(search?: string, limit?: number) {
@@ -55,20 +56,20 @@ export class CustomersService {
       phone: data.phone,
       email: data.email,
       idNumber: data.idNumber,
-      tag: (data.tag as any) || 'regular',
+      tag: (data.tag as InsertCustomerProfile['tag']) || 'regular',
       notes: data.notes,
     }).returning();
     return row;
   }
 
-  async update(id: string, data: Record<string, any>) {
-    const updates: any = { updatedAt: new Date() };
-    if (data.fullName) updates.fullName = data.fullName;
-    if (data.phone) updates.phone = data.phone;
-    if (data.email !== undefined) updates.email = data.email;
-    if (data.idNumber !== undefined) updates.idNumber = data.idNumber;
-    if (data.tag) updates.tag = data.tag;
-    if (data.notes !== undefined) updates.notes = data.notes;
+  async update(id: string, data: Record<string, unknown>) {
+    const updates: Partial<CustomerProfile> & { updatedAt: Date } = { updatedAt: new Date() };
+    if (data.fullName) updates.fullName = data.fullName as string;
+    if (data.phone) updates.phone = data.phone as string;
+    if (data.email !== undefined) updates.email = data.email as string | null;
+    if (data.idNumber !== undefined) updates.idNumber = data.idNumber as string | null;
+    if (data.tag) updates.tag = data.tag as CustomerProfile['tag'];
+    if (data.notes !== undefined) updates.notes = data.notes as string | null;
 
     await db.update(customerProfiles).set(updates).where(eq(customerProfiles.id, id));
     return { success: true };
