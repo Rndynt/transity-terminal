@@ -3,7 +3,7 @@ import { pgTable, text, uuid, timestamp, integer, numeric, boolean, jsonb } from
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { promoTypeEnum, voucherStatusEnum } from "./enums";
+import { promoTypeEnum, promoScopeEnum, voucherStatusEnum } from "./enums";
 
 export const promotions = pgTable("promotions", {
   id:                uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -14,6 +14,15 @@ export const promotions = pgTable("promotions", {
   discountValue:     numeric("discount_value", { precision: 12, scale: 2 }).notNull(),
   minPurchase:       numeric("min_purchase", { precision: 12, scale: 2 }).default('0'),
   maxDiscount:       numeric("max_discount", { precision: 12, scale: 2 }),
+  // Legacy scope columns — superseded by promotion_conditions table.
+  // Kept on the model so Drizzle's introspection matches the live DB
+  // (migration 0004_thin_xorn.sql). New code MUST read scope data from
+  // promotion_conditions; do not write to these columns. A future
+  // migration will drop them once backfill-promo-conditions.ts has been
+  // run on every operator deployment.
+  scope:             promoScopeEnum("scope").default('global'),
+  scopeRefId:        text("scope_ref_id"),
+  applicableChannels: text("applicable_channels").array(),
   usageLimit:        integer("usage_limit"),
   usageCount:        integer("usage_count").default(0),
   perUserLimit:      integer("per_user_limit"),

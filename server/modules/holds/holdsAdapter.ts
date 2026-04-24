@@ -94,19 +94,25 @@ export class HoldsAdapter {
         expiresAt: new Date(r.expires_at),
       };
     } catch (e) {
-      if (e instanceof EngineError && e.status === 409) {
-        return {
-          success: false,
-          reason: "SEAT_CONFLICT",
-          conflictSeats: e.details?.conflict_seats ?? [req.seatNo],
-        };
-      }
-      if (e instanceof EngineError && e.status === 422) {
-        return {
-          success: false,
-          reason: "INCOMPLETE_INVENTORY",
-          conflictSeats: [req.seatNo],
-        };
+      if (e instanceof EngineError) {
+        // Engine v1.1 maps INCOMPLETE_INVENTORY → 422, SEAT_CONFLICT → 409.
+        // Engine v1.0 returned 409 for both, distinguishing only via
+        // body.reason (which `call()` hoists into `e.code`). Route off
+        // `e.code` first so this adapter is forward- and backward-compat.
+        if (e.code === "INCOMPLETE_INVENTORY" || e.status === 422) {
+          return {
+            success: false,
+            reason: "INCOMPLETE_INVENTORY",
+            conflictSeats: e.details?.conflict_seats ?? [req.seatNo],
+          };
+        }
+        if (e.code === "SEAT_CONFLICT" || e.status === 409) {
+          return {
+            success: false,
+            reason: "SEAT_CONFLICT",
+            conflictSeats: e.details?.conflict_seats ?? [req.seatNo],
+          };
+        }
       }
       console.error("[HOLDS_ADAPTER] hold failed:", e);
       return {
