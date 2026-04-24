@@ -1,4 +1,4 @@
-import { and, eq, isNull, or, desc, inArray } from "drizzle-orm";
+import { and, eq, isNull, or, desc, inArray, type SQL } from "drizzle-orm";
 import { db } from "@server/db";
 import { priceRules } from "@shared/schema/inventory";
 import type { IStorage } from "@server/storage.interface";
@@ -15,6 +15,7 @@ import {
   deriveChannels,
   mapTripStatus,
   type SchedulePayloadTrip,
+  type ChannelFlags,
 } from "./consoleWebhook";
 import { fromZonedHHMMToUtc, ensureDefaultTimezone } from "@server/utils/timezone";
 
@@ -77,7 +78,7 @@ function extractFareFromRule(rule: unknown): number {
 
 async function resolveFarePerPerson(trip: Trip): Promise<number> {
   try {
-    const conds: any[] = [];
+    const conds: SQL[] = [];
     conds.push(eq(priceRules.tripId, trip.id));
     if (trip.patternId) conds.push(eq(priceRules.patternId, trip.patternId));
     const orCond = conds.length === 1 ? conds[0] : or(...conds);
@@ -111,7 +112,7 @@ export async function resolveFaresForTrips(
     new Set(trips.map((t) => t.patternId).filter((x): x is string => !!x))
   );
   try {
-    const conds: any[] = [];
+    const conds: SQL[] = [];
     if (tripIds.length) conds.push(inArray(priceRules.tripId, tripIds));
     if (patternIds.length) conds.push(inArray(priceRules.patternId, patternIds));
     if (conds.length === 0) return out;
@@ -183,7 +184,7 @@ export function buildScheduleTripPayloadSync(
   trip: Trip,
   deps: BuildPayloadDeps
 ): SchedulePayloadTrip | null {
-  const channels = deriveChannels(trip.channelFlags as any);
+  const channels = deriveChannels(trip.channelFlags as ChannelFlags | null | undefined);
 
   const sortedStops = [...deps.patternStops].sort((a, b) => a.stopSequence - b.stopSequence);
   const firstStop = sortedStops[0]?.stop ?? null;
@@ -202,7 +203,7 @@ export function buildScheduleTripPayloadSync(
   }
 
   const routeName =
-    (deps.pattern && (deps.pattern as any).name) ||
+    (deps.pattern && (deps.pattern as { name?: string }).name) ||
     [firstStop?.city, lastStop?.city].filter(Boolean).join(" - ") ||
     "Unknown route";
 
@@ -217,7 +218,7 @@ export function buildScheduleTripPayloadSync(
     serviceDate: dateStr(trip.serviceDate),
     departureTime: toHHMMSS(firstTime?.departAt) ?? toHHMMSS(trip.originDepartHHMM),
     arrivalTime: toHHMMSS(lastTime?.arriveAt),
-    vehicleClass: (deps.pattern as any)?.vehicleClass ?? null,
+    vehicleClass: (deps.pattern as { vehicleClass?: string | null } | null)?.vehicleClass ?? null,
     farePerPerson: deps.fare,
     capacity: trip.capacity ?? 0,
     availableSeats,
