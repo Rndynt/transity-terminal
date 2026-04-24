@@ -371,12 +371,18 @@ describe("BookingsService — service-layer guard (Task #6)", () => {
     ).rejects.toMatchObject({ requiredFlags: ["action.booking.cancel"] });
   });
 
-  it("cleanupExpiredPendingBookings tidak butuh ctx (cron internal)", async () => {
+  it("cleanupExpiredPendingBookings: caller cron tanpa arg lolos via SYSTEM_CONTEXT default", async () => {
     const { BookingsService } = await import("@modules/bookings/bookings.service");
     const svc = new BookingsService(makeStorage() as any);
-    // Tidak boleh throw PermissionDeniedError karena memang TANPA ctx-arg.
-    // Tetap akan jalan sampai mock DB select kosong → no-op.
+    // Tidak throw karena default arg = SYSTEM_CONTEXT (flags.has() always true).
     await expect(svc.cleanupExpiredPendingBookings()).resolves.toBeUndefined();
+  });
+
+  it("cleanupExpiredPendingBookings: ctx user biasa tanpa flag → 403 (tidak bisa dipanggil dari HTTP)", async () => {
+    const { BookingsService } = await import("@modules/bookings/bookings.service");
+    const svc = new BookingsService(makeStorage() as any);
+    await expect(svc.cleanupExpiredPendingBookings(ctxWith("page.cso")))
+      .rejects.toMatchObject({ requiredFlags: ["action.booking.cancel"] });
   });
 });
 

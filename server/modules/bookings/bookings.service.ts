@@ -19,7 +19,7 @@ import {
   calculateBookingTotal,
   generateBookingCode,
 } from "./booking.helpers";
-import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { requirePermission, SYSTEM_CONTEXT, type ServiceContext } from "@modules/rbac/rbac.guard";
 
 /**
  * S1-09 (Sprint 2): tiket dan booking adalah fondasi pendapatan, jadi
@@ -560,11 +560,14 @@ export class BookingsService {
   }
 
   /**
-   * Dipanggil oleh `server/scheduler.ts` (cron internal). Tidak butuh
-   * konteks user karena pelaku adalah sistem; pemanggil wajib lewat
-   * pemanggilan eksplisit di scheduler bukan via HTTP.
+   * Dipanggil oleh `server/scheduler.ts` (cron internal). Pelaku adalah
+   * sistem — wajib pakai `SYSTEM_CONTEXT`. `requirePermission` akan
+   * meloloskan SYSTEM_CONTEXT (lihat rbac.guard.ts) namun menolak ctx
+   * user biasa, sehingga method ini tidak bisa dipanggil dari HTTP
+   * controller secara tidak sengaja.
    */
-  async cleanupExpiredPendingBookings(): Promise<void> {
+  async cleanupExpiredPendingBookings(ctx: ServiceContext = SYSTEM_CONTEXT): Promise<void> {
+    requirePermission(ctx, 'action.booking.cancel');
     const now = new Date();
 
     const expiredPendingBookings = await db
