@@ -332,16 +332,27 @@ export class TripBasesService {
     // 4. Attempt creation. The unique constraint on trips(base_id,
     // service_date) is our race serializer — two concurrent calls both
     // reach here, one wins `createTrip`, the other sees 23505 and
-    // re-reads. We also clean up after ourselves: if createTrip wins
-    // but a downstream step fails (e.g. precomputeInventory), we delete
-    // the freshly-created trip so the next call re-attempts from a clean
-    // slate instead of returning a row with no inventory or no legs.
+    // re-reads the winner's row. If any step *after* createTrip throws
+    // (bulkUpsertTripStopTimes, deriveLegsFromTrip, precomputeInventory),
+    // the new trip row stays in the DB as an orphan: no legs, no stop
+    // times, no inventory. This is latent behavior that has existed
+    // since the method was written; PR #11 tried to clean it up via
+    // `storage.deleteTrip` and introduced a worse bug — `deleteTrip` is
+    // a soft-delete but neither the `uniq_trip_base_per_day` unique
+    // index nor `getTripByBaseAndDate` filters on `deleted_at`, so the
+    // cleanup permanently poisoned the (base_id, service_date) slot.
+    // Proper fix requires either (a) threading a tx through every step,
+    // or (b) hard-deleting the orphan with explicit cascade on child
+    // tables, or (c) making the unique index partial on deleted_at IS
+    // NULL. None of those fit a regression hotfix, so we back off to
+    // the pre-#11 behavior: let the orphan stay. The defense-in-depth
+    // `deletedAt` filter on `getTripByBaseAndDate` (see
+    // scheduling.repository.ts) ensures any unrelated soft-delete on a
+    // trip does not cause this method to hand out a cancelled id.
     let tripIdResolved: string;
     let isFreshlyCreated = false;
-    let createdTripId: string | null = null;
     try {
       const trip = await this.storage.createTrip(tripData); // race point — unique (base_id, service_date)
-      createdTripId = trip.id;
 
       if (tripStopTimesData.length > 0) {
         await this.storage.bulkUpsertTripStopTimes(
@@ -357,29 +368,16 @@ export class TripBasesService {
       isFreshlyCreated = true;
     } catch (error) {
       if (isPgUniqueViolation(error)) {
-        // Race-loss at createTrip: another request committed first.
-        // If we somehow ended up with a partially-created row (the
-        // 23505 came from a later step instead of createTrip — should
-        // not happen but is cheap to defend against), scrub it.
-        if (createdTripId) {
-          await this.storage.deleteTrip(createdTripId).catch(err => {
-            console.warn(`[tripBases] cleanup failed for orphan trip ${createdTripId}:`, (err as Error).message);
-          });
-        }
+        // Race-loss at createTrip: another concurrent request committed
+        // first. Re-read and return the winner's id. The winner row is
+        // guaranteed to be `deletedAt IS NULL` here because createTrip
+        // only inserts live rows.
         const winnerTrip = await this.storage.getTripByBaseAndDate(baseId, serviceDate);
         if (!winnerTrip) {
           throw new Error(`Failed to materialize trip for base ${baseId} on ${serviceDate}: unique constraint violation but no existing trip found`);
         }
         tripIdResolved = winnerTrip.id;
       } else {
-        // Non-race failure after createTrip: delete the orphan so the
-        // next caller doesn't inherit a half-materialized trip (no
-        // inventory / no legs = ghost trip on the seatmap).
-        if (createdTripId) {
-          await this.storage.deleteTrip(createdTripId).catch(err => {
-            console.warn(`[tripBases] cleanup failed for orphan trip ${createdTripId}:`, (err as Error).message);
-          });
-        }
         throw error;
       }
     }

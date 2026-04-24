@@ -806,10 +806,19 @@ export class SchedulingRepository {
   }
 
   async getTripByBaseAndDate(baseId: string, serviceDate: string): Promise<Trip | undefined> {
+    // Skip soft-deleted rows: `deleteTrip` only flips `deletedAt` +
+    // `status='cancelled'` and does NOT free the unique slot on
+    // `uniq_trip_base_per_day`. Without this filter, any caller that
+    // resolves a trip by (base, date) would inherit a cancelled
+    // ghost trip — seats all released, legs soft-deleted, status
+    // cancelled — as if it were live. All callers of this method use
+    // the returned id to read live data (seatmap, manifest, emission
+    // targets), so handing back a soft-deleted id is always wrong.
     const [trip] = await db.select().from(trips)
       .where(and(
         eq(trips.baseId, baseId),
-        eq(trips.serviceDate, serviceDate)
+        eq(trips.serviceDate, serviceDate),
+        isNull(trips.deletedAt),
       ));
     return trip;
   }
