@@ -27,6 +27,31 @@ async function emitTripWebhook(
   }
 }
 
+/**
+ * Detects PostgreSQL `unique_violation` (SQLSTATE 23505). node-pg and
+ * neon-serverless surface it on `err.code`; drizzle sometimes wraps the
+ * driver error and the code ends up on `err.cause.code` instead. We
+ * keep the old message-match as a last-resort fallback, but the code
+ * check is the deterministic path — relying on the human-readable
+ * message was the bug this helper replaces.
+ */
+function isPgUniqueViolation(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as { code?: unknown }).code;
+  if (code === "23505") return true;
+  const causeCode = (err as { cause?: { code?: unknown } }).cause?.code;
+  if (causeCode === "23505") return true;
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    return (
+      msg.includes("duplicate key") ||
+      msg.includes("unique constraint") ||
+      msg.includes("unique violation")
+    );
+  }
+  return false;
+}
+
 export class TripBasesService {
   private tripLegsService: TripLegsService;
   private seatInventoryService: SeatInventoryService;
@@ -230,120 +255,131 @@ export class TripBasesService {
       throw new Error('base-not-eligible');
     }
 
-    // 3. Begin transaction to create trip
+    // 3. Prepare the row data up-front (no DB writes yet) so we can treat
+    // the create-trip step as the single race-point. All unique keys on
+    // `trips` funnel through the one insert on line marked below.
+    const patternStops = await this.storage.getPatternStops(base.patternId);
+
+    let vehicleId = base.defaultVehicleId;
+    if (!vehicleId) {
+      const pattern = await this.storage.getTripPatternById(base.patternId);
+      if (pattern?.defaultLayoutId) {
+        const vehicles = await this.storage.getVehicles();
+        const compatibleVehicle = vehicles.find(v => v.layoutId === pattern.defaultLayoutId);
+        vehicleId = compatibleVehicle?.id || null;
+      }
+      if (!vehicleId) {
+        throw new Error('No suitable vehicle found for trip base. Please assign a default vehicle to the trip base or ensure vehicles exist for the pattern layout.');
+      }
+    }
+
+    let capacity = base.capacity || null;
+    if (!capacity) {
+      const vehicle = await this.storage.getVehicleById(vehicleId);
+      capacity = vehicle?.capacity || null;
+    }
+    if (!capacity && base.defaultLayoutId) {
+      const layout = await this.storage.getLayoutById(base.defaultLayoutId);
+      capacity = layout?.seatMap ? (layout.seatMap as any[]).length : null;
+    }
+
+    const timestamps = this.computeDefaultTimestamps(base, serviceDate);
+    const firstStopTime = timestamps.find(t => t.stopSequence === 1);
+    const timezone = ensureDefaultTimezone(base.timezone);
+    const originDepartHHMM = firstStopTime?.departAt
+      ? formatTimeInTZ(firstStopTime.departAt, timezone)
+      : null;
+
+    const [pattern, driver, vehicle] = await Promise.all([
+      this.storage.getTripPatternById(base.patternId),
+      base.defaultDriverId ? this.storage.getDriverById(base.defaultDriverId) : null,
+      this.storage.getVehicleById(vehicleId),
+    ]);
+
+    const tripData: InsertTrip = {
+      patternId: base.patternId,
+      serviceDate,
+      vehicleId,
+      layoutId: base.defaultLayoutId,
+      capacity: capacity || 50,
+      status: 'scheduled',
+      channelFlags: base.channelFlags as any,
+      baseId: base.id,
+      driverId: base.defaultDriverId,
+      originDepartHHMM,
+      snapRouteName: pattern?.name || null,
+      snapRouteCode: pattern?.code || null,
+      snapDriverName: driver?.name || null,
+      snapVehiclePlate: vehicle?.plate || null,
+    };
+
+    const tripStopTimesData = timestamps.map(ts => {
+      const patternStop = patternStops.find(ps => ps.stopSequence === ts.stopSequence);
+      if (!patternStop) {
+        throw new Error(`Pattern stop not found for sequence ${ts.stopSequence}`);
+      }
+      return {
+        stopId: patternStop.stopId,
+        stopSequence: ts.stopSequence,
+        arriveAt: ts.arriveAt,
+        departAt: ts.departAt,
+        dwellSeconds: patternStop.dwellSeconds || 0,
+        boardingAllowed: null,
+        alightingAllowed: null,
+      };
+    });
+
+    // 4. Attempt creation. The unique constraint on trips(base_id,
+    // service_date) is our race serializer — two concurrent calls both
+    // reach here, one wins `createTrip`, the other sees 23505 and
+    // re-reads. We also clean up after ourselves: if createTrip wins
+    // but a downstream step fails (e.g. precomputeInventory), we delete
+    // the freshly-created trip so the next call re-attempts from a clean
+    // slate instead of returning a row with no inventory or no legs.
     let tripIdResolved: string;
     let isFreshlyCreated = false;
+    let createdTripId: string | null = null;
     try {
-      // Get pattern stops for this base
-      const patternStops = await this.storage.getPatternStops(base.patternId);
-      
-      // Ensure we have a valid vehicle ID
-      let vehicleId = base.defaultVehicleId;
-      if (!vehicleId) {
-        // Get pattern's default layout to find a vehicle
-        const pattern = await this.storage.getTripPatternById(base.patternId);
-        if (pattern?.defaultLayoutId) {
-          // Find a vehicle that uses this layout
-          const vehicles = await this.storage.getVehicles();
-          const compatibleVehicle = vehicles.find(v => v.layoutId === pattern.defaultLayoutId);
-          vehicleId = compatibleVehicle?.id || null;
-        }
-        
-        if (!vehicleId) {
-          throw new Error('No suitable vehicle found for trip base. Please assign a default vehicle to the trip base or ensure vehicles exist for the pattern layout.');
-        }
-      }
+      const trip = await this.storage.createTrip(tripData); // race point — unique (base_id, service_date)
+      createdTripId = trip.id;
 
-      // Determine capacity
-      let capacity = base.capacity || null;
-      if (!capacity) {
-        const vehicle = await this.storage.getVehicleById(vehicleId);
-        capacity = vehicle?.capacity || null;
-      }
-      if (!capacity && base.defaultLayoutId) {
-        const layout = await this.storage.getLayoutById(base.defaultLayoutId);
-        capacity = layout?.seatMap ? (layout.seatMap as any[]).length : null;
-      }
-
-      // Extract origin departure time for sorting using base timezone
-      const timestamps = this.computeDefaultTimestamps(base, serviceDate);
-      const firstStopTime = timestamps.find(t => t.stopSequence === 1);
-      const timezone = ensureDefaultTimezone(base.timezone);
-      const originDepartHHMM = firstStopTime?.departAt ? 
-        formatTimeInTZ(firstStopTime.departAt, timezone) : null;
-
-      const [pattern, driver, vehicle] = await Promise.all([
-        this.storage.getTripPatternById(base.patternId),
-        base.defaultDriverId ? this.storage.getDriverById(base.defaultDriverId) : null,
-        this.storage.getVehicleById(vehicleId),
-      ]);
-
-      const tripData: InsertTrip = {
-        patternId: base.patternId,
-        serviceDate,
-        vehicleId,
-        layoutId: base.defaultLayoutId,
-        capacity: capacity || 50,
-        status: 'scheduled',
-        channelFlags: base.channelFlags as any,
-        baseId: base.id,
-        driverId: base.defaultDriverId,
-        originDepartHHMM,
-        snapRouteName: pattern?.name || null,
-        snapRouteCode: pattern?.code || null,
-        snapDriverName: driver?.name || null,
-        snapVehiclePlate: vehicle?.plate || null,
-      };
-
-      const trip = await this.storage.createTrip(tripData);
-      
-      // Create trip stop times from defaultStopTimes
-      const tripStopTimesData = timestamps.map(ts => {
-        const patternStop = patternStops.find(ps => ps.stopSequence === ts.stopSequence);
-        if (!patternStop) {
-          throw new Error(`Pattern stop not found for sequence ${ts.stopSequence}`);
-        }
-        
-        return {
-          tripId: trip.id,
-          stopId: patternStop.stopId,
-          stopSequence: ts.stopSequence,
-          arriveAt: ts.arriveAt,
-          departAt: ts.departAt,
-          dwellSeconds: patternStop.dwellSeconds || 0,
-          boardingAllowed: null, // inherit from pattern
-          alightingAllowed: null // inherit from pattern
-        };
-      });
-
-      // Bulk upsert trip stop times
       if (tripStopTimesData.length > 0) {
-        await this.storage.bulkUpsertTripStopTimes(trip.id, tripStopTimesData);
+        await this.storage.bulkUpsertTripStopTimes(
+          trip.id,
+          tripStopTimesData.map(r => ({ ...r, tripId: trip.id })),
+        );
       }
 
-      // Derive trip legs
       await this.tripLegsService.deriveLegsFromTrip(trip);
-
       await this.seatInventoryService.precomputeInventory(trip);
 
       tripIdResolved = trip.id;
       isFreshlyCreated = true;
     } catch (error) {
-      // Handle race condition: if unique constraint violation, fetch the existing trip
-      if (error instanceof Error && (
-        error.message.includes('unique') ||
-        error.message.includes('duplicate') ||
-        error.message.includes('violates unique constraint')
-      )) {
-        // Another request already created the trip, fetch it
-        const existingTrip = await this.storage.getTripByBaseAndDate(baseId, serviceDate);
-        if (existingTrip) {
-          tripIdResolved = existingTrip.id;
-        } else {
-          // If still not found, there might be a deeper issue
+      if (isPgUniqueViolation(error)) {
+        // Race-loss at createTrip: another request committed first.
+        // If we somehow ended up with a partially-created row (the
+        // 23505 came from a later step instead of createTrip — should
+        // not happen but is cheap to defend against), scrub it.
+        if (createdTripId) {
+          await this.storage.deleteTrip(createdTripId).catch(err => {
+            console.warn(`[tripBases] cleanup failed for orphan trip ${createdTripId}:`, (err as Error).message);
+          });
+        }
+        const winnerTrip = await this.storage.getTripByBaseAndDate(baseId, serviceDate);
+        if (!winnerTrip) {
           throw new Error(`Failed to materialize trip for base ${baseId} on ${serviceDate}: unique constraint violation but no existing trip found`);
         }
+        tripIdResolved = winnerTrip.id;
       } else {
+        // Non-race failure after createTrip: delete the orphan so the
+        // next caller doesn't inherit a half-materialized trip (no
+        // inventory / no legs = ghost trip on the seatmap).
+        if (createdTripId) {
+          await this.storage.deleteTrip(createdTripId).catch(err => {
+            console.warn(`[tripBases] cleanup failed for orphan trip ${createdTripId}:`, (err as Error).message);
+          });
+        }
         throw error;
       }
     }
