@@ -2,6 +2,7 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import { PaymentsService } from "./payments.service";
 import { IStorage } from "@server/storage.interface";
 import { insertPaymentSchema } from "@shared/schema";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 
 export class PaymentsController {
   private paymentsService: PaymentsService;
@@ -18,7 +19,7 @@ export class PaymentsController {
 
   async create(req: FastifyRequest, reply: FastifyReply) {
     const validatedData = insertPaymentSchema.parse(req.body);
-    const payment = await this.paymentsService.createPayment(validatedData);
+    const payment = await this.paymentsService.createPayment(validatedData, buildServiceContext(req));
     reply.code(201).send(payment);
   }
 }

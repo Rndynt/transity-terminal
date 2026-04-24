@@ -19,7 +19,26 @@ import {
   calculateBookingTotal,
   generateBookingCode,
 } from "./booking.helpers";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 
+/**
+ * S1-09 (Sprint 2): tiket dan booking adalah fondasi pendapatan, jadi
+ * setiap method yang membuat / membatalkan booking memanggil
+ * `requirePermission(ctx, ...)` agar guard tetap berjalan walaupun
+ * service di-import langsung dari modul lain.
+ *
+ * Pemetaan flag:
+ *   - createBooking, createPendingBooking → `action.booking.create`
+ *   - releasePendingBooking               → `action.booking.cancel`
+ *   - cleanupExpiredPendingBookings       → cron internal, wajib pakai
+ *     `SYSTEM_CONTEXT` (lihat `server/scheduler.ts`).
+ *
+ * Method baca (`getAllBookings`, `getBookingById`, `getPendingBookings`,
+ * `createHold`, `releaseHold`, `isHoldOwner`) tidak di-guard di sini
+ * karena route HTTP-nya sudah diperiksa oleh `requireFlag`. Hold/release
+ * di-guard di sisi route saja supaya customer-app yang sudah lewat
+ * `requireAppAuth` tetap bisa pegang kursi tanpa menyentuh staff RBAC.
+ */
 export class BookingsService {
   private holdsService: HoldsService;
   private atomicHoldService: AtomicHoldService;
@@ -99,9 +118,11 @@ export class BookingsService {
     bookingData: InsertBooking,
     passengers: { fullName: string; phone?: string; idNumber?: string; seatNo: string }[],
     payment: { method: 'cash' | 'qr' | 'ewallet' | 'bank'; amount: number },
-    idempotencyKey?: string,
-    promoCode?: string
+    idempotencyKey: string | undefined,
+    promoCode: string | undefined,
+    ctx: ServiceContext
   ): Promise<{ booking: Booking; printPayload: any }> {
+    requirePermission(ctx, "action.booking.create");
 
     // B1: Idempotency — if same key was already used, return the existing booking
     // unchanged. This protects against double-charge from network retries.
@@ -342,8 +363,10 @@ export class BookingsService {
   async createPendingBooking(
     bookingData: InsertBooking,
     passengers: { fullName: string; phone?: string; idNumber?: string; seatNo: string }[],
-    operatorId: string
+    operatorId: string,
+    ctx: ServiceContext
   ): Promise<{ booking: Booking; pendingExpiresAt: Date }> {
+    requirePermission(ctx, "action.booking.create");
     const { getConfig } = await import("../../config");
     const config = getConfig();
     
@@ -451,7 +474,8 @@ export class BookingsService {
     return await db.select().from(bookingsTable).where(and(...conditions));
   }
 
-  async releasePendingBooking(bookingId: string, operatorId: string): Promise<void> {
+  async releasePendingBooking(bookingId: string, operatorId: string, ctx: ServiceContext): Promise<void> {
+    requirePermission(ctx, "action.booking.cancel");
     const booking = await this.storage.getBookingById(bookingId);
     if (!booking) {
       throw new Error(`Booking with id ${bookingId} not found`);
@@ -535,6 +559,11 @@ export class BookingsService {
     }
   }
 
+  /**
+   * Dipanggil oleh `server/scheduler.ts` (cron internal). Tidak butuh
+   * konteks user karena pelaku adalah sistem; pemanggil wajib lewat
+   * pemanggilan eksplisit di scheduler bukan via HTTP.
+   */
   async cleanupExpiredPendingBookings(): Promise<void> {
     const now = new Date();
 

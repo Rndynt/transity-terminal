@@ -3,6 +3,7 @@ import { PromosService } from "./promos.service";
 import { IStorage } from "@server/storage.interface";
 import { insertPromotionSchema, promoConditionInputSchema } from "@shared/schema";
 import { z } from "zod";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 
 export class PromosController {
   private service: PromosService;
@@ -24,20 +25,20 @@ export class PromosController {
 
   async createPromotion(req: FastifyRequest, reply: FastifyReply) {
     const data = insertPromotionSchema.parse(req.body);
-    const promo = await this.service.createPromotion(data);
+    const promo = await this.service.createPromotion(data, buildServiceContext(req));
     reply.code(201).send(promo);
   }
 
   async updatePromotion(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
     const data = insertPromotionSchema.partial().parse(req.body);
-    const promo = await this.service.updatePromotion(id, data);
+    const promo = await this.service.updatePromotion(id, data, buildServiceContext(req));
     reply.send(promo);
   }
 
   async deletePromotion(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
-    await this.service.deletePromotion(id);
+    await this.service.deletePromotion(id, buildServiceContext(req));
     reply.code(204).send();
   }
 
@@ -50,7 +51,7 @@ export class PromosController {
   async replacePromoConditions(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
     const conditions = z.array(promoConditionInputSchema).parse(req.body);
-    const result = await this.service.replaceConditions(id, conditions);
+    const result = await this.service.replaceConditions(id, conditions, buildServiceContext(req));
     reply.send(result);
   }
 
@@ -111,19 +112,19 @@ export class PromosController {
       assignedTo: z.string().optional()
     });
     const data = schema.parse(req.body);
-    const vouchers = await this.service.generateVouchers(data.promoId, data.count, data.prefix, data.assignedTo);
+    const vouchers = await this.service.generateVouchers(data.promoId, data.count, data.prefix, data.assignedTo, buildServiceContext(req));
     reply.code(201).send(vouchers);
   }
 
   async revokeVoucher(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
-    const voucher = await this.service.revokeVoucher(id);
+    const voucher = await this.service.revokeVoucher(id, buildServiceContext(req));
     reply.send(voucher);
   }
 
   async deleteVoucher(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
-    await this.service.deleteVoucher(id);
+    await this.service.deleteVoucher(id, buildServiceContext(req));
     reply.code(204).send();
   }
 

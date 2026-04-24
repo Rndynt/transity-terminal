@@ -2,6 +2,7 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import { TripPatternsService } from "./tripPatterns.service";
 import { IStorage } from "@server/storage.interface";
 import { insertTripPatternSchema } from "@shared/schema";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 
 export class TripPatternsController {
   private tripPatternsService: TripPatternsService;
@@ -29,20 +30,20 @@ export class TripPatternsController {
 
   async create(req: FastifyRequest, reply: FastifyReply) {
     const validatedData = insertTripPatternSchema.parse(req.body);
-    const pattern = await this.tripPatternsService.createTripPattern(validatedData);
+    const pattern = await this.tripPatternsService.createTripPattern(validatedData, buildServiceContext(req));
     reply.code(201).send(pattern);
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
     const validatedData = insertTripPatternSchema.partial().parse(req.body);
-    const pattern = await this.tripPatternsService.updateTripPattern(id, validatedData);
+    const pattern = await this.tripPatternsService.updateTripPattern(id, validatedData, buildServiceContext(req));
     reply.send(pattern);
   }
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
-    await this.tripPatternsService.deleteTripPattern(id);
+    await this.tripPatternsService.deleteTripPattern(id, buildServiceContext(req));
     reply.code(204).send();
   }
 

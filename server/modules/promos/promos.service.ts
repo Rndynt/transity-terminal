@@ -1,6 +1,17 @@
 import { IStorage } from "@server/storage.interface";
 import { type Promotion, type Voucher, type InsertPromotion, type InsertVoucher, type PromoCondition, type PromoConditionInput, type InsertBookingPromoApplication } from "@shared/schema";
 import crypto from "crypto";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+
+/**
+ * S1-09 (Sprint 2): semua mutasi promo & voucher memanggil
+ * `requirePermission(ctx, 'master.promos')`. Method read (`getAll*`,
+ * `getById*`, `validateAndCalculateDiscount`, `findBestAutoApplicablePromo`,
+ * `listScopedPromotions`, `persistApplications`, `markApplicationsUsed`,
+ * `markUsed`) tidak di-guard karena dipanggil dari booking flow internal
+ * (sudah di-guard oleh action.booking.create) dan oleh customer-app yang
+ * memang boleh membaca daftar promo. Lihat `server/modules/rbac/README.md`.
+ */
 
 export interface PromoApplicationItem {
   promoId: string;
@@ -46,13 +57,15 @@ export class PromosService {
     return promo;
   }
 
-  async createPromotion(data: InsertPromotion): Promise<Promotion> {
+  async createPromotion(data: InsertPromotion, ctx: ServiceContext): Promise<Promotion> {
+    requirePermission(ctx, "master.promos");
     const existing = await this.storage.getPromotionByCode(data.code);
     if (existing) throw new Error('Kode promo sudah digunakan');
     return this.storage.createPromotion(data);
   }
 
-  async updatePromotion(id: string, data: Partial<InsertPromotion>): Promise<Promotion> {
+  async updatePromotion(id: string, data: Partial<InsertPromotion>, ctx: ServiceContext): Promise<Promotion> {
+    requirePermission(ctx, "master.promos");
     if (data.code) {
       const existing = await this.storage.getPromotionByCode(data.code);
       if (existing && existing.id !== id) throw new Error('Kode promo sudah digunakan');
@@ -60,7 +73,8 @@ export class PromosService {
     return this.storage.updatePromotion(id, data);
   }
 
-  async deletePromotion(id: string): Promise<void> {
+  async deletePromotion(id: string, ctx: ServiceContext): Promise<void> {
+    requirePermission(ctx, "master.promos");
     return this.storage.deletePromotion(id);
   }
 
@@ -68,7 +82,8 @@ export class PromosService {
     return this.storage.getPromoConditions(promoId);
   }
 
-  async replaceConditions(promoId: string, conditions: PromoConditionInput[]): Promise<PromoCondition[]> {
+  async replaceConditions(promoId: string, conditions: PromoConditionInput[], ctx: ServiceContext): Promise<PromoCondition[]> {
+    requirePermission(ctx, "master.promos");
     const promo = await this.storage.getPromotionById(promoId);
     if (!promo) throw new Error('Promotion not found');
     return this.storage.replacePromoConditions(promoId, conditions);
@@ -84,7 +99,8 @@ export class PromosService {
     return v;
   }
 
-  async generateVouchers(promoId: string, count: number, prefix?: string, assignedTo?: string): Promise<Voucher[]> {
+  async generateVouchers(promoId: string, count: number, prefix: string | undefined, assignedTo: string | undefined, ctx: ServiceContext): Promise<Voucher[]> {
+    requirePermission(ctx, "master.promos");
     const promo = await this.storage.getPromotionById(promoId);
     if (!promo) throw new Error('Promotion not found');
 
@@ -120,11 +136,13 @@ export class PromosService {
     return results;
   }
 
-  async revokeVoucher(id: string): Promise<Voucher> {
+  async revokeVoucher(id: string, ctx: ServiceContext): Promise<Voucher> {
+    requirePermission(ctx, "master.promos");
     return this.storage.updateVoucher(id, { status: 'revoked' } as any);
   }
 
-  async deleteVoucher(id: string): Promise<void> {
+  async deleteVoucher(id: string, ctx: ServiceContext): Promise<void> {
+    requirePermission(ctx, "master.promos");
     return this.storage.deleteVoucher(id);
   }
 
