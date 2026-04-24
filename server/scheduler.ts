@@ -12,6 +12,12 @@ const LOCK_ORPHAN_REFS   = 8240_002;
 const LOCK_PENDING_BOOK  = 8240_003;
 const LOCK_SNAPSHOT_PUSH = 8240_004;
 const LOCK_ENGINE_COMP   = 8240_005;
+// S2-08: notifications cleanup berjalan jauh lebih jarang dari hold reaper.
+// Lock terpisah supaya cleanup yang lambat (DELETE besar pertama kali) tidak
+// menahan lock cleanup hold yang dipakai tiap menit.
+const LOCK_NOTIF_CLEAN   = 8240_006;
+// Interval cleanup notifikasi: 6 jam default (4× per hari sudah cukup).
+const NOTIF_CLEANUP_INTERVAL_MS = parseInt(process.env.NOTIF_CLEANUP_INTERVAL_MS || `${6 * 60 * 60 * 1000}`, 10);
 
 // IMPORTANT: session-level pg advisory locks are bound to a *single
 // connection*. The default `db` client uses a connection pool — two separate
@@ -57,6 +63,7 @@ export class Scheduler {
   private bookingsService: BookingsService;
   private intervalId: NodeJS.Timeout | null = null;
   private snapshotIntervalId: NodeJS.Timeout | null = null;
+  private notifCleanupIntervalId: NodeJS.Timeout | null = null;
 
   constructor() {
     this.bookingsService = new BookingsService(storage);
@@ -221,6 +228,31 @@ export class Scheduler {
 
     console.log('[SCHEDULER] Cleanup scheduler started (runs every 1 minute)');
 
+    // S2-08: notifications cleanup. Berjalan jauh lebih jarang (default 6 jam)
+    // karena DELETE TTL tidak perlu high-frequency dan akan berat di run
+    // pertama setelah deploy dengan tabel besar.
+    if (NOTIF_CLEANUP_INTERVAL_MS > 0) {
+      const runNotifCleanup = async () => {
+        try {
+          await withAdvisoryLock(LOCK_NOTIF_CLEAN, async () => {
+            const { NotificationsService } = await import('@modules/notifications/notifications.service');
+            const svc = new NotificationsService();
+            const deleted = await svc.cleanupOldNotifications();
+            if (deleted > 0) {
+              console.log(`[SCHEDULER] notifications cleanup: ${deleted} row dihapus (TTL read=${process.env.NOTIF_READ_TTL_DAYS || 90}d, unread=${process.env.NOTIF_UNREAD_TTL_DAYS || 180}d)`);
+            }
+          });
+        } catch (e) {
+          console.error('[SCHEDULER] notifications cleanup gagal:', e);
+        }
+      };
+      this.notifCleanupIntervalId = setInterval(runNotifCleanup, NOTIF_CLEANUP_INTERVAL_MS);
+      console.log(`[SCHEDULER] Notifications cleanup started (every ${Math.round(NOTIF_CLEANUP_INTERVAL_MS / 1000 / 60)} minutes)`);
+      // Kick once on startup supaya backlog dari deploy sebelumnya langsung
+      // dibersihkan tanpa menunggu interval pertama.
+      void runNotifCleanup();
+    }
+
     // Run immediately on start (only if Node still owns reaping).
     if (!engineOwnsHolds) {
       this.cleanupExpiredHolds();
@@ -254,6 +286,11 @@ export class Scheduler {
       clearInterval(this.snapshotIntervalId);
       this.snapshotIntervalId = null;
       console.log('[SCHEDULER] Schedule snapshot push stopped');
+    }
+    if (this.notifCleanupIntervalId) {
+      clearInterval(this.notifCleanupIntervalId);
+      this.notifCleanupIntervalId = null;
+      console.log('[SCHEDULER] Notifications cleanup stopped');
     }
   }
 }
