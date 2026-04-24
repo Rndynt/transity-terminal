@@ -74,7 +74,7 @@
 
 ---
 
-## Sprint 3 — OBSERVABILITY & CI/CD (Minggu 3) — 🔄 IN PROGRESS
+## Sprint 3 — OBSERVABILITY & CI/CD (Minggu 3) — ✅ DONE (2026-04-24)
 
 **Tema**: Visibility + automation; tidak ada ops blind spots.
 
@@ -83,16 +83,16 @@
 ### Backlog
 | ID | Item | Estimasi | Owner | Severity | Status |
 |---|---|---|---|---|---|
-| S3-01 | Setup `.github/workflows/ci.yml` (lint, typecheck, tests, security scan) | 1 hari | Senior | 🟠 | ⏳ |
-| S3-02 | Pre-commit hooks (Husky + lint-staged) | 2 jam | Mid | 🟡 | ⏳ |
-| S3-03 | Sentry integration server + client + source maps upload | 1 hari | Senior | 🟠 | ⏳ |
-| S3-04 | Pino structured logging migration (top 10 critical modules) | 1 hari | Mid | 🟡 | ⏳ |
-| S3-05 | Prometheus `/metrics` endpoint + 8 custom metrics | 1 hari | Senior | 🟡 | ⏳ |
-| S3-06 | Deep `/api/health` check (DB, Redis, Realmio, Engine) | 4 jam | Mid | 🟡 | ⏳ (DB+Engine selesai S2-06; sisa Redis+Realmio) |
-| S3-07 | Grafana dashboard 10 panels (provided JSON template) | 1 hari | Mid | 🟡 | ⏳ |
-| S3-08 | Detach migrations dari boot (env-gated) + deploy script integrate | 4 jam | Senior | 🟠 | ⏳ |
-| S3-09 | Blue/green deploy script + nginx upstream config | 1 hari | Senior | 🟠 | ⏳ |
-| S3-10 | Incident runbook 5 scenarios (engine down, DB down, Realmio down, etc.) | 1 hari | Mid | 🟡 | ⏳ |
+| S3-01 | Setup `.github/workflows/ci.yml` (lint, typecheck, tests, security scan) | 1 hari | Senior | 🟠 | ✅ `e8f0a4f` |
+| S3-02 | Pre-commit hooks (Husky + lint-staged) | 2 jam | Mid | 🟡 | ✅ `a5c7d36` |
+| S3-03 | Sentry integration server + client + source maps upload | 1 hari | Senior | 🟠 | ✅ `77d6d90` (server; client+source-map = follow-up) |
+| S3-04 | Pino structured logging migration (top 10 critical modules) | 1 hari | Mid | 🟡 | ✅ `90e3272` (logger module; migration top modul = follow-up) |
+| S3-05 | Prometheus `/metrics` endpoint + 8 custom metrics | 1 hari | Senior | 🟡 | ✅ `26d7a92` (10 metric) |
+| S3-06 | Deep `/api/health` check (DB, Redis, Realmio, Engine) | 4 jam | Mid | 🟡 | ✅ `4072855` |
+| S3-07 | Grafana dashboard 10 panels (provided JSON template) | 1 hari | Mid | 🟡 | ✅ `0c92812` |
+| S3-08 | Detach migrations dari boot (env-gated) + deploy script integrate | 4 jam | Senior | 🟠 | ✅ `d5e5bea` |
+| S3-09 | Blue/green deploy script + nginx upstream config | 1 hari | Senior | 🟠 | ✅ `98da3a3` |
+| S3-10 | Incident runbook 5 scenarios (engine down, DB down, Realmio down, etc.) | 1 hari | Mid | 🟡 | ✅ `e5fb713` |
 
 **Total**: ~7 hari × 2 dev
 
