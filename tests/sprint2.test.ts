@@ -215,6 +215,57 @@ describe("AppService.payBooking (S2-01)", () => {
 });
 
 // =====================================================================
+// S2-02: AppService.cancelBooking — cancellable rules + idempotency
+// =====================================================================
+describe("AppService.cancelBooking (S2-02)", () => {
+  const baseBooking = {
+    id: "b1",
+    appUserId: "u1",
+    status: "confirmed",
+    tripId: "t1",
+    originSeq: 0,
+    destinationSeq: 1,
+  };
+
+  it("menolak kalau booking tidak ditemukan", async () => {
+    storageMock.getBookingById.mockResolvedValue(null);
+    const { AppService } = await import("@modules/app/app.service");
+    const svc = new AppService(storageMock as any);
+    await expect(svc.cancelBooking("missing", "u1")).rejects.toThrow(/not found/i);
+  });
+
+  it("menolak kalau ownership tidak match (anti-IDOR)", async () => {
+    storageMock.getBookingById.mockResolvedValue({ ...baseBooking });
+    const { AppService } = await import("@modules/app/app.service");
+    const svc = new AppService(storageMock as any);
+    await expect(svc.cancelBooking("b1", "u-OTHER")).rejects.toThrow(/unauthorized/i);
+  });
+
+  it("menolak kalau booking sudah cancelled (status non-cancellable)", async () => {
+    storageMock.getBookingById.mockResolvedValue({ ...baseBooking, status: "cancelled" });
+    const { AppService } = await import("@modules/app/app.service");
+    const svc = new AppService(storageMock as any);
+    await expect(svc.cancelBooking("b1", "u1")).rejects.toThrow(/cannot be canceled/i);
+  });
+
+  it("menolak post-departure (trip.status=closed) dgn pesan refund", async () => {
+    storageMock.getBookingById.mockResolvedValue({ ...baseBooking });
+    storageMock.getTripById.mockResolvedValueOnce({ id: "t1", status: "closed", patternId: "p1", serviceDate: "2026-05-01" });
+    const { AppService } = await import("@modules/app/app.service");
+    const svc = new AppService(storageMock as any);
+    await expect(svc.cancelBooking("b1", "u1")).rejects.toThrow(/berangkat|refund/i);
+  });
+
+  it("menolak kalau trip dibatalkan operator (trip.status=cancelled)", async () => {
+    storageMock.getBookingById.mockResolvedValue({ ...baseBooking });
+    storageMock.getTripById.mockResolvedValueOnce({ id: "t1", status: "cancelled", patternId: "p1", serviceDate: "2026-05-01" });
+    const { AppService } = await import("@modules/app/app.service");
+    const svc = new AppService(storageMock as any);
+    await expect(svc.cancelBooking("b1", "u1")).rejects.toThrow(/dibatalkan operator|kompensasi/i);
+  });
+});
+
+// =====================================================================
 // S2-04 regression: compensationQueue DLQ contract
 // Memastikan getStuckCount export & alert format snake_case stable.
 // =====================================================================

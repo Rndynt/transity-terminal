@@ -1567,11 +1567,42 @@ export class AppService {
       throw new Error("Booking cannot be canceled");
     }
 
+    // S2-02: cancellable rules — trip yang sudah berangkat (closed) tidak
+    // boleh dibatalkan dari sisi customer. Customer harus minta refund via
+    // RefundsService (yang punya alur approval staff). Trip yang batal di
+    // level operasional juga ditolak supaya customer tahu kondisinya.
+    const trip = await this.storage.getTripById(booking.tripId);
+    if (trip) {
+      if (trip.status === 'closed') {
+        throw new Error('Trip sudah berangkat — gunakan menu refund untuk pengajuan pengembalian dana.');
+      }
+      if (trip.status === 'cancelled') {
+        throw new Error('Trip sudah dibatalkan operator — kompensasi diproses otomatis, tidak perlu cancel manual.');
+      }
+    }
+
     const pax = await this.storage.getPassengers(bookingId);
     const seatNos = pax.map(p => p.seatNo);
     const legIndexes = computeLegIndexes(booking.originSeq, booking.destinationSeq);
 
+    // S2-02: capture status awal untuk decide apakah perlu kompensasi
+    // engine. Hanya booking yang sudah 'confirmed' yang punya seat ledger
+    // terbooking di engine; 'pending' cuma punya hold yang akan expire sendiri.
+    const wasConfirmed = booking.status === 'confirmed';
+
     await db.transaction(async (tx) => {
+      // CAS guard: hanya satu cancel yang menang (idempotent untuk client retry).
+      const [bookingUpdate] = await tx.update(bookings)
+        .set({ status: 'cancelled' })
+        .where(and(
+          eq(bookings.id, bookingId),
+          inArray(bookings.status, ['pending', 'confirmed']),
+        ))
+        .returning({ id: bookings.id });
+      if (!bookingUpdate) {
+        throw new Error('Booking sudah dibatalkan atau tidak dalam status yang dapat dibatalkan');
+      }
+
       if (seatNos.length > 0) {
         await tx.update(seatInventory)
           .set({ booked: false, holdRef: null })
@@ -1587,11 +1618,33 @@ export class AppService {
           eq(seatHolds.bookingId, bookingId)
         ));
       }
-
-      await tx.update(bookings)
-        .set({ status: 'cancelled' })
-        .where(eq(bookings.id, bookingId));
     });
+
+    // S2-02: kompensasi engine — kalau RESERVATION_ENGINE_ENABLED dan
+    // booking ini sebelumnya confirmed (artinya seat sudah di-book di engine
+    // ledger via Console/OTA flow), kita harus release di engine juga.
+    // Pakai compensationQueue (best-effort + retry) supaya cancel TT-side
+    // tetap commit walau engine sedang down. Untuk pending booking, hold
+    // engine akan expire sendiri sesuai TTL.
+    if (wasConfirmed && seatNos.length > 0) {
+      try {
+        const { isEngineEnabled } = await import('@modules/holds/holdsAdapter');
+        if (isEngineEnabled()) {
+          const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
+          for (const seatNo of seatNos) {
+            await enqueueCancelSeats({
+              tripId: booking.tripId,
+              seatNo,
+              legIndexes,
+              context: { source: 'cancelBooking', bookingId },
+            });
+          }
+        }
+      } catch (e) {
+        // Best-effort: log saja, jangan gagalkan cancel yang sudah commit di TT.
+        console.error('[CANCEL] gagal enqueue engine compensation, scheduler akan retry via DLQ:', e);
+      }
+    }
 
     // Realtime: kursi yang dibebaskan harus refresh di seatmap CSO
     for (const seatNo of seatNos) {
