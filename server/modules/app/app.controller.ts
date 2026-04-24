@@ -155,6 +155,10 @@ export class AppController {
   async getCities(_req: FastifyRequest, reply: FastifyReply) {
     try {
       const cities = await this.service.getCities();
+      // T-CON-02: cities jarang berubah; izinkan caching publik 5 menit
+      // (sesuai TTL CITIES di Console gateway aggregator). swr=60 supaya
+      // worker bisa serve stale sambil refresh background.
+      reply.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
       reply.send(cities);
     } catch (e: unknown) {
       reply.code(500).send({ error: errMsg(e) });
@@ -164,6 +168,8 @@ export class AppController {
   async getServiceLines(_req: FastifyRequest, reply: FastifyReply) {
     try {
       const lines = await this.service.getServiceLines();
+      // T-CON-02: service-lines metadata stabil, sama TTL dengan cities.
+      reply.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
       reply.send(lines);
     } catch (e: unknown) {
       reply.code(500).send({ error: errMsg(e) });
