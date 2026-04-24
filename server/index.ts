@@ -16,11 +16,11 @@ if (_envExists(_envPath)) {
 
 // S3-03: Sentry harus diinit SEBELUM Fastify supaya boot-time
 // unhandled errors ter-capture. No-op kalau SENTRY_DSN tidak diset.
-import { initSentry, flushSentry, captureError } from "./observability/sentry";
+import { initSentry, flushSentry } from "./observability/sentry";
+import { registerGlobalErrorHandler } from "./errorHandler";
 initSentry();
 
 import Fastify from "fastify";
-import { ZodError } from "zod";
 import rateLimit from "@fastify/rate-limit";
 import helmet from "@fastify/helmet";
 import cors from "@fastify/cors";
@@ -185,38 +185,9 @@ app.addHook('onSend', async (request, reply, payload) => {
   return payload;
 });
 
-app.setErrorHandler((err: Error & { status?: number; statusCode?: number; code?: string }, request, reply) => {
-  if (err.code === '23505') {
-    const detail: string = (err as any).detail ?? '';
-    const valueMatch = detail.match(/Key \([^)]+\)=\(([^)]+)\)/);
-    const fieldMatch = detail.match(/Key \(([^)]+)\)=/);
-    const value = valueMatch ? valueMatch[1] : null;
-    const field = fieldMatch ? fieldMatch[1] : 'data';
-    const msg = value
-      ? `Kode "${value}" sudah digunakan. Gunakan ${field} yang berbeda.`
-      : `Nilai ${field} sudah digunakan. Gunakan nilai yang berbeda.`;
-    return reply.code(409).send({ message: msg });
-  }
-
-  if (err instanceof ZodError) {
-    const messages = err.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
-    return reply.code(400).send({ message: `Data tidak valid: ${messages}` });
-  }
-
-  const status = err.status || err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
-
-  // S3-03: forward 5xx + uncaught ke Sentry. 4xx adalah client error,
-  // tidak perlu alert (akan polusi Sentry feed).
-  if (status >= 500) {
-    captureError(err, { mod: 'fastify', op: request.method, tags: { route: request.url, code: err.code || 'unknown' } });
-  }
-
-  reply.code(status).send({ message });
-  if (status === 500) {
-    console.error(err);
-  }
-});
+// Global error handler — diekstrak ke `./errorHandler.ts` supaya
+// production app dan test integrasi share kode yang sama.
+registerGlobalErrorHandler(app);
 
 function assertProductionEnv() {
   if (process.env.NODE_ENV !== 'production') return;
