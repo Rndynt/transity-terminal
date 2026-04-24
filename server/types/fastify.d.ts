@@ -10,5 +10,6 @@ declare module "fastify" {
     outletId?: string | null;
     appUser?: AppUserPayload;
     rawBody?: Buffer;
+    isServiceClient?: boolean;
   }
 }
