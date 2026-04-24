@@ -56,11 +56,12 @@ export class RoundTripController {
       const result = await this.roundTripService.createRoundTripBooking(validatedData, operatorId, buildServiceContext(req));
       
       reply.code(201).send(result);
-    } catch (error: any) {
+    } catch (err: unknown) {
+      const error = err as { statusCode?: number; name?: string; message?: string; errors?: unknown };
       // S1-09 / Task #6: PermissionDeniedError → forward ke global handler.
-      if (error?.statusCode === 403) throw error;
-      req.log.error({ err: error }, 'Round-trip booking creation error');
-      
+      if (error?.statusCode === 403) throw err;
+      req.log.error({ err }, 'Round-trip booking creation error');
+
       if (error.name === 'ZodError') {
         return reply.code(400).send({
           error: 'Validation failed',
@@ -68,27 +69,28 @@ export class RoundTripController {
           details: error.errors
         });
       }
-      
-      if (error.message.includes('tidak lagi dihold') || error.message.includes('kadaluarsa') || error.message.includes('not held')) {
+
+      const msg = error.message ?? '';
+      if (msg.includes('tidak lagi dihold') || msg.includes('kadaluarsa') || msg.includes('not held')) {
         return reply.code(400).send({
           error: 'Seat hold validation failed',
           code: 'SEAT_NOT_HELD',
-          details: error.message
+          details: msg
         });
       }
-      
-      if (error.message.includes('already booked')) {
+
+      if (msg.includes('already booked')) {
         return reply.code(409).send({
           error: 'Seat already booked',
           code: 'SEAT_CONFLICT',
-          details: error.message
+          details: msg
         });
       }
 
       reply.code(500).send({
         error: 'Internal server error',
         code: 'INTERNAL_ERROR',
-        details: error.message || 'An unexpected error occurred during round-trip booking creation'
+        details: msg || 'An unexpected error occurred during round-trip booking creation'
       });
     }
   }
@@ -106,12 +108,12 @@ export class RoundTripController {
       }
       
       reply.send(result);
-    } catch (error: any) {
-      req.log.error({ err: error }, 'Get group by code error');
+    } catch (err: unknown) {
+      req.log.error({ err }, 'Get group by code error');
       reply.code(500).send({
         error: 'Internal server error',
         code: 'INTERNAL_ERROR',
-        details: error.message
+        details: err instanceof Error ? err.message : 'Unknown error'
       });
     }
   }
