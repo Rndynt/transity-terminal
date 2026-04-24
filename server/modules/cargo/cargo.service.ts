@@ -51,7 +51,7 @@ export class CargoService {
     const yy = String(now.getUTCFullYear()).slice(-2);
     const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(now.getUTCDate()).padStart(2, '0');
-    const result: any = await db.execute(sql`SELECT nextval('cargo_waybill_seq') AS id`);
+    const result = await db.execute(sql`SELECT nextval('cargo_waybill_seq') AS id`) as { rows?: Array<{ id: string | number }> };
     const id = String(result.rows?.[0]?.id ?? 0).padStart(6, '0');
     return `WB-${yy}${mm}${dd}-${id}`;
   }
@@ -174,9 +174,9 @@ export class CargoService {
     // global storage.updateCargoShipment would go through `db` (different
     // connection) and break the lock semantics.
     return await db.transaction(async (tx) => {
-      const lockResult: any = await tx.execute(
+      const lockResult = await tx.execute(
         sql`SELECT id FROM cargo_shipments WHERE id = ${id} FOR UPDATE`
-      );
+      ) as { rows?: Array<{ id: string }> };
       if (!lockResult.rows?.[0]) {
         throw new Error('Cargo shipment not found');
       }
@@ -199,9 +199,9 @@ export class CargoService {
     }
 
     return await db.transaction(async (tx) => {
-      const result: any = await tx.execute(
+      const result = await tx.execute(
         sql`SELECT status FROM cargo_shipments WHERE id = ${id} FOR UPDATE`
-      );
+      ) as { rows?: Array<{ status?: string | null }> };
       const row = result.rows?.[0];
       if (!row) {
         throw new Error('Cargo shipment not found');
