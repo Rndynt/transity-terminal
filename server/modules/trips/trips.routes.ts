@@ -31,17 +31,17 @@ export function registerTripsRoutes(app: FastifyInstance, storage: IStorage) {
   app.get('/api/trips/:tripId/seats/:seatNo/passenger-details', { preHandler: [requireFlag('page.cso')] }, async (req, reply) => tripsController.getSeatPassengerDetails(req, reply));
 
   app.get('/api/trips/:id/unseated-passengers', { preHandler: [requireFlag('page.cso')] }, async (req, reply) => {
-    const passengers = await storage.getUnseatedPassengers((req.params as any).id);
+    const passengers = await storage.getUnseatedPassengers((req.params as { id: string }).id);
     reply.send(passengers);
   });
 
   app.get('/api/trips/:id/manifest', { preHandler: [requireFlag('page.manifest')] }, async (req, reply) => {
-    const manifest = await storage.getManifestFull((req.params as any).id);
+    const manifest = await storage.getManifestFull((req.params as { id: string }).id);
     reply.send(manifest);
   });
 
   app.post('/api/trips/:id/manifest/print', { preHandler: [requireFlag('page.manifest')] }, async (req, reply) => {
-    const firstPrintedAt = await storage.recordManifestPrint((req.params as any).id);
+    const firstPrintedAt = await storage.recordManifestPrint((req.params as { id: string }).id);
     reply.send({ success: true, firstPrintedAt });
   });
 }
