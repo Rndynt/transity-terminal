@@ -178,6 +178,9 @@ export class BookingsController {
       
       reply.code(201).send(result);
     } catch (error: any) {
+      // S1-09 / Task #6: PermissionDeniedError punya statusCode=403; forward
+      // ke global errorHandler (server/index.ts) supaya tidak ter-flatten ke 500.
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Booking creation error');
       
       if (error.name === 'ZodError') {
@@ -338,6 +341,7 @@ export class BookingsController {
       
       reply.code(201).send(result);
     } catch (error: any) {
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Pending booking creation error');
       
       if (error.name === 'ZodError') {
@@ -380,6 +384,7 @@ export class BookingsController {
       await this.bookingsService.releasePendingBooking(id, operatorId, buildServiceContext(req));
       reply.code(204).send();
     } catch (error: any) {
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Release pending booking error');
       reply.code(500).send({
         error: 'Internal server error',
@@ -397,6 +402,7 @@ export class BookingsController {
       const result = await this.unseatService.unseatPassenger(passengerId, performedBy, reason, buildServiceContext(req));
       reply.send(result);
     } catch (error: any) {
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Unseat passenger error');
       reply.code(error.message.includes('tidak ditemukan') ? 404 : 400).send({
         error: error.message,
@@ -413,6 +419,7 @@ export class BookingsController {
       const result = await this.unseatService.unseatAllPassengers(bookingId, performedBy, reason, buildServiceContext(req));
       reply.send(result);
     } catch (error: any) {
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Unseat all passengers error');
       reply.code(error.message.includes('tidak ditemukan') ? 404 : 400).send({
         error: error.message,
@@ -441,6 +448,7 @@ export class BookingsController {
       );
       reply.send(result);
     } catch (error: any) {
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Reschedule passenger error');
       const status = error.message.includes('tidak ditemukan') ? 404
         : error.message.includes('tidak tersedia') ? 409 : 400;
@@ -459,6 +467,7 @@ export class BookingsController {
       const result = await this.unseatService.assignSeatToUnseated(passengerId, newSeatNo, performedBy, buildServiceContext(req));
       reply.send(result);
     } catch (error: any) {
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Assign seat to unseated error');
       const status = error.message.includes('tidak ditemukan') ? 404
         : error.message.includes('tidak tersedia') ? 409

@@ -105,7 +105,7 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
   app.post('/api/bookings', { preHandler: [requireFlag('action.booking.create')] }, async (req, reply) => bookingsController.create(req, reply));
   app.post('/api/bookings/pending', { preHandler: [requireFlag('action.booking.create')] }, async (req, reply) => bookingsController.createPendingBooking(req, reply));
   app.get('/api/bookings/pending', async (req, reply) => bookingsController.getPendingBookings(req, reply));
-  app.delete('/api/bookings/pending/:id', async (req, reply) => bookingsController.releasePendingBooking(req, reply));
+  app.delete('/api/bookings/pending/:id', { preHandler: [requireFlag('action.booking.cancel')] }, async (req, reply) => bookingsController.releasePendingBooking(req, reply));
 
   app.post('/api/passengers/:passengerId/unseat', { preHandler: [requireFlag('action.passenger.unseat')] }, async (req, reply) => bookingsController.unseatPassenger(req, reply));
   app.post('/api/passengers/:passengerId/assign-seat', { preHandler: [requireFlag('action.passenger.assign_seat')] }, async (req, reply) => bookingsController.assignSeatToUnseated(req, reply));

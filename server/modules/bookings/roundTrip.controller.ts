@@ -57,6 +57,8 @@ export class RoundTripController {
       
       reply.code(201).send(result);
     } catch (error: any) {
+      // S1-09 / Task #6: PermissionDeniedError → forward ke global handler.
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Round-trip booking creation error');
       
       if (error.name === 'ZodError') {

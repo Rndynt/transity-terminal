@@ -508,3 +508,78 @@ describe("UnseatService — service-layer guard (Task #6)", () => {
       .rejects.toMatchObject({ requiredFlags: ["action.passenger.assign_seat"] });
   });
 });
+
+// =====================================================================
+// HTTP-level propagation — pastikan PermissionDeniedError yang dilempar
+// service tetap muncul sebagai 403 ke klien (tidak ter-flatten ke 500
+// oleh catch-all controller). Ini menutup gap yang ditemukan architect
+// review: BookingsController & RoundTripController sebelumnya menelan
+// error 403 karena catch-all `reply.code(500).send(...)`. Kini setiap
+// catch block diawali `if (error?.statusCode === 403) throw error;`
+// agar diteruskan ke global error handler di server/index.ts.
+// =====================================================================
+describe("HTTP propagation — PermissionDeniedError → 403", () => {
+  it("Fastify global handler mengembalikan 403 saat service throw PermissionDeniedError", async () => {
+    const Fastify = (await import("fastify")).default;
+    const { PermissionDeniedError } = await import("@modules/rbac/rbac.guard");
+
+    const app = Fastify();
+    // Mirror perilaku server/index.ts: pakai err.statusCode kalau ada.
+    app.setErrorHandler((err: any, _req, reply) => {
+      const status = err.status || err.statusCode || 500;
+      reply.code(status).send({ message: err.message });
+    });
+
+    // Endpoint-1: controller TANPA try/catch (mis. outlets/promos/payments)
+    // → error langsung diteruskan ke global handler.
+    app.post("/no-catch", async () => {
+      throw new PermissionDeniedError(["master.outlets"]);
+    });
+
+    // Endpoint-2: controller DENGAN catch-all yang sebelumnya bocor.
+    // Pola persis seperti BookingsController.releasePendingBooking
+    // setelah perbaikan Task #6.
+    app.post("/with-catch", async (_req, reply) => {
+      try {
+        throw new PermissionDeniedError(["action.booking.cancel"]);
+      } catch (error: any) {
+        if (error?.statusCode === 403) throw error;
+        reply.code(500).send({ error: "Internal server error" });
+      }
+    });
+
+    const r1 = await app.inject({ method: "POST", url: "/no-catch" });
+    expect(r1.statusCode).toBe(403);
+    expect(r1.json()).toMatchObject({ message: expect.stringContaining("master.outlets") });
+
+    const r2 = await app.inject({ method: "POST", url: "/with-catch" });
+    expect(r2.statusCode).toBe(403);
+    expect(r2.json()).toMatchObject({ message: expect.stringContaining("action.booking.cancel") });
+
+    await app.close();
+  });
+
+  it("regression: catch-all TANPA forward 403 akan SALAH menjadi 500", async () => {
+    // Test ini sengaja menunjukkan kontra-faktualnya — supaya jelas kenapa
+    // baris `if (error?.statusCode === 403) throw error;` itu wajib.
+    const Fastify = (await import("fastify")).default;
+    const { PermissionDeniedError } = await import("@modules/rbac/rbac.guard");
+
+    const app = Fastify();
+    app.setErrorHandler((err: any, _req, reply) => {
+      reply.code(err.statusCode || 500).send({ message: err.message });
+    });
+    app.post("/buggy", async (_req, reply) => {
+      try {
+        throw new PermissionDeniedError(["x.y"]);
+      } catch (error: any) {
+        // sengaja TIDAK forward → bocor ke 500
+        reply.code(500).send({ error: "Internal" });
+      }
+    });
+
+    const r = await app.inject({ method: "POST", url: "/buggy" });
+    expect(r.statusCode).toBe(500);
+    await app.close();
+  });
+});
