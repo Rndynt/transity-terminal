@@ -139,6 +139,26 @@ function redactSensitive(obj: Record<string, unknown>): Record<string, unknown> 
   return result;
 }
 
+// S3-05 (post-review fix): wire HTTP metrics ke setiap response.
+// onResponse jalan setelah reply terkirim, jadi durasi + status final
+// sudah tersedia. Skip route /api/metrics sendiri supaya scrape
+// Prometheus tidak self-amplify counter.
+app.addHook('onResponse', async (request, reply) => {
+  const url = request.url;
+  if (!url.startsWith('/api') || url === '/api/metrics') return;
+  try {
+    const { recordHttpResponse } = await import('./observability/metrics');
+    // Pakai route template ('/api/bookings/:id') supaya cardinality gauge
+    // tidak meledak. Fastify v5 expose via request.routeOptions.url; v4
+    // via request.routerPath. Fallback ke 'unknown' kalau belum match.
+    const r = request as unknown as { routeOptions?: { url?: string }; routerPath?: string };
+    const routeTpl = r.routeOptions?.url ?? r.routerPath ?? 'unknown';
+    recordHttpResponse(request.method, reply.statusCode, routeTpl, Math.round(reply.elapsedTime));
+  } catch {
+    // metrics module gagal load — jangan ganggu request flow
+  }
+});
+
 app.addHook('onSend', async (request, reply, payload) => {
   const path = request.url;
   if (path.startsWith("/api")) {

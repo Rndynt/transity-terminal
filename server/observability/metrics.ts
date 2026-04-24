@@ -137,6 +137,43 @@ export async function refreshDbPoolMetrics(): Promise<void> {
 }
 
 /**
+ * Helper: refresh compensation queue size gauge dari DB. Schema pakai
+ * deadLetteredAt timestamp (NULL = pending, NOT NULL = dead-lettered).
+ * Dipanggil pada /metrics scrape supaya gauge selalu fresh tanpa
+ * scheduler tambahan.
+ */
+export async function refreshCompensationQueueMetrics(): Promise<void> {
+  try {
+    const { db } = await import('../db');
+    const { engineCompensationQueue } = await import('@shared/schema');
+    const { sql } = await import('drizzle-orm');
+    const rows = await db
+      .select({
+        bucket: sql<string>`CASE WHEN ${engineCompensationQueue.deadLetteredAt} IS NULL THEN 'pending' ELSE 'dead_lettered' END`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(engineCompensationQueue)
+      .groupBy(sql`1`);
+    // Reset both buckets ke 0 dulu supaya kalau salah satu bucket kosong,
+    // gauge tidak stuck di nilai lama.
+    compensationQueueSize.set({ status: 'pending' }, 0);
+    compensationQueueSize.set({ status: 'dead_lettered' }, 0);
+    for (const r of rows) {
+      compensationQueueSize.set({ status: r.bucket }, Number(r.count ?? 0));
+    }
+  } catch {
+    // DB tidak tersedia — biarkan gauge di nilai sebelumnya
+  }
+}
+
+/**
+ * WS gauge helper: dipanggil dari realtime/ws.ts pada connect/disconnect
+ * supaya transity_ws_connected_clients akurat tanpa polling.
+ */
+export function incWsClient(): void { wsConnectedClients.inc(); }
+export function decWsClient(): void { wsConnectedClients.dec(); }
+
+/**
  * Hook helper supaya http counters tercatat per request. Dipasang di
  * registerRoutes lewat onResponse hook.
  */

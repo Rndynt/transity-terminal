@@ -142,6 +142,13 @@ class WebSocketService {
     this.io.on('connection', (socket: Socket) => {
       log(`WebSocket client connected: ${socket.id} kind=${socket.data.kind}`, 'websocket');
 
+      // S3-05 (post-review fix): track connected clients gauge supaya
+      // Grafana panel #6 ada data. Decrement on disconnect.
+      void import('../observability/metrics').then(m => m.incWsClient()).catch(() => {});
+      socket.on('disconnect', () => {
+        void import('../observability/metrics').then(m => m.decWsClient()).catch(() => {});
+      });
+
       // S2-07 helper: kirim error ke klien tanpa disconnect.
       const denySubscribe = (roomName: string, reason: string) => {
         log(`Client ${socket.id} (${socket.data.kind}) DENIED subscribe to ${roomName}: ${reason}`, 'websocket');

@@ -122,15 +122,24 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
     }
 
     // 3. Redis (S3-06). Skip kalau REDIS_URL tidak diset (single-instance OK
-    // tanpa Redis). Pakai client yang sudah dibuat di realtime/redis.ts.
+    // tanpa Redis). FIX (post-review): client di-buat transient + dijamin
+    // disconnect via finally supaya tidak leak FD per probe; ping
+    // di-Promise.race dengan timeout 1500ms supaya Redis lambat tidak
+    // memblok health check (panggil setiap menit dari monitoring).
     if (process.env.REDIS_URL) {
       const tR = Date.now();
+      type PingableClient = { ping: () => Promise<string>; quit: () => Promise<unknown> };
+      let client: PingableClient | null = null;
       try {
         const { createRateLimitRedisClient } = await import('./realtime/redis');
-        const client = createRateLimitRedisClient();
+        const raw = createRateLimitRedisClient();
+        client = raw as unknown as PingableClient | null;
         if (client) {
-          // ioredis: ping returns "PONG"
-          const pong = await (client as { ping: () => Promise<string> }).ping();
+          const ping = client.ping();
+          const timeout = new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error('redis ping timeout 1500ms')), 1500),
+          );
+          const pong = await Promise.race([ping, timeout]);
           checks.redis = {
             status: pong === 'PONG' ? 'ok' : 'fail',
             latencyMs: Date.now() - tR,
@@ -141,6 +150,10 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
         }
       } catch (e) {
         checks.redis = { status: 'fail', latencyMs: Date.now() - tR, detail: (e as Error).message };
+      } finally {
+        if (client) {
+          try { await client.quit(); } catch { /* swallow shutdown error */ }
+        }
       }
     } else {
       checks.redis = { status: 'skip', detail: 'REDIS_URL not set (single-instance mode)' };
@@ -191,18 +204,25 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
     });
   });
 
-  // S3-05: Prometheus metrics endpoint. Gated dengan service key (sama
-  // seperti /api/health/deep) supaya tidak public exposure. Scrape dari
-  // Prometheus harus pakai header X-Service-Key.
+  // S3-05: Prometheus metrics endpoint. Gated dengan service key. FIX
+  // (post-review): fail-closed di production kalau TERMINAL_SERVICE_KEY
+  // belum diset — sebelumnya fail-open (metrics publik kalau env lupa
+  // diset). Konsisten dengan /api/health prod-mode behavior.
   app.get('/api/metrics', async (req, reply) => {
-    const incomingKey = req.headers['x-service-key'] as string | undefined;
-    if (TERMINAL_SERVICE_KEY) {
+    if (!TERMINAL_SERVICE_KEY) {
+      if (process.env.NODE_ENV === 'production') {
+        return reply.code(503).send({ error: 'TERMINAL_SERVICE_KEY not configured (metrics gated)' });
+      }
+      // Dev: izinkan tanpa key supaya developer bisa curl /api/metrics lokal.
+    } else {
+      const incomingKey = req.headers['x-service-key'] as string | undefined;
       if (!incomingKey || incomingKey !== TERMINAL_SERVICE_KEY) {
         return reply.code(401).send({ error: 'Invalid or missing service key' });
       }
     }
-    const { register, refreshDbPoolMetrics } = await import('./observability/metrics');
+    const { register, refreshDbPoolMetrics, refreshCompensationQueueMetrics } = await import('./observability/metrics');
     await refreshDbPoolMetrics();
+    await refreshCompensationQueueMetrics();
     reply.header('Content-Type', register.contentType);
     return reply.send(await register.metrics());
   });
