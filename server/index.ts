@@ -231,12 +231,21 @@ function assertProductionEnv() {
   // 0. Production safety: pastikan env wajib ada, tolak DEV_BYPASS_AUTH.
   assertProductionEnv();
 
-  // 1. Jalankan SQL migration files (membuat semua tabel dari nol di fresh DB,
-  //    atau hanya migration baru jika DB sudah ada sebelumnya)
-  await runSchemaMigrations();
+  // S3-08: migration boleh di-detach dari boot. Set RUN_MIGRATIONS_ON_BOOT=false
+  // di production setelah deploy script (`scripts/db-migrate.ts`) jalankan
+  // migrasi sebagai langkah terpisah sebelum app start. Default true untuk
+  // backward-compat (dev + single-instance VPS).
+  const runMigrationsOnBoot = process.env.RUN_MIGRATIONS_ON_BOOT !== 'false';
+  if (runMigrationsOnBoot) {
+    // 1. Jalankan SQL migration files (membuat semua tabel dari nol di fresh DB,
+    //    atau hanya migration baru jika DB sudah ada sebelumnya)
+    await runSchemaMigrations();
 
-  // 2. Safety-net ALTER TABLE (untuk kompatibilitas Realmio)
-  await runMigrations();
+    // 2. Safety-net ALTER TABLE (untuk kompatibilitas Realmio)
+    await runMigrations();
+  } else {
+    console.log('[boot] RUN_MIGRATIONS_ON_BOOT=false — skipping migrations. Run `pnpm tsx scripts/db-migrate.ts` separately before starting app.');
+  }
 
   // 3. Seed roles, feature flags, dan staff dev
   await seedRbac();
