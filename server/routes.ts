@@ -57,6 +57,23 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
     reply.send({ status: 'ok' });
   });
 
+  // S2-05: clock health endpoint. Monitoring/ops bisa polling ini dan
+  // membandingkan `serverTimeMs` dengan jam mereka untuk mendeteksi drift.
+  // Jika drift > HMAC skew (60s), HMAC verify ke engine pasti gagal — ini
+  // sumber bug paling sulit di-diagnosis di production. Endpoint ini
+  // sengaja TIDAK butuh service key supaya monitoring eksternal mudah
+  // pakai (cuma return waktu, bukan info sensitif).
+  app.get('/api/health/clock', async (_req, reply) => {
+    const now = new Date();
+    reply.send({
+      status: 'ok',
+      serverTime: now.toISOString(),
+      serverTimeMs: now.getTime(),
+      uptimeSec: Math.floor(process.uptime()),
+      hmacSkewSec: 60, // batas yang dikonfigurasi di engine
+    });
+  });
+
   registerAuthRoutes(app);
   registerConsoleRoutes(app, storage);
 
