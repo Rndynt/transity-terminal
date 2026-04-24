@@ -199,7 +199,7 @@ export interface IStorage {
   getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]>;
   getCargoShipmentById(id: string): Promise<CargoShipment | undefined>;
   getCargoShipmentByWaybill(waybillNumber: string): Promise<CargoShipment | undefined>;
-  createCargoShipment(data: InsertCargoShipment): Promise<CargoShipment>;
+  createCargoShipment(data: InsertCargoShipment & { trackingSecret: string }): Promise<CargoShipment>;
   updateCargoShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment>;
 
   getTripCostTemplates(patternId?: string): Promise<TripCostTemplate[]>;

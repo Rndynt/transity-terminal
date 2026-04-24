@@ -186,7 +186,7 @@ export class CargoRepository {
     return shipment;
   }
 
-  async createCargoShipment(data: InsertCargoShipment): Promise<CargoShipment> {
+  async createCargoShipment(data: InsertCargoShipment & { trackingSecret: string }): Promise<CargoShipment> {
     const [shipment] = await db.insert(cargoShipments).values(data).returning();
     return shipment;
   }

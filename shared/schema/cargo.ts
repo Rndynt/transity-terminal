@@ -72,12 +72,11 @@ export const cargoShipments = pgTable("cargo_shipments", {
   paidAt:             timestamp("paid_at", { withTimezone: true }),
   notes:              text("notes"),
   // S1-06: secret yang harus disertakan saat tracking publik (mencegah
-  // enumerasi waybill). Di-generate server-side, tidak pernah expose ke
-  // operator UI; tercetak di label pengirim/penerima.
-  // Default '' hanya supaya db:push pertama kali tidak gagal di env yang
-  // sudah punya data. Migration 0011 akan backfill row dengan empty string
-  // jadi random hex dan DROP DEFAULT setelahnya.
-  trackingSecret:     text("tracking_secret").notNull().default(''),
+  // enumerasi waybill). Di-generate server-side di cargo.service.ts setiap
+  // insert, tidak pernah expose ke operator UI; tercetak di label
+  // pengirim/penerima. Tidak ada default DB — migration 0011 sudah backfill
+  // row lama dan DROP DEFAULT di semua lingkungan.
+  trackingSecret:     text("tracking_secret").notNull(),
   createdBy:          text("created_by"),
   createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({

@@ -157,7 +157,7 @@ export class DatabaseStorage implements IStorage {
   getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]> { return this.cargo.getCargoShipments(filters); }
   getCargoShipmentById(id: string): Promise<CargoShipment | undefined> { return this.cargo.getCargoShipmentById(id); }
   getCargoShipmentByWaybill(waybillNumber: string): Promise<CargoShipment | undefined> { return this.cargo.getCargoShipmentByWaybill(waybillNumber); }
-  createCargoShipment(data: InsertCargoShipment): Promise<CargoShipment> { return this.cargo.createCargoShipment(data); }
+  createCargoShipment(data: InsertCargoShipment & { trackingSecret: string }): Promise<CargoShipment> { return this.cargo.createCargoShipment(data); }
   updateCargoShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment> { return this.cargo.updateCargoShipment(id, data); }
 
   // Finance
