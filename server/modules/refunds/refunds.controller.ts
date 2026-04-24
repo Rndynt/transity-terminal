@@ -21,29 +21,29 @@ export class RefundsController {
   }
 
   async create(req: FastifyRequest, reply: FastifyReply) {
-    const body = req.body as any;
-    const requestedBy = (req as any).user?.email || 'Unknown';
+    const body = req.body as Parameters<RefundsService['create']>[0];
+    const requestedBy = req.user?.email || 'Unknown';
     const row = await this.service.create(body, requestedBy, buildServiceContext(req));
     reply.send(row);
   }
 
   async approve(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
-    const approvedBy = (req as any).user?.email || 'Unknown';
+    const approvedBy = req.user?.email || 'Unknown';
     const result = await this.service.approve(id, approvedBy, buildServiceContext(req));
     reply.send(result);
   }
 
   async process(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
-    const processedBy = (req as any).user?.email || 'Unknown';
+    const processedBy = req.user?.email || 'Unknown';
     const result = await this.service.process(id, processedBy, buildServiceContext(req));
     reply.send(result);
   }
 
   async reject(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
-    const { notes } = req.body as any;
+    const { notes } = (req.body as { notes?: string } | undefined) || {};
     const result = await this.service.reject(id, notes, buildServiceContext(req));
     reply.send(result);
   }
