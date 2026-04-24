@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "@server/db";
 import { eq, and } from "drizzle-orm";
 import { requireFlag, requireAnyFlag } from "./rbac.middleware";
@@ -6,28 +6,28 @@ import { createRealmioUser } from "@modules/auth/realmio";
 import { staffMembers, users } from "@shared/schema";
 
 export function registerAdminRoutes(app: FastifyInstance) {
-  app.get('/api/admin/roles', { preHandler: [requireAnyFlag('admin.flags.manage', 'admin.staff.manage')] }, async (_req: any, reply: any) => {
+  app.get('/api/admin/roles', { preHandler: [requireAnyFlag('admin.flags.manage', 'admin.staff.manage')] }, async (_req: FastifyRequest, reply: FastifyReply) => {
     const { roles } = await import('../../../shared/schema');
     const allRoles = await db.select().from(roles);
     reply.send(allRoles);
   });
 
-  app.get('/api/admin/flags', { preHandler: [requireFlag('admin.flags.manage')] }, async (_req: any, reply: any) => {
+  app.get('/api/admin/flags', { preHandler: [requireFlag('admin.flags.manage')] }, async (_req: FastifyRequest, reply: FastifyReply) => {
     const { featureFlags } = await import('../../../shared/schema');
     const allFlags = await db.select().from(featureFlags);
     reply.send(allFlags);
   });
 
-  app.get('/api/admin/role-flags', { preHandler: [requireFlag('admin.flags.manage')] }, async (_req: any, reply: any) => {
+  app.get('/api/admin/role-flags', { preHandler: [requireFlag('admin.flags.manage')] }, async (_req: FastifyRequest, reply: FastifyReply) => {
     const { roleFlags } = await import('../../../shared/schema');
     const matrix = await db.select().from(roleFlags);
     reply.send(matrix);
   });
 
-  app.put('/api/admin/role-flags/:roleId/:flagId', { preHandler: [requireFlag('admin.flags.manage')] }, async (req: any, reply: any) => {
+  app.put('/api/admin/role-flags/:roleId/:flagId', { preHandler: [requireFlag('admin.flags.manage')] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { roleFlags } = await import('../../../shared/schema');
-    const { roleId, flagId } = req.params;
-    const { enabled } = req.body;
+    const { roleId, flagId } = req.params as { roleId: string; flagId: string };
+    const { enabled } = req.body as { enabled: boolean };
 
     const existing = await db.select().from(roleFlags).where(and(eq(roleFlags.roleId, roleId), eq(roleFlags.flagId, flagId)));
     if (existing.length > 0) {
@@ -39,7 +39,7 @@ export function registerAdminRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get('/api/admin/staff', { preHandler: [requireFlag('admin.staff.manage')] }, async (_req: any, reply: any) => {
+  app.get('/api/admin/staff', { preHandler: [requireFlag('admin.staff.manage')] }, async (_req: FastifyRequest, reply: FastifyReply) => {
     const rows = await db
       .select({
         id:        staffMembers.id,
@@ -57,8 +57,15 @@ export function registerAdminRoutes(app: FastifyInstance) {
     reply.send(rows);
   });
 
-  app.post('/api/admin/staff', { preHandler: [requireFlag('admin.staff.manage')] }, async (req: any, reply: any) => {
-    const { name, email, password, roleId, outletId, isActive } = req.body;
+  app.post('/api/admin/staff', { preHandler: [requireFlag('admin.staff.manage')] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { name, email, password, roleId, outletId, isActive } = req.body as {
+      name?: string;
+      email?: string;
+      password?: string;
+      roleId?: string;
+      outletId?: string | null;
+      isActive?: boolean;
+    };
 
     if (!name || !email || !password || !roleId) {
       return reply.code(400).send({ message: 'name, email, password, dan roleId wajib diisi' });
@@ -67,8 +74,9 @@ export function registerAdminRoutes(app: FastifyInstance) {
     let realmioUser: { userId: string; email: string; name: string };
     try {
       realmioUser = await createRealmioUser(name, email, password);
-    } catch (err: any) {
-      return reply.code(422).send({ message: err.message || 'Gagal membuat akun di sistem autentikasi' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Gagal membuat akun di sistem autentikasi';
+      return reply.code(422).send({ message });
     }
 
     const now = new Date();
@@ -103,10 +111,14 @@ export function registerAdminRoutes(app: FastifyInstance) {
     });
   });
 
-  app.put('/api/admin/staff/:id', { preHandler: [requireFlag('admin.staff.manage')] }, async (req: any, reply: any) => {
-    const id = req.params.id;
-    const { roleId, outletId, isActive } = req.body;
-    const updates: any = {};
+  app.put('/api/admin/staff/:id', { preHandler: [requireFlag('admin.staff.manage')] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const { roleId, outletId, isActive } = req.body as {
+      roleId?: string;
+      outletId?: string | null;
+      isActive?: boolean;
+    };
+    const updates: Partial<typeof staffMembers.$inferInsert> = {};
     if (roleId !== undefined) updates.roleId = roleId;
     if (outletId !== undefined) updates.outletId = outletId || null;
     if (isActive !== undefined) updates.isActive = isActive;
@@ -127,8 +139,9 @@ export function registerAdminRoutes(app: FastifyInstance) {
     reply.send({ ...updated, name: user[0]?.name ?? null, email: user[0]?.email ?? null });
   });
 
-  app.delete('/api/admin/staff/:id', { preHandler: [requireFlag('admin.staff.manage')] }, async (req: any, reply: any) => {
-    await db.delete(staffMembers).where(eq(staffMembers.id, req.params.id));
+  app.delete('/api/admin/staff/:id', { preHandler: [requireFlag('admin.staff.manage')] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    await db.delete(staffMembers).where(eq(staffMembers.id, id));
     reply.code(204).send();
   });
 }
