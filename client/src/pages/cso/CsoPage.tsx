@@ -212,7 +212,6 @@ export default function CsoPage() {
     } catch (e: any) {
       toast({ title: 'Gagal mengambil harga', description: e.message, variant: 'destructive' });
     } finally {
-      setIsProcessing(true); // Should be false but task said setIsProcessing(true) then result then false
       setIsProcessing(false);
     }
   };
