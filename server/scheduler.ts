@@ -120,6 +120,59 @@ export class Scheduler {
     }
   }
 
+  /**
+   * P2 §7: engine-mode safety net for `seat_holds`.
+   *
+   * When `RESERVATION_ENGINE_ENABLED=true` the Rust sidecar owns
+   * `seat_inventory.hold_ref` and emits its own WS releases. But the
+   * sidecar does NOT touch TT's `seat_holds` table — that's a TT-local
+   * artefact of legacy paths and of post-confirm state that the adapter
+   * never actively cleans up (`HoldsAdapter.confirmForBooking` relies on
+   * engine-side ownership of release). Without this sweep the table
+   * grows unbounded and `idx_seat_holds_trip_id` scans slow down.
+   *
+   * This variant deliberately:
+   *   - Deletes expired rows from `seat_holds` only.
+   *   - Does NOT touch `seat_inventory.hold_ref` — writing there would
+   *     fight the engine and could clear a valid confirmed slot.
+   *   - Does NOT emit `holdsReleased` — the engine already publishes
+   *     that via its own pub/sub.
+   *   - Uses `FOR UPDATE SKIP LOCKED` so concurrent booking flows that
+   *     happen to be updating / extending the same row don't block.
+   */
+  async cleanupExpiredSeatHoldsOnly(): Promise<void> {
+    try {
+      const now = new Date();
+      const deleted = await db.transaction(async (tx) => {
+        const holds = await tx
+          .select({ holdRef: seatHolds.holdRef })
+          .from(seatHolds)
+          .where(lt(seatHolds.expiresAt, now))
+          .for('update', { skipLocked: true });
+
+        if (holds.length === 0) return 0;
+
+        const refs = holds.map(h => h.holdRef);
+        await tx
+          .delete(seatHolds)
+          .where(and(
+            inArray(seatHolds.holdRef, refs),
+            lt(seatHolds.expiresAt, now)
+          ));
+
+        return holds.length;
+      });
+
+      if (deleted > 0) {
+        console.log(
+          `[SCHEDULER] engine-mode seat_holds sweep: ${deleted} expired row(s) removed`,
+        );
+      }
+    } catch (error) {
+      console.error('[SCHEDULER] Error in engine-mode seat_holds sweep:', error);
+    }
+  }
+
   async cleanupOrphanHoldRefs(): Promise<void> {
     try {
       const result = await db.execute(sql`
@@ -186,9 +239,11 @@ export class Scheduler {
 
     if (engineOwnsHolds) {
       console.log(
-        '[SCHEDULER] RESERVATION_ENGINE_ENABLED=true — local hold reaper ' +
-          'and orphan-ref cleanup are DISABLED. The engine sidecar owns ' +
-          'reaping. Pending-booking cleanup remains active.',
+        '[SCHEDULER] RESERVATION_ENGINE_ENABLED=true — engine sidecar owns ' +
+          'seat_inventory.hold_ref reaping; local orphan-ref cleanup DISABLED. ' +
+          'TT still sweeps expired seat_holds rows locally to prevent the ' +
+          'table from growing unbounded (P2 §7). Pending-booking cleanup ' +
+          'remains active.',
       );
     }
 
@@ -199,6 +254,10 @@ export class Scheduler {
         if (!engineOwnsHolds) {
           await withAdvisoryLock(LOCK_HOLDS_CLEANUP, () => this.cleanupExpiredHolds());
           await withAdvisoryLock(LOCK_ORPHAN_REFS, () => this.cleanupOrphanHoldRefs());
+        } else {
+          // Engine mode: only reap TT's local `seat_holds` table. The engine
+          // sidecar handles `seat_inventory.hold_ref` + WS broadcast itself.
+          await withAdvisoryLock(LOCK_HOLDS_CLEANUP, () => this.cleanupExpiredSeatHoldsOnly());
         }
 
         if (config.pendingBookingAutoRelease) {
@@ -253,9 +312,12 @@ export class Scheduler {
       void runNotifCleanup();
     }
 
-    // Run immediately on start (only if Node still owns reaping).
+    // Run immediately on start so a backlog from the previous process
+    // gets swept without waiting a full minute.
     if (!engineOwnsHolds) {
       this.cleanupExpiredHolds();
+    } else {
+      void this.cleanupExpiredSeatHoldsOnly();
     }
 
     // Periodic schedule snapshot push to Console — this is the safety net so
