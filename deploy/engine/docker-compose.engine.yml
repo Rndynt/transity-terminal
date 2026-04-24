@@ -1,20 +1,3 @@
-# ─────────────────────────────────────────────
-# Reservation Engine sidecar overlay
-# ─────────────────────────────────────────────
-# Stacked ON TOP of TransityTerminal's docker-compose.yml — does NOT replace it.
-# Adds the `engine` service and injects engine env vars into `terminal`.
-#
-# Usage (manual):
-#   docker compose -f docker-compose.yml -f deploy/engine/docker-compose.engine.yml up -d
-#
-# Or just run ./deploy.sh — it auto-layers this overlay when
-# RESERVATION_ENGINE_ENABLED is set in .env (true OR false; the engine
-# can run idle even with the flag off).
-#
-# Engine port 8000 is NEVER exposed to the host. Only `terminal` reaches it
-# via the internal docker network at http://engine:8000.
-# ─────────────────────────────────────────────
-
 services:
   terminal:
     environment:
@@ -28,18 +11,15 @@ services:
     restart: unless-stopped
     expose:
       - "8000"
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
     environment:
       - HOST=0.0.0.0
       - PORT=8000
       - RUST_LOG=${ENGINE_LOG_LEVEL:-info}
-      # Engine reads the SAME database TT uses by default.
       - ENGINE_DATABASE_URL=${ENGINE_DATABASE_URL:-${DATABASE_URL}}
       - RESERVATION_ENGINE_HMAC_SECRET=${RESERVATION_ENGINE_HMAC_SECRET}
-      # S2-05: skew dinaikkan dari 30s → 60s. 30s terlalu ketat saat
-      # terminal/engine berada di host fisik berbeda atau saat ada beban CPU
-      # tinggi (timestamp di terminal vs validasi di engine bisa drift
-      # 5–20 detik realistis). 60s memberi headroom 2x tanpa membuka window
-      # replay terlalu lebar — tetap di bawah ambang AWS SigV4 (300s).
       - HMAC_SKEW_SECS=${HMAC_SKEW_SECS:-60}
       - REAPER_INTERVAL_SECS=${REAPER_INTERVAL_SECS:-60}
       - DB_MIN_CONN=${DB_MIN_CONN:-2}
@@ -54,8 +34,6 @@ services:
       start_period: 15s
     networks:
       - transity-terminals-net
-    # Intentionally NO depends_on — TT must boot independently of the
-    # engine so a degraded engine can never block the operator's UI.
 
 networks:
   transity-terminals-net:
