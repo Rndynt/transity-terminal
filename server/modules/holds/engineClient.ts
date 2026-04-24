@@ -129,14 +129,42 @@ export const engineClient = {
   release: (holdRef: string) =>
     call<void>("DELETE", `/api/v1/holds/${encodeURIComponent(holdRef)}`),
 
-  /** §3.3 — confirm hold → booking. Sets booked=true, links booking_id. */
-  confirm: (holdRef: string, body: ConfirmRequest, idemKey?: string) =>
-    call<ConfirmOk>(
+  /** §3.3 — confirm hold → booking. Sets booked=true, links booking_id.
+   *
+   * Engine v1.1 returns HTTP 409 on failure (hold expired or already
+   * consumed) so the base `call()` helper throws naturally. Engine v1.0
+   * returned HTTP 200 with `{success:false, conflict: "..."}` — silently
+   * accepting that would produce a ghost booking (see
+   * `TransityTerminal-code-review.md §10.1`), so we defensively inspect
+   * the body here and raise an `EngineError(409, ...)` to match the
+   * v1.1 behavior regardless of which engine version is deployed.
+   */
+  confirm: async (holdRef: string, body: ConfirmRequest, idemKey?: string): Promise<ConfirmOk> => {
+    const res = await call<Record<string, unknown>>(
       "POST",
       `/api/v1/holds/${encodeURIComponent(holdRef)}/confirm`,
       body,
       idemKey,
-    ),
+    );
+    if (res && res.success === false) {
+      const reason =
+        (typeof res.reason === "string" && res.reason) ||
+        (typeof res.conflict === "string" && res.conflict) ||
+        "HOLD_EXPIRED_OR_MISSING";
+      throw new EngineError(
+        409,
+        reason as EngineErrorCode,
+        `Engine confirm returned success=false (reason=${reason})`,
+        res as EngineErrorBody,
+      );
+    }
+    // Engine v1.1 success path returns `{success: true, hold_ref, booking_id}`;
+    // engine v1.0 returned `{confirmed: true, seat_no, leg_indexes}`.
+    // Callers don't depend on the shape (they only care that no throw
+    // happened), so we cast to the typed ConfirmOk for the legacy clients
+    // that do.
+    return res as unknown as ConfirmOk;
+  },
 
   /** §3.4 — cancel ONE booked seat. Per-seat (not batched). */
   cancelSeats: (req: CancelSeatRequest, idemKey?: string) =>
