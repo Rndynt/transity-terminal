@@ -7,7 +7,8 @@ import { webSocketService } from "@server/realtime/ws";
 import { db } from "@server/db";
 import { eq, and, inArray, sql, ilike } from "drizzle-orm";
 import {
-  bookingHistory, passengers as passengersTable, seatInventory, bookings as bookingsTable
+  bookingHistory, passengers as passengersTable, seatInventory, bookings as bookingsTable,
+  bookingPromoApplications as bpaTable, promotions as promotionsTable, vouchers as vouchersTable
 } from "@shared/schema";
 import { trips } from "@shared/schema";
 
@@ -169,11 +170,28 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
       });
 
       const allPassengers = await tx.select().from(passengersTable).where(eq(passengersTable.bookingId, booking.id));
-      const allInactive = allPassengers.every(p => p.ticketStatus === 'cancelled' || p.ticketStatus === 'unseated');
+      const allInactive = allPassengers.every(p =>
+        p.ticketStatus === 'cancelled' || p.ticketStatus === 'unseated' ||
+        p.ticketStatus === 'refunded' || p.ticketStatus === 'no_show'
+      );
       if (allInactive) {
         await tx.update(bookingsTable)
           .set({ status: 'cancelled' })
           .where(eq(bookingsTable.id, booking.id));
+
+        // S1-03: decrement promo usageCount + revert voucher 'active' kalau
+        // booking transit ke cancelled. GREATEST() supaya tidak negatif.
+        const apps = await tx.select().from(bpaTable).where(eq(bpaTable.bookingId, booking.id));
+        for (const app of apps) {
+          await tx.update(promotionsTable)
+            .set({ usageCount: sql`GREATEST(0, ${promotionsTable.usageCount} - 1)` })
+            .where(eq(promotionsTable.id, app.promoId));
+          if (app.voucherId) {
+            await tx.update(vouchersTable)
+              .set({ status: 'active', usedAt: null, usedByBookingId: null })
+              .where(eq(vouchersTable.id, app.voucherId));
+          }
+        }
       }
 
       return updated;

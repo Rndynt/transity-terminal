@@ -484,6 +484,21 @@ export class BookingsService {
       await tx.update(bookingsTable)
         .set({ status: 'cancelled' })
         .where(eq(bookingsTable.id, bookingId));
+
+      // S1-03: decrement promo usage + revert voucher saat pending → cancelled.
+      // GREATEST guard supaya tidak negatif kalau race / belum sempat ter-increment.
+      const apps = await tx.select().from(bookingPromoApplicationsTable)
+        .where(eq(bookingPromoApplicationsTable.bookingId, bookingId));
+      for (const app of apps) {
+        await tx.update(promotionsTable)
+          .set({ usageCount: sql`GREATEST(0, ${promotionsTable.usageCount} - 1)` })
+          .where(eq(promotionsTable.id, app.promoId));
+        if (app.voucherId) {
+          await tx.update(vouchersTable)
+            .set({ status: 'active', usedAt: null, usedByBookingId: null })
+            .where(eq(vouchersTable.id, app.voucherId));
+        }
+      }
     });
 
     await this.holdsService.releaseHoldsByOwner(operatorId, bookingId);
@@ -571,6 +586,20 @@ export class BookingsService {
           await tx.update(bookingsTable)
             .set({ status: 'cancelled' })
             .where(eq(bookingsTable.id, booking.id));
+
+          // S1-03: decrement promo usage + revert voucher pada cleanup expired.
+          const apps = await tx.select().from(bookingPromoApplicationsTable)
+            .where(eq(bookingPromoApplicationsTable.bookingId, booking.id));
+          for (const app of apps) {
+            await tx.update(promotionsTable)
+              .set({ usageCount: sql`GREATEST(0, ${promotionsTable.usageCount} - 1)` })
+              .where(eq(promotionsTable.id, app.promoId));
+            if (app.voucherId) {
+              await tx.update(vouchersTable)
+                .set({ status: 'active', usedAt: null, usedByBookingId: null })
+                .where(eq(vouchersTable.id, app.voucherId));
+            }
+          }
         });
 
         if (engineMode && seatNos.length > 0) {
