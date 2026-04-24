@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { getConfig } from "@server/config";
 import { db } from "@server/db";
 import { seatHolds, seatInventory } from "@shared/schema";
-import { eq, and, lt, inArray } from "drizzle-orm";
+import { eq, and, gt, inArray } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
 
 interface SeatHoldOwner {
@@ -39,13 +39,23 @@ export class HoldsService {
 
     try {
       const result = await db.transaction(async (tx) => {
+        // `FOR UPDATE` serializes two concurrent operators racing on the
+        // same seat — without the row-lock both SELECTs pass the "not
+        // booked + no live hold" check and both INSERTs succeed, leaving
+        // the losing operator with a dangling seat_holds row while
+        // seat_inventory.holdRef points at the winner. That dangling
+        // hold passes validateHoldOwnership later but engine.confirm /
+        // confirmSeatsBooked will reject it, surfacing as a failed
+        // booking at the pay step. Mirrors the lock pattern in
+        // AtomicHoldService / booking.helpers.checkSeatsAvailable.
         const existingRows = await tx.select()
           .from(seatInventory)
           .where(and(
             eq(seatInventory.tripId, tripId),
             eq(seatInventory.seatNo, seatNo),
             inArray(seatInventory.legIndex, legIndexes)
-          ));
+          ))
+          .for('update');
 
         if (existingRows.some(r => r.booked)) {
           return { ok: false as const, reason: 'already-booked', ownedByYou: false };
@@ -55,7 +65,8 @@ export class HoldsService {
         if (activeHoldRefs.length > 0) {
           const activeHolds = await tx.select()
             .from(seatHolds)
-            .where(inArray(seatHolds.holdRef, activeHoldRefs));
+            .where(inArray(seatHolds.holdRef, activeHoldRefs))
+            .for('update');
 
           const now = new Date();
           for (const h of activeHolds) {
@@ -213,10 +224,35 @@ export class HoldsService {
     const ttlSeconds = ttlClass === 'short' ? config.holdTtlShortSeconds : config.holdTtlLongSeconds;
     const newExpiry = new Date(now + (ttlSeconds * 1000));
 
-    const result = await db.update(seatHolds)
+    // Only extend still-live holds. A caller asking to extend an
+    // already-expired hold means "grant me more time on a seat I no
+    // longer own" — granting it would revive a seat the reaper may
+    // have already freed for someone else. Use a guarded UPDATE and
+    // surface a boolean so callers can fall back to createSeatHold.
+    const updated = await db.update(seatHolds)
       .set({ expiresAt: newExpiry, ttlClass })
-      .where(eq(seatHolds.holdRef, holdRef));
+      .where(and(
+        eq(seatHolds.holdRef, holdRef),
+        gt(seatHolds.expiresAt, new Date(now)),
+      ))
+      .returning({
+        tripId: seatHolds.tripId,
+        seatNo: seatHolds.seatNo,
+        legIndexes: seatHolds.legIndexes,
+      });
 
+    if (updated.length === 0) return false;
+
+    // The previous implementation didn't emit anything on extend. That
+    // was a real UX bug: a CSO watching the seatmap wouldn't see the
+    // countdown reset when another CSO refreshed the hold. Emit the
+    // inventory-updated event so clients redraw the timer.
+    const [row] = updated;
+    webSocketService.emitInventoryUpdated(
+      row.tripId,
+      row.seatNo,
+      row.legIndexes as number[],
+    );
     return true;
   }
 
