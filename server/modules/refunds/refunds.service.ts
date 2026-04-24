@@ -88,22 +88,21 @@ export class RefundsService {
    *   7. WS emit inventory.updated supaya seatmap CSO/WEB refresh otomatis.
    */
   async approve(id: string, approvedBy: string) {
-    const [refund] = await db.select().from(refunds).where(eq(refunds.id, id)).limit(1);
-    if (!refund) throw new Error('Refund tidak ditemukan');
-
-    // Idempotency: approved/processed → no-op (return success).
-    if (refund.status === 'approved' || refund.status === 'processed') {
+    // S1-01 race-safety: pre-flight check untuk error message bagus + early
+    // exit kalau sudah approved (idempotent). Tapi keputusan resmi tetap di
+    // dalam transaction via compare-and-swap.
+    const [preRefund] = await db.select().from(refunds).where(eq(refunds.id, id)).limit(1);
+    if (!preRefund) throw new Error('Refund tidak ditemukan');
+    if (preRefund.status === 'approved' || preRefund.status === 'processed') {
       return { success: true, idempotent: true };
     }
-    if (refund.status === 'rejected') {
+    if (preRefund.status === 'rejected') {
       throw new Error('Refund sudah ditolak — tidak dapat di-approve.');
     }
 
-    const [booking] = await db.select().from(bookings).where(eq(bookings.id, refund.bookingId)).limit(1);
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, preRefund.bookingId)).limit(1);
     if (!booking) throw new Error('Booking tidak ditemukan');
 
-    // Trip departure check — kalau trip sudah closed (departed) refund diblok
-    // karena seat physically tidak bisa di-resell lagi.
     const [trip] = await db.select().from(trips).where(eq(trips.id, booking.tripId)).limit(1);
     if (!trip) throw new Error('Trip tidak ditemukan');
     if (trip.status === 'closed') {
@@ -112,19 +111,21 @@ export class RefundsService {
 
     // Resolve passenger(s) yang akan di-refund. Kalau passengerId null, refund
     // berlaku untuk seluruh penumpang aktif di booking.
-    const targetPassengers = refund.passengerId
-      ? await db.select().from(passengers).where(eq(passengers.id, refund.passengerId))
+    const targetPassengers = preRefund.passengerId
+      ? await db.select().from(passengers).where(eq(passengers.id, preRefund.passengerId))
       : await db.select().from(passengers).where(and(
-          eq(passengers.bookingId, refund.bookingId),
+          eq(passengers.bookingId, preRefund.bookingId),
           notInArray(passengers.ticketStatus, INACTIVE_TICKET_STATUSES as unknown as string[]),
         ));
 
     if (targetPassengers.length === 0) {
-      // Semua passenger sudah inactive sebelumnya — tetap mark refund approved
-      // (record akuntansi saja, tidak ada seat untuk dilepas).
-      await db.update(refunds)
-        .set({ status: 'approved', approvedBy, approvedAt: new Date() })
-        .where(eq(refunds.id, id));
+      // Semua passenger sudah inactive — CAS-only update (tetap race-safe).
+      const [r]: any = getRows(await db.execute(sql`
+        UPDATE refunds SET status = 'approved', approved_by = ${approvedBy}, approved_at = NOW()
+         WHERE id = ${id} AND status = 'pending'
+        RETURNING id
+      `));
+      if (!r) return { success: true, idempotent: true, releasedSeats: 0 };
       return { success: true, releasedSeats: 0 };
     }
 
@@ -133,12 +134,23 @@ export class RefundsService {
 
     const engineMode = isEngineEnabled();
     let allInactive = false;
+    let claimed = false;
 
     await db.transaction(async (tx) => {
-      // 1. Approve refund row
-      await tx.update(refunds)
-        .set({ status: 'approved', approvedBy, approvedAt: new Date() })
-        .where(eq(refunds.id, id));
+      // 1. CAS: 'pending' → 'approved'. Kalau ada request paralel yang sudah
+      // duluan, rowCount=0 → kita skip semua side-effect dan return idempotent
+      // di luar transaction.
+      const claimRows: any = getRows(await tx.execute(sql`
+        UPDATE refunds
+           SET status = 'approved', approved_by = ${approvedBy}, approved_at = NOW()
+         WHERE id = ${id} AND status = 'pending'
+        RETURNING id
+      `));
+      if (claimRows.length === 0) {
+        // Race lost — request paralel menang. Bail out tanpa side-effect.
+        return;
+      }
+      claimed = true;
 
       // 2. Mark passengers refunded + history per passenger
       for (const p of targetPassengers) {
@@ -199,6 +211,12 @@ export class RefundsService {
         }
       }
     });
+
+    // Race lost di dalam transaction → request paralel sudah finalize.
+    // Jangan lepas seat lagi (sudah dilepas oleh winner). Return idempotent.
+    if (!claimed) {
+      return { success: true, idempotent: true, releasedSeats: 0 };
+    }
 
     // 5. Engine-mode seat release post-tx + compensation queue on failure.
     if (engineMode && legIndexes.length > 0) {
