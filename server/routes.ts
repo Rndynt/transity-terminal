@@ -57,6 +57,63 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
     reply.send({ status: 'ok' });
   });
 
+  // S2-06: deep health check. Default `/api/health` tetap shallow (cuma
+  // liveness, dipakai allowlist rate-limit). Dengan `?deep=1`, kita ping
+  // engine `/api/v1/healthz` dan jalankan SELECT 1 ke DB. Hasilnya
+  // structured per-subsystem dengan latency, supaya monitoring bisa
+  // alarm pada subsystem yang spesifik.
+  app.get('/api/health/deep', async (req, reply) => {
+    const incomingKey = req.headers['x-service-key'] as string | undefined;
+    if (TERMINAL_SERVICE_KEY) {
+      if (!incomingKey) {
+        return reply.code(401).send({ error: 'Missing X-Service-Key header', code: 'MISSING_SERVICE_KEY' });
+      }
+      if (incomingKey !== TERMINAL_SERVICE_KEY) {
+        return reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
+      }
+    }
+
+    const checks: Record<string, { status: 'ok' | 'fail' | 'skip'; latencyMs?: number; detail?: string }> = {};
+
+    // 1. Database — SELECT 1
+    {
+      const t0 = Date.now();
+      try {
+        const { db } = await import('./db');
+        const { sql } = await import('drizzle-orm');
+        await db.execute(sql`SELECT 1`);
+        checks.db = { status: 'ok', latencyMs: Date.now() - t0 };
+      } catch (e) {
+        checks.db = { status: 'fail', latencyMs: Date.now() - t0, detail: (e as Error).message };
+      }
+    }
+
+    // 2. Engine — /api/v1/healthz (kalau engine diaktifkan).
+    if (process.env.RESERVATION_ENGINE_ENABLED === 'true' && process.env.RESERVATION_ENGINE_URL) {
+      const t0 = Date.now();
+      try {
+        const { engineClient } = await import('./modules/holds/engineClient');
+        const res = await engineClient.health();
+        checks.engine = {
+          status: res?.status === 'ok' ? 'ok' : 'fail',
+          latencyMs: Date.now() - t0,
+          detail: res?.service ? `service=${res.service}` : undefined,
+        };
+      } catch (e) {
+        checks.engine = { status: 'fail', latencyMs: Date.now() - t0, detail: (e as Error).message };
+      }
+    } else {
+      checks.engine = { status: 'skip', detail: 'engine disabled' };
+    }
+
+    const overall = Object.values(checks).every(c => c.status !== 'fail') ? 'ok' : 'degraded';
+    reply.code(overall === 'ok' ? 200 : 503).send({
+      status: overall,
+      checks,
+      serverTime: new Date().toISOString(),
+    });
+  });
+
   // S2-05: clock health endpoint. Monitoring/ops bisa polling ini dan
   // membandingkan `serverTimeMs` dengan jam mereka untuk mendeteksi drift.
   // Jika drift > HMAC skew (60s), HMAC verify ke engine pasti gagal — ini
