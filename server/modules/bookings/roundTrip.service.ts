@@ -19,6 +19,37 @@ import { IStorage } from "@server/storage.interface";
 import { Booking, BookingGroup } from "@shared/schema";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 
+interface OutboundPassengerInput {
+  name: string;
+  seatNo: string;
+}
+interface ReturnPassengerInput {
+  seatNo: string;
+}
+export interface RoundTripBookingInput {
+  outbound: {
+    tripId: string;
+    originStopId: string;
+    destinationStopId: string;
+    originSeq: number;
+    destinationSeq: number;
+    outletId?: string;
+    passengers: OutboundPassengerInput[];
+  };
+  return: {
+    tripId: string;
+    originStopId: string;
+    destinationStopId: string;
+    originSeq: number;
+    destinationSeq: number;
+    passengers: ReturnPassengerInput[];
+  };
+  payment: {
+    method: 'cash' | 'qr' | 'ewallet' | 'bank';
+    amount: number;
+  };
+}
+
 /**
  * S1-09 (Sprint 2): round-trip booking sama dengan dua booking sekaligus
  * jadi guard `action.booking.create` harus aktif walaupun service
@@ -33,7 +64,7 @@ export class RoundTripService {
     this.printService = new PrintService();
   }
 
-  async createRoundTripBooking(data: any, operatorId: string, ctx: ServiceContext) {
+  async createRoundTripBooking(data: RoundTripBookingInput, operatorId: string, ctx: ServiceContext) {
     requirePermission(ctx, "action.booking.create");
     const { outbound, return: returnData, payment } = data;
 
@@ -49,8 +80,8 @@ export class RoundTripService {
     ]);
 
     // 3. Validasi kedua hold masih aktif
-    const outboundSeatNos = outbound.passengers.map((p: any) => p.seatNo);
-    const returnSeatNos = returnData.passengers.map((p: any) => p.seatNo);
+    const outboundSeatNos = outbound.passengers.map((p) => p.seatNo);
+    const returnSeatNos = returnData.passengers.map((p) => p.seatNo);
 
     const [outboundHolds, returnHolds] = await Promise.all([
       db.select().from(seatHolds).where(and(
@@ -101,8 +132,8 @@ export class RoundTripService {
     const returnLegIndexes: number[] = [];
     for (let i = returnData.originSeq; i < returnData.destinationSeq; i++) returnLegIndexes.push(i);
 
-    const outboundSeatNosArr = outbound.passengers.map((p: any) => p.seatNo);
-    const returnSeatNosArr = returnData.passengers.map((p: any) => p.seatNo);
+    const outboundSeatNosArr = outbound.passengers.map((p) => p.seatNo);
+    const returnSeatNosArr = returnData.passengers.map((p) => p.seatNo);
 
     // 6. DB Transaction with advisory lock to prevent deadlocks
     const result = await db.transaction(async (tx) => {
@@ -143,7 +174,7 @@ export class RoundTripService {
         snapOutletName: outletData?.name || null,
       }).returning();
 
-      const outboundPaxValues = outbound.passengers.map((p: any) => ({
+      const outboundPaxValues = outbound.passengers.map((p) => ({
         bookingId: outboundBooking.id,
         fullName: p.name,
         seatNo: p.seatNo,
@@ -191,7 +222,7 @@ export class RoundTripService {
         snapOutletName: outletData?.name || null,
       }).returning();
 
-      const returnPaxValues = returnData.passengers.map((retP: any, i: number) => ({
+      const returnPaxValues = returnData.passengers.map((retP, i) => ({
         bookingId: returnBooking.id,
         fullName: outbound.passengers[i].name,
         seatNo: retP.seatNo,
