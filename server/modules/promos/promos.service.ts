@@ -89,17 +89,33 @@ export class PromosService {
     if (!promo) throw new Error('Promotion not found');
 
     const results: Voucher[] = [];
-    for (let i = 0; i < count; i++) {
+    const maxAttempts = count * 5;
+    let attempts = 0;
+    while (results.length < count && attempts < maxAttempts) {
+      attempts++;
       const code = this.generateVoucherCode(prefix || promo.code);
-      const voucher = await this.storage.createVoucher({
-        code,
-        promoId,
-        assignedTo: assignedTo || null,
-        status: 'active',
-        validFrom: promo.validFrom,
-        validTo: promo.validTo,
-      });
-      results.push(voucher);
+      try {
+        const voucher = await this.storage.createVoucher({
+          code,
+          promoId,
+          assignedTo: assignedTo || null,
+          status: 'active',
+          validFrom: promo.validFrom,
+          validTo: promo.validTo,
+        });
+        results.push(voucher);
+      } catch (err: any) {
+        if (err?.code === '23505' || err?.cause?.code === '23505') {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (results.length < count) {
+      throw new Error(
+        `Voucher generation collision: hanya ${results.length}/${count} unique code dapat dibuat dalam ${attempts} percobaan. Pertimbangkan prefix lebih panjang.`
+      );
     }
     return results;
   }
