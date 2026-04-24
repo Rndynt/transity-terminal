@@ -57,9 +57,31 @@ if (_rateLimitRedis) {
 } else {
   console.log('[rate-limit] in-memory store (single-instance only)');
 }
+// T-CON-04: rate-limit aware service-key. Console / OTA aggregator polling
+// hot-path (schedules, bookings, seatmap) dengan frekuensi tinggi via
+// X-Service-Key. Kasih bucket terpisah dengan limit jauh lebih longgar
+// (default 3000/min) supaya tidak bentrok dengan limit user IP biasa.
+const _rateLimitMaxIp = parseInt(process.env.RATE_LIMIT_MAX || '300', 10);
+const _rateLimitMaxService = parseInt(process.env.RATE_LIMIT_MAX_SERVICE || '3000', 10);
 app.register(rateLimit, {
   global: true,
-  max: parseInt(process.env.RATE_LIMIT_MAX || '300', 10),
+  max: (req) => {
+    const incomingKey = req.headers['x-service-key'] as string | undefined;
+    const expected = process.env.TERMINAL_SERVICE_KEY || '';
+    if (expected && incomingKey && incomingKey === expected) {
+      return _rateLimitMaxService;
+    }
+    return _rateLimitMaxIp;
+  },
+  keyGenerator: (req) => {
+    const incomingKey = req.headers['x-service-key'] as string | undefined;
+    const expected = process.env.TERMINAL_SERVICE_KEY || '';
+    if (expected && incomingKey && incomingKey === expected) {
+      // Bucket per service-key (prefix saja, tidak full key, supaya log aman).
+      return `service:${incomingKey.slice(0, 8)}`;
+    }
+    return req.ip;
+  },
   timeWindow: process.env.RATE_LIMIT_WINDOW || '1 minute',
   allowList: (req) => req.url === '/api/health' || req.url === '/health',
   ...(_rateLimitRedis ? { redis: _rateLimitRedis, nameSpace: 'transity-rl:' } : {}),
