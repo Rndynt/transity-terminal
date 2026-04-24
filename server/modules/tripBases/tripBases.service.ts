@@ -158,8 +158,8 @@ export class TripBasesService {
    * Handles overnight routes: if a converted timestamp is <= the previous one, it means midnight
    * was crossed, so we add the accumulated day offset to keep times strictly increasing.
    */
-  computeDefaultTimestamps(base: TripBase, serviceDate: string): any[] {
-    const defaultStopTimes = base.defaultStopTimes as any[];
+  computeDefaultTimestamps(base: TripBase, serviceDate: string): Array<{ stopSequence: number; arriveAt: Date | null; departAt: Date | null }> {
+    const defaultStopTimes = base.defaultStopTimes as Array<{ stopSequence: number; arriveAt: string | null; departAt: string | null }>;
     
     if (!Array.isArray(defaultStopTimes)) {
       throw new Error('defaultStopTimes must be an array');
@@ -168,7 +168,7 @@ export class TripBasesService {
     const timezone = ensureDefaultTimezone(base.timezone);
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-    const result: any[] = [];
+    const result: Array<{ stopSequence: number; arriveAt: Date | null; departAt: Date | null }> = [];
     let dayOffset = 0;
     let lastTimestamp: Date | null = null;
 
@@ -280,7 +280,7 @@ export class TripBasesService {
     }
     if (!capacity && base.defaultLayoutId) {
       const layout = await this.storage.getLayoutById(base.defaultLayoutId);
-      capacity = layout?.seatMap ? (layout.seatMap as any[]).length : null;
+      capacity = layout?.seatMap ? (layout.seatMap as Array<unknown>).length : null;
     }
 
     const timestamps = this.computeDefaultTimestamps(base, serviceDate);
@@ -303,7 +303,7 @@ export class TripBasesService {
       layoutId: base.defaultLayoutId,
       capacity: capacity || 50,
       status: 'scheduled',
-      channelFlags: base.channelFlags as any,
+      channelFlags: base.channelFlags as InsertTrip['channelFlags'],
       baseId: base.id,
       driverId: base.defaultDriverId,
       originDepartHHMM,
@@ -418,7 +418,7 @@ export class TripBasesService {
   /**
    * Validate the structure of defaultStopTimes
    */
-  private validateDefaultStopTimes(defaultStopTimes: any): void {
+  private validateDefaultStopTimes(defaultStopTimes: unknown): void {
     if (!Array.isArray(defaultStopTimes)) {
       throw new Error('defaultStopTimes must be an array');
     }
@@ -427,17 +427,17 @@ export class TripBasesService {
       throw new Error('defaultStopTimes must not be empty');
     }
 
-    for (const stopTime of defaultStopTimes) {
+    for (const stopTime of defaultStopTimes as Array<{ stopSequence?: unknown; arriveAt?: unknown; departAt?: unknown }>) {
       if (!stopTime.stopSequence || typeof stopTime.stopSequence !== 'number') {
         throw new Error('Each stop time must have a numeric stopSequence');
       }
-      
+
       // Validate time format (HH:MM:SS or HH:MM)
-      if (stopTime.arriveAt && !/^\d{2}:\d{2}(:\d{2})?$/.test(stopTime.arriveAt)) {
+      if (stopTime.arriveAt && !/^\d{2}:\d{2}(:\d{2})?$/.test(String(stopTime.arriveAt))) {
         throw new Error(`Invalid arriveAt format: ${stopTime.arriveAt}. Expected HH:MM or HH:MM:SS`);
       }
-      
-      if (stopTime.departAt && !/^\d{2}:\d{2}(:\d{2})?$/.test(stopTime.departAt)) {
+
+      if (stopTime.departAt && !/^\d{2}:\d{2}(:\d{2})?$/.test(String(stopTime.departAt))) {
         throw new Error(`Invalid departAt format: ${stopTime.departAt}. Expected HH:MM or HH:MM:SS`);
       }
     }
