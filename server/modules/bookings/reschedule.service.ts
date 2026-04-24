@@ -2,7 +2,7 @@ import { db } from "@server/db";
 import { bookings, passengers, seatInventory, bookingHistory } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
-import { IStorage } from "@server/storage.interface";
+import { IStorage, type ActivePassengerForTrip } from "@server/storage.interface";
 import { generateBookingCode } from "@server/utils/codeGenerator";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
 import { AtomicHoldService } from "./atomicHold.service";
@@ -36,7 +36,7 @@ export class RescheduleService {
     performedBy: string,
     reason: string | undefined,
     ctx: ServiceContext
-  ): Promise<{ success: boolean; oldBooking: any; newBooking: any }> {
+  ): Promise<{ success: boolean; oldBooking: typeof bookings.$inferSelect; newBooking: typeof bookings.$inferSelect }> {
     requirePermission(ctx, "action.passenger.reschedule");
     const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
     if (!passenger) throw new Error("Penumpang tidak ditemukan");
@@ -248,6 +248,9 @@ export class RescheduleService {
     }
 
     const updatedBooking = await this.storage.getBookingById(resultBookingId);
+    if (!updatedBooking) {
+      throw new Error("Booking tidak ditemukan setelah reschedule");
+    }
     return {
       success: true,
       oldBooking: updatedBooking,
@@ -265,7 +268,7 @@ export class RescheduleService {
     performedBy: string,
     reason: string,
     ctx: ServiceContext
-  ): Promise<{ succeeded: any[]; failed: any[] }> {
+  ): Promise<{ succeeded: Array<ActivePassengerForTrip & { newSeatNo: string }>; failed: Array<ActivePassengerForTrip & { failReason: string }> }> {
     requirePermission(ctx, "action.trip.batch_reschedule");
     const activePassengers = await this.storage.getActivePassengersForTrip(oldTripId);
     if (activePassengers.length === 0) {
@@ -298,11 +301,11 @@ export class RescheduleService {
         return numA - numB || a.localeCompare(b);
       });
 
-    const succeeded: any[] = [];
-    const failed: any[] = [];
+    const succeeded: Array<ActivePassengerForTrip & { newSeatNo: string }> = [];
+    const failed: Array<ActivePassengerForTrip & { failReason: string }> = [];
     let seatIdx = 0;
 
-    const passengersByBooking = new Map<string, any[]>();
+    const passengersByBooking = new Map<string, ActivePassengerForTrip[]>();
     for (const pax of activePassengers) {
       const arr = passengersByBooking.get(pax.bookingId) || [];
       arr.push(pax);
