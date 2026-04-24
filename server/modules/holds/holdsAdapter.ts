@@ -355,6 +355,146 @@ export class HoldsAdapter {
   }
 
   // ────────────────────────────────────────────────────────────
+  // HOLD-FOR-BOOKING — multi-seat initial hold tied to a booking.
+  //
+  // Used by B2C / OTA / WEB flows (app.service.ts) that create a
+  // "pending" booking with seats held under booking_id so the pay/confirm
+  // path can later query `seat_holds WHERE booking_id = ? AND expires_at > now()`.
+  //
+  // Engine mode:
+  //   1. engine.hold(seat) per seat — atomic under FOR UPDATE + engine tx.
+  //   2. UPDATE seat_holds SET booking_id = ? WHERE hold_ref IN (...)
+  //      to backfill TT's link. The engine writes the hold row but does
+  //      not know about TT's booking_id, so this UPDATE stitches the two.
+  //   3. Expire timestamp is whatever the engine returned. The caller
+  //      should align its own `bookings.pendingExpiresAt` to the min
+  //      of returned expires_at values.
+  //   4. On mid-loop failure, release every hold we already created so
+  //      the operator sees a clean cancel.
+  //
+  // Legacy mode: caller is expected to use the legacy
+  // `createSeatHoldsForBooking` helper directly; this method throws to
+  // make the routing explicit.
+  // ────────────────────────────────────────────────────────────
+  async holdForBooking(opts: {
+    bookingId: string;
+    tripId: string;
+    seatNos: string[];
+    legIndexes: number[];
+    operatorId: string;
+    ttlClass: "short" | "long";
+  }): Promise<Array<{ seatNo: string; holdRef: string; expiresAt: Date }>> {
+    if (!isEngineEnabled()) {
+      throw new Error(
+        "HoldsAdapter.holdForBooking called while RESERVATION_ENGINE_ENABLED=false. " +
+          "Use createSeatHoldsForBooking() directly instead.",
+      );
+    }
+
+    const created: Array<{ seatNo: string; holdRef: string; expiresAt: Date }> = [];
+    try {
+      for (const seatNo of opts.seatNos) {
+        // Deterministic idem-key: same booking + seat = same key, so a
+        // retry within 24h returns the engine's cached response.
+        const idemKey = `hold:${opts.bookingId}:${seatNo}`;
+        const r = await engineClient.hold(
+          {
+            trip_id: opts.tripId,
+            seat_no: seatNo,
+            leg_indexes: opts.legIndexes,
+            operator_id: opts.operatorId,
+            ttl_class: opts.ttlClass,
+          },
+          idemKey,
+        );
+        created.push({
+          seatNo,
+          holdRef: r.hold_ref,
+          expiresAt: new Date(r.expires_at),
+        });
+      }
+    } catch (e) {
+      // Compensate: release every hold we already placed in this loop.
+      for (const c of created) {
+        try {
+          await engineClient.release(c.holdRef);
+        } catch (relErr) {
+          console.error(
+            `[HOLDS_ADAPTER] holdForBooking: compensation release failed for ${c.seatNo}:`,
+            relErr,
+          );
+        }
+      }
+      throw e;
+    }
+
+    // Stitch TT's booking_id onto the engine-written hold rows. Failure
+    // here leaves engine holds alive with booking_id=NULL — the pay flow
+    // will see zero "active holds for bookingId" and fail cleanly. We
+    // treat the link-up as best-effort-but-throw so the caller can
+    // abort if the link fails and not leak orphaned holds.
+    const holdRefs = created.map((c) => c.holdRef);
+    try {
+      await db
+        .update(seatHolds)
+        .set({ bookingId: opts.bookingId })
+        .where(inArray(seatHolds.holdRef, holdRefs));
+    } catch (linkErr) {
+      for (const c of created) {
+        try {
+          await engineClient.release(c.holdRef);
+        } catch {
+          /* swallow; hold will expire at TTL */
+        }
+      }
+      throw linkErr;
+    }
+
+    for (const c of created) {
+      webSocketService.emitInventoryUpdated(opts.tripId, c.seatNo, opts.legIndexes);
+    }
+    return created;
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // RELEASE-FOR-BOOKING — release every live hold linked to a booking.
+  //
+  // Used when a pending booking is cancelled / its payment fails /
+  // its hold window expires. Best-effort; on individual release
+  // failure the hold will expire at its TTL anyway.
+  // ────────────────────────────────────────────────────────────
+  async releaseForBooking(bookingId: string, tripId?: string): Promise<void> {
+    if (!isEngineEnabled()) return;
+
+    const rows = await db
+      .select({
+        holdRef: seatHolds.holdRef,
+        tripId: seatHolds.tripId,
+        seatNo: seatHolds.seatNo,
+        legIndexes: seatHolds.legIndexes,
+      })
+      .from(seatHolds)
+      .where(eq(seatHolds.bookingId, bookingId));
+
+    for (const row of rows) {
+      try {
+        await engineClient.release(row.holdRef);
+      } catch (e) {
+        if (e instanceof EngineError && e.status === 404) continue;
+        console.error(
+          `[HOLDS_ADAPTER] releaseForBooking: release failed for hold ${row.holdRef}; will expire at TTL:`,
+          e,
+        );
+      }
+      webSocketService.emitInventoryUpdated(
+        tripId ?? row.tripId,
+        row.seatNo,
+        row.legIndexes as number[],
+      );
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────
   // CANCEL SEATS — release CONFIRMED seats back to inventory.
   //   Engine endpoint is PER SEAT. Caller iterates over passengers.
   //   When flag is off, falls back to the local SQL (releaseConfirmedSeatLocal).
