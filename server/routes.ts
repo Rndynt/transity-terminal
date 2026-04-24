@@ -172,11 +172,39 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
     }
 
     const overall = Object.values(checks).every(c => c.status !== 'fail') ? 'ok' : 'degraded';
+
+    // S3-05: update gauge subsystem supaya Prometheus scrape dapat status
+    // terakhir (panel #10 di dashboard). 1 = ok/skip, 0 = fail.
+    try {
+      const { healthSubsystemOk } = await import('./observability/metrics');
+      for (const [name, c] of Object.entries(checks)) {
+        healthSubsystemOk.set({ subsystem: name }, c.status === 'fail' ? 0 : 1);
+      }
+    } catch {
+      // metrics module gagal load — health tetap jalan
+    }
+
     reply.code(overall === 'ok' ? 200 : 503).send({
       status: overall,
       checks,
       serverTime: new Date().toISOString(),
     });
+  });
+
+  // S3-05: Prometheus metrics endpoint. Gated dengan service key (sama
+  // seperti /api/health/deep) supaya tidak public exposure. Scrape dari
+  // Prometheus harus pakai header X-Service-Key.
+  app.get('/api/metrics', async (req, reply) => {
+    const incomingKey = req.headers['x-service-key'] as string | undefined;
+    if (TERMINAL_SERVICE_KEY) {
+      if (!incomingKey || incomingKey !== TERMINAL_SERVICE_KEY) {
+        return reply.code(401).send({ error: 'Invalid or missing service key' });
+      }
+    }
+    const { register, refreshDbPoolMetrics } = await import('./observability/metrics');
+    await refreshDbPoolMetrics();
+    reply.header('Content-Type', register.contentType);
+    return reply.send(await register.metrics());
   });
 
   // S2-05: clock health endpoint. Monitoring/ops bisa polling ini dan
