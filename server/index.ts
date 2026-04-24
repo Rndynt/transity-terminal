@@ -14,6 +14,11 @@ if (_envExists(_envPath)) {
   }
 }
 
+// S3-03: Sentry harus diinit SEBELUM Fastify supaya boot-time
+// unhandled errors ter-capture. No-op kalau SENTRY_DSN tidak diset.
+import { initSentry, flushSentry, captureError } from "./observability/sentry";
+initSentry();
+
 import Fastify from "fastify";
 import { ZodError } from "zod";
 import rateLimit from "@fastify/rate-limit";
@@ -181,6 +186,12 @@ app.setErrorHandler((err: Error & { status?: number; statusCode?: number; code?:
   const status = err.status || err.statusCode || 500;
   const message = err.message || "Internal Server Error";
 
+  // S3-03: forward 5xx + uncaught ke Sentry. 4xx adalah client error,
+  // tidak perlu alert (akan polusi Sentry feed).
+  if (status >= 500) {
+    captureError(err, { mod: 'fastify', op: request.method, tags: { route: request.url, code: err.code || 'unknown' } });
+  }
+
   reply.code(status).send({ message });
   if (status === 500) {
     console.error(err);
@@ -287,13 +298,16 @@ function assertProductionEnv() {
 
   scheduler.start();
 
-  process.on('SIGTERM', () => {
+  process.on('SIGTERM', async () => {
     scheduler.stop();
-    app.close();
+    await app.close();
+    await flushSentry(2000);
   });
 
-  process.on('SIGINT', () => {
+  process.on('SIGINT', async () => {
     scheduler.stop();
-    app.close().then(() => process.exit(0));
+    await app.close();
+    await flushSentry(2000);
+    process.exit(0);
   });
 })();
