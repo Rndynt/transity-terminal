@@ -22,21 +22,26 @@
 
 ## Status Headlines
 
-### 🚨 3 CRITICAL (Block launch)
-1. **Refund approval tidak release seat** — `refunds.service.ts:63`
-2. **Cashier session tidak per-staff** — `cashier.service.ts:15`
-3. **0 test untuk modul kritis** — booking, hold, payment, refund, cashier
+> **Update 2026-04-24 (after Sprint 1 + 2):** semua CRITICAL & sebagian
+> besar HIGH sudah resolved. Lihat `SPRINT1-PROGRESS.md` &
+> `SPRINT2-PROGRESS.md` untuk commit hash per item.
+
+### 🚨 3 CRITICAL (Block launch) — ✅ ALL RESOLVED
+1. ~~Refund approval tidak release seat~~ — ✅ S1-01 (`4d25f54`)
+2. ~~Cashier session tidak per-staff~~ — ✅ S1-02 (`925e782`) + migration 0010
+3. ~~0 test untuk modul kritis~~ — ✅ Sprint 1 + 2: 37 sprint2 + 5 sprint1 = 42 test
 
 ### 🟠 6 HIGH (Fix sebelum public launch)
-4. Cargo waybill PII publik — `cargo.controller.ts:41`
-5. No CI/CD pipeline
-6. No Sentry / structured logging
-7. No helmet (security headers) — defense-in-depth
-8. Drivers/Vehicles tidak cek RBAC di service layer
-9. Engine idempotency in-memory only (lost on restart)
+4. ~~Cargo waybill PII publik~~ — ✅ S1-06 (`e68098b`) + cleanup S2-followup `#4` (`tracking_secret` NOT NULL no-default)
+5. **No CI/CD pipeline** — 🔄 Sprint 3 (S3-01)
+6. **No Sentry / structured logging** — 🔄 Sprint 3 (S3-03 + S3-04)
+7. ~~No helmet (security headers)~~ — ✅ S1-08 (`d3a74c2`)
+8. **Drivers/Vehicles tidak cek RBAC di service layer** — ⏭️ deferred ke project task `#2` (in-progress)
+9. **Engine idempotency in-memory only (lost on restart)** — ⚠️ partial: compensation queue persist DB (S2-04), idempotency key store masih in-memory; defer ke Sprint 4
 
 ### 🟡 ~14 MEDIUM (Sprint 2-3)
-Detail di `01` & `02`.
+Sprint 2 selesai semua 11 item — lihat `SPRINT2-PROGRESS.md`. Sisa
+medium pindah ke Sprint 3-4.
 
 ### 🟢 LOW (Backlog)
 Detail di docs.

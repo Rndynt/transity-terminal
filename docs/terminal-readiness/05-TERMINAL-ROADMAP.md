@@ -6,23 +6,25 @@
 
 ---
 
-## Sprint 1 — STOP THE BLEED (Minggu 1)
+## Sprint 1 — STOP THE BLEED (Minggu 1) — ✅ DONE (2026-04-24)
 
 **Tema**: Fix bug kritis yang langsung impact bisnis & uang. Tanpa ini, launch pasti ada masalah.
 
+> Lihat `SPRINT1-PROGRESS.md` untuk commit hash per item.
+
 ### Backlog
-| ID | Item | Estimasi | Owner | Severity |
-|---|---|---|---|---|
-| S1-01 | **Fix refund approval seat release** (transaction + engine cancel + WS emit) | 1.5 hari | Senior | 🔴 |
-| S1-02 | **Fix cashier session per-staff** (schema + service + reconciliation) | 1 hari | Senior | 🔴 |
-| S1-03 | Fix promo `usageCount` decrement on cancel/refund | 4 jam | Mid | 🟠 |
-| S1-04 | Fix voucher generation collision-safe | 2 jam | Mid | 🟠 |
-| S1-05 | Fix `isProcessing` stuck di CSO page | 1 jam | Mid | 🟠 |
-| S1-06 | Cargo waybill: add `tracking_secret` requirement | 0.5 hari | Mid | 🟠 |
-| S1-07 | Production boot guard: fail-fast jika secrets hilang (`DEV_BYPASS_AUTH`, `REALMIO_*`, engine secret) | 2 jam | Senior | 🟠 |
-| S1-08 | Install `@fastify/helmet` global + consolidate CORS handling | 2 jam | Mid | 🟠 |
-| S1-09 | Move RBAC check ke service layer (drivers, vehicles, +5 modul) | 1 hari | Mid | 🟠 |
-| S1-10 | **Write 5 unit tests** untuk fix di S1-01 dan S1-02 | 0.5 hari | Senior | — |
+| ID | Item | Estimasi | Owner | Severity | Status |
+|---|---|---|---|---|---|
+| S1-01 | **Fix refund approval seat release** (transaction + engine cancel + WS emit) | 1.5 hari | Senior | 🔴 | ✅ `4d25f54` |
+| S1-02 | **Fix cashier session per-staff** (schema + service + reconciliation) | 1 hari | Senior | 🔴 | ✅ `925e782` |
+| S1-03 | Fix promo `usageCount` decrement on cancel/refund | 4 jam | Mid | 🟠 | ✅ `4d25f54` (digabung) |
+| S1-04 | Fix voucher generation collision-safe | 2 jam | Mid | 🟠 | ✅ `290448d` |
+| S1-05 | Fix `isProcessing` stuck di CSO page | 1 jam | Mid | 🟠 | ✅ `0f2feb5` |
+| S1-06 | Cargo waybill: add `tracking_secret` requirement | 0.5 hari | Mid | 🟠 | ✅ `e68098b` |
+| S1-07 | Production boot guard: fail-fast jika secrets hilang (`DEV_BYPASS_AUTH`, `REALMIO_*`, engine secret) | 2 jam | Senior | 🟠 | ✅ `d3a74c2` (digabung) |
+| S1-08 | Install `@fastify/helmet` global + consolidate CORS handling | 2 jam | Mid | 🟠 | ✅ `d3a74c2` |
+| S1-09 | Move RBAC check ke service layer (drivers, vehicles, +5 modul) | 1 hari | Mid | 🟠 | ⏭️ DEFERRED → project task `#2` |
+| S1-10 | **Write 5 unit tests** untuk fix di S1-01 dan S1-02 | 0.5 hari | Senior | — | ✅ `398c256` |
 
 **Total**: ~5 hari work × 2 dev = 1 minggu kalender
 
@@ -40,24 +42,26 @@
 
 ---
 
-## Sprint 2 — INTEGRATION & ENGINE STABILITY (Minggu 2)
+## Sprint 2 — INTEGRATION & ENGINE STABILITY (Minggu 2) — ✅ DONE (2026-04-24)
 
 **Tema**: Solidify engine integration + Console contracts; eliminate race conditions sisa.
 
+> Lihat `SPRINT2-PROGRESS.md` untuk commit hash + audit doc per item.
+
 ### Backlog
-| ID | Item | Estimasi | Owner | Severity |
-|---|---|---|---|---|
-| S2-01 | **Audit** `/api/app/bookings/:id/pay` (idempotency, engine confirm path) + E2E test | 1 hari | Senior | 🟡 |
-| S2-02 | **Audit** `/api/app/bookings/:id/cancel` (cancellable rules, refund eligibility) + E2E test | 1 hari | Senior | 🟡 |
-| S2-03 | Reschedule chaos test (engine kill mid-flow) + compensation queue alerting | 1 hari | Senior | 🟡 |
-| S2-04 | Compensation queue: DLQ + Sentry alert on stuck items | 4 jam | Mid | 🟠 |
-| S2-05 | Engine HMAC skew increase to 60s + clock health check | 1 jam | Mid | 🟡 |
-| S2-06 | Engine `/healthz` integration into TT `/api/health` deep check | 2 jam | Mid | 🟡 |
-| S2-07 | WS room subscribe permission check | 1 hari | Mid | 🟡 |
-| S2-08 | Notifications cleanup scheduler (TTL 90 hari read, archive policy) | 4 jam | Mid | 🟡 |
-| S2-09 | Audit payment webhook idempotency + HMAC constant-time | 1 hari | Senior | 🟠 |
-| S2-10 | Engine activation runbook + smoke-test script verify | 4 jam | Mid | 🟡 |
-| S2-11 | Write 10 integration tests (full booking, cancel, OTA, refund, cargo) | 2 hari | Senior | — |
+| ID | Item | Estimasi | Owner | Severity | Status |
+|---|---|---|---|---|---|
+| S2-01 | **Audit** `/api/app/bookings/:id/pay` (idempotency, engine confirm path) + E2E test | 1 hari | Senior | 🟡 | ✅ `c62c906` |
+| S2-02 | **Audit** `/api/app/bookings/:id/cancel` (cancellable rules, refund eligibility) + E2E test | 1 hari | Senior | 🟡 | ✅ `6af72be` |
+| S2-03 | Reschedule chaos test (engine kill mid-flow) + compensation queue alerting | 1 hari | Senior | 🟡 | ✅ `44818d8` |
+| S2-04 | Compensation queue: DLQ + Sentry alert on stuck items | 4 jam | Mid | 🟠 | ✅ `d2a8df1` |
+| S2-05 | Engine HMAC skew increase to 60s + clock health check | 1 jam | Mid | 🟡 | ✅ `0aa2776` |
+| S2-06 | Engine `/healthz` integration into TT `/api/health` deep check | 2 jam | Mid | 🟡 | ✅ `0aa2776` |
+| S2-07 | WS room subscribe permission check | 1 hari | Mid | 🟡 | ✅ `09b044d` (+ CR-HIGH fix `c162c9f`) |
+| S2-08 | Notifications cleanup scheduler (TTL 90 hari read, archive policy) | 4 jam | Mid | 🟡 | ✅ `aac9735` |
+| S2-09 | Audit payment webhook idempotency + HMAC constant-time | 1 hari | Senior | 🟠 | ✅ `6693f5c` |
+| S2-10 | Engine activation runbook + smoke-test script verify | 4 jam | Mid | 🟡 | ✅ `5ce330c` |
+| S2-11 | Write 10 integration tests (full booking, cancel, OTA, refund, cargo) | 2 hari | Senior | — | ✅ `dc850d9` |
 
 **Total**: ~7 hari × 2 dev = 1 minggu
 
@@ -70,23 +74,25 @@
 
 ---
 
-## Sprint 3 — OBSERVABILITY & CI/CD (Minggu 3)
+## Sprint 3 — OBSERVABILITY & CI/CD (Minggu 3) — 🔄 IN PROGRESS
 
 **Tema**: Visibility + automation; tidak ada ops blind spots.
 
+> Status real-time: `SPRINT3-PROGRESS.md`.
+
 ### Backlog
-| ID | Item | Estimasi | Owner | Severity |
-|---|---|---|---|---|
-| S3-01 | Setup `.github/workflows/ci.yml` (lint, typecheck, tests, security scan) | 1 hari | Senior | 🟠 |
-| S3-02 | Pre-commit hooks (Husky + lint-staged) | 2 jam | Mid | 🟡 |
-| S3-03 | Sentry integration server + client + source maps upload | 1 hari | Senior | 🟠 |
-| S3-04 | Pino structured logging migration (top 10 critical modules) | 1 hari | Mid | 🟡 |
-| S3-05 | Prometheus `/metrics` endpoint + 8 custom metrics | 1 hari | Senior | 🟡 |
-| S3-06 | Deep `/api/health` check (DB, Redis, Realmio, Engine) | 4 jam | Mid | 🟡 |
-| S3-07 | Grafana dashboard 10 panels (provided JSON template) | 1 hari | Mid | 🟡 |
-| S3-08 | Detach migrations dari boot (env-gated) + deploy script integrate | 4 jam | Senior | 🟠 |
-| S3-09 | Blue/green deploy script + nginx upstream config | 1 hari | Senior | 🟠 |
-| S3-10 | Incident runbook 5 scenarios (engine down, DB down, Realmio down, etc.) | 1 hari | Mid | 🟡 |
+| ID | Item | Estimasi | Owner | Severity | Status |
+|---|---|---|---|---|---|
+| S3-01 | Setup `.github/workflows/ci.yml` (lint, typecheck, tests, security scan) | 1 hari | Senior | 🟠 | ⏳ |
+| S3-02 | Pre-commit hooks (Husky + lint-staged) | 2 jam | Mid | 🟡 | ⏳ |
+| S3-03 | Sentry integration server + client + source maps upload | 1 hari | Senior | 🟠 | ⏳ |
+| S3-04 | Pino structured logging migration (top 10 critical modules) | 1 hari | Mid | 🟡 | ⏳ |
+| S3-05 | Prometheus `/metrics` endpoint + 8 custom metrics | 1 hari | Senior | 🟡 | ⏳ |
+| S3-06 | Deep `/api/health` check (DB, Redis, Realmio, Engine) | 4 jam | Mid | 🟡 | ⏳ (DB+Engine selesai S2-06; sisa Redis+Realmio) |
+| S3-07 | Grafana dashboard 10 panels (provided JSON template) | 1 hari | Mid | 🟡 | ⏳ |
+| S3-08 | Detach migrations dari boot (env-gated) + deploy script integrate | 4 jam | Senior | 🟠 | ⏳ |
+| S3-09 | Blue/green deploy script + nginx upstream config | 1 hari | Senior | 🟠 | ⏳ |
+| S3-10 | Incident runbook 5 scenarios (engine down, DB down, Realmio down, etc.) | 1 hari | Mid | 🟡 | ⏳ |
 
 **Total**: ~7 hari × 2 dev
 
