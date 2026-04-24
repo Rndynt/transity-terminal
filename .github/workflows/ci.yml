@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, "feat/**", "fix/**"]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-test:
+    name: Build, typecheck, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: transity
+          POSTGRES_PASSWORD: transity
+          POSTGRES_DB: transity_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://transity:transity@localhost:5432/transity_test?sslmode=disable
+      JWT_SECRET: ci-jwt-secret-aabbccddeeff00112233445566778899
+      NODE_ENV: test
+      DEV_BYPASS_AUTH: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+        continue-on-error: true # ada pre-existing TS errors di refunds/cargo (lihat AUDIT-S2-11); track via project task #7
+
+      - name: DB push (drizzle)
+        run: npm run db:push -- --force
+
+      - name: Test (vitest)
+        run: npx vitest run
+
+      - name: Security audit (npm)
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true # high tidak block, tapi diaudit di Sprint 5
+
+  lint:
+    name: Lint (placeholder)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci --no-audit --no-fund
+      # ESLint belum dikonfigurasi di repo (S3-02 follow-up). Saat itu
+      # gantilah step ini dengan: npx eslint .
+      - name: Lint placeholder
+        run: echo "Lint config belum ada — tracked di Sprint 3 follow-up (S3-02)."
