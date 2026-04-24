@@ -452,6 +452,27 @@ export class AppController {
     }
   }
 
+  // T-CON-03: batch fetch by IDs untuk Console reconciler.
+  // Format: GET /api/app/bookings?ids=uuid1,uuid2,...  (max 50).
+  async batchBookings(req: FastifyRequest, reply: FastifyReply) {
+    const query = req.query as { ids?: string };
+    const raw = (query.ids ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    if (raw.length === 0) {
+      return reply.code(400).send({ error: 'ids query parameter is required' });
+    }
+    if (raw.length > 50) {
+      return reply.code(400).send({ error: 'Maximum 50 IDs per batch request' });
+    }
+    // Dedupe — Console kadang kirim duplikat tidak sengaja.
+    const ids = Array.from(new Set(raw));
+    try {
+      const result = await this.service.getBookingsByIds(ids);
+      reply.send(result);
+    } catch (e: unknown) {
+      reply.code(500).send({ error: errMsg(e) });
+    }
+  }
+
   async createReview(req: FastifyRequest, reply: FastifyReply) {
     const parsed = createReviewSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });

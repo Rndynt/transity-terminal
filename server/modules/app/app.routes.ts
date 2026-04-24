@@ -73,6 +73,13 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
   app.post('/api/app/bookings', { preHandler: [bookingAuthMiddleware] }, async (req, reply) => appController.createBooking(req, reply));
   app.get('/api/app/bookings', { preHandler: [bookingAuthMiddleware] }, async (req, reply) => {
     const isServiceClient = (req as any).isServiceClient === true;
+    const q = req.query as { ids?: string };
+    // T-CON-03: kalau service client kirim `?ids=`, dispatch ke batch handler
+    // (1 query DB) supaya Console reconciler tidak perlu N kali GET /:id.
+    // User app (non service-client) tidak boleh pakai batch shortcut.
+    if (isServiceClient && typeof q.ids === 'string' && q.ids.trim().length > 0) {
+      return appController.batchBookings(req, reply);
+    }
     if (isServiceClient) {
       return appController.listBookings(req, reply);
     }

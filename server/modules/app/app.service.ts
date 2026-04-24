@@ -2047,6 +2047,59 @@ export class AppService {
     return { data, total, page, limit, hasMore: (page - 1) * limit + data.length < total };
   }
 
+  // T-CON-03: batch fetch — kembalikan ringkasan booking utk N IDs dalam 1
+  // round-trip DB (Console reconciler polling per-booking → batch). Skip ID
+  // yang tidak ditemukan, tidak melempar error. Caller wajib limit ids.length.
+  async getBookingsByIds(ids: string[]): Promise<{ bookings: any[] }> {
+    if (ids.length === 0) return { bookings: [] };
+
+    const result = await db.select({
+      id: bookings.id,
+      bookingCode: bookings.bookingCode,
+      tripId: bookings.tripId,
+      serviceDate: trips.serviceDate,
+      status: bookings.status,
+      totalAmount: bookings.totalAmount,
+      discountAmount: bookings.discountAmount,
+      voucherCode: bookings.voucherCode,
+      channel: bookings.channel,
+      pendingExpiresAt: bookings.pendingExpiresAt,
+      originStopId: bookings.originStopId,
+      destinationStopId: bookings.destinationStopId,
+      snapOriginStopName: bookings.snapOriginStopName,
+      snapDestinationStopName: bookings.snapDestinationStopName,
+      createdAt: bookings.createdAt,
+    })
+    .from(bookings)
+    .innerJoin(trips, eq(bookings.tripId, trips.id))
+    .where(inArray(bookings.id, ids));
+
+    const foundIds = result.map(b => b.id);
+    let holdExpiryMap = new Map<string, string | null>();
+    if (foundIds.length > 0) {
+      const holds = await db.select({
+        bookingId: seatHolds.bookingId,
+        expiresAt: seatHolds.expiresAt,
+      }).from(seatHolds)
+        .where(inArray(seatHolds.bookingId, foundIds));
+      for (const h of holds) {
+        if (h.bookingId && !holdExpiryMap.has(h.bookingId)) {
+          holdExpiryMap.set(h.bookingId, h.expiresAt?.toISOString() ?? null);
+        }
+      }
+    }
+
+    const data = result.map(b => ({
+      ...b,
+      holdExpiresAt: b.status === 'pending'
+        ? (holdExpiryMap.get(b.id) || b.pendingExpiresAt?.toISOString() || null)
+        : null,
+      finalAmount: (Number(b.totalAmount ?? 0) - Number(b.discountAmount ?? 0)).toString(),
+    }));
+
+    return { bookings: data };
+  }
+
   async createReview(data: { userId: string; tripId: string; bookingId?: string; rating: number; comment?: string }): Promise<Review> {
     if (data.rating < 1 || data.rating > 5) throw new Error("Rating must be between 1 and 5");
 
