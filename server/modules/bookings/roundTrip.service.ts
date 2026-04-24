@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { db } from "@server/db";
 import { 
   bookingGroups as bookingGroupsTable, 
@@ -215,10 +216,20 @@ export class RoundTripService {
           eq(seatHolds.operatorId, operatorId)
         ));
 
+      // Round-trip booking is created with status='paid' for both legs
+      // (line 176 above), so the payment row needs the matching
+      // status='success' + paidAt + providerRef — otherwise finance
+      // reports that filter on status='success' miss every round-trip
+      // sale and the partial index idx_payments_paid_date is bypassed.
+      // Single payment row covers both legs (amount = outbound + return).
+      const paymentRef = `PAY-${randomBytes(12).toString('hex').toUpperCase()}`;
       await tx.insert(paymentsTable).values({
         bookingId: outboundBooking.id,
         method: payment.method,
-        amount: totalAmount.toString()
+        amount: totalAmount.toString(),
+        status: 'success',
+        providerRef: paymentRef,
+        paidAt: new Date(),
       });
 
       await tx.insert(printJobsTable).values([

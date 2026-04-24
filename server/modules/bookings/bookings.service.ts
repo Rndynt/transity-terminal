@@ -3,7 +3,7 @@ import { InsertBooking, Booking } from "@shared/schema";
 import { HoldsService } from "@modules/holds/holds.service";
 import { AtomicHoldService } from "./atomicHold.service";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { PrintService } from "@modules/printing/print.service";
 import { db } from "@server/db";
 import { bookings as bookingsTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable, bookingPromoApplications as bookingPromoApplicationsTable } from "@shared/schema";
@@ -215,10 +215,22 @@ export class BookingsService {
         await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);
       }
 
+      // CSO booking is created with status='paid' immediately (the cash/QR
+      // has already changed hands at the counter), so the payment row MUST
+      // match — otherwise finance reports that filter `status='success'`
+      // miss every CSO transaction, and the partial index
+      // idx_payments_paid_date (WHERE status='success') is bypassed.
+      // Generate a `PAY-<hex>` providerRef to match the shape used by
+      // app.service.processPaymentWebhook, which is what gateway-driven
+      // payments write into the same table.
+      const paymentRef = `PAY-${randomBytes(12).toString('hex').toUpperCase()}`;
       await tx.insert(paymentsTable).values({
         method: payment.method,
         amount: payment.amount.toString(),
-        bookingId: newBooking.id
+        bookingId: newBooking.id,
+        status: 'success',
+        providerRef: paymentRef,
+        paidAt: new Date(),
       });
 
       await tx.insert(printJobsTable).values({
