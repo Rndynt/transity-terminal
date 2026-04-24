@@ -136,11 +136,14 @@ export class CargoService {
     const { randomBytes } = await import("node:crypto");
     const trackingSecret = randomBytes(8).toString("hex");
 
-    return await this.storage.createCargoShipment({
+    // trackingSecret di-omit dari insertCargoShipmentSchema (server-generated),
+    // jadi kita lampirkan eksplisit di sini sebagai field tambahan yang sah.
+    const payload: InsertCargoShipment & { trackingSecret: string } = {
       ...data,
       waybillNumber,
       trackingSecret,
-    } as any);
+    };
+    return await this.storage.createCargoShipment(payload);
   }
 
   async updateShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment> {
