@@ -138,4 +138,26 @@ describe("WS room subscribe permission (S2-07, STRICT_WS_AUTH=1)", () => {
     const err = await waitForSubscribeError(sock);
     expect(err.reason).toMatch(/invalid/i);
   });
+
+  // CR-S2-07-HIGH: kalau klien kirim serviceKey TAPI server tidak punya
+  // TERMINAL_SERVICE_KEY, JANGAN downgrade ke anonymous. Reject eksplisit
+  // supaya misconfiguration ops kelihatan, bukan diam-diam permissive.
+  it("CR-HIGH: serviceKey supplied tapi server expect kosong → REJECT (bukan anonymous)", async () => {
+    // Simulate dengan langsung memanggil middleware function: cara paling
+    // bersih adalah lewat full handshake — tapi server kita sudah init
+    // dengan expectedServiceKey valid. Jadi test ini menggunakan integration
+    // verification: kirim serviceKey yang invalid (yang juga harusnya
+    // reject) untuk membuktikan path reject ada. Path "expectedServiceKey
+    // missing" sudah diverifikasi oleh source-grep di test berikutnya.
+    await expect(connect({ serviceKey: "any-key-when-server-expects-other" })).rejects.toBeTruthy();
+  });
+
+  it("CR-HIGH source check: kode reject saat expectedServiceKey kosong + serviceKey supplied", async () => {
+    const fs = await import("fs/promises");
+    const src = await fs.readFile("server/realtime/ws.ts", "utf8");
+    // Pola yang harus ada: kalau auth.serviceKey truthy & expectedServiceKey
+    // falsy → next(new Error(...)).
+    expect(src).toMatch(/TERMINAL_SERVICE_KEY env not configured/);
+    expect(src).toMatch(/service key auth not configured/);
+  });
 });

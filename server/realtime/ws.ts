@@ -91,12 +91,17 @@ class WebSocketService {
     // (kasih tapi salah), tolak koneksi. Kalau tidak kasih sama sekali, treat
     // anonymous (untuk seatmap shopping publik).
     const expectedServiceKey = process.env.TERMINAL_SERVICE_KEY?.trim();
-    // S2-07: STRICT_WS_AUTH=1 → enforce service-key untuk room operator/cso.
-    // Default off untuk backward-compat dengan operator UI lama yang anon
-    // subscribe (akan dihardening di sprint berikutnya setelah UI di-update).
-    const strictWsAuth = process.env.STRICT_WS_AUTH === '1';
+    // S2-07: default STRICT mode di production (NODE_ENV=production); dev
+    // tetap permisif supaya operator UI lama yang anon subscribe ke base/cso
+    // tidak break. Operator boleh paksa via STRICT_WS_AUTH=1 atau matikan
+    // via STRICT_WS_AUTH=0 (override eksplisit). `isProd` sudah dideklarasikan
+    // di atas (CORS branch).
+    const explicitStrict = process.env.STRICT_WS_AUTH;
+    const strictWsAuth = explicitStrict === '1' || (isProd && explicitStrict !== '0');
     if (!strictWsAuth) {
       log('STRICT_WS_AUTH off — base/cso room subscriptions allow anonymous (legacy compat). Set STRICT_WS_AUTH=1 to enforce service-key.', 'websocket');
+    } else {
+      log('STRICT_WS_AUTH on — base/cso room subscriptions require service-key.', 'websocket');
     }
     this.io.use((socket, next) => {
       const auth = (socket.handshake.auth || {}) as { token?: string; serviceKey?: string };
@@ -104,10 +109,12 @@ class WebSocketService {
       // Service-key path (Console BE, engine internal).
       if (auth.serviceKey) {
         if (!expectedServiceKey) {
-          // Server belum set TERMINAL_SERVICE_KEY → tidak bisa verify, treat
-          // sebagai anonymous (jangan reject — banyak dev env tidak set).
-          socket.data = { kind: 'anonymous' };
-          return next();
+          // CR-S2-07-HIGH: klien KIRIM serviceKey tapi server tidak punya
+          // expectedServiceKey untuk verify → ini misconfiguration ops yang
+          // berbahaya (key bisa accidentally bocor + di-trust). Reject
+          // eksplisit; jangan downgrade jadi anonymous.
+          console.error('[ws] handshake rejected: client supplied serviceKey but TERMINAL_SERVICE_KEY env not configured on server');
+          return next(new Error('service key auth not configured on server'));
         }
         if (auth.serviceKey !== expectedServiceKey) {
           return next(new Error('invalid service key'));
