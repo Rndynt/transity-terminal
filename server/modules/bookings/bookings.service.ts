@@ -20,6 +20,7 @@ import {
   generateBookingCode,
 } from "./booking.helpers";
 import { requirePermission, SYSTEM_CONTEXT, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { revertPromoApplicationsForBooking } from "@modules/promos/promoRevert";
 
 /**
  * S1-09 (Sprint 2): tiket dan booking adalah fondasi pendapatan, jadi
@@ -522,19 +523,9 @@ export class BookingsService {
         .where(eq(bookingsTable.id, bookingId));
 
       // S1-03: decrement promo usage + revert voucher saat pending → cancelled.
-      // GREATEST guard supaya tidak negatif kalau race / belum sempat ter-increment.
-      const apps = await tx.select().from(bookingPromoApplicationsTable)
-        .where(eq(bookingPromoApplicationsTable.bookingId, bookingId));
-      for (const app of apps) {
-        await tx.update(promotionsTable)
-          .set({ usageCount: sql`GREATEST(0, ${promotionsTable.usageCount} - 1)` })
-          .where(eq(promotionsTable.id, app.promoId));
-        if (app.voucherId) {
-          await tx.update(vouchersTable)
-            .set({ status: 'active', usedAt: null, usedByBookingId: null })
-            .where(eq(vouchersTable.id, app.voucherId));
-        }
-      }
+      // Helper keeps GREATEST-guarded decrement + voucher revert identical
+      // across this path, unseat.service, and refunds.service (P2 §5).
+      await revertPromoApplicationsForBooking(tx, bookingId);
     });
 
     await this.holdsService.releaseHoldsByOwner(operatorId, bookingId);
@@ -632,18 +623,8 @@ export class BookingsService {
             .where(eq(bookingsTable.id, booking.id));
 
           // S1-03: decrement promo usage + revert voucher pada cleanup expired.
-          const apps = await tx.select().from(bookingPromoApplicationsTable)
-            .where(eq(bookingPromoApplicationsTable.bookingId, booking.id));
-          for (const app of apps) {
-            await tx.update(promotionsTable)
-              .set({ usageCount: sql`GREATEST(0, ${promotionsTable.usageCount} - 1)` })
-              .where(eq(promotionsTable.id, app.promoId));
-            if (app.voucherId) {
-              await tx.update(vouchersTable)
-                .set({ status: 'active', usedAt: null, usedByBookingId: null })
-                .where(eq(vouchersTable.id, app.voucherId));
-            }
-          }
+          // Shared helper — see P2 §5 for dedup context.
+          await revertPromoApplicationsForBooking(tx, booking.id);
         });
 
         if (engineMode && seatNos.length > 0) {
