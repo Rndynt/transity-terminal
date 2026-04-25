@@ -6,6 +6,7 @@ import { IStorage, type ActivePassengerForTrip } from "@server/storage.interface
 import { generateBookingCode } from "@server/utils/codeGenerator";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
 import { AtomicHoldService } from "./atomicHold.service";
+import { enqueueCancelSeats } from "@modules/holds/compensationQueue";
 import { randomUUID } from "node:crypto";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 
@@ -199,7 +200,7 @@ export class RescheduleService {
           });
         } catch (e) {
           console.error('[RESCHEDULE] compensation cancelSeats(new) failed, enqueuing:', e);
-          const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
+          
           await enqueueCancelSeats({
             tripId: newTripId,
             seatNo: newSeatNo,
@@ -225,7 +226,7 @@ export class RescheduleService {
         });
       } catch (e) {
         console.error('[RESCHEDULE] engine cancelSeats(old) failed, enqueuing for retry:', e);
-        const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
+        
         await enqueueCancelSeats({
           tripId: oldTripId,
           seatNo: oldSeatNo,
@@ -461,7 +462,7 @@ export class RescheduleService {
               });
             } catch (e) {
               console.error('[RESCHEDULE_BATCH] compensation cancelSeats(new) failed, enqueuing:', e);
-              const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
+              
               await enqueueCancelSeats({
                 tripId: newTripId,
                 seatNo: targetSeat!,
@@ -488,7 +489,7 @@ export class RescheduleService {
               `[RESCHEDULE_BATCH] engine cancelSeats(old) failed for pax ${pax.id}, enqueuing:`,
               e,
             );
-            const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
+            
             await enqueueCancelSeats({
               tripId: oldTripId,
               seatNo: preferredSeat,

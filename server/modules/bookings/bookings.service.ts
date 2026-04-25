@@ -3,6 +3,8 @@ import { InsertBooking, Booking } from "@shared/schema";
 import { HoldsService } from "@modules/holds/holds.service";
 import { AtomicHoldService } from "./atomicHold.service";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
+import { enqueueCancelSeats } from "@modules/holds/compensationQueue";
+import { getConfig } from "../../config";
 import { randomBytes, randomUUID } from "node:crypto";
 import { PrintService } from "@modules/printing/print.service";
 import { db } from "@server/db";
@@ -380,7 +382,6 @@ export class BookingsService {
     ctx: ServiceContext
   ): Promise<{ booking: Booking; pendingExpiresAt: Date }> {
     requirePermission(ctx, "action.booking.create");
-    const { getConfig } = await import("../../config");
     const config = getConfig();
     
     const legIndexes = computeLegIndexes(bookingData.originSeq, bookingData.destinationSeq);
@@ -533,7 +534,6 @@ export class BookingsService {
     if (engineMode && seatNos.length > 0) {
       // Per-seat cancel via adapter; failures enqueue for scheduler retry
       // so a transient engine outage cannot leak seats from sale.
-      const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
       for (const passenger of passengers) {
         try {
           await this.holdsAdapter.cancelSeats({
@@ -595,9 +595,7 @@ export class BookingsService {
     }
 
     const engineMode = isEngineEnabled();
-    const enqueueCancel = engineMode
-      ? (await import('@modules/holds/compensationQueue')).enqueueCancelSeats
-      : null;
+    const enqueueCancel = engineMode ? enqueueCancelSeats : null;
 
     for (const booking of expiredPendingBookings) {
       try {

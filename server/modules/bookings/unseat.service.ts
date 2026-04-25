@@ -10,6 +10,9 @@ import { webSocketService } from "@server/realtime/ws";
 import { IStorage } from "@server/storage.interface";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 import { revertPromoApplicationsForBooking } from "@modules/promos/promoRevert";
+import { isEngineEnabled, HoldsAdapter } from "@modules/holds/holdsAdapter";
+import { AtomicHoldService } from "./atomicHold.service";
+import { enqueueCancelSeats } from "@modules/holds/compensationQueue";
 
 /**
  * S1-09 (Sprint 2): unseat & re-assign kursi memengaruhi inventory dan
@@ -76,7 +79,6 @@ export class UnseatService {
       // Engine mode: defer the seat release to AFTER tx commit; the engine
       // owns inventory writes and runs its own tx. Flag-off mode keeps the
       // legacy inline SQL inside the outer tx for unchanged behavior.
-      const { isEngineEnabled } = await import("@modules/holds/holdsAdapter");
       if (!isEngineEnabled()) {
         await tx.update(seatInventory)
           .set({ booked: false, holdRef: null })
@@ -116,29 +118,23 @@ export class UnseatService {
     // the engine to release the seat back to inventory. On failure,
     // enqueue for asynchronous retry — the unseat is already done on TT
     // side and we don't want to roll it back.
-    let engineModeUnseat = false;
-    {
-      const { isEngineEnabled, HoldsAdapter } = await import("@modules/holds/holdsAdapter");
-      engineModeUnseat = isEngineEnabled();
-      if (engineModeUnseat) {
-        const { AtomicHoldService } = await import("./atomicHold.service");
-        const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
-        try {
-          await adapter.cancelSeats({
-            tripId: booking.tripId,
-            seatNo: passenger.seatNo,
-            legIndexes,
-          });
-        } catch (e) {
-          console.error('[UNSEAT] engine cancelSeats failed, enqueuing:', e);
-          const { enqueueCancelSeats } = await import("@modules/holds/compensationQueue");
-          await enqueueCancelSeats({
-            tripId: booking.tripId,
-            seatNo: passenger.seatNo,
-            legIndexes,
-            context: { source: 'unseatPassenger', passengerId, bookingId: booking.id },
-          });
-        }
+    const engineModeUnseat = isEngineEnabled();
+    if (engineModeUnseat) {
+      const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+      try {
+        await adapter.cancelSeats({
+          tripId: booking.tripId,
+          seatNo: passenger.seatNo,
+          legIndexes,
+        });
+      } catch (e) {
+        console.error('[UNSEAT] engine cancelSeats failed, enqueuing:', e);
+        await enqueueCancelSeats({
+          tripId: booking.tripId,
+          seatNo: passenger.seatNo,
+          legIndexes,
+          context: { source: 'unseatPassenger', passengerId, bookingId: booking.id },
+        });
       }
     }
 
@@ -179,7 +175,6 @@ export class UnseatService {
           .where(eq(passengers.id, p.id));
 
         // See comment in unseatPassenger() about engine-mode deferral.
-        const { isEngineEnabled } = await import("@modules/holds/holdsAdapter");
         if (!isEngineEnabled()) {
           await tx.update(seatInventory)
             .set({ booked: false, holdRef: null })
@@ -211,30 +206,24 @@ export class UnseatService {
     // Engine mode: per-seat cancel after tx commit. Engine endpoint is
     // per-seat only, so we iterate. Each failure is enqueued for the
     // scheduler so a transient engine outage cannot leak seats.
-    let engineModeBatch = false;
-    {
-      const { isEngineEnabled, HoldsAdapter } = await import("@modules/holds/holdsAdapter");
-      engineModeBatch = isEngineEnabled();
-      if (engineModeBatch) {
-        const { AtomicHoldService } = await import("./atomicHold.service");
-        const { enqueueCancelSeats } = await import("@modules/holds/compensationQueue");
-        const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
-        for (const p of activePax) {
-          try {
-            await adapter.cancelSeats({
-              tripId: booking.tripId,
-              seatNo: p.seatNo,
-              legIndexes,
-            });
-          } catch (e) {
-            console.error(`[UNSEAT] engine cancelSeats failed for seat ${p.seatNo}, enqueuing:`, e);
-            await enqueueCancelSeats({
-              tripId: booking.tripId,
-              seatNo: p.seatNo,
-              legIndexes,
-              context: { source: 'unseatAllPassengers', passengerId: p.id, bookingId: booking.id },
-            });
-          }
+    const engineModeBatch = isEngineEnabled();
+    if (engineModeBatch) {
+      const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+      for (const p of activePax) {
+        try {
+          await adapter.cancelSeats({
+            tripId: booking.tripId,
+            seatNo: p.seatNo,
+            legIndexes,
+          });
+        } catch (e) {
+          console.error(`[UNSEAT] engine cancelSeats failed for seat ${p.seatNo}, enqueuing:`, e);
+          await enqueueCancelSeats({
+            tripId: booking.tripId,
+            seatNo: p.seatNo,
+            legIndexes,
+            context: { source: 'unseatAllPassengers', passengerId: p.id, bookingId: booking.id },
+          });
         }
       }
     }
@@ -306,7 +295,6 @@ export class UnseatService {
       // seat release until AFTER tx commit. Flag-off mode keeps the
       // legacy inline SQL inside the tx for unchanged behavior.
       if (passengerRow.seatNo && legIndexes.length > 0) {
-        const { isEngineEnabled } = await import("@modules/holds/holdsAdapter");
         if (!isEngineEnabled()) {
           await tx.update(seatInventory)
             .set({ booked: false, holdRef: null })
@@ -362,10 +350,8 @@ export class UnseatService {
     // irreversible at this point.
     let engineModeCancel = false;
     if (passengerRow.seatNo && legIndexes.length > 0) {
-      const { isEngineEnabled, HoldsAdapter } = await import("@modules/holds/holdsAdapter");
       engineModeCancel = isEngineEnabled();
       if (engineModeCancel) {
-        const { AtomicHoldService } = await import("./atomicHold.service");
         const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
         try {
           await adapter.cancelSeats({
@@ -375,7 +361,6 @@ export class UnseatService {
           });
         } catch (e) {
           console.error('[UNSEAT] engine cancelSeats failed after cancel tx commit, enqueuing:', e);
-          const { enqueueCancelSeats } = await import("@modules/holds/compensationQueue");
           await enqueueCancelSeats({
             tripId: booking.tripId,
             seatNo: passengerRow.seatNo,
