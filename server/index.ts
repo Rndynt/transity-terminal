@@ -27,6 +27,7 @@ import helmet from "@fastify/helmet";
 import cors from "@fastify/cors";
 import { createRateLimitRedisClient } from "./realtime/redis";
 import { registerRoutes } from "./routes";
+import { registerRequestContextHook } from "./lib/requestContext";
 import { setupVite, serveStatic, log } from "./vite";
 import { scheduler } from "./scheduler";
 import { runMigrations } from "./migrate";
@@ -170,6 +171,11 @@ function redactSensitive(obj: Record<string, unknown>): Record<string, unknown> 
   }
   return result;
 }
+
+// P2 §5.5: wrap each request in an AsyncLocalStorage scope so downstream
+// code can memoize per-request reads (e.g. `storage.getTripById` is called
+// 3-5x in a single booking flow). Must be registered before route handlers.
+registerRequestContextHook(app);
 
 // S3-05 (post-review fix): wire HTTP metrics ke setiap response.
 // onResponse jalan setelah reply terkirim, jadi durasi + status final
