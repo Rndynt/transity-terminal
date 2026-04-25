@@ -119,7 +119,7 @@ export class BookingRepository {
     return passenger;
   }
 
-  async getActivePassengersForTrip(tripId: string): Promise<any[]> {
+  async getActivePassengersForTrip(tripId: string): Promise<import("@server/storage.interface").ActivePassengerForTrip[]> {
     const rows = await db.execute(sql`
       SELECT
         p.id,
@@ -146,10 +146,10 @@ export class BookingRepository {
         AND COALESCE(p.ticket_status, 'active') NOT IN ('cancelled', 'refunded', 'unseated')
       ORDER BY p.full_name ASC
     `);
-    return rows.rows as any[];
+    return rows.rows as unknown as import("@server/storage.interface").ActivePassengerForTrip[];
   }
 
-  async getUnseatedPassengers(tripId: string): Promise<any[]> {
+  async getUnseatedPassengers(tripId: string): Promise<import("@server/storage.interface").UnseatedPassengerForTrip[]> {
     const rows = await db.execute(sql`
       SELECT
         p.id,
@@ -170,7 +170,7 @@ export class BookingRepository {
         AND COALESCE(p.ticket_status, 'active') = 'unseated'
       ORDER BY p.full_name ASC
     `);
-    return rows.rows as any[];
+    return rows.rows as unknown as import("@server/storage.interface").UnseatedPassengerForTrip[];
   }
 
   async getPayments(bookingId: string): Promise<Payment[]> {

@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
+import type { Server } from "http";
 import type { FastifyInstance } from "fastify";
+import type { LogErrorOptions } from "vite";
 
 export function log(message: string, source = "fastify") {
   const formattedTime = new Date().toLocaleTimeString("id-ID", {
@@ -14,7 +16,7 @@ export function log(message: string, source = "fastify") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-export async function setupVite(app: FastifyInstance, server: any) {
+export async function setupVite(app: FastifyInstance, server: Server) {
   const viteLib = await import("vite");
   const createViteServer = viteLib.createServer;
   const createLogger = viteLib.createLogger;
@@ -36,7 +38,7 @@ export async function setupVite(app: FastifyInstance, server: any) {
     configFile: false,
     customLogger: {
       ...viteLogger,
-      error: (msg: string, options?: any) => {
+      error: (msg: string, options?: LogErrorOptions) => {
         viteLogger.error(msg, options);
         process.exit(1);
       },

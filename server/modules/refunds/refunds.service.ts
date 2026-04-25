@@ -16,8 +16,9 @@ import { webSocketService } from "@server/realtime/ws";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 import { revertPromoApplicationsForBooking } from "@modules/promos/promoRevert";
 
-function getRows(result: any): any[] {
-  return Array.isArray(result) ? result : (result as any).rows || [];
+function getRows(result: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(result)) return result as Array<Record<string, unknown>>;
+  return ((result as { rows?: unknown[] })?.rows || []) as Array<Record<string, unknown>>;
 }
 
 const INACTIVE_TICKET_STATUSES = ['cancelled', 'refunded', 'no_show', 'unseated'] as const;
@@ -131,7 +132,7 @@ export class RefundsService {
 
     if (targetPassengers.length === 0) {
       // Semua passenger sudah inactive — CAS-only update (tetap race-safe).
-      const [r]: any = getRows(await db.execute(sql`
+      const [r] = getRows(await db.execute(sql`
         UPDATE refunds SET status = 'approved', approved_by = ${approvedBy}, approved_at = NOW()
          WHERE id = ${id} AND status = 'pending'
         RETURNING id
@@ -151,7 +152,7 @@ export class RefundsService {
       // 1. CAS: 'pending' → 'approved'. Kalau ada request paralel yang sudah
       // duluan, rowCount=0 → kita skip semua side-effect dan return idempotent
       // di luar transaction.
-      const claimRows: any = getRows(await tx.execute(sql`
+      const claimRows = getRows(await tx.execute(sql`
         UPDATE refunds
            SET status = 'approved', approved_by = ${approvedBy}, approved_at = NOW()
          WHERE id = ${id} AND status = 'pending'

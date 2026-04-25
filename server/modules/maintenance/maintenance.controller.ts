@@ -21,14 +21,14 @@ export class MaintenanceController {
 
   async create(req: FastifyRequest, reply: FastifyReply) {
     const { vehicleId } = req.params as { vehicleId: string };
-    const createdBy = (req as any).user?.email || 'Unknown';
-    const row = await this.service.create(vehicleId, req.body, createdBy);
+    const createdBy = req.user?.email || 'Unknown';
+    const row = await this.service.create(vehicleId, req.body as Parameters<MaintenanceService['create']>[1], createdBy);
     reply.send(row);
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
-    const result = await this.service.update(id, req.body);
+    const result = await this.service.update(id, req.body as Parameters<MaintenanceService['update']>[1]);
     reply.send(result);
   }
 

@@ -1,13 +1,17 @@
 import { db } from "@server/db";
 import { sql } from "drizzle-orm";
 
-function getRow(result: any, index = 0) {
-  const rows = Array.isArray(result) ? result : result?.rows || [];
-  return rows[index] || {};
+function getRow(result: unknown, index = 0): Record<string, unknown> {
+  const rows = Array.isArray(result)
+    ? result
+    : ((result as { rows?: unknown[] })?.rows || []);
+  return (rows[index] || {}) as Record<string, unknown>;
 }
 
-function getRows(result: any) {
-  return Array.isArray(result) ? result : result?.rows || [];
+function getRows(result: unknown): Array<Record<string, unknown>> {
+  return (Array.isArray(result)
+    ? result
+    : ((result as { rows?: unknown[] })?.rows || [])) as Array<Record<string, unknown>>;
 }
 
 export class DashboardService {

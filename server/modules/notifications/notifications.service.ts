@@ -24,7 +24,7 @@ export class NotificationsService {
       WHERE is_read = false
       AND (target_user_id IS NULL OR target_user_id = ${userId || ''} ${outletId ? sql`OR target_outlet_id = ${outletId}` : sql``})
     `);
-    const rows = Array.isArray(result) ? result : (result as any).rows || [];
+    const rows = Array.isArray(result) ? result : ((result as { rows?: Array<{ count?: number }> }).rows || []);
     return rows[0]?.count || 0;
   }
 
@@ -73,7 +73,7 @@ export class NotificationsService {
     const readTtlDays = Math.max(1, parseInt(process.env.NOTIF_READ_TTL_DAYS || '90', 10));
     const unreadTtlDays = Math.max(readTtlDays, parseInt(process.env.NOTIF_UNREAD_TTL_DAYS || '180', 10));
 
-    const result: any = await db.execute(sql`
+    const result = await db.execute(sql`
       DELETE FROM notifications
       WHERE
         (is_read = true  AND created_at < NOW() - (${readTtlDays}   || ' days')::interval)
@@ -83,6 +83,7 @@ export class NotificationsService {
         (expires_at IS NOT NULL AND expires_at < NOW())
     `);
     // Drizzle/pg returns rowCount via different shapes depending on driver.
-    return Number(result?.rowCount ?? result?.[0]?.rowCount ?? 0);
+    const r = result as unknown as { rowCount?: number; [k: number]: { rowCount?: number } };
+    return Number(r?.rowCount ?? r?.[0]?.rowCount ?? 0);
   }
 }

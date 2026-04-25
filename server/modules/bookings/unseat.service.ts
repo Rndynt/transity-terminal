@@ -54,7 +54,7 @@ export class UnseatService {
     performedBy: string,
     reason: string | undefined,
     ctx: ServiceContext
-  ): Promise<{ success: boolean; booking: any; passenger: any }> {
+  ): Promise<{ success: boolean; booking: typeof bookings.$inferSelect | undefined; passenger: typeof passengers.$inferSelect }> {
     requirePermission(ctx, "action.passenger.unseat");
     const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
     if (!passenger) throw new Error("Penumpang tidak ditemukan");
@@ -161,7 +161,7 @@ export class UnseatService {
     performedBy: string,
     reason: string | undefined,
     ctx: ServiceContext
-  ): Promise<{ success: boolean; booking: any }> {
+  ): Promise<{ success: boolean; booking: typeof bookings.$inferSelect | null | undefined }> {
     requirePermission(ctx, "action.passenger.unseat");
     const booking = await this.storage.getBookingById(bookingId);
     if (!booking) throw new Error("Booking tidak ditemukan");
@@ -278,7 +278,7 @@ export class UnseatService {
     reason: string,
     performedBy: string,
     ctx: ServiceContext
-  ): Promise<{ passenger: any }> {
+  ): Promise<{ passenger: typeof passengers.$inferSelect }> {
     requirePermission(ctx, "action.booking.cancel");
 
     const trimmedReason = reason.trim();
@@ -403,7 +403,7 @@ export class UnseatService {
     newSeatNo: string,
     performedBy: string,
     ctx: ServiceContext
-  ): Promise<{ success: boolean; passenger: any; booking: any }> {
+  ): Promise<{ success: boolean; passenger: typeof passengers.$inferSelect; booking: typeof bookings.$inferSelect | null | undefined }> {
     requirePermission(ctx, "action.passenger.assign_seat");
     const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
     if (!passenger) throw new Error("Penumpang tidak ditemukan");

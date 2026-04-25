@@ -56,11 +56,11 @@ export async function runSchemaMigrations(migrationsFolder = "./migrations") {
         console.log("[migrator] DB sudah ada. Inisialisasi migration tracking...");
 
         const journalPath = `${migrationsFolder}/meta/_journal.json`;
-        const journal = JSON.parse(fs.readFileSync(journalPath).toString());
+        const journal = JSON.parse(fs.readFileSync(journalPath).toString()) as { entries: Array<{ idx: number; tag: string; when: number; breakpoints?: boolean }> };
 
         // Semua migration sampai sebelum idx 7 dianggap sudah diterapkan
         const NEW_MIGRATION_IDX = 7;
-        const existingEntries = journal.entries.filter((e: any) => e.idx < NEW_MIGRATION_IDX);
+        const existingEntries = journal.entries.filter((e) => e.idx < NEW_MIGRATION_IDX);
 
         for (const entry of existingEntries) {
           const sqlPath = `${migrationsFolder}/${entry.tag}.sql`;

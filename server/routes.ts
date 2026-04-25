@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply, RouteShorthandOptions } from "fastify";
 import { storage } from "./storage";
 import { registerAuthRoutes } from "./modules/auth/auth.routes";
 import { requireAuth } from "./modules/auth/realmio";
@@ -268,8 +268,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
     });
   });
 
-  const masterDataCache = {
-    onSend: async (_req: FastifyRequest, reply: FastifyReply, payload: string) => {
+  const masterDataCache: RouteShorthandOptions = {
+    onSend: async (_req, reply, payload) => {
       reply.header('Cache-Control', 'no-cache');
       return payload;
     }
@@ -301,7 +301,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
   registerCustomersRoutes(app);
   registerSettingsRoutes(app);
 
-  app.post('/api/seed', { preHandler: [requireFlag('admin.flags.manage')] }, async (req: any, reply: any) => {
+  app.post('/api/seed', { preHandler: [requireFlag('admin.flags.manage')] }, async (req, reply) => {
     if (process.env.NODE_ENV === 'production') {
       return reply.code(403).send({ error: 'Seed disabled in production' });
     }
@@ -310,7 +310,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
     reply.send({ message: 'Seed data created successfully' });
   });
 
-  app.post('/api/seed/rbac', { preHandler: [requireFlag('admin.flags.manage')] }, async (req: any, reply: any) => {
+  app.post('/api/seed/rbac', { preHandler: [requireFlag('admin.flags.manage')] }, async (req, reply) => {
     if (process.env.NODE_ENV === 'production') {
       return reply.code(403).send({ error: 'Seed disabled in production' });
     }

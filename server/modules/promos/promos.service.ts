@@ -120,8 +120,9 @@ export class PromosService {
           validTo: promo.validTo,
         });
         results.push(voucher);
-      } catch (err: any) {
-        if (err?.code === '23505' || err?.cause?.code === '23505') {
+      } catch (err: unknown) {
+        const e = err as { code?: string; cause?: { code?: string } };
+        if (e?.code === '23505' || e?.cause?.code === '23505') {
           continue;
         }
         throw err;
@@ -138,7 +139,7 @@ export class PromosService {
 
   async revokeVoucher(id: string, ctx: ServiceContext): Promise<Voucher> {
     requirePermission(ctx, "master.promos");
-    return this.storage.updateVoucher(id, { status: 'revoked' } as any);
+    return this.storage.updateVoucher(id, { status: 'revoked' });
   }
 
   async deleteVoucher(id: string, ctx: ServiceContext): Promise<void> {
@@ -399,7 +400,7 @@ export class PromosService {
           status: 'used',
           usedAt: new Date(),
           usedByBookingId: bookingId,
-        } as any);
+        });
       }
     }
   }
@@ -411,7 +412,7 @@ export class PromosService {
         status: 'used',
         usedAt: new Date(),
         usedByBookingId: bookingId || null,
-      } as any);
+      });
     }
   }
 

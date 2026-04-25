@@ -963,8 +963,7 @@ export class AppService {
     const allStopsForDetail = await this.storage.getStopsByIds(stopIdsForDetail);
     const stopsDetailMap = new Map(allStopsForDetail.map(s => [s.id, s]));
 
-    const stopsData: TripDetailResponse['stops'] = stopTimes.map(
-      (st: { stopId: string; stopName?: string; stopCode?: string; stopSequence: number; arriveAt: string | null; departAt: string | null; effectiveBoardingAllowed: boolean; effectiveAlightingAllowed: boolean }) => {
+    const stopsData: TripDetailResponse['stops'] = stopTimes.map((st) => {
         const stop = stopsDetailMap.get(st.stopId);
         return {
           stopId: st.stopId as string,

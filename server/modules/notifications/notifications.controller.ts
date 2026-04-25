@@ -9,16 +9,16 @@ export class NotificationsController {
   }
 
   async getAll(req: FastifyRequest, reply: FastifyReply) {
-    const userId = (req as any).user?.id || (req as any).rbac?.staffId;
-    const outletId = (req as any).rbac?.outletId;
-    const rows = await this.service.getForUser(userId, outletId);
+    const userId = req.user?.id || (req.rbac as { staffId?: string } | undefined)?.staffId;
+    const outletId = req.rbac?.outletId;
+    const rows = await this.service.getForUser(userId ?? '', outletId ?? undefined);
     reply.send(rows);
   }
 
   async getUnreadCount(req: FastifyRequest, reply: FastifyReply) {
-    const userId = (req as any).user?.id || (req as any).rbac?.staffId;
-    const outletId = (req as any).rbac?.outletId;
-    const count = await this.service.getUnreadCount(userId, outletId);
+    const userId = req.user?.id || (req.rbac as { staffId?: string } | undefined)?.staffId;
+    const outletId = req.rbac?.outletId;
+    const count = await this.service.getUnreadCount(userId ?? '', outletId ?? undefined);
     reply.send({ count });
   }
 
@@ -29,8 +29,8 @@ export class NotificationsController {
   }
 
   async markAllRead(req: FastifyRequest, reply: FastifyReply) {
-    const userId = (req as any).user?.id || (req as any).rbac?.staffId;
-    await this.service.markAllRead(userId);
+    const userId = req.user?.id || (req.rbac as { staffId?: string } | undefined)?.staffId;
+    await this.service.markAllRead(userId ?? '');
     reply.send({ success: true });
   }
 

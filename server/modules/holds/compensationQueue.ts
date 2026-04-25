@@ -215,14 +215,15 @@ export async function getStuckCount(): Promise<{
 }> {
   if (!isEngineEnabled()) return { deadLettered: 0, nearCap: 0 };
   try {
-    const result: any = await db.execute(sql`
+    const result = await db.execute(sql`
       SELECT
         COUNT(*) FILTER (WHERE dead_lettered_at IS NOT NULL)::int    AS dead_lettered,
         COUNT(*) FILTER (WHERE dead_lettered_at IS NULL
                           AND attempts >= ${Math.floor(MAX_ATTEMPTS * 0.8)})::int AS near_cap
         FROM engine_compensation_queue
     `);
-    const row = (result.rows?.[0] ?? result[0]) as { dead_lettered: number; near_cap: number };
+    const r = result as unknown as { rows?: Array<{ dead_lettered: number; near_cap: number }>; [k: number]: { dead_lettered: number; near_cap: number } };
+    const row = r.rows?.[0] ?? r[0];
     return {
       deadLettered: Number(row?.dead_lettered ?? 0),
       nearCap: Number(row?.near_cap ?? 0),

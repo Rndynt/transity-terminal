@@ -16,7 +16,7 @@ function serviceKeyMiddleware(req: FastifyRequest, reply: FastifyReply, done: ()
       reply.code(401).send({ error: 'Missing X-Service-Key header', code: 'MISSING_SERVICE_KEY' });
       return;
     }
-    (req as any).isServiceClient = true;
+    req.isServiceClient = true;
     done();
     return;
   }
@@ -28,7 +28,7 @@ function serviceKeyMiddleware(req: FastifyRequest, reply: FastifyReply, done: ()
     reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
     return;
   }
-  (req as any).isServiceClient = true;
+  req.isServiceClient = true;
   done();
 }
 
@@ -63,7 +63,7 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
       if (incomingKey !== getTerminalServiceKey()) {
         return reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
       }
-      (req as any).isServiceClient = true;
+      req.isServiceClient = true;
     } else {
       await appAuthMiddleware(req, reply);
     }
@@ -72,7 +72,7 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
   app.get('/api/app/bookings/find-ota', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.findOtaBooking(req, reply));
   app.post('/api/app/bookings', { preHandler: [bookingAuthMiddleware] }, async (req, reply) => appController.createBooking(req, reply));
   app.get('/api/app/bookings', { preHandler: [bookingAuthMiddleware] }, async (req, reply) => {
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const q = req.query as { ids?: string };
     // T-CON-03: kalau service client kirim `?ids=`, dispatch ke batch handler
     // (1 query DB) supaya Console reconciler tidak perlu N kali GET /:id.

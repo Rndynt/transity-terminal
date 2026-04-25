@@ -75,9 +75,10 @@ export class CashierService {
         notes: data.notes,
       }).returning();
       return session;
-    } catch (err: any) {
+    } catch (err: unknown) {
       // 23505 = unique_violation. Race antara dua request dari staff yang sama.
-      if (err?.code === '23505' || err?.cause?.code === '23505') {
+      const e = err as { code?: string; cause?: { code?: string } };
+      if (e?.code === '23505' || e?.cause?.code === '23505') {
         throw new Error('Sesi kasir Anda sudah dibuka oleh request paralel. Refresh halaman.');
       }
       throw err;
@@ -117,7 +118,7 @@ export class CashierService {
       GROUP BY p.method
       ORDER BY p.method
     `);
-    const summary = Array.isArray(summaryResult) ? summaryResult : (summaryResult as any).rows || [];
+    const summary = Array.isArray(summaryResult) ? summaryResult : (summaryResult as { rows?: unknown[] }).rows || [];
 
     const txResult = await db.execute(sql`
       SELECT p.id, p.amount, p.method, p.status, p.paid_at AS created_at, b.booking_code
@@ -126,7 +127,7 @@ export class CashierService {
       WHERE ${this.buildOutletTimeFilter(outletId, session.openedAt, null)}
       ORDER BY p.paid_at DESC
     `);
-    const transactions = Array.isArray(txResult) ? txResult : (txResult as any).rows || [];
+    const transactions = Array.isArray(txResult) ? txResult : (txResult as { rows?: unknown[] }).rows || [];
 
     return { session, summary, transactions };
   }
@@ -152,7 +153,7 @@ export class CashierService {
       GROUP BY p.method
     `);
     const systemByMethod: Record<string, number> = {};
-    const rows = Array.isArray(systemTotals) ? systemTotals : (systemTotals as any).rows || [];
+    const rows = (Array.isArray(systemTotals) ? systemTotals : (systemTotals as { rows?: unknown[] }).rows || []) as Array<{ method: string; total: string }>;
     for (const r of rows) {
       systemByMethod[r.method] = parseFloat(r.total) || 0;
     }
@@ -205,7 +206,7 @@ export class CashierService {
     const [session] = await db.select().from(cashierSessions).where(eq(cashierSessions.id, id));
     const settlements = await db.select().from(cashierSettlements).where(eq(cashierSettlements.sessionId, id));
 
-    let transactions: any[] = [];
+    let transactions: unknown[] = [];
     if (session) {
       const txResult = await db.execute(sql`
         SELECT p.id, p.amount, p.method, p.status, p.paid_at AS created_at, b.booking_code
@@ -214,7 +215,7 @@ export class CashierService {
         WHERE ${this.buildOutletTimeFilter(session.outletId, session.openedAt, session.closedAt)}
         ORDER BY p.paid_at DESC
       `);
-      transactions = Array.isArray(txResult) ? txResult : (txResult as any).rows || [];
+      transactions = Array.isArray(txResult) ? txResult : (txResult as { rows?: unknown[] }).rows || [];
     }
 
     return { session, settlements, transactions };

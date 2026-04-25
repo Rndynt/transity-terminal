@@ -139,11 +139,12 @@ app.register(import("@fastify/middie"));
 
 app.addContentTypeParser('application/json', { parseAs: 'buffer' }, function (req, body, done) {
   try {
-    const json = body.length > 0 ? JSON.parse(body.toString()) : undefined;
-    (req as any).rawBody = body;
+    const buf = body as Buffer;
+    const json = buf.length > 0 ? JSON.parse(buf.toString()) : undefined;
+    (req as unknown as { rawBody: Buffer }).rawBody = buf;
     done(null, json);
-  } catch (err: any) {
-    done(err, undefined);
+  } catch (err: unknown) {
+    done(err as Error, undefined);
   }
 });
 

@@ -43,7 +43,7 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
       return reply.code(400).send({ message: 'Invalid request', errors: parsed.error.flatten() });
     }
 
-    const user = (req as any).user;
+    const user = req.user;
     const exception = await schedulerService.addException(
       parsed.data.baseId,
       parsed.data.exceptionDate,
@@ -86,7 +86,7 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
     if (!parsed.success) {
       return reply.code(400).send({ message: 'Invalid request', errors: parsed.error.flatten() });
     }
-    const user = (req as any).user;
+    const user = req.user;
     const exception = await schedulerService.addStopException(
       parsed.data.baseId,
       parsed.data.exceptionDate,
@@ -134,7 +134,7 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
     }
 
     try {
-      const updateData: Record<string, any> = {};
+      const updateData: Record<string, unknown> = {};
       if (parsed.data.driverId !== undefined) updateData.driverId = parsed.data.driverId;
       if (parsed.data.vehicleId !== undefined) updateData.vehicleId = parsed.data.vehicleId;
 
@@ -150,8 +150,9 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
         vehicleId: updated.vehicleId,
         vehiclePlate: vehicle?.plate || updated.snapVehiclePlate || null,
       });
-    } catch (err: any) {
-      return reply.code(400).send({ message: err.message || 'Failed to update assignment' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update assignment';
+      return reply.code(400).send({ message });
     }
   });
 }

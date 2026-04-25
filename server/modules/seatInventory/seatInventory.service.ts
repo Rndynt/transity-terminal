@@ -71,7 +71,7 @@ export class SeatInventoryService {
         }
       }
 
-      const seatMap = layout.seatMap as any[];
+      const seatMap = layout.seatMap as Array<{ seat_no: string; disabled?: boolean }>;
       const inventoryEntries = [];
 
       for (const seat of seatMap) {

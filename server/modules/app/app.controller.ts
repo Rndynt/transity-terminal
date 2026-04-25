@@ -188,7 +188,7 @@ export class AppController {
   async searchTrips(req: FastifyRequest, reply: FastifyReply) {
     const parsed = searchSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", code: 'VALIDATION_ERROR', details: parsed.error.flatten() });
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const channel: 'OTA' | 'APP' = isServiceClient ? 'OTA' : 'APP';
     const result = await this.service.searchTrips({
       ...parsed.data,
@@ -250,7 +250,7 @@ export class AppController {
   }
 
   async createBooking(req: FastifyRequest, reply: FastifyReply) {
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const parsed = createBookingSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
     const userId = isServiceClient ? null : (req.appUser?.userId ?? null);
@@ -315,7 +315,7 @@ export class AppController {
   }
 
   async getBookingDetail(req: FastifyRequest, reply: FastifyReply) {
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const userId = isServiceClient ? undefined : (req.appUser?.userId ?? undefined);
     try {
       const detail = await this.service.getBookingDetail((req.params as { id: string }).id, userId);
@@ -330,7 +330,7 @@ export class AppController {
   }
 
   async getPaymentStatus(req: FastifyRequest, reply: FastifyReply) {
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const userId = isServiceClient ? undefined : (req.appUser?.userId ?? undefined);
     try {
       const result = await this.service.getPaymentStatus((req.params as { id: string }).id, userId!);
@@ -384,7 +384,7 @@ export class AppController {
   }
 
   async cancelBooking(req: FastifyRequest, reply: FastifyReply) {
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const userId = isServiceClient ? null : (req.appUser?.userId ?? null);
     try {
       await this.service.cancelBooking((req.params as { id: string }).id, userId);
@@ -404,7 +404,7 @@ export class AppController {
   async payBooking(req: FastifyRequest, reply: FastifyReply) {
     const parsed = payBookingSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const userId = isServiceClient ? null : (req.appUser?.userId ?? null);
     try {
       const result = await this.service.payBooking((req.params as { id: string }).id, parsed.data.paymentMethod, parsed.data.voucherCode, userId);
@@ -496,7 +496,7 @@ export class AppController {
     try {
       const waybillNumber = (req.params as { waybillNumber: string }).waybillNumber;
       // S1-06: secret bisa dikirim via query (?secret=) atau header X-Tracking-Secret.
-      const q = (req.query as any) || {};
+      const q = (req.query as { secret?: string; s?: string } | undefined) || {};
       const headerSecret = (req.headers['x-tracking-secret'] as string | undefined) || undefined;
       const secret: string | undefined = q.secret || q.s || headerSecret;
       const result = await this.service.trackCargo(waybillNumber, secret);

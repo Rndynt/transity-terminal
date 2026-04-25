@@ -14,18 +14,19 @@ export class CargoController {
   }
 
   async getAll(req: FastifyRequest, reply: FastifyReply) {
-    const { tripId, status } = req.query as any;
+    const query = (req.query as { tripId?: string; status?: string; outletId?: string; page?: string; pageSize?: string } | undefined) || {};
+    const { tripId, status } = query;
     const scopedOutlet = req.scopedOutletId ?? req.rbac?.outletId ?? null;
-    const outletId = scopedOutlet ?? (req.query as any).outletId;
+    const outletId = scopedOutlet ?? query.outletId;
     const shipments = await this.cargoService.getAllShipments({
       tripId: tripId as string,
       status: status as string,
       outletId: outletId as string
     });
-    const pageParam = (req.query as any).page;
+    const pageParam = query.page;
     if (pageParam) {
       const page = Math.max(1, parseInt(pageParam) || 1);
-      const pageSize = Math.min(100, Math.max(1, parseInt((req.query as any).pageSize) || 50));
+      const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize ?? '') || 50));
       const total = shipments.length;
       const paginated = shipments.slice((page - 1) * pageSize, page * pageSize);
       return reply.send({ data: paginated, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
@@ -81,7 +82,7 @@ export class CargoController {
   }
 
   async getAvailableTrips(req: FastifyRequest, reply: FastifyReply) {
-    const { date, originStopId, destinationStopId } = req.query as any;
+    const { date, originStopId, destinationStopId } = (req.query as { date?: string; originStopId?: string; destinationStopId?: string } | undefined) || {};
     if (!date || !originStopId || !destinationStopId) {
       return reply.code(400).send({ error: 'date, originStopId, destinationStopId are required' });
     }

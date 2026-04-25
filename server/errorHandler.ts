@@ -31,7 +31,7 @@ export type AppError = Error & {
 export function registerGlobalErrorHandler(app: FastifyInstance) {
   app.setErrorHandler((err: AppError, request, reply) => {
     if (err.code === "23505") {
-      const detail: string = (err as any).detail ?? "";
+      const detail: string = (err as { detail?: string }).detail ?? "";
       const valueMatch = detail.match(/Key \([^)]+\)=\(([^)]+)\)/);
       const fieldMatch = detail.match(/Key \(([^)]+)\)=/);
       const value = valueMatch ? valueMatch[1] : null;

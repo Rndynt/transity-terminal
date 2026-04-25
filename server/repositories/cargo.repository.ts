@@ -4,7 +4,8 @@ import {
   cargoShipments, cargoTypes, cargoRates, stops, trips,
   type CargoShipment, type CargoShipmentListItem, type InsertCargoShipment,
   type CargoType, type InsertCargoType,
-  type CargoRate, type InsertCargoRate
+  type CargoRate, type InsertCargoRate,
+  type Trip
 } from "@shared/schema";
 
 export class CargoRepository {
@@ -61,7 +62,7 @@ export class CargoRepository {
     await db.delete(cargoRates).where(eq(cargoRates.id, id));
   }
 
-  async findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string, tripId?: string, getTripById?: (id: string) => Promise<any>): Promise<CargoRate | undefined> {
+  async findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string, tripId?: string, getTripById?: (id: string) => Promise<Trip | undefined>): Promise<CargoRate | undefined> {
     const findBestInScope = async (scope: 'global' | 'pattern' | 'trip', scopeRefId: string): Promise<CargoRate | undefined> => {
       const [routeSpecific] = await db.select().from(cargoRates).where(
         and(

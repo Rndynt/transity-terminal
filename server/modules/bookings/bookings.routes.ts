@@ -20,7 +20,7 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
 
   app.get('/api/bookings', { preHandler: [requireOutletScope()] }, async (req, reply) => bookingsController.getAll(req, reply));
   app.get('/api/bookings/by-code/:code', async (req, reply) => {
-    const booking = await storage.getBookingByCode((req.params as any).code.toUpperCase());
+    const booking = await storage.getBookingByCode((req.params as { code: string }).code.toUpperCase());
     if (!booking) return reply.code(404).send({ message: 'Booking tidak ditemukan' });
     reply.send(booking);
   });
@@ -30,7 +30,7 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
       rateLimit: { max: 30, timeWindow: '1 minute' },
     },
   }, async (req, reply) => {
-    const q = ((req.query as any).q || '').toUpperCase().trim();
+    const q = ((req.query as { q?: string } | undefined)?.q || '').toUpperCase().trim();
     if (!q || q.length < 3) return reply.send([]);
 
     const bookingRows = await db
@@ -115,7 +115,7 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
   app.patch('/api/passengers/:id/cancel', { preHandler: [requireFlag('action.booking.cancel')] }, async (req, reply) => bookingsController.cancelPassenger(req, reply));
 
   app.get('/api/tickets/:ticketNumber', async (req, reply) => {
-    const passenger = await storage.getPassengerByTicketNumber((req.params as any).ticketNumber.toUpperCase());
+    const passenger = await storage.getPassengerByTicketNumber((req.params as { ticketNumber: string }).ticketNumber.toUpperCase());
     if (!passenger) return reply.code(404).send({ message: 'Tiket tidak ditemukan' });
     reply.send(passenger);
   });

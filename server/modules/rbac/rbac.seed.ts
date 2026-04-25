@@ -175,7 +175,7 @@ export async function seedRbac() {
     VALUES ${sql.join(roleFlagRows, sql`, `)}
     ON CONFLICT (role_id, flag_id) DO NOTHING
   `);
-  const inserted = (result as any).rowCount ?? 0;
+  const inserted = (result as { rowCount?: number }).rowCount ?? 0;
   const skipped = roleFlagRows.length - inserted;
   console.log(`  ✓ ${inserted} role-flag mappings inserted, ${skipped} already exist (preserved)`);
 

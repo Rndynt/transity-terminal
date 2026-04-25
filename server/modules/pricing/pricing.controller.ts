@@ -37,9 +37,10 @@ export class PricingController {
         passengerCount,
         breakdown: fareQuote.breakdown
       });
-    } catch (error: any) {
-      req.log.error({ err: error }, 'Fare quote error');
-      
+    } catch (err: unknown) {
+      const error = err as { name?: string; message?: string; errors?: unknown };
+      req.log.error({ err }, 'Fare quote error');
+
       if (error.name === 'ZodError') {
         return reply.code(400).send({
           error: 'Validation failed',
@@ -47,7 +48,7 @@ export class PricingController {
           details: error.errors
         });
       }
-      
+
       if (error.message === 'NO_PRICE_RULE') {
         return reply.code(422).send({
           error: 'Tidak ada aturan harga untuk trip ini',

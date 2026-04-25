@@ -289,9 +289,9 @@ export class SchedulerService {
   }
 
   private getBaseDepartureTime(base: TripBase): string {
-    const stopTimes = base.defaultStopTimes as any[];
+    const stopTimes = base.defaultStopTimes as Array<{ stopSequence: number; departAt?: string | null; arriveAt?: string | null }>;
     if (Array.isArray(stopTimes) && stopTimes.length > 0) {
-      const first = stopTimes.find((s: any) => s.stopSequence === 1) || stopTimes[0];
+      const first = stopTimes.find((s) => s.stopSequence === 1) || stopTimes[0];
       return first.departAt || first.arriveAt || '00:00';
     }
     return '00:00';
@@ -312,7 +312,7 @@ export class SchedulerService {
       GROUP BY b.trip_id
     `);
 
-    for (const row of rows.rows as any[]) {
+    for (const row of rows.rows as Array<{ tripId: string; count: number }>) {
       result.set(row.tripId, row.count);
     }
     return result;

@@ -2,7 +2,7 @@ import { db } from "@server/db";
 import { bookings, passengers, seatInventory, bookingHistory } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
-import { IStorage } from "@server/storage.interface";
+import { IStorage, type ActivePassengerForTrip } from "@server/storage.interface";
 import { generateBookingCode } from "@server/utils/codeGenerator";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
 import { AtomicHoldService } from "./atomicHold.service";
@@ -36,7 +36,7 @@ export class RescheduleService {
     performedBy: string,
     reason: string | undefined,
     ctx: ServiceContext
-  ): Promise<{ success: boolean; oldBooking: any; newBooking: any }> {
+  ): Promise<{ success: boolean; oldBooking: typeof bookings.$inferSelect; newBooking: typeof bookings.$inferSelect }> {
     requirePermission(ctx, "action.passenger.reschedule");
     const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
     if (!passenger) throw new Error("Penumpang tidak ditemukan");
@@ -248,6 +248,9 @@ export class RescheduleService {
     }
 
     const updatedBooking = await this.storage.getBookingById(resultBookingId);
+    if (!updatedBooking) {
+      throw new Error("Booking tidak ditemukan setelah reschedule");
+    }
     return {
       success: true,
       oldBooking: updatedBooking,
@@ -265,7 +268,7 @@ export class RescheduleService {
     performedBy: string,
     reason: string,
     ctx: ServiceContext
-  ): Promise<{ succeeded: any[]; failed: any[] }> {
+  ): Promise<{ succeeded: Array<ActivePassengerForTrip & { newSeatNo: string }>; failed: Array<ActivePassengerForTrip & { failReason: string }> }> {
     requirePermission(ctx, "action.trip.batch_reschedule");
     const activePassengers = await this.storage.getActivePassengersForTrip(oldTripId);
     if (activePassengers.length === 0) {
@@ -298,11 +301,11 @@ export class RescheduleService {
         return numA - numB || a.localeCompare(b);
       });
 
-    const succeeded: any[] = [];
-    const failed: any[] = [];
+    const succeeded: Array<ActivePassengerForTrip & { newSeatNo: string }> = [];
+    const failed: Array<ActivePassengerForTrip & { failReason: string }> = [];
     let seatIdx = 0;
 
-    const passengersByBooking = new Map<string, any[]>();
+    const passengersByBooking = new Map<string, ActivePassengerForTrip[]>();
     for (const pax of activePassengers) {
       const arr = passengersByBooking.get(pax.bookingId) || [];
       arr.push(pax);
@@ -310,7 +313,10 @@ export class RescheduleService {
     }
 
     for (const pax of activePassengers) {
-      const preferredSeat = pax.seatNo;
+      // Active (non-unseated) passengers always have a seat; the storage
+      // contract returns `seatNo: string | null` because the column is
+      // nullable, but the SQL filter excludes unseated tickets.
+      const preferredSeat = pax.seatNo!;
       let targetSeat: string | null = null;
 
       if (fullyAvailableSeats.includes(preferredSeat)) {
@@ -362,7 +368,7 @@ export class RescheduleService {
               .set({ booked: false, holdRef: null })
               .where(and(
                 eq(seatInventory.tripId, oldTripId),
-                eq(seatInventory.seatNo, pax.seatNo),
+                eq(seatInventory.seatNo, preferredSeat),
                 inArray(seatInventory.legIndex, oldLegIndexes)
               ));
 
@@ -406,7 +412,7 @@ export class RescheduleService {
               destinationSeq: newDestinationSeq,
               channel: oldBooking?.channel || 'CSO',
               outletId: oldBooking?.outletId,
-              totalAmount: pax.fareAmount,
+              totalAmount: pax.fareAmount ?? '0',
               discountAmount: '0',
               currency: oldBooking?.currency || 'IDR',
               createdBy: performedBy,
@@ -474,7 +480,7 @@ export class RescheduleService {
           try {
             await adapter.cancelSeats({
               tripId: oldTripId,
-              seatNo: pax.seatNo,
+              seatNo: preferredSeat,
               legIndexes: oldLegIndexes,
             });
           } catch (e) {
@@ -485,7 +491,7 @@ export class RescheduleService {
             const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
             await enqueueCancelSeats({
               tripId: oldTripId,
-              seatNo: pax.seatNo,
+              seatNo: preferredSeat,
               legIndexes: oldLegIndexes,
               context: { source: 'batchReschedule.cancelOld', passengerId: pax.id },
             });
@@ -496,7 +502,7 @@ export class RescheduleService {
         if (!engineMode) {
           const oldLegIdx = getLegIndexes(pax.originSeq, pax.destinationSeq);
           for (const legIdx of oldLegIdx) {
-            webSocketService.emitInventoryUpdated(oldTripId, pax.seatNo, [legIdx]);
+            webSocketService.emitInventoryUpdated(oldTripId, preferredSeat, [legIdx]);
           }
           for (const legIdx of newLegIndexes) {
             webSocketService.emitInventoryUpdated(newTripId, targetSeat, [legIdx]);

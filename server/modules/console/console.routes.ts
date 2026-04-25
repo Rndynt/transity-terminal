@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { createHash } from "node:crypto";
 import { sql, inArray, and } from "drizzle-orm";
 import { db } from "@server/db";
@@ -7,7 +7,7 @@ import type { IStorage } from "@server/storage.interface";
 import { buildScheduleSnapshot } from "@server/lib/scheduleSnapshot";
 
 export function registerConsoleRoutes(app: FastifyInstance, storage: IStorage) {
-  const requireServiceKey = (req: any, reply: any): boolean => {
+  const requireServiceKey = (req: FastifyRequest, reply: FastifyReply): boolean => {
     const incoming = req.headers["x-service-key"] as string | undefined;
     const expected = process.env.TERMINAL_SERVICE_KEY || "";
     if (!expected) {
@@ -77,7 +77,7 @@ export function registerConsoleRoutes(app: FastifyInstance, storage: IStorage) {
         .where(
           and(
             inArray(bookings.tripId, tripIds),
-            inArray(bookings.status, ["pending", "confirmed", "paid"] as any[])
+            inArray(bookings.status, ["pending", "confirmed", "paid"] as Array<typeof bookings.status._.data>)
           )
         );
       activeBookingCount = sigRows[0]?.cnt ?? 0;
