@@ -4,7 +4,7 @@ import { RoundTripController } from "./roundTrip.controller";
 import { IStorage } from "@server/storage.interface";
 import { requireFlag, requireOutletScope } from "@modules/rbac/rbac.middleware";
 import { db } from "@server/db";
-import { eq, inArray, ilike } from "drizzle-orm";
+import { eq, inArray, like } from "drizzle-orm";
 import {
   passengers as passengersTable,
   bookings as bookingsTable,
@@ -48,7 +48,7 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
       })
       .from(bookingsTable)
       .leftJoin(trips, eq(bookingsTable.tripId, trips.id))
-      .where(ilike(bookingsTable.bookingCode, `%${q}%`))
+      .where(like(bookingsTable.bookingCode, `${q}%`))
       .orderBy(bookingsTable.createdAt)
       .limit(10);
 
