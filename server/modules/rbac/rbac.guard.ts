@@ -114,7 +114,7 @@ export function requireAnyPermission(
  */
 export function buildServiceContext(req: FastifyRequest): ServiceContext {
   const rbac: EffectivePermissions | undefined = req.rbac;
-  const user = (req as any).user as { id?: string; email?: string } | undefined;
+  const user = req.user;
   return {
     flags: rbac?.flags ?? new Set<string>(),
     outletId: rbac?.outletId ?? null,

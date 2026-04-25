@@ -1,9 +1,9 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, RouteShorthandOptions } from "fastify";
 import { DriversController } from "./drivers.controller";
 import { IStorage } from "@server/storage.interface";
 import { requireFlag } from "@modules/rbac/rbac.middleware";
 
-export function registerDriversRoutes(app: FastifyInstance, storage: IStorage, cacheHook: any) {
+export function registerDriversRoutes(app: FastifyInstance, storage: IStorage, cacheHook: RouteShorthandOptions) {
   const controller = new DriversController(storage);
 
   app.get('/api/drivers', { ...cacheHook }, async (req, reply) => controller.getAll(req, reply));
