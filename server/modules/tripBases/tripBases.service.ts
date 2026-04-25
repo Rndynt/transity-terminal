@@ -138,16 +138,37 @@ export class TripBasesService {
   }
 
   /**
-   * Get eligible bases for a given service date
+   * Get eligible bases for a given service date.
+   *
+   * Performance: pre-fetch all schedule exceptions for `serviceDate` in one
+   * query, then evaluate each base's eligibility in-memory. Avoids the N+1
+   * pattern of `getAllTripBases() + per-base isBaseEligible()`.
    */
   async getEligibleBases(serviceDate: string): Promise<TripBase[]> {
     const allBases = await this.getAllTripBases();
+    if (allBases.length === 0) return [];
+
+    const exceptionRows = await db.select({ baseId: scheduleExceptions.baseId })
+      .from(scheduleExceptions)
+      .where(eq(scheduleExceptions.exceptionDate, serviceDate));
+    const exceptedBaseIds = new Set(exceptionRows.map(r => r.baseId).filter((id): id is string => id != null));
+
+    const serviceDateObj = parseISO(serviceDate);
     const eligibleBases: TripBase[] = [];
 
     for (const base of allBases) {
-      if (await this.isBaseEligible(base, serviceDate)) {
-        eligibleBases.push(base);
-      }
+      if (!base.active) continue;
+      if (base.validFrom && serviceDateObj < parseISO(base.validFrom)) continue;
+      if (base.validTo && serviceDateObj > parseISO(base.validTo)) continue;
+
+      const timezone = ensureDefaultTimezone(base.timezone);
+      const dayOfWeek = getDayInTZ(serviceDate, timezone);
+      const dayFlags = [base.sun, base.mon, base.tue, base.wed, base.thu, base.fri, base.sat];
+      if (!dayFlags[dayOfWeek]) continue;
+
+      if (exceptedBaseIds.has(base.id)) continue;
+
+      eligibleBases.push(base);
     }
 
     return eligibleBases;
