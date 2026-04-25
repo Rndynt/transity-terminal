@@ -129,8 +129,24 @@ export const payments = pgTable("payments", {
   idxPaymentsBookingId: sql`CREATE INDEX IF NOT EXISTS idx_payments_booking_id ON ${table} (booking_id)`,
   idxPaymentsProviderRef: sql`CREATE INDEX IF NOT EXISTS idx_payments_provider_ref ON ${table} (provider_ref) WHERE provider_ref IS NOT NULL`,
   idxPaymentsPaidAt: sql`CREATE INDEX IF NOT EXISTS idx_payments_paid_at ON ${table} (paid_at)`,
-  // P3: functional index on (paid_at::date) so reports that group/filter by
-  // date hit an index instead of a full scan when status='success'.
+  // P3 / P2 §7.9: functional index on (paid_at::date) so reports that
+  // group/filter by date hit an index instead of a full scan.
+  //
+  // Partial index: only `status = 'success'` rows are indexed. Callers
+  // that want to use this index MUST include the predicate `status = 'success'`
+  // in their WHERE clause, otherwise Postgres falls back to a sequential
+  // scan or to `idx_payments_paid_at`.
+  //
+  // Verified callers (all pass the partial predicate):
+  //   - server/modules/dashboard/dashboard.service.ts: today's revenue
+  //   - server/repositories/reports.repository.ts:
+  //       bookingDateConditions (paid mode), paymentFilters (paid mode),
+  //       getRevenueSummary daily breakdown, getBookingTrends daily breakdown,
+  //       getRefundReport gross_amount daily breakdown
+  //
+  // Date expression must be `paid_at::date` (matching the index's functional
+  // expression). Any caller using `date_trunc('day', paid_at)` would NOT
+  // hit this index — none currently exist (audited 2025-04).
   idxPaymentsPaidDate: sql`CREATE INDEX IF NOT EXISTS idx_payments_paid_date ON ${table} ((paid_at::date)) WHERE status = 'success'`
 }));
 
