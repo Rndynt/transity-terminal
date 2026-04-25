@@ -7,6 +7,7 @@ import {
   FleetRepository, NetworkRepository, SchedulingRepository,
   BookingRepository, CargoRepository, FinanceRepository
 } from "./repositories";
+import { getRequestContext } from "./lib/requestContext";
 import type {
   Driver, InsertDriver, Stop, InsertStop, Outlet, InsertOutlet,
   Vehicle, InsertVehicle, Layout, InsertLayout,
@@ -88,10 +89,25 @@ export class DatabaseStorage implements IStorage {
   getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]> {
     return this.scheduling.getCargoAvailableTrips(serviceDate, originStopId, destinationStopId);
   }
-  getTripById(id: string): Promise<Trip | undefined> { return this.scheduling.getTripById(id); }
+  getTripById(id: string): Promise<Trip | undefined> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.scheduling.getTripById(id);
+    const cached = ctx.tripCache.get(id);
+    if (cached) return cached;
+    const promise = this.scheduling.getTripById(id);
+    ctx.tripCache.set(id, promise);
+    promise.catch(() => { ctx.tripCache.delete(id); });
+    return promise;
+  }
   createTrip(data: InsertTrip): Promise<Trip> { return this.scheduling.createTrip(data); }
-  updateTrip(id: string, data: Partial<InsertTrip>): Promise<Trip> { return this.scheduling.updateTrip(id, data); }
-  deleteTrip(id: string): Promise<void> { return this.scheduling.deleteTrip(id); }
+  updateTrip(id: string, data: Partial<InsertTrip>): Promise<Trip> {
+    getRequestContext()?.tripCache.delete(id);
+    return this.scheduling.updateTrip(id, data);
+  }
+  deleteTrip(id: string): Promise<void> {
+    getRequestContext()?.tripCache.delete(id);
+    return this.scheduling.deleteTrip(id);
+  }
   getTripStopTimes(tripId: string): Promise<TripStopTime[]> { return this.scheduling.getTripStopTimes(tripId); }
   getTripStopTimesByTripIds(tripIds: string[]): Promise<Map<string, TripStopTime[]>> { return this.scheduling.getTripStopTimesByTripIds(tripIds); }
   createTripStopTime(data: InsertTripStopTime): Promise<TripStopTime> { return this.scheduling.createTripStopTime(data); }
