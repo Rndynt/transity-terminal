@@ -10,6 +10,7 @@ import {
   bookings as bookingsTable,
   trips,
 } from "@shared/schema";
+import { BOOKINGS_SEARCH_LIMIT } from "@server/constants/pagination";
 
 export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) {
   const bookingsController = new BookingsController(storage);
@@ -50,7 +51,7 @@ export function registerBookingsRoutes(app: FastifyInstance, storage: IStorage) 
       .leftJoin(trips, eq(bookingsTable.tripId, trips.id))
       .where(like(bookingsTable.bookingCode, `${q}%`))
       .orderBy(bookingsTable.createdAt)
-      .limit(10);
+      .limit(BOOKINGS_SEARCH_LIMIT);
 
     if (bookingRows.length === 0) return reply.send([]);
 
