@@ -39,36 +39,111 @@ export class DatabaseStorage implements IStorage {
   updateDriver(id: string, data: Partial<InsertDriver>): Promise<Driver> { return this.fleet.updateDriver(id, data); }
   deleteDriver(id: string): Promise<void> { return this.fleet.deleteDriver(id); }
   getVehicles(): Promise<Vehicle[]> { return this.fleet.getVehicles(); }
-  getVehicleById(id: string): Promise<Vehicle | undefined> { return this.fleet.getVehicleById(id); }
+  getVehicleById(id: string): Promise<Vehicle | undefined> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.fleet.getVehicleById(id);
+    const cached = ctx.vehicleCache.get(id);
+    if (cached) return cached;
+    const promise = this.fleet.getVehicleById(id);
+    ctx.vehicleCache.set(id, promise);
+    promise.catch(() => { ctx.vehicleCache.delete(id); });
+    return promise;
+  }
   createVehicle(data: InsertVehicle): Promise<Vehicle> { return this.fleet.createVehicle(data); }
-  updateVehicle(id: string, data: Partial<InsertVehicle>): Promise<Vehicle> { return this.fleet.updateVehicle(id, data); }
-  deleteVehicle(id: string): Promise<void> { return this.fleet.deleteVehicle(id); }
+  updateVehicle(id: string, data: Partial<InsertVehicle>): Promise<Vehicle> {
+    getRequestContext()?.vehicleCache.delete(id);
+    return this.fleet.updateVehicle(id, data);
+  }
+  deleteVehicle(id: string): Promise<void> {
+    getRequestContext()?.vehicleCache.delete(id);
+    return this.fleet.deleteVehicle(id);
+  }
   getLayouts(): Promise<Layout[]> { return this.fleet.getLayouts(); }
-  getLayoutById(id: string): Promise<Layout | undefined> { return this.fleet.getLayoutById(id); }
+  getLayoutById(id: string): Promise<Layout | undefined> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.fleet.getLayoutById(id);
+    const cached = ctx.layoutCache.get(id);
+    if (cached) return cached;
+    const promise = this.fleet.getLayoutById(id);
+    ctx.layoutCache.set(id, promise);
+    promise.catch(() => { ctx.layoutCache.delete(id); });
+    return promise;
+  }
   createLayout(data: InsertLayout): Promise<Layout> { return this.fleet.createLayout(data); }
-  updateLayout(id: string, data: Partial<InsertLayout>): Promise<Layout> { return this.fleet.updateLayout(id, data); }
-  deleteLayout(id: string): Promise<void> { return this.fleet.deleteLayout(id); }
+  updateLayout(id: string, data: Partial<InsertLayout>): Promise<Layout> {
+    getRequestContext()?.layoutCache.delete(id);
+    return this.fleet.updateLayout(id, data);
+  }
+  deleteLayout(id: string): Promise<void> {
+    getRequestContext()?.layoutCache.delete(id);
+    return this.fleet.deleteLayout(id);
+  }
 
   // Network
   getStops(): Promise<Stop[]> { return this.network.getStops(); }
-  getStopById(id: string): Promise<Stop | undefined> { return this.network.getStopById(id); }
+  getStopById(id: string): Promise<Stop | undefined> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.network.getStopById(id);
+    const cached = ctx.stopCache.get(id);
+    if (cached) return cached;
+    const promise = this.network.getStopById(id);
+    ctx.stopCache.set(id, promise);
+    promise.catch(() => { ctx.stopCache.delete(id); });
+    return promise;
+  }
   getStopsByIds(ids: string[]): Promise<Stop[]> { return this.network.getStopsByIds(ids); }
   createStop(data: InsertStop): Promise<Stop> { return this.network.createStop(data); }
-  updateStop(id: string, data: Partial<InsertStop>): Promise<Stop> { return this.network.updateStop(id, data); }
-  deleteStop(id: string): Promise<void> { return this.network.deleteStop(id); }
+  updateStop(id: string, data: Partial<InsertStop>): Promise<Stop> {
+    getRequestContext()?.stopCache.delete(id);
+    return this.network.updateStop(id, data);
+  }
+  deleteStop(id: string): Promise<void> {
+    getRequestContext()?.stopCache.delete(id);
+    return this.network.deleteStop(id);
+  }
   getOutlets(): Promise<Outlet[]> { return this.network.getOutlets(); }
-  getOutletById(id: string): Promise<Outlet | undefined> { return this.network.getOutletById(id); }
+  getOutletById(id: string): Promise<Outlet | undefined> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.network.getOutletById(id);
+    const cached = ctx.outletCache.get(id);
+    if (cached) return cached;
+    const promise = this.network.getOutletById(id);
+    ctx.outletCache.set(id, promise);
+    promise.catch(() => { ctx.outletCache.delete(id); });
+    return promise;
+  }
   getOutletsByIds(ids: string[]): Promise<Outlet[]> { return this.network.getOutletsByIds(ids); }
   createOutlet(data: InsertOutlet): Promise<Outlet> { return this.network.createOutlet(data); }
-  updateOutlet(id: string, data: Partial<InsertOutlet>): Promise<Outlet> { return this.network.updateOutlet(id, data); }
-  deleteOutlet(id: string): Promise<void> { return this.network.deleteOutlet(id); }
+  updateOutlet(id: string, data: Partial<InsertOutlet>): Promise<Outlet> {
+    getRequestContext()?.outletCache.delete(id);
+    return this.network.updateOutlet(id, data);
+  }
+  deleteOutlet(id: string): Promise<void> {
+    getRequestContext()?.outletCache.delete(id);
+    return this.network.deleteOutlet(id);
+  }
 
   // Scheduling
   getTripPatterns(): Promise<TripPattern[]> { return this.scheduling.getTripPatterns(); }
-  getTripPatternById(id: string): Promise<TripPattern | undefined> { return this.scheduling.getTripPatternById(id); }
+  getTripPatternById(id: string): Promise<TripPattern | undefined> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.scheduling.getTripPatternById(id);
+    const cached = ctx.tripPatternCache.get(id);
+    if (cached) return cached;
+    const promise = this.scheduling.getTripPatternById(id);
+    ctx.tripPatternCache.set(id, promise);
+    promise.catch(() => { ctx.tripPatternCache.delete(id); });
+    return promise;
+  }
   createTripPattern(data: InsertTripPattern): Promise<TripPattern> { return this.scheduling.createTripPattern(data); }
-  updateTripPattern(id: string, data: Partial<InsertTripPattern>): Promise<TripPattern> { return this.scheduling.updateTripPattern(id, data); }
-  deleteTripPattern(id: string): Promise<void> { return this.scheduling.deleteTripPattern(id); }
+  updateTripPattern(id: string, data: Partial<InsertTripPattern>): Promise<TripPattern> {
+    getRequestContext()?.tripPatternCache.delete(id);
+    return this.scheduling.updateTripPattern(id, data);
+  }
+  deleteTripPattern(id: string): Promise<void> {
+    getRequestContext()?.tripPatternCache.delete(id);
+    return this.scheduling.deleteTripPattern(id);
+  }
   getPatternStops(patternId: string): Promise<Array<PatternStop & { stop: Stop | null }>> { return this.scheduling.getPatternStops(patternId); }
   getPatternStopsByPatternIds(patternIds: string[]): Promise<Map<string, Array<PatternStop & { stop: Stop | null }>>> { return this.scheduling.getPatternStopsByPatternIds(patternIds); }
   getTripPatternsByIds(patternIds: string[]): Promise<Map<string, TripPattern>> { return this.scheduling.getTripPatternsByIds(patternIds); }
