@@ -62,11 +62,17 @@ export class AtomicHoldService {
       const result = await db.transaction(async (tx) => {
         // P2 §10.7 — leftJoin seat_holds so we can ignore expired
         // holds whose hold_ref is still pinned on inventory because
-        // the reaper hasn't swept yet. `for('update')` locks the
-        // result rows; drizzle locks both sides of the join, but
-        // seat_holds is read-only here so the extra lock is benign.
-        // The matching engine query uses `FOR UPDATE OF i` for the
-        // same reason — see hold.rs.
+        // the reaper hasn't swept yet.
+        //
+        // The lock MUST be scoped with `{ of: seatInventory }`:
+        // PostgreSQL forbids a bare `FOR UPDATE` when the query
+        // contains an outer join because the nullable (right) side
+        // is not lockable — Postgres errors out with "FOR UPDATE
+        // cannot be applied to the nullable side of an outer join".
+        // Scoping the lock to the inventory table only mirrors the
+        // engine's `FOR UPDATE OF i` in
+        // engine/crates/engine-core/src/hold.rs::run_hold_txn.
+        // seat_holds rows are read-only inside this transaction.
         const inventoryRows = await tx
           .select({
             booked: seatInventory.booked,
@@ -81,7 +87,7 @@ export class AtomicHoldService {
             eq(seatInventory.seatNo, seatNo),
             inArray(seatInventory.legIndex, legIndexes)
           ))
-          .for('update');
+          .for('update', { of: seatInventory });
 
         if (inventoryRows.length !== legIndexes.length) {
           return {
