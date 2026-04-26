@@ -78,8 +78,10 @@ export async function insertPassengerRows(
   passengers: { fullName: string; phone?: string; idNumber?: string; seatNo: string }[],
   fareQuote: { perPassenger: string | number; breakdown: unknown }
 ) {
-  for (const pax of passengers) {
-    await tx.insert(passengersTable).values({
+  if (passengers.length === 0) return;
+  // Bulk insert: 1 round-trip per booking (vs N round-trip sebelumnya).
+  await tx.insert(passengersTable).values(
+    passengers.map((pax) => ({
       bookingId,
       ticketNumber: generateTicketNumber(),
       fullName: pax.fullName,
@@ -88,8 +90,8 @@ export async function insertPassengerRows(
       seatNo: pax.seatNo,
       fareAmount: fareQuote.perPassenger.toString(),
       fareBreakdown: fareQuote.breakdown,
-    });
-  }
+    }))
+  );
 }
 
 export async function validateBoardingAlighting(
