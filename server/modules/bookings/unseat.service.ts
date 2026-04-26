@@ -168,35 +168,41 @@ export class UnseatService {
 
     const legIndexes = getLegIndexes(booking.originSeq, booking.destinationSeq);
 
+    const activePaxIds = activePax.map((p) => p.id);
+    const activePaxSeats = activePax.map((p) => p.seatNo);
+
     await db.transaction(async (tx) => {
-      for (const p of activePax) {
-        await tx.update(passengers)
-          .set({ ticketStatus: 'unseated' })
-          .where(eq(passengers.id, p.id));
+      // Bulk UPDATE passengers — single round-trip vs N sebelumnya.
+      await tx.update(passengers)
+        .set({ ticketStatus: 'unseated' })
+        .where(inArray(passengers.id, activePaxIds));
 
-        // See comment in unseatPassenger() about engine-mode deferral.
-        if (!isEngineEnabled()) {
-          await tx.update(seatInventory)
-            .set({ booked: false, holdRef: null })
-            .where(and(
-              eq(seatInventory.tripId, booking.tripId),
-              eq(seatInventory.seatNo, p.seatNo),
-              inArray(seatInventory.legIndex, legIndexes)
-            ));
-        }
+      // See comment in unseatPassenger() about engine-mode deferral.
+      if (!isEngineEnabled()) {
+        // Bulk UPDATE seat_inventory — single round-trip vs N sebelumnya.
+        await tx.update(seatInventory)
+          .set({ booked: false, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, booking.tripId),
+            inArray(seatInventory.seatNo, activePaxSeats),
+            inArray(seatInventory.legIndex, legIndexes)
+          ));
+      }
 
-        await tx.insert(bookingHistory).values({
+      // Bulk INSERT booking_history — single round-trip vs N sebelumnya.
+      await tx.insert(bookingHistory).values(
+        activePax.map((p) => ({
           bookingId: booking.id,
           passengerId: p.id,
-          action: 'unseated',
+          action: 'unseated' as const,
           details: {
             seatNo: p.seatNo,
             reason: reason || 'Unseat all passengers',
-            previousStatus: p.ticketStatus
+            previousStatus: p.ticketStatus,
           },
-          performedBy
-        });
-      }
+          performedBy,
+        }))
+      );
 
       await tx.update(bookings)
         .set({ status: 'unseated' })

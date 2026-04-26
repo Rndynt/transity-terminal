@@ -25,6 +25,7 @@ import { createHash } from "node:crypto";
 import rateLimit from "@fastify/rate-limit";
 import helmet from "@fastify/helmet";
 import cors from "@fastify/cors";
+import compress from "@fastify/compress";
 import { createRateLimitRedisClient } from "./realtime/redis";
 import { registerRoutes } from "./routes";
 import { registerRequestContextHook } from "./lib/requestContext";
@@ -134,6 +135,16 @@ app.register(cors, {
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-access-token', 'X-Operator-Slug'],
   exposedHeaders: ['X-Total-Count'],
+});
+
+// Response compression — gain terbesar di /api/app/schedule, manifest,
+// list endpoints yang return JSON 50-150KB. Threshold 1KB supaya payload
+// kecil tidak overhead. Encoding default: br > gzip > deflate (Fastify
+// auto-negotiate dari Accept-Encoding).
+app.register(compress, {
+  global: true,
+  threshold: 1024,
+  encodings: ['br', 'gzip', 'deflate'],
 });
 
 app.register(import("@fastify/middie"));
