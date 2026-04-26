@@ -27,6 +27,12 @@ export const SEARCH_LIMIT = 10;
 // "Recent N" feeds (notifications, dashboard recent bookings, etc.)
 export const RECENT_LIMIT = 50;
 
+// Customer profile listing — narrower than generic LIST tier karena
+// admin UI render full row dengan banyak metadata (tag, totalTrips, dst.)
+// dan operator umumnya tidak butuh > 100 row sekaligus.
+export const CUSTOMERS_DEFAULT_LIMIT = 100;
+export const CUSTOMERS_MAX_LIMIT = 500;
+
 export function clampBookingsPageSize(pageSize: number | undefined): number {
   const n = Math.floor(Number(pageSize) || BOOKINGS_DEFAULT_LIMIT);
   if (n <= 0) return BOOKINGS_DEFAULT_LIMIT;

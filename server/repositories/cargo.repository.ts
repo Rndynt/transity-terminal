@@ -1,5 +1,6 @@
 import { db } from "@server/db";
 import { eq, and, desc, sql, isNull } from "drizzle-orm";
+import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "@server/constants/pagination";
 import {
   cargoShipments, cargoTypes, cargoRates, stops, trips,
   type CargoShipment, type CargoShipmentListItem, type InsertCargoShipment,
@@ -138,9 +139,8 @@ export class CargoRepository {
     if (filters?.outletId) conditions.push(eq(cargoShipments.outletId, filters.outletId));
 
     // β-2: enforce hard cap di repository supaya caller manapun (controller,
-    // job, integration test) tidak bisa pull unbounded list. Default 200 dari
-    // shared constant, hard cap 1000.
-    const limit = Math.min(Math.max(opts?.limit ?? 200, 1), 1000);
+    // job, integration test) tidak bisa pull unbounded list.
+    const limit = Math.min(Math.max(opts?.limit ?? LIST_DEFAULT_LIMIT, 1), LIST_MAX_LIMIT);
     const offset = Math.max(opts?.offset ?? 0, 0);
 
     const baseQuery = db

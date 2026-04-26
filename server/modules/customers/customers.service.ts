@@ -1,7 +1,7 @@
 import { db } from "@server/db";
 import { customerProfiles, type CustomerProfile, type InsertCustomerProfile } from "@shared/schema";
 import { eq, desc, ilike, or, sql } from "drizzle-orm";
-import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT, RECENT_LIMIT } from "@server/constants/pagination";
+import { CUSTOMERS_DEFAULT_LIMIT, CUSTOMERS_MAX_LIMIT, RECENT_LIMIT } from "@server/constants/pagination";
 
 export class CustomersService {
   private getRows(result: unknown): Array<Record<string, unknown>> {
@@ -10,8 +10,10 @@ export class CustomersService {
   }
 
   async getAll(search?: string, limit?: number) {
-    // β-2: pakai shared constant (sebelumnya hardcoded 100/500).
-    const maxRows = Math.min(limit || LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT);
+    // β-2: preserve original 100/500 semantics via customer-specific
+    // constant (sebelumnya magic number, sekarang named constant —
+    // tidak kena LIST_DEFAULT_LIMIT yang lebih lebar).
+    const maxRows = Math.min(limit || CUSTOMERS_DEFAULT_LIMIT, CUSTOMERS_MAX_LIMIT);
 
     if (search) {
       const q = `%${search}%`;
