@@ -1,6 +1,7 @@
 import { db } from "@server/db";
 import { customerProfiles, type CustomerProfile, type InsertCustomerProfile } from "@shared/schema";
 import { eq, desc, ilike, or, sql } from "drizzle-orm";
+import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT, RECENT_LIMIT } from "@server/constants/pagination";
 
 export class CustomersService {
   private getRows(result: unknown): Array<Record<string, unknown>> {
@@ -9,7 +10,8 @@ export class CustomersService {
   }
 
   async getAll(search?: string, limit?: number) {
-    const maxRows = Math.min(limit || 100, 500);
+    // β-2: pakai shared constant (sebelumnya hardcoded 100/500).
+    const maxRows = Math.min(limit || LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT);
 
     if (search) {
       const q = `%${search}%`;
@@ -43,7 +45,7 @@ export class CustomersService {
       LEFT JOIN stops d ON d.id = b.destination_stop_id
       JOIN passengers p ON p.booking_id = b.id
       WHERE p.phone = ${customer.phone} OR p.full_name = ${customer.fullName}
-      ORDER BY b.created_at DESC LIMIT 50
+      ORDER BY b.created_at DESC LIMIT ${RECENT_LIMIT}
     `);
     const bookings = this.getRows(bookingsResult);
 
@@ -112,7 +114,7 @@ export class CustomersService {
       WHERE t.driver_id = ${driverId}
         AND t.service_date >= (CURRENT_DATE - ${periodDays}::int)::text
       ORDER BY t.service_date DESC
-      LIMIT 50
+      LIMIT ${RECENT_LIMIT}
     `);
     const tripHistory = this.getRows(tripHistoryResult);
 

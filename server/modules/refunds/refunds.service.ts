@@ -15,6 +15,7 @@ import { storage } from "@server/storage";
 import { webSocketService } from "@server/realtime/ws";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 import { revertPromoApplicationsForBooking } from "@modules/promos/promoRevert";
+import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "@server/constants/pagination";
 
 function getRows(result: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(result)) return result as Array<Record<string, unknown>>;
@@ -32,15 +33,18 @@ const INACTIVE_TICKET_STATUSES = ['cancelled', 'refunded', 'no_show', 'unseated'
  *   - process         → action.refund.process
  */
 export class RefundsService {
-  async getAll(ctx: ServiceContext) {
+  async getAll(ctx: ServiceContext, opts?: { limit?: number; offset?: number }) {
     requirePermission(ctx, "page.refunds");
+    // β-2: explicit cap dari shared constant (sebelumnya hardcoded 200).
+    const limit = Math.min(Math.max(opts?.limit ?? LIST_DEFAULT_LIMIT, 1), LIST_MAX_LIMIT);
+    const offset = Math.max(opts?.offset ?? 0, 0);
     const result = await db.execute(sql`
       SELECT r.*, b.booking_code, p.full_name AS passenger_name
       FROM refunds r
       LEFT JOIN bookings b ON b.id = r.booking_id
       LEFT JOIN passengers p ON p.id = r.passenger_id
       ORDER BY r.created_at DESC
-      LIMIT 200
+      LIMIT ${limit} OFFSET ${offset}
     `);
     return getRows(result);
   }
