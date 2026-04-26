@@ -222,7 +222,11 @@ export class TripBasesService {
       if (normalizedArriveAt) {
         const raw = fromZonedHHMMToUtc(serviceDate, normalizedArriveAt, timezone);
         if (raw) {
-          if (lastTimestamp && raw.getTime() + dayOffset * ONE_DAY_MS <= lastTimestamp.getTime()) {
+          // §3.7: bump day offset only when the candidate timestamp would be
+          // STRICTLY EARLIER than the previous one (genuine midnight wrap).
+          // Using `<` instead of `<=` so equal timestamps (e.g. dwell=0
+          // depart === arrive) don't trigger a spurious dayOffset++.
+          if (lastTimestamp && raw.getTime() + dayOffset * ONE_DAY_MS < lastTimestamp.getTime()) {
             dayOffset++;
           }
           arriveAtTimestamp = new Date(raw.getTime() + dayOffset * ONE_DAY_MS);
@@ -231,13 +235,26 @@ export class TripBasesService {
       }
 
       if (normalizedDepartAt) {
-        const raw = fromZonedHHMMToUtc(serviceDate, normalizedDepartAt, timezone);
-        if (raw) {
-          if (lastTimestamp && raw.getTime() + dayOffset * ONE_DAY_MS <= lastTimestamp.getTime()) {
-            dayOffset++;
+        // §3.7: when arriveAt === departAt within the same stop (dwell=0),
+        // they map to the SAME instant. Skip the recomputation entirely so
+        // a 23:59 dwell-0 stop right before midnight does not double-bump
+        // dayOffset (depart's raw <= last arrive's raw triggers the bump,
+        // even though it's the same instant).
+        if (
+          normalizedArriveAt &&
+          normalizedArriveAt === normalizedDepartAt &&
+          arriveAtTimestamp
+        ) {
+          departAtTimestamp = arriveAtTimestamp;
+        } else {
+          const raw = fromZonedHHMMToUtc(serviceDate, normalizedDepartAt, timezone);
+          if (raw) {
+            if (lastTimestamp && raw.getTime() + dayOffset * ONE_DAY_MS < lastTimestamp.getTime()) {
+              dayOffset++;
+            }
+            departAtTimestamp = new Date(raw.getTime() + dayOffset * ONE_DAY_MS);
+            lastTimestamp = departAtTimestamp;
           }
-          departAtTimestamp = new Date(raw.getTime() + dayOffset * ONE_DAY_MS);
-          lastTimestamp = departAtTimestamp;
         }
       }
 
