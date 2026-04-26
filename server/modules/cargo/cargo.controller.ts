@@ -3,6 +3,7 @@ import { CargoService } from "./cargo.service";
 import { IStorage } from "@server/storage.interface";
 import { insertCargoShipmentSchema, insertCargoTypeSchema, insertCargoRateSchema } from "@shared/schema";
 import { buildServiceContext } from "@modules/rbac/rbac.guard";
+import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "@server/constants/pagination";
 
 export class CargoController {
   private cargoService: CargoService;
@@ -18,19 +19,28 @@ export class CargoController {
     const { tripId, status } = query;
     const scopedOutlet = req.scopedOutletId ?? req.rbac?.outletId ?? null;
     const outletId = scopedOutlet ?? query.outletId;
-    const shipments = await this.cargoService.getAllShipments({
+    const filters = {
       tripId: tripId as string,
       status: status as string,
-      outletId: outletId as string
-    });
+      outletId: outletId as string,
+    };
     const pageParam = query.page;
+
     if (pageParam) {
+      // β-2: SQL-level pagination (sebelumnya pull all rows lalu .slice() di JS).
       const page = Math.max(1, parseInt(pageParam) || 1);
-      const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize ?? '') || 50));
-      const total = shipments.length;
-      const paginated = shipments.slice((page - 1) * pageSize, page * pageSize);
-      return reply.send({ data: paginated, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+      const pageSize = Math.min(LIST_MAX_LIMIT, Math.max(1, parseInt(query.pageSize ?? '') || 50));
+      const offset = (page - 1) * pageSize;
+      const [data, total] = await Promise.all([
+        this.cargoService.getAllShipments(filters, { limit: pageSize, offset }),
+        this.cargoService.countShipments(filters),
+      ]);
+      return reply.send({ data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
     }
+
+    // β-2: cap legacy unwrapped response juga supaya tidak unbounded.
+    // Caller yang butuh > LIST_DEFAULT_LIMIT row harus pakai ?page query.
+    const shipments = await this.cargoService.getAllShipments(filters, { limit: LIST_DEFAULT_LIMIT });
     reply.send(shipments);
   }
 

@@ -99,8 +99,15 @@ export class CargoService {
     return this.storage.getCargoAvailableTrips(serviceDate, originStopId, destinationStopId);
   }
 
-  async getAllShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipmentListItem[]> {
-    return await this.storage.getCargoShipments(filters);
+  async getAllShipments(
+    filters?: { tripId?: string; status?: string; outletId?: string },
+    opts?: { limit?: number; offset?: number }
+  ): Promise<CargoShipmentListItem[]> {
+    return await this.storage.getCargoShipments(filters, opts);
+  }
+
+  async countShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<number> {
+    return await this.storage.countCargoShipments(filters);
   }
 
   async getShipmentById(id: string): Promise<CargoShipment> {

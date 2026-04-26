@@ -249,7 +249,11 @@ export class DatabaseStorage implements IStorage {
   findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string, tripId?: string): Promise<CargoRate | undefined> {
     return this.cargo.findCargoRate(cargoTypeId, originStopId, destinationStopId, tripId, (id) => this.scheduling.getTripById(id));
   }
-  getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipmentListItem[]> { return this.cargo.getCargoShipments(filters); }
+  getCargoShipments(
+    filters?: { tripId?: string; status?: string; outletId?: string },
+    opts?: { limit?: number; offset?: number }
+  ): Promise<CargoShipmentListItem[]> { return this.cargo.getCargoShipments(filters, opts); }
+  countCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<number> { return this.cargo.countCargoShipments(filters); }
   getCargoShipmentById(id: string): Promise<CargoShipment | undefined> { return this.cargo.getCargoShipmentById(id); }
   getCargoShipmentByWaybill(waybillNumber: string): Promise<CargoShipment | undefined> { return this.cargo.getCargoShipmentByWaybill(waybillNumber); }
   createCargoShipment(data: InsertCargoShipment & { trackingSecret: string }): Promise<CargoShipment> { return this.cargo.createCargoShipment(data); }

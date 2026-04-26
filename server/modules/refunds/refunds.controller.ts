@@ -10,7 +10,13 @@ export class RefundsController {
   }
 
   async getAll(req: FastifyRequest, reply: FastifyReply) {
-    const rows = await this.service.getAll(buildServiceContext(req));
+    const query = (req.query as { limit?: string; offset?: string } | undefined) || {};
+    const limit = query.limit ? parseInt(query.limit) : undefined;
+    const offset = query.offset ? parseInt(query.offset) : undefined;
+    const rows = await this.service.getAll(buildServiceContext(req), {
+      limit: Number.isFinite(limit) ? limit : undefined,
+      offset: Number.isFinite(offset) ? offset : undefined,
+    });
     reply.send(rows);
   }
 

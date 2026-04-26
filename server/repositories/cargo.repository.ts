@@ -1,5 +1,6 @@
 import { db } from "@server/db";
 import { eq, and, desc, sql, isNull } from "drizzle-orm";
+import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "@server/constants/pagination";
 import {
   cargoShipments, cargoTypes, cargoRates, stops, trips,
   type CargoShipment, type CargoShipmentListItem, type InsertCargoShipment,
@@ -125,7 +126,10 @@ export class CargoRepository {
     return globalFallback;
   }
 
-  async getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipmentListItem[]> {
+  async getCargoShipments(
+    filters?: { tripId?: string; status?: string; outletId?: string },
+    opts?: { limit?: number; offset?: number }
+  ): Promise<CargoShipmentListItem[]> {
     const originStop = db.select({ id: stops.id, code: stops.code, name: stops.name }).from(stops).as('origin_stop');
     const destStop = db.select({ id: stops.id, code: stops.code, name: stops.name }).from(stops).as('dest_stop');
 
@@ -133,6 +137,11 @@ export class CargoRepository {
     if (filters?.tripId) conditions.push(eq(cargoShipments.tripId, filters.tripId));
     if (filters?.status) conditions.push(sql`${cargoShipments.status} = ${filters.status}`);
     if (filters?.outletId) conditions.push(eq(cargoShipments.outletId, filters.outletId));
+
+    // β-2: enforce hard cap di repository supaya caller manapun (controller,
+    // job, integration test) tidak bisa pull unbounded list.
+    const limit = Math.min(Math.max(opts?.limit ?? LIST_DEFAULT_LIMIT, 1), LIST_MAX_LIMIT);
+    const offset = Math.max(opts?.offset ?? 0, 0);
 
     const baseQuery = db
       .select({
@@ -172,9 +181,22 @@ export class CargoRepository {
       .leftJoin(destStop, eq(cargoShipments.destinationStopId, destStop.id));
 
     if (conditions.length > 0) {
-      return await baseQuery.where(and(...conditions)).orderBy(desc(cargoShipments.createdAt));
+      return await baseQuery.where(and(...conditions)).orderBy(desc(cargoShipments.createdAt)).limit(limit).offset(offset);
     }
-    return await baseQuery.orderBy(desc(cargoShipments.createdAt));
+    return await baseQuery.orderBy(desc(cargoShipments.createdAt)).limit(limit).offset(offset);
+  }
+
+  async countCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<number> {
+    const conditions = [];
+    if (filters?.tripId) conditions.push(eq(cargoShipments.tripId, filters.tripId));
+    if (filters?.status) conditions.push(sql`${cargoShipments.status} = ${filters.status}`);
+    if (filters?.outletId) conditions.push(eq(cargoShipments.outletId, filters.outletId));
+
+    const query = db.select({ count: sql<number>`count(*)::int` }).from(cargoShipments);
+    const [row] = conditions.length > 0
+      ? await query.where(and(...conditions))
+      : await query;
+    return row?.count ?? 0;
   }
 
   async getCargoShipmentById(id: string): Promise<CargoShipment | undefined> {

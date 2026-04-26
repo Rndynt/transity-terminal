@@ -1,6 +1,7 @@
 import { db } from "@server/db";
 import { notifications } from "@shared/schema";
 import { eq, and, desc, sql, isNull, or } from "drizzle-orm";
+import { RECENT_LIMIT } from "@server/constants/pagination";
 
 export class NotificationsService {
   async getForUser(userId: string, outletId?: string) {
@@ -13,7 +14,7 @@ export class NotificationsService {
         )
       )
       .orderBy(desc(notifications.createdAt))
-      .limit(50);
+      .limit(RECENT_LIMIT);
 
     return rows;
   }

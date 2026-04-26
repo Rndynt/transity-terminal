@@ -2,6 +2,7 @@ import { db } from "@server/db";
 import { spj, spjCostLines, trips, drivers, vehicles, tripPatterns, tripCostTemplates, tripCostItems } from "@shared/schema";
 import type { Spj, SpjCostLine, SpjWithDetails } from "@shared/schema";
 import { eq, sql, desc } from "drizzle-orm";
+import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "@server/constants/pagination";
 
 type CostCategory = 'bbm' | 'tol' | 'makan' | 'parkir' | 'lainnya';
 
@@ -74,7 +75,11 @@ export class SpjService {
     return `${prefix}-${String(count + 1).padStart(4, '0')}`;
   }
 
-  async getAll(): Promise<SpjWithDetails[]> {
+  async getAll(opts?: { limit?: number; offset?: number }): Promise<SpjWithDetails[]> {
+    // β-2: enforce hard cap. Operator dengan ratusan SPJ historis sebelumnya
+    // pull all rows tanpa LIMIT (heavy LEFT JOIN x N). Default 200, max 1000.
+    const limit = Math.min(Math.max(opts?.limit ?? LIST_DEFAULT_LIMIT, 1), LIST_MAX_LIMIT);
+    const offset = Math.max(opts?.offset ?? 0, 0);
     const rows = await db.execute(sql`
       SELECT s.*,
         d.name as driver_name, d.code as driver_code, d.phone as driver_phone, d.license_no as driver_license_no,
@@ -87,6 +92,7 @@ export class SpjService {
       LEFT JOIN trips t ON s.trip_id = t.id
       LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
       ORDER BY s.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
     `);
     return (rows.rows as unknown as SpjJoinedRow[] || []).map(this.mapRow);
   }

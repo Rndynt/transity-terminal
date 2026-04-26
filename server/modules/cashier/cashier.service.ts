@@ -2,6 +2,7 @@ import { db } from "@server/db";
 import { cashierSessions, cashierSettlements } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { RECENT_LIMIT } from "@server/constants/pagination";
 
 /**
  * S1-09: setiap method butuh `ctx: ServiceContext` dan akan menolak
@@ -197,7 +198,7 @@ export class CashierService {
     const rows = await db.select().from(cashierSessions)
       .where(conds.length > 0 ? and(...conds) : undefined)
       .orderBy(desc(cashierSessions.openedAt))
-      .limit(50);
+      .limit(RECENT_LIMIT);
     return rows;
   }
 

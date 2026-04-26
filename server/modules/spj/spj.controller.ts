@@ -26,7 +26,13 @@ function errorMessage(e: unknown): string {
 export class SpjController {
   async getAll(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const list = await spjService.getAll();
+      const query = (req.query as { limit?: string; offset?: string } | undefined) || {};
+      const limit = query.limit ? parseInt(query.limit) : undefined;
+      const offset = query.offset ? parseInt(query.offset) : undefined;
+      const list = await spjService.getAll({
+        limit: Number.isFinite(limit) ? limit : undefined,
+        offset: Number.isFinite(offset) ? offset : undefined,
+      });
       reply.send(list);
     } catch (e) {
       reply.code(500).send({ error: errorMessage(e) });
