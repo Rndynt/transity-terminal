@@ -34,7 +34,12 @@ export const cargoRates = pgTable("cargo_rates", {
   pricePerLeg:        numeric("price_per_leg", { precision: 12, scale: 2 }).notNull().default('0'),
   minCharge:          numeric("min_charge", { precision: 12, scale: 2 }).notNull().default('0'),
   createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  // PR α-1: composite index untuk findCargoRate (cargo.repository.ts:65).
+  // Setiap insert cargo shipment hit query ini 1-3x (global / pattern / trip
+  // scope chain). Migration 0015 mendaftarkan index yang sama.
+  idxCargoRatesLookup: sql`CREATE INDEX IF NOT EXISTS idx_cargo_rates_lookup ON ${table} (cargo_type_id, scope, scope_ref_id, is_active)`,
+}));
 
 export const cargoRatesRelations = relations(cargoRates, ({ one }) => ({
   cargoType: one(cargoTypes, { fields: [cargoRates.cargoTypeId], references: [cargoTypes.id] }),
