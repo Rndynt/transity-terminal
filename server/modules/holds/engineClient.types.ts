@@ -47,19 +47,32 @@ export interface InventorySnapshot {
   }>;
 }
 
+// §10.5 parity: bentuk error body engine sekarang seragam ke
+// `{ success: false, reason, message, details? }` (engine PR #4).
+// EngineErrorCode di-sync dengan engine/crates/engine-server/src/error.rs
+// dan engine/crates/engine-core/src/error.rs.
 export type EngineErrorCode =
   | "SEAT_CONFLICT"
   | "INCOMPLETE_INVENTORY"
   | "HOLD_NOT_FOUND"
   | "HOLD_EXPIRED"
+  | "HOLD_EXPIRED_OR_MISSING"
+  | "HOLD_ALREADY_CONSUMED"
   | "BOOKING_NOT_FOUND"
   | "INVALID_SIGNATURE"
   | "INTERNAL"
   | "UNKNOWN";
 
+// §10.5: standard error body fields. `success` di-include karena engine
+// confirm endpoint masih return 200 dengan {success:false} di legacy
+// path (engine v1.0); engineClient.confirm inspect field ini sebelum
+// route ke EngineError(409).
 export interface EngineErrorBody {
+  success?: boolean;
   reason?: EngineErrorCode | string;
-  conflict_seats?: string[];
   message?: string;
+  details?: Record<string, unknown>;
+  conflict_seats?: string[];
+  conflict?: string;
   [k: string]: unknown;
 }
