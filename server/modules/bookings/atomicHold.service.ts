@@ -5,6 +5,34 @@ import { eq, and, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { webSocketService } from "@server/realtime/ws";
 
+/**
+ * P2 §10.7 — a leg conflicts on hold creation iff:
+ *   (a) it is already booked, OR
+ *   (b) its hold_ref points at an *active* seat_holds row.
+ *
+ * A hold row is active when either:
+ *   - h.expires_at > now()                  (TTL window still open), OR
+ *   - h.booking_id IS NOT NULL              (already confirmed; the
+ *     release path nulls hold_ref on cancel, so a non-null
+ *     booking_id always wins regardless of expires_at).
+ *
+ * An orphan hold_ref (no matching seat_holds row, or one whose
+ * expires_at lapsed without a booking_id) is treated as a tombstone
+ * the reaper will sweep — atomicHold overwrites it and proceeds.
+ *
+ * This must stay aligned with the engine implementation in
+ * `engine/crates/engine-core/src/hold.rs::run_hold_txn`.
+ */
+function isHoldActive(
+  holdExpiresAt: Date | null,
+  holdBookingId: string | null,
+  now: Date,
+): boolean {
+  if (holdBookingId !== null) return true;
+  if (holdExpiresAt !== null) return holdExpiresAt > now;
+  return false;
+}
+
 export interface SeatHoldRequest {
   tripId: string;
   seatNo: string;
@@ -32,9 +60,22 @@ export class AtomicHoldService {
 
     try {
       const result = await db.transaction(async (tx) => {
+        // P2 §10.7 — leftJoin seat_holds so we can ignore expired
+        // holds whose hold_ref is still pinned on inventory because
+        // the reaper hasn't swept yet. `for('update')` locks the
+        // result rows; drizzle locks both sides of the join, but
+        // seat_holds is read-only here so the extra lock is benign.
+        // The matching engine query uses `FOR UPDATE OF i` for the
+        // same reason — see hold.rs.
         const inventoryRows = await tx
-          .select()
+          .select({
+            booked: seatInventory.booked,
+            holdRef: seatInventory.holdRef,
+            holdExpiresAt: seatHolds.expiresAt,
+            holdBookingId: seatHolds.bookingId,
+          })
           .from(seatInventory)
+          .leftJoin(seatHolds, eq(seatHolds.holdRef, seatInventory.holdRef))
           .where(and(
             eq(seatInventory.tripId, tripId),
             eq(seatInventory.seatNo, seatNo),
@@ -50,9 +91,14 @@ export class AtomicHoldService {
           };
         }
 
+        const now = new Date();
         const conflicts: string[] = [];
         for (const row of inventoryRows) {
-          if (row.booked || row.holdRef) {
+          if (row.booked) {
+            conflicts.push(seatNo);
+            continue;
+          }
+          if (row.holdRef && isHoldActive(row.holdExpiresAt, row.holdBookingId, now)) {
             conflicts.push(seatNo);
           }
         }
