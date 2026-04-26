@@ -279,7 +279,11 @@ export interface IStorage {
   deleteCargoRate(id: string): Promise<void>;
   findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string, tripId?: string): Promise<CargoRate | undefined>;
 
-  getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipmentListItem[]>;
+  getCargoShipments(
+    filters?: { tripId?: string; status?: string; outletId?: string },
+    opts?: { limit?: number; offset?: number }
+  ): Promise<CargoShipmentListItem[]>;
+  countCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<number>;
   getCargoShipmentById(id: string): Promise<CargoShipment | undefined>;
   getCargoShipmentByWaybill(waybillNumber: string): Promise<CargoShipment | undefined>;
   createCargoShipment(data: InsertCargoShipment & { trackingSecret: string }): Promise<CargoShipment>;
