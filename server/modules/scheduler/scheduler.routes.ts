@@ -97,7 +97,10 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
       user?.id || undefined,
       buildServiceContext(req),
     );
-    webSocketService.broadcast('STOP_EXCEPTION_CHANGED', {
+    // Scope ke base room — clients (CargoTerminalPage, TripSelector) subscribe
+    // ke base:{baseId} bila trip base ini relevan dengan view mereka. Hindari
+    // global broadcast yang fanout ke semua connected client.
+    webSocketService.emitToBase(parsed.data.baseId, 'STOP_EXCEPTION_CHANGED', {
       baseId: parsed.data.baseId,
       serviceDate: parsed.data.exceptionDate,
       stopId: parsed.data.stopId,
@@ -110,7 +113,7 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
     const exception = await schedulerService.getStopExceptionById(id);
     await schedulerService.removeStopException(id, buildServiceContext(req));
     if (exception) {
-      webSocketService.broadcast('STOP_EXCEPTION_CHANGED', {
+      webSocketService.emitToBase(exception.baseId, 'STOP_EXCEPTION_CHANGED', {
         baseId: exception.baseId,
         serviceDate: exception.exceptionDate,
         stopId: exception.stopId,
