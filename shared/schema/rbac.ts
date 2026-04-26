@@ -44,7 +44,12 @@ export const staffMembers = pgTable("staff_members", {
   isActive:  boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  // PR α-1: FK index untuk RBAC list-staff-by-role / list-staff-by-outlet.
+  // Migration 0015 mendaftarkan index yang sama dengan `IF NOT EXISTS`.
+  idxStaffMembersRoleId: sql`CREATE INDEX IF NOT EXISTS idx_staff_members_role_id ON ${table} (role_id)`,
+  idxStaffMembersOutletId: sql`CREATE INDEX IF NOT EXISTS idx_staff_members_outlet_id ON ${table} (outlet_id) WHERE outlet_id IS NOT NULL`,
+}));
 
 export const insertStaffMemberSchema = createInsertSchema(staffMembers).omit({ id: true, createdAt: true, updatedAt: true });
 export type StaffMember = typeof staffMembers.$inferSelect;

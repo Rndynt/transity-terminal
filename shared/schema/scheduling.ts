@@ -17,7 +17,11 @@ export const tripPatterns = pgTable("trip_patterns", {
   tags:            text("tags").array().default(sql`'{}'`),
   createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow(),
   deletedAt:       timestamp("deleted_at", { withTimezone: true })
-});
+}, (table) => ({
+  // PR α-1: FK index untuk pattern admin (which patterns use layout X).
+  // Partial: default_layout_id nullable. Migration 0015 mendaftarkan index yang sama.
+  idxTripPatternsDefaultLayoutId: sql`CREATE INDEX IF NOT EXISTS idx_trip_patterns_default_layout_id ON ${table} (default_layout_id) WHERE default_layout_id IS NOT NULL`,
+}));
 
 export const insertTripPatternSchema = createInsertSchema(tripPatterns).omit({ id: true, createdAt: true });
 export type TripPattern = typeof tripPatterns.$inferSelect;
