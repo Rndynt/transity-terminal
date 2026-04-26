@@ -1636,9 +1636,22 @@ export class AppService {
         desc(bookings.createdAt)
       );
 
+    if (results.length === 0) return null;
+
+    // Batch passenger lookup → group by bookingId, then iterate ranked bookings
+    // (pending first, then by createdAt desc) untuk pick first match.
+    const allPassengers = await this.storage.getPassengersByBookingIds(
+      results.map(b => b.id)
+    );
+    const seatsByBooking = new Map<string, string[]>();
+    for (const p of allPassengers) {
+      const arr = seatsByBooking.get(p.bookingId);
+      if (arr) arr.push(p.seatNo);
+      else seatsByBooking.set(p.bookingId, [p.seatNo]);
+    }
+
     for (const booking of results) {
-      const pax = await this.storage.getPassengers(booking.id);
-      const bookingSeats = pax.map(p => p.seatNo).sort();
+      const bookingSeats = (seatsByBooking.get(booking.id) ?? []).slice().sort();
       if (sortedInput.length === bookingSeats.length &&
           sortedInput.every((s, i) => s === bookingSeats[i])) {
         return this.getBookingDetail(booking.id);
