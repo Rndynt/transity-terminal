@@ -137,16 +137,6 @@ app.register(cors, {
   exposedHeaders: ['X-Total-Count'],
 });
 
-// Response compression — gain terbesar di /api/app/schedule, manifest,
-// list endpoints yang return JSON 50-150KB. Threshold 1KB supaya payload
-// kecil tidak overhead. Encoding default: br > gzip > deflate (Fastify
-// auto-negotiate dari Accept-Encoding).
-app.register(compress, {
-  global: true,
-  threshold: 1024,
-  encodings: ['br', 'gzip', 'deflate'],
-});
-
 app.register(import("@fastify/middie"));
 
 app.addContentTypeParser('application/json', { parseAs: 'buffer' }, function (req, body, done) {
@@ -243,6 +233,24 @@ app.addHook('onSend', async (request, reply, payload) => {
     log(logLine);
   }
   return payload;
+});
+
+// Response compression — gain terbesar di /api/app/schedule, manifest,
+// list endpoints yang return JSON 50-150KB. Threshold 1KB supaya payload
+// kecil tidak overhead. Encoding default: br > gzip > deflate (Fastify
+// auto-negotiate dari Accept-Encoding).
+//
+// IMPORTANT: harus DI-REGISTER setelah onSend logging hook di atas.
+// @fastify/compress pakai fastify-plugin (non-encapsulated), jadi onSend
+// hook-nya hidup di root scope. Hook execution dalam scope yang sama
+// ikut urutan registrasi — kalau compress register duluan, dia transform
+// payload jadi Stream sebelum logging hook melihatnya, dan
+// `typeof payload === 'string'` di line ~228 jadi false → response body
+// logging silently skipped untuk semua response > threshold (1KB).
+app.register(compress, {
+  global: true,
+  threshold: 1024,
+  encodings: ['br', 'gzip', 'deflate'],
 });
 
 // Global error handler — diekstrak ke `./errorHandler.ts` supaya
