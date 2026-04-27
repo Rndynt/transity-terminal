@@ -17,13 +17,15 @@
  * RUNBOOK-SENTRY-SETUP.md untuk DSN provisioning + CI secret).
  */
 import * as Sentry from '@sentry/node';
+import { createComponentLogger } from '../lib/logger';
 
+const log = createComponentLogger('sentry');
 let initialized = false;
 
 export function initSentry(): boolean {
   const dsn = process.env.SENTRY_DSN?.trim();
   if (!dsn) {
-    console.log('[sentry] SENTRY_DSN not set — Sentry disabled');
+    log.info('SENTRY_DSN not set — sentry disabled');
     return false;
   }
   if (initialized) return true;
@@ -40,7 +42,7 @@ export function initSentry(): boolean {
   });
 
   initialized = true;
-  console.log(`[sentry] initialized (env=${process.env.NODE_ENV || 'development'})`);
+  log.info({ env: process.env.NODE_ENV || 'development' }, 'sentry initialized');
   return true;
 }
 

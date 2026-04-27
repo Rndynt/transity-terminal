@@ -1,6 +1,9 @@
 import { pool } from "./db";
 import { db } from "./db";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { createComponentLogger } from "./lib/logger";
+
+const log = createComponentLogger("migrator");
 
 /**
  * Menjalankan migrasi database.
@@ -29,5 +32,5 @@ export async function runSchemaMigrations(migrationsFolder = "./migrations") {
     seqClient.release();
   }
 
-  console.log("[migrator] Schema database sudah up-to-date.");
+  log.info("schema database sudah up-to-date");
 }

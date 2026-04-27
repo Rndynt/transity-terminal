@@ -3,6 +3,9 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import { log } from '@server/vite';
 import { createSocketIoAdapter } from './redis';
 import { verifyToken, type AppUserPayload } from '@server/modules/app/app.auth';
+import { createComponentLogger } from '@server/lib/logger';
+
+const wsLog = createComponentLogger('ws');
 
 // S2-07: kategori klien yang sudah authenticate di handshake.
 // - 'service' = backend trusted (Console BE, engine, internal scheduler) yang
@@ -57,7 +60,7 @@ class WebSocketService {
     } else if (isProd) {
       // Production tanpa CORS_ORIGINS yang valid → CLOSE (no cross-origin allowed).
       // Set CORS_ORIGINS=https://yourdomain,https://other untuk membuka.
-      console.warn('[ws] CORS_ORIGINS not set (or set to "*") in production. Cross-origin WS connections will be REJECTED. Set CORS_ORIGINS=https://yourdomain to enable.');
+      wsLog.warn('CORS_ORIGINS not set (or set to "*") in production. Cross-origin WS connections will be REJECTED. Set CORS_ORIGINS=https://yourdomain to enable.');
       allowedOrigins = false;
     } else {
       // Development → permisif.
@@ -83,7 +86,7 @@ class WebSocketService {
         log('Redis not configured — using in-memory adapter (single-instance only)', 'websocket');
       }
     } catch (err) {
-      console.error('[ws] failed to attach redis adapter, falling back to in-memory:', err);
+      wsLog.error({ err }, 'failed to attach redis adapter, falling back to in-memory');
     }
 
     // S2-07: handshake middleware — authenticate sekali pas connect, simpan
@@ -113,7 +116,7 @@ class WebSocketService {
           // expectedServiceKey untuk verify → ini misconfiguration ops yang
           // berbahaya (key bisa accidentally bocor + di-trust). Reject
           // eksplisit; jangan downgrade jadi anonymous.
-          console.error('[ws] handshake rejected: client supplied serviceKey but TERMINAL_SERVICE_KEY env not configured on server');
+          wsLog.error('handshake rejected: client supplied serviceKey but TERMINAL_SERVICE_KEY env not configured on server');
           return next(new Error('service key auth not configured on server'));
         }
         if (auth.serviceKey !== expectedServiceKey) {

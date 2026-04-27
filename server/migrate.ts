@@ -1,4 +1,7 @@
 import { pool } from "./db";
+import { createComponentLogger } from "./lib/logger";
+
+const log = createComponentLogger("migrate");
 
 /**
  * Safety-net migration untuk kompatibilitas Realmio.
@@ -29,7 +32,7 @@ export async function runMigrations() {
         END IF;
       END $$;
     `);
-    console.log("[migrate] staff_members: ensured name/email columns removed");
+    log.info("staff_members: ensured name/email columns removed");
 
     // users: pastikan semua kolom yang dibutuhkan ada.
     // Dibungkus DO block agar tidak crash jika tabel belum ada.
@@ -51,10 +54,10 @@ export async function runMigrations() {
         END IF;
       END $$;
     `);
-    console.log("[migrate] users: ensured all required columns exist");
+    log.info("users: ensured all required columns exist");
 
   } catch (err) {
-    console.error("[migrate] Failed:", err);
+    log.error({ err }, "safety-net migration failed");
     throw err;
   } finally {
     client.release();
