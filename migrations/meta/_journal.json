@@ -120,6 +120,13 @@
       "when": 1782000360000,
       "tag": "0016_backfill_payments_status_for_paid_bookings",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1782000420000,
+      "tag": "0017_schema_invariants_and_currency_alignment",
+      "breakpoints": true
     }
   ]
 }

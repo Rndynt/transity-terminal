@@ -146,7 +146,10 @@ export class RoundTripService {
         groupCode,
         type: 'round_trip',
         channel: 'CSO',
-        totalAmount: Math.round(totalAmount),
+        // §3.8: booking_groups.totalAmount is numeric(12,2) → string at
+        // runtime. Keep IDR-rounded semantics for now via Math.round, but
+        // the schema accepts fractions if a future commission flow needs it.
+        totalAmount: Math.round(totalAmount).toFixed(2),
         outletId: outbound.outletId || null,
         createdBy: operatorId
       }).returning();

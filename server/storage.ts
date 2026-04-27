@@ -220,7 +220,7 @@ export class DatabaseStorage implements IStorage {
   getActiveBookingsByTripIds(tripIds: string[]): Promise<Map<string, Booking[]>> { return this.booking.getActiveBookingsByTripIds(tripIds); }
   getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }> { return this.booking.getBookingsPaginated(options); }
   getBookingById(id: string): Promise<Booking | undefined> { return this.booking.getBookingById(id); }
-  createBooking(data: InsertBooking): Promise<Booking> { return this.booking.createBooking(data); }
+  createBooking(data: InsertBooking & { bookingCode: string }): Promise<Booking> { return this.booking.createBooking(data); }
   updateBooking(id: string, data: Partial<InsertBooking>): Promise<Booking> { return this.booking.updateBooking(id, data); }
   getBookingByCode(bookingCode: string): Promise<Booking | undefined> { return this.booking.getBookingByCode(bookingCode); }
   getPassengers(bookingId: string): Promise<Passenger[]> { return this.booking.getPassengers(bookingId); }

@@ -13,7 +13,11 @@ export const bookingGroups = pgTable("booking_groups", {
   groupCode:   text("group_code").notNull().unique(),
   type:        text("type").notNull().default("round_trip"),
   channel:     channelEnum("channel").notNull().default("CSO"),
-  totalAmount: integer("total_amount").notNull(),
+  // §3.8: numeric(12,2) supaya align dengan bookings.totalAmount.
+  // Drizzle merepresentasikan numeric sebagai string di runtime — caller
+  // wajib `.toFixed(2)` atau `.toString()` saat insert (lihat
+  // roundTrip.service.ts).
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
   outletId:    uuid("outlet_id").references(() => outlets.id),
   createdBy:   text("created_by"),
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -29,8 +33,11 @@ export type InsertBookingGroup = z.infer<typeof insertBookingGroupSchema>;
 
 export const bookings = pgTable("bookings", {
   id:                 uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  bookingCode:        text("booking_code").unique(),
-  status:             bookingStatusEnum("status").default('pending'),
+  // §3.9a: notNull. Setiap insert path eksplisit panggil generateBookingCode().
+  bookingCode:        text("booking_code").notNull().unique(),
+  // §3.9a: notNull dengan default 'pending'. Insert paths set status
+  // eksplisit ('paid'/'pending'); default ada untuk safety net.
+  status:             bookingStatusEnum("status").notNull().default('pending'),
   groupId:            uuid("group_id").references(() => bookingGroups.id),
   legType:            text("leg_type").notNull().default("single"),
   tripId:             uuid("trip_id").notNull().references(() => trips.id),
@@ -46,7 +53,12 @@ export const bookings = pgTable("bookings", {
   snapOutletName:          text("snap_outlet_name"),
   totalAmount:        numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
   discountAmount:     numeric("discount_amount", { precision: 12, scale: 2 }).default('0'),
-  promoId:            uuid("promo_id"),
+  // §3.9b: FK ke promotions(id) dengan ON DELETE SET NULL. Snapshot
+  // data (discountAmount, voucherCode) tetap di booking row jadi
+  // kehilangan ref promo aman.
+  promoId:            uuid("promo_id").references(() => promotions.id, { onDelete: 'set null' }),
+  // §3.9: snapshot text intentional — ketika voucher dicabut/expired,
+  // booking history tetap menampilkan kode yang dipakai. Tidak FK by design.
   voucherCode:        text("voucher_code"),
   currency:           text("currency").default('IDR'),
   createdBy:          text("created_by"),
@@ -71,7 +83,11 @@ export const bookings = pgTable("bookings", {
   uniqBookingsIdempotency: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_bookings_idempotency_key ON ${table} (idempotency_key) WHERE idempotency_key IS NOT NULL`
 }));
 
-export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, createdAt: true });
+// §3.9a: bookingCode is notNull at the column level, but every TT
+// insert path generates it via generateBookingCode() at the service
+// layer. Omit it from InsertBooking so controllers don't need to pass
+// a placeholder string just to satisfy the type.
+export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, createdAt: true, bookingCode: true });
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 
@@ -124,6 +140,10 @@ export const payments = pgTable("payments", {
   status:      paymentStatusEnum("status").default('pending'),
   amount:      numeric("amount", { precision: 12, scale: 2 }).notNull(),
   providerRef: text("provider_ref"),
+  // §3.9: semantic "kapan paid". Default defaultNow() pragmatis di-keep
+  // supaya tidak break existing pending-then-success flow (PR #10 set
+  // paidAt eksplisit saat status transit). Reports yang baca paidAt
+  // wajib JOIN ke payments.status='success' untuk filter row pending.
   paidAt:      timestamp("paid_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
   idxPaymentsBookingId: sql`CREATE INDEX IF NOT EXISTS idx_payments_booking_id ON ${table} (booking_id)`,

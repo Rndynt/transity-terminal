@@ -73,7 +73,10 @@ export class BookingRepository {
     return booking;
   }
 
-  async createBooking(data: InsertBooking): Promise<Booking> {
+  async createBooking(data: InsertBooking & { bookingCode: string }): Promise<Booking> {
+    // §3.9a: bookingCode dihilangkan dari InsertBooking (services
+    // generate via generateBookingCode()), jadi caller wajib supply
+    // ke repo helper ini.
     const [booking] = await db.insert(bookings).values(data).returning();
     return booking;
   }
