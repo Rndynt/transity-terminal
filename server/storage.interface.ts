@@ -247,7 +247,7 @@ export interface IStorage {
   getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }>;
   getBookingById(id: string): Promise<Booking | undefined>;
   getBookingByCode(bookingCode: string): Promise<Booking | undefined>;
-  createBooking(data: InsertBooking): Promise<Booking>;
+  createBooking(data: InsertBooking & { bookingCode: string }): Promise<Booking>;
   updateBooking(id: string, data: Partial<InsertBooking>): Promise<Booking>;
 
   getPassengers(bookingId: string): Promise<Passenger[]>;
