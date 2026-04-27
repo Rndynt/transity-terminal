@@ -24,6 +24,9 @@ import { engineCompensationQueue } from "@shared/schema";
 import { sql } from "drizzle-orm";
 import { engineClient } from "./engineClient";
 import { isEngineEnabled } from "./holdsAdapter";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("engineCompQueue");
 
 const BATCH_SIZE = parseInt(
   process.env.ENGINE_COMPENSATION_BATCH ?? "50",
@@ -53,13 +56,14 @@ export async function enqueueCancelSeats(
       legIndexes: input.legIndexes,
       context: input.context ?? null,
     });
-    console.warn(
-      `[ENGINE_COMP_QUEUE] enqueued cancel_seats trip=${input.tripId} seat=${input.seatNo}`,
+    log.warn(
+      { tripId: input.tripId, seatNo: input.seatNo },
+      "enqueued cancel_seats"
     );
   } catch (e) {
-    console.error(
-      "[ENGINE_COMP_QUEUE] enqueue failed (will not retry; data lost):",
-      e,
+    log.error(
+      { err: e, tripId: input.tripId, seatNo: input.seatNo },
+      "enqueue failed (will not retry; data lost)"
     );
   }
 }
@@ -135,8 +139,9 @@ export async function runOnce(): Promise<{
           sql`DELETE FROM engine_compensation_queue WHERE id = ${row.id}::uuid`,
         );
         succeeded++;
-        console.log(
-          `[ENGINE_COMP_QUEUE] drained trip=${row.trip_id} seat=${row.seat_no} after attempt ${row.attempts + 1}`,
+        log.info(
+          { tripId: row.trip_id, seatNo: row.seat_no, attempt: row.attempts + 1 },
+          "drained"
         );
       } catch (e) {
         // Persist the error message for forensics; attempt counter was
@@ -160,18 +165,15 @@ export async function runOnce(): Promise<{
                 WHERE id = ${row.id}::uuid`,
           )
           .catch((upErr) =>
-            console.error(
-              "[ENGINE_COMP_QUEUE] failed to record last_error:",
-              upErr,
-            ),
+            log.error({ err: upErr }, "failed to record last_error"),
           );
 
         if (justEnteredDlq) {
           // Structured single-line JSON yang gampang di-pickup Sentry,
           // Datadog, Grafana Loki, atau grep manual. Field `alert` sengaja
           // pakai snake_case supaya stabil sebagai alert key.
-          console.error(
-            `[ALERT] ${JSON.stringify({
+          log.error(
+            {
               alert: "engine_compensation_dlq",
               queueId: row.id,
               opType: row.op_type,
@@ -181,12 +183,13 @@ export async function runOnce(): Promise<{
               attempts: newAttempts,
               maxAttempts: MAX_ATTEMPTS,
               lastError: msg.slice(0, 200),
-            })}`,
+            },
+            "engine_compensation_dlq"
           );
         } else {
-          console.error(
-            `[ENGINE_COMP_QUEUE] retry failed trip=${row.trip_id} seat=${row.seat_no} attempt=${newAttempts}/${MAX_ATTEMPTS}:`,
-            msg,
+          log.error(
+            { tripId: row.trip_id, seatNo: row.seat_no, attempt: newAttempts, maxAttempts: MAX_ATTEMPTS, msg },
+            "retry failed"
           );
         }
       }
@@ -197,7 +200,7 @@ export async function runOnce(): Promise<{
     } catch {
       // ignore
     }
-    console.error("[ENGINE_COMP_QUEUE] worker tick failed:", e);
+    log.error({ err: e }, "worker tick failed");
   } finally {
     client.release();
   }
@@ -229,7 +232,7 @@ export async function getStuckCount(): Promise<{
       nearCap: Number(row?.near_cap ?? 0),
     };
   } catch (e) {
-    console.error("[ENGINE_COMP_QUEUE] getStuckCount failed:", e);
+    log.error({ err: e }, "getStuckCount failed");
     return { deadLettered: 0, nearCap: 0 };
   }
 }

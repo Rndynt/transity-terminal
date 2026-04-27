@@ -9,6 +9,9 @@ import { AtomicHoldService } from "./atomicHold.service";
 import { enqueueCancelSeats } from "@modules/holds/compensationQueue";
 import { randomUUID } from "node:crypto";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("reschedule.service");
 
 /**
  * S1-09 (Sprint 2): operasi reschedule berisiko ganti kursi & buat
@@ -199,7 +202,7 @@ export class RescheduleService {
             legIndexes: newLegIndexes,
           });
         } catch (e) {
-          console.error('[RESCHEDULE] compensation cancelSeats(new) failed, enqueuing:', e);
+          log.error({ err: e, op: "reschedule", tripId: newTripId }, "compensation cancelSeats(new) failed, enqueuing");
           
           await enqueueCancelSeats({
             tripId: newTripId,
@@ -225,7 +228,7 @@ export class RescheduleService {
           legIndexes: oldLegIndexes,
         });
       } catch (e) {
-        console.error('[RESCHEDULE] engine cancelSeats(old) failed, enqueuing for retry:', e);
+        log.error({ err: e, op: "reschedule", tripId: oldTripId }, "engine cancelSeats(old) failed, enqueuing for retry");
         
         await enqueueCancelSeats({
           tripId: oldTripId,
@@ -461,7 +464,7 @@ export class RescheduleService {
                 legIndexes: newLegIndexes,
               });
             } catch (e) {
-              console.error('[RESCHEDULE_BATCH] compensation cancelSeats(new) failed, enqueuing:', e);
+              log.error({ err: e, op: "rescheduleBatch", tripId: newTripId }, "compensation cancelSeats(new) failed, enqueuing");
               
               await enqueueCancelSeats({
                 tripId: newTripId,
@@ -485,9 +488,9 @@ export class RescheduleService {
               legIndexes: oldLegIndexes,
             });
           } catch (e) {
-            console.error(
-              `[RESCHEDULE_BATCH] engine cancelSeats(old) failed for pax ${pax.id}, enqueuing:`,
-              e,
+            log.error(
+              { err: e, op: "rescheduleBatch", paxId: pax.id, tripId: oldTripId },
+              "engine cancelSeats(old) failed, enqueuing"
             );
             
             await enqueueCancelSeats({

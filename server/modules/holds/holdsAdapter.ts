@@ -30,6 +30,9 @@ import { seatInventory, seatHolds } from "@shared/schema";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
 import { randomUUID } from "node:crypto";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("holdsAdapter");
 
 export const isEngineEnabled = (): boolean =>
   (process.env.RESERVATION_ENGINE_ENABLED ?? "false").toLowerCase() === "true";
@@ -114,7 +117,7 @@ export class HoldsAdapter {
           };
         }
       }
-      console.error("[HOLDS_ADAPTER] hold failed:", e);
+      log.error({ err: e, tripId: req.tripId, seatNo: req.seatNo }, "hold failed");
       return {
         success: false,
         reason: "TRANSACTION_ERROR",
@@ -147,7 +150,7 @@ export class HoldsAdapter {
         // Already gone — treat as success.
         return { success: true };
       }
-      console.error("[HOLDS_ADAPTER] release failed:", e);
+      log.error({ err: e, holdRef }, "release failed");
       return { success: false };
     }
 
@@ -252,9 +255,9 @@ export class HoldsAdapter {
             leg_indexes: opts.legIndexes,
           });
         } catch (cancelErr) {
-          console.error(
-            `[HOLDS_ADAPTER] compensation cancelSeats failed for ${c.seatNo}:`,
-            cancelErr,
+          log.error(
+            { err: cancelErr, seatNo: c.seatNo, op: "compensationCancelSeats" },
+            "compensation cancelSeats failed"
           );
         }
       }
@@ -285,9 +288,9 @@ export class HoldsAdapter {
           leg_indexes: legIndexes,
         });
       } catch (e) {
-        console.error(
-          `[HOLDS_ADAPTER] post-tx compensation cancelSeats failed for ${c.seatNo}, enqueuing for retry:`,
-          e,
+        log.error(
+          { err: e, seatNo: c.seatNo, op: "postTxCompensationCancelSeats" },
+          "post-tx compensation cancelSeats failed, enqueuing for retry"
         );
         await enqueueCancelSeats({
           tripId,
@@ -342,9 +345,9 @@ export class HoldsAdapter {
       try {
         await engineClient.release(holdRes.hold_ref);
       } catch (relErr) {
-        console.error(
-          `[HOLDS_ADAPTER] holdAndConfirmShort: release after confirm failure failed for ${opts.seatNo}:`,
-          relErr,
+        log.error(
+          { err: relErr, seatNo: opts.seatNo, op: "holdAndConfirmShort" },
+          "release after confirm failure failed"
         );
       }
       throw e;
@@ -419,9 +422,9 @@ export class HoldsAdapter {
         try {
           await engineClient.release(c.holdRef);
         } catch (relErr) {
-          console.error(
-            `[HOLDS_ADAPTER] holdForBooking: compensation release failed for ${c.seatNo}:`,
-            relErr,
+          log.error(
+            { err: relErr, seatNo: c.seatNo, op: "holdForBooking" },
+            "compensation release failed"
           );
         }
       }
@@ -481,9 +484,9 @@ export class HoldsAdapter {
         await engineClient.release(row.holdRef);
       } catch (e) {
         if (e instanceof EngineError && e.status === 404) continue;
-        console.error(
-          `[HOLDS_ADAPTER] releaseForBooking: release failed for hold ${row.holdRef}; will expire at TTL:`,
-          e,
+        log.error(
+          { err: e, holdRef: row.holdRef, op: "releaseForBooking" },
+          "release failed; will expire at TTL"
         );
       }
       webSocketService.emitInventoryUpdated(

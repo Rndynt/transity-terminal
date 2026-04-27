@@ -24,6 +24,9 @@ import {
 } from "@modules/bookings/booking.helpers";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
 import { AtomicHoldService } from "@modules/bookings/atomicHold.service";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("app.service");
 
 interface OperatorSummary {
   id: string;
@@ -552,7 +555,7 @@ export class AppService {
             };
           }
         } catch (err) {
-          console.warn('[searchTrips] promo lookup failed for trip', trip.tripId, err);
+          log.warn({ err, tripId: trip.tripId, op: "searchTrips" }, "promo lookup failed for trip");
         }
       }
 
@@ -1238,7 +1241,7 @@ export class AppService {
         try {
           await this.holdsAdapter().releaseForBooking(pregenBookingId, resolvedTripId);
         } catch (relErr) {
-          console.error('[APP_BOOKING] compensation release after tx failure failed:', relErr);
+          log.error({ err: relErr, op: "appBooking" }, "compensation release after tx failure failed");
         }
       }
       throw e;
@@ -1304,7 +1307,7 @@ export class AppService {
         try {
           await this.holdsAdapter().releaseForBooking(booking.id, booking.tripId);
         } catch (e) {
-          console.error('[WEBHOOK] releaseForBooking after failed payment failed (will expire at TTL):', e);
+          log.error({ err: e, op: "webhook.failedPayment" }, "releaseForBooking failed (will expire at TTL)");
         }
       }
       // Realtime: webhook 'failed' membebaskan kursi → refresh seatmap CSO
@@ -1457,7 +1460,7 @@ export class AppService {
             { source: 'processPaymentWebhook', bookingId: booking.id },
           );
         } catch (compErr) {
-          console.error('[WEBHOOK] compensateConfirms after tx failure failed:', compErr);
+          log.error({ err: compErr, op: "webhook" }, "compensateConfirms after tx failure failed");
         }
       }
       throw e;
@@ -1490,7 +1493,7 @@ export class AppService {
       const expiryTime = booking.pendingExpiresAt ? new Date(booking.pendingExpiresAt).getTime() : 0;
       const cancelledRecently = expiryTime > 0 && (Date.now() - expiryTime) < graceWindowMs;
       if (cancelledRecently) {
-        console.log(`[OTA] Grace period: re-activating recently cancelled OTA booking ${bookingId}`);
+        log.info({ bookingId, op: "otaGracePeriod" }, "re-activating recently cancelled OTA booking");
         isGracePeriodRecovery = true;
       } else {
         throw new Error(`Booking cannot be confirmed. Current status: ${booking.status}`);
@@ -1605,7 +1608,7 @@ export class AppService {
             { source: 'confirmOtaPayment', bookingId: booking.id },
           );
         } catch (compErr) {
-          console.error('[OTA_CONFIRM] compensateConfirms after tx failure failed:', compErr);
+          log.error({ err: compErr, op: "otaConfirm" }, "compensateConfirms after tx failure failed");
         }
       }
       throw e;
@@ -1921,7 +1924,7 @@ export class AppService {
             });
           }
         } catch (e) {
-          console.error('[CANCEL] enqueueCancelSeats after confirmed cancel failed:', e);
+          log.error({ err: e, op: "cancelConfirmed" }, "enqueueCancelSeats after confirmed cancel failed");
         }
       } else {
         // Pending → holds in engine. Release directly so clients see
@@ -1930,7 +1933,7 @@ export class AppService {
         try {
           await this.holdsAdapter().releaseForBooking(bookingId, booking.tripId);
         } catch (e) {
-          console.error('[CANCEL] releaseForBooking on pending cancel failed (will expire at TTL):', e);
+          log.error({ err: e, op: "cancelPending" }, "releaseForBooking on pending cancel failed (will expire at TTL)");
         }
       }
     }
@@ -2248,7 +2251,7 @@ export class AppService {
             { source: 'payBooking', bookingId },
           );
         } catch (compErr) {
-          console.error('[PAY_BOOKING] compensateConfirms after tx failure failed:', compErr);
+          log.error({ err: compErr, op: "payBooking" }, "compensateConfirms after tx failure failed");
         }
       }
       throw e;
