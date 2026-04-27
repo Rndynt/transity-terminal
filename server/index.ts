@@ -1,18 +1,9 @@
-import { existsSync as _envExists, readFileSync as _envRead } from "fs";
-import { resolve as _envResolve } from "path";
-const _envPath = _envResolve(process.cwd(), ".env");
-if (_envExists(_envPath)) {
-  for (const raw of _envRead(_envPath, "utf8").split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    const eq = line.indexOf("=");
-    if (eq < 0) continue;
-    const k = line.slice(0, eq).trim();
-    let v = line.slice(eq + 1).trim();
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
-    process.env[k] = v;
-  }
-}
+// HARUS jadi import pertama: load `.env` ke `process.env` sebelum
+// import lain dievaluasi. ESM hoist semua import declarations ke
+// top, sehingga inline body code TIDAK akan jalan duluan — file
+// terpisah ini memastikan env tersedia sebelum logger/sentry init.
+// Lihat `lib/loadEnv.ts` untuk rationale lengkap.
+import "./lib/loadEnv";
 
 // S3-03: Sentry harus diinit SEBELUM Fastify supaya boot-time
 // unhandled errors ter-capture. No-op kalau SENTRY_DSN tidak diset.
