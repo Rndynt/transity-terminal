@@ -36,6 +36,7 @@ import { seedRbac } from "./modules/rbac/rbac.seed";
 import { existsSync } from "fs";
 import { join, resolve } from "path";
 import { runSchemaMigrations } from "./migrator";
+import { logger } from "./lib/logger";
 
 // T-CON-05: aktifkan request-id propagation. Fastify auto-generate kalau
 // header tidak ada; kalau ada (mis. dari Console / load balancer), pakai
@@ -62,9 +63,9 @@ app.decorateRequest('rawBody', undefined);
 // Tanpa Redis, fallback in-memory (per-instance) yang OK untuk single-instance deploy.
 const _rateLimitRedis = createRateLimitRedisClient();
 if (_rateLimitRedis) {
-  console.log('[rate-limit] Redis store enabled (multi-instance safe)');
+  logger.info({ component: "rate-limit", store: "redis" }, "redis store enabled (multi-instance safe)");
 } else {
-  console.log('[rate-limit] in-memory store (single-instance only)');
+  logger.info({ component: "rate-limit", store: "in-memory" }, "in-memory store (single-instance only)");
 }
 // T-CON-04: rate-limit aware service-key. Console / OTA aggregator polling
 // hot-path (schedules, bookings, seatmap) dengan frekuensi tinggi via
@@ -114,10 +115,10 @@ const _corsAllowList = _corsOriginsRaw && !_corsAllowAll
 const _isProd = process.env.NODE_ENV === 'production';
 
 if (_isProd && _corsAllowAll) {
-  console.warn('[cors] APP_CORS_ORIGINS="*" di production — strongly discouraged. Set whitelist eksplisit.');
+  logger.warn({ component: "cors" }, 'APP_CORS_ORIGINS="*" di production — strongly discouraged. Set whitelist eksplisit.');
 }
 if (_isProd && !_corsAllowAll && _corsAllowList.length === 0) {
-  console.warn('[cors] APP_CORS_ORIGINS / CORS_ORIGINS kosong di production. Cross-origin requests akan ditolak.');
+  logger.warn({ component: "cors" }, "APP_CORS_ORIGINS / CORS_ORIGINS kosong di production. Cross-origin requests akan ditolak.");
 }
 
 app.register(cors, {
@@ -280,21 +281,21 @@ function assertProductionEnv() {
 
   const missing = required.filter(([k]) => !process.env[k]?.trim()).map(([k, hint]) => `  - ${k}: ${hint}`);
   if (missing.length > 0) {
-    console.error('\n[boot] FATAL — Missing required production env vars:\n' + missing.join('\n') + '\n');
+    logger.fatal({ component: "boot", missing: missing.map(line => line.trim().split(":")[0]) }, "missing required production env vars");
     process.exit(1);
   }
 
   if (process.env.DEV_BYPASS_AUTH === 'true') {
-    console.error('\n[boot] FATAL — DEV_BYPASS_AUTH=true dilarang di production.\n');
+    logger.fatal({ component: "boot" }, "DEV_BYPASS_AUTH=true dilarang di production");
     process.exit(1);
   }
 
   if ((process.env.JWT_SECRET || '').length < 32) {
-    console.error('\n[boot] FATAL — JWT_SECRET terlalu pendek (<32 chars). Gunakan: openssl rand -hex 32\n');
+    logger.fatal({ component: "boot" }, "JWT_SECRET terlalu pendek (<32 chars). Gunakan: openssl rand -hex 32");
     process.exit(1);
   }
 
-  console.log('[boot] Production env guard passed.');
+  logger.info({ component: "boot" }, "production env guard passed");
 }
 
 (async () => {
@@ -314,7 +315,7 @@ function assertProductionEnv() {
     // 2. Safety-net ALTER TABLE (untuk kompatibilitas Realmio)
     await runMigrations();
   } else {
-    console.log('[boot] RUN_MIGRATIONS_ON_BOOT=false — skipping migrations. Run `pnpm tsx scripts/db-migrate.ts` separately before starting app.');
+    logger.info({ component: "boot" }, "RUN_MIGRATIONS_ON_BOOT=false — skipping migrations. Run `pnpm tsx scripts/db-migrate.ts` separately before starting app.");
   }
 
   // 3. Seed roles, feature flags, dan staff dev
