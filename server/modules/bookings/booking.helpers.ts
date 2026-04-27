@@ -6,6 +6,9 @@ import { scheduleStopExceptions } from "@shared/schema/scheduling";
 import { generateBookingCode, generateTicketNumber } from "@server/utils/codeGenerator";
 import { db } from "@server/db";
 import { eq, and, inArray, gt, sql } from "drizzle-orm";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("booking.helpers");
 
 export { generateBookingCode, generateTicketNumber };
 
@@ -392,7 +395,7 @@ export async function calculateBookingTotal(
         }];
       }
     } catch (err) {
-      console.warn('[calculateBookingTotal] auto-apply lookup failed:', err);
+      log.warn({ err, op: "calculateBookingTotal" }, "auto-apply lookup failed");
     }
   }
 

@@ -9,6 +9,9 @@ import { stops } from "@shared/schema/network";
 import { fireAndForget } from "@server/lib/consoleWebhook";
 import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("scheduler.service");
 
 export type CalendarItem = {
   id: string;
@@ -215,7 +218,7 @@ export class SchedulerService {
         emittedAt: new Date().toISOString(),
       });
     } catch (err) {
-      console.warn("[scheduler.addException] webhook emit failed:", (err as Error).message);
+      log.warn({ err, op: "addException" }, "webhook emit failed");
     }
   }
 

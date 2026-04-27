@@ -4,6 +4,9 @@ import { TripLegsService } from "@modules/tripLegs/tripLegs.service";
 import { SeatInventoryService } from "@modules/seatInventory/seatInventory.service";
 import { fireAndForget } from "@server/lib/consoleWebhook";
 import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("trips.service");
 
 /**
  * Single seat entry in `layouts.seat_map` (jsonb). Layouts are seeded
@@ -35,7 +38,7 @@ export class TripsService {
       if (!payload) return;
       fireAndForget({ event, trip: payload, emittedAt: new Date().toISOString() });
     } catch (err) {
-      console.warn("[trips.service] failed to build webhook payload:", (err as Error).message);
+      log.warn({ err, event, tripId: trip.id }, "failed to build webhook payload");
     }
   }
 

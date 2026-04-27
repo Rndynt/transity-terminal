@@ -10,6 +10,9 @@ import { db } from "@server/db";
 import { eq, and } from "drizzle-orm";
 import { fireAndForget } from "@server/lib/consoleWebhook";
 import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("tripBases.service");
 
 async function emitTripWebhook(
   storage: IStorage,
@@ -23,7 +26,7 @@ async function emitTripWebhook(
     if (!payload) return;
     fireAndForget({ event, trip: payload, emittedAt: new Date().toISOString() });
   } catch (err) {
-    console.warn("[tripBases.service] failed to emit webhook:", (err as Error).message);
+    log.warn({ err, event, tripId }, "failed to emit trip webhook");
   }
 }
 

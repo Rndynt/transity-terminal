@@ -1,5 +1,8 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { getEffectivePermissions, type EffectivePermissions } from "@modules/rbac/rbac.service";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("auth.realmio");
 
 export interface RealmioUser {
   id: string;
@@ -17,11 +20,11 @@ const DEV_BYPASS_AUTH =
   process.env.DEV_BYPASS_AUTH === "true" || (!IS_PRODUCTION && !REALMIO_BASE_URL);
 
 if (IS_PRODUCTION && !REALMIO_BASE_URL && !DEV_BYPASS_AUTH) {
-  console.error("FATAL: REALMIO_BASE_URL is required in production. Auth will reject all requests.");
+  log.fatal("REALMIO_BASE_URL is required in production. Auth will reject all requests.");
 }
 
 if (DEV_BYPASS_AUTH) {
-  console.log("[AUTH] Bypass auth enabled — all requests use dev user");
+  log.info("bypass auth enabled — all requests use dev user");
 }
 
 const DEV_USER: RealmioUser = {
