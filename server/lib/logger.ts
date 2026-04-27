@@ -21,8 +21,10 @@ const defaultLevel = isProduction ? "info" : "debug";
 
 export const logger: Logger = pino({
   level: process.env.LOG_LEVEL || defaultLevel,
-  // Hindari leak PID/hostname ke log production (privacy + size)
-  base: isProduction ? undefined : { pid: process.pid },
+  // Hindari leak PID/hostname ke log production (privacy + size).
+  // pino: `base: null` SUPPRESSES default {pid,hostname}; `undefined`
+  // jatuh ke default (tetap include keduanya). null = correct intent.
+  base: isProduction ? null : { pid: process.pid },
   formatters: {
     level: (label) => ({ level: label }),
   },
