@@ -13,7 +13,11 @@ export const bookingGroups = pgTable("booking_groups", {
   groupCode:   text("group_code").notNull().unique(),
   type:        text("type").notNull().default("round_trip"),
   channel:     channelEnum("channel").notNull().default("CSO"),
-  totalAmount: integer("total_amount").notNull(),
+  // §3.8: numeric(12,2) supaya align dengan bookings.totalAmount.
+  // Drizzle merepresentasikan numeric sebagai string di runtime — caller
+  // wajib `.toFixed(2)` atau `.toString()` saat insert (lihat
+  // roundTrip.service.ts).
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
   outletId:    uuid("outlet_id").references(() => outlets.id),
   createdBy:   text("created_by"),
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
