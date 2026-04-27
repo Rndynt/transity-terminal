@@ -270,9 +270,12 @@ function assertProductionEnv() {
     required.push(['RESERVATION_ENGINE_HMAC_SECRET', 'HMAC secret untuk reservation engine adapter']);
   }
 
-  const missing = required.filter(([k]) => !process.env[k]?.trim()).map(([k, hint]) => `  - ${k}: ${hint}`);
+  const missing = required.filter(([k]) => !process.env[k]?.trim());
   if (missing.length > 0) {
-    logger.fatal({ component: "boot", missing: missing.map(line => line.trim().split(":")[0]) }, "missing required production env vars");
+    logger.fatal(
+      { component: "boot", missing: missing.map(([k]) => k) },
+      "missing required production env vars",
+    );
     process.exit(1);
   }
 
