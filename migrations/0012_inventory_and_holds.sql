@@ -32,3 +32,13 @@ CREATE INDEX "idx_seat_inv_trip_seat" ON "seat_inventory" USING btree ("trip_id"
 CREATE INDEX "idx_seat_inv_trip_id" ON "seat_inventory" USING btree ("trip_id");
 --> statement-breakpoint
 CREATE INDEX "idx_seat_inv_trip_leg" ON "seat_inventory" USING btree ("trip_id","leg_index");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_seat_holds_trip_id ON "seat_holds" (trip_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_seat_holds_expires_at ON "seat_holds" (expires_at);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_seat_holds_active ON "seat_holds" (trip_id, expires_at) WHERE booking_id IS NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_seat_holds_booking_id ON "seat_holds" (booking_id) WHERE booking_id IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_seat_holds_trip_seat ON "seat_holds" (trip_id, seat_no);

@@ -60,3 +60,17 @@ ALTER TABLE "trip_bases" ADD CONSTRAINT "trip_bases_default_layout_id_layouts_id
 ALTER TABLE "trip_bases" ADD CONSTRAINT "trip_bases_default_vehicle_id_vehicles_id_fk" FOREIGN KEY ("default_vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "trip_bases" ADD CONSTRAINT "trip_bases_default_driver_id_drivers_id_fk" FOREIGN KEY ("default_driver_id") REFERENCES "public"."drivers"("id") ON DELETE no action ON UPDATE no action;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trip_bases_active ON "trip_bases" (active);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trip_bases_pattern ON "trip_bases" (pattern_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trip_bases_valid ON "trip_bases" (valid_from, valid_to);
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_schedule_exception_base_date ON "schedule_exceptions" (base_id, exception_date);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_schedule_exception_date ON "schedule_exceptions" (exception_date);
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_stop_exception_base_date_stop ON "schedule_stop_exceptions" (base_id, exception_date, stop_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_stop_exception_date ON "schedule_stop_exceptions" (exception_date);

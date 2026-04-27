@@ -22,3 +22,9 @@ CREATE TABLE "cashier_settlements" (
 	"difference" numeric(15, 2) DEFAULT '0' NOT NULL,
 	"notes" text
 );
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_cashier_sessions_outlet_status ON "cashier_sessions" (outlet_id, status);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_cashier_sessions_staff_id ON "cashier_sessions" (staff_id);
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_cashier_sessions_outlet_staff_open ON "cashier_sessions" (outlet_id, staff_id) WHERE status = 'open';

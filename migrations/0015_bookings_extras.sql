@@ -78,3 +78,19 @@ ALTER TABLE "reviews" ADD CONSTRAINT "reviews_app_user_id_app_users_id_fk" FOREI
 ALTER TABLE "reviews" ADD CONSTRAINT "reviews_trip_id_trips_id_fk" FOREIGN KEY ("trip_id") REFERENCES "public"."trips"("id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "reviews" ADD CONSTRAINT "reviews_booking_id_bookings_id_fk" FOREIGN KEY ("booking_id") REFERENCES "public"."bookings"("id") ON DELETE no action ON UPDATE no action;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bpa_booking_id ON "booking_promo_applications" (booking_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bpa_promo_id ON "booking_promo_applications" (promo_id);
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_bpa_booking_promo ON "booking_promo_applications" (booking_id, promo_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_print_jobs_booking_id ON "print_jobs" (booking_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_booking_history_booking_id ON "booking_history" (booking_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_reviews_trip_created ON "reviews" (trip_id, created_at DESC);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_reviews_app_user ON "reviews" (app_user_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_reviews_booking ON "reviews" (booking_id) WHERE booking_id IS NOT NULL;

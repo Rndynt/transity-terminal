@@ -52,3 +52,13 @@ ALTER TABLE "trip_patterns" ADD CONSTRAINT "trip_patterns_default_layout_id_layo
 ALTER TABLE "trip_cost_items" ADD CONSTRAINT "trip_cost_items_template_id_trip_cost_templates_id_fk" FOREIGN KEY ("template_id") REFERENCES "public"."trip_cost_templates"("id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "trip_cost_templates" ADD CONSTRAINT "trip_cost_templates_pattern_id_trip_patterns_id_fk" FOREIGN KEY ("pattern_id") REFERENCES "public"."trip_patterns"("id") ON DELETE no action ON UPDATE no action;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_cost_templates_pattern_active ON "trip_cost_templates" (pattern_id, is_active);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trip_cost_items_template_id ON "trip_cost_items" (template_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trip_patterns_default_layout_id ON "trip_patterns" (default_layout_id) WHERE default_layout_id IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_pattern_stops_pattern_id ON "pattern_stops" (pattern_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_pattern_stops_stop_id ON "pattern_stops" (stop_id);

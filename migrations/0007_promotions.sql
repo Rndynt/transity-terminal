@@ -47,3 +47,11 @@ CREATE TABLE "vouchers" (
 ALTER TABLE "promotion_conditions" ADD CONSTRAINT "promotion_conditions_promo_id_promotions_id_fk" FOREIGN KEY ("promo_id") REFERENCES "public"."promotions"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "vouchers" ADD CONSTRAINT "vouchers_promo_id_promotions_id_fk" FOREIGN KEY ("promo_id") REFERENCES "public"."promotions"("id") ON DELETE no action ON UPDATE no action;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_promotions_active_valid ON "promotions" (is_active, valid_from, valid_to) WHERE is_active = true;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_promo_conditions_promo_id ON "promotion_conditions" (promo_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_vouchers_promo_id ON "vouchers" (promo_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_vouchers_status ON "vouchers" (status);

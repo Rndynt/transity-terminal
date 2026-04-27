@@ -24,3 +24,11 @@ CREATE TABLE "operator_settings" (
 	"accent_color" text DEFAULT '#F59E0B' NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now()
 );
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_notifications_target_user_created ON "notifications" (target_user_id, created_at DESC) WHERE target_user_id IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_notifications_target_outlet_created ON "notifications" (target_outlet_id, created_at DESC) WHERE target_outlet_id IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON "notifications" (target_user_id, is_read) WHERE is_read = false AND target_user_id IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_notifications_expires ON "notifications" (expires_at) WHERE expires_at IS NOT NULL;

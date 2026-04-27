@@ -27,3 +27,15 @@ CREATE TABLE "customer_profiles" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_app_users_phone ON "app_users" (phone) WHERE phone IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_app_users_active ON "app_users" (is_active) WHERE is_active = true;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON "customer_profiles" (phone);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_customers_id_number ON "customer_profiles" (id_number) WHERE id_number IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_customers_email ON "customer_profiles" (email) WHERE email IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_customers_tag ON "customer_profiles" (tag);

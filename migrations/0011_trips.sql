@@ -63,3 +63,31 @@ ALTER TABLE "trips" ADD CONSTRAINT "trips_vehicle_id_vehicles_id_fk" FOREIGN KEY
 ALTER TABLE "trips" ADD CONSTRAINT "trips_layout_id_layouts_id_fk" FOREIGN KEY ("layout_id") REFERENCES "public"."layouts"("id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "trips" ADD CONSTRAINT "trips_driver_id_drivers_id_fk" FOREIGN KEY ("driver_id") REFERENCES "public"."drivers"("id") ON DELETE no action ON UPDATE no action;
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_trip_base_per_day ON "trips" (base_id, service_date) WHERE base_id IS NOT NULL AND deleted_at IS NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trips_service_date ON "trips" (service_date);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trips_pattern_id ON "trips" (pattern_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trips_status ON "trips" (status);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trips_driver_id ON "trips" (driver_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trips_vehicle_id ON "trips" (vehicle_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trips_pattern_date ON "trips" (pattern_id, service_date);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trips_base_date ON "trips" (base_id, service_date) WHERE base_id IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trips_date_status ON "trips" (service_date, status) WHERE deleted_at IS NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_tst_trip_id ON "trip_stop_times" (trip_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_tst_stop_id ON "trip_stop_times" (stop_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_tst_trip_stop ON "trip_stop_times" (trip_id, stop_id) WHERE deleted_at IS NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_tst_trip_seq ON "trip_stop_times" (trip_id, stop_sequence) WHERE deleted_at IS NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_trip_legs_trip_id ON "trip_legs" (trip_id);

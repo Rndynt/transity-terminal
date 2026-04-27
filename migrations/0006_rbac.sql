@@ -36,3 +36,7 @@ ALTER TABLE "role_flags" ADD CONSTRAINT "role_flags_flag_id_feature_flags_id_fk"
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_role_id_roles_id_fk" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "staff_members" ADD CONSTRAINT "staff_members_outlet_id_outlets_id_fk" FOREIGN KEY ("outlet_id") REFERENCES "public"."outlets"("id") ON DELETE no action ON UPDATE no action;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_staff_members_role_id ON "staff_members" (role_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_staff_members_outlet_id ON "staff_members" (outlet_id) WHERE outlet_id IS NOT NULL;

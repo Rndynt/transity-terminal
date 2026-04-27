@@ -14,3 +14,7 @@ CREATE TABLE "price_rules" (
 ALTER TABLE "price_rules" ADD CONSTRAINT "price_rules_pattern_id_trip_patterns_id_fk" FOREIGN KEY ("pattern_id") REFERENCES "public"."trip_patterns"("id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "price_rules" ADD CONSTRAINT "price_rules_trip_id_trips_id_fk" FOREIGN KEY ("trip_id") REFERENCES "public"."trips"("id") ON DELETE no action ON UPDATE no action;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_price_rules_pattern_id ON "price_rules" (pattern_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_price_rules_trip_id ON "price_rules" (trip_id);

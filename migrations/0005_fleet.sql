@@ -55,3 +55,9 @@ CREATE TABLE "vehicle_maintenances" (
 );
 --> statement-breakpoint
 ALTER TABLE "vehicles" ADD CONSTRAINT "vehicles_layout_id_layouts_id_fk" FOREIGN KEY ("layout_id") REFERENCES "public"."layouts"("id") ON DELETE no action ON UPDATE no action;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_drivers_status ON "drivers" (status) WHERE deleted_at IS NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_drivers_active ON "drivers" (deleted_at) WHERE deleted_at IS NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_vehicles_layout_id ON "vehicles" (layout_id);

@@ -70,3 +70,19 @@ ALTER TABLE "cargo_shipments" ADD CONSTRAINT "cargo_shipments_destination_stop_i
 ALTER TABLE "cargo_shipments" ADD CONSTRAINT "cargo_shipments_outlet_id_outlets_id_fk" FOREIGN KEY ("outlet_id") REFERENCES "public"."outlets"("id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "cargo_shipments" ADD CONSTRAINT "cargo_shipments_cargo_type_id_cargo_types_id_fk" FOREIGN KEY ("cargo_type_id") REFERENCES "public"."cargo_types"("id") ON DELETE no action ON UPDATE no action;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_cargo_rates_lookup ON "cargo_rates" (cargo_type_id, scope, scope_ref_id, is_active);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_cargo_trip_id ON "cargo_shipments" (trip_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_cargo_status ON "cargo_shipments" (status);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_cargo_outlet_id ON "cargo_shipments" (outlet_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_cargo_trip_status ON "cargo_shipments" (trip_id, status);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_cargo_paid_at ON "cargo_shipments" (paid_at) WHERE paid_at IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_cargo_outlet_created ON "cargo_shipments" (outlet_id, created_at DESC);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_cargo_cargo_type_id ON "cargo_shipments" (cargo_type_id) WHERE cargo_type_id IS NOT NULL;

@@ -85,3 +85,39 @@ ALTER TABLE "bookings" ADD CONSTRAINT "bookings_app_user_id_app_users_id_fk" FOR
 ALTER TABLE "passengers" ADD CONSTRAINT "passengers_booking_id_bookings_id_fk" FOREIGN KEY ("booking_id") REFERENCES "public"."bookings"("id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "payments" ADD CONSTRAINT "payments_booking_id_bookings_id_fk" FOREIGN KEY ("booking_id") REFERENCES "public"."bookings"("id") ON DELETE no action ON UPDATE no action;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_booking_groups_created_at ON "booking_groups" (created_at);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bookings_trip_id ON "bookings" (trip_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bookings_status ON "bookings" (status);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bookings_trip_status ON "bookings" (trip_id, status);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bookings_outlet_id ON "bookings" (outlet_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bookings_created_at ON "bookings" (created_at);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bookings_pending_expiry ON "bookings" (pending_expires_at) WHERE status = 'pending';
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bookings_app_user_id ON "bookings" (app_user_id) WHERE app_user_id IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bookings_group_id ON "bookings" (group_id) WHERE group_id IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bookings_origin_stop ON "bookings" (origin_stop_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bookings_destination_stop ON "bookings" (destination_stop_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_bookings_outlet_created ON "bookings" (outlet_id, created_at DESC);
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_bookings_idempotency_key ON "bookings" (idempotency_key) WHERE idempotency_key IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_passengers_booking_id ON "passengers" (booking_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_passengers_booking_seat ON "passengers" (booking_id, seat_no);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_payments_booking_id ON "payments" (booking_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_payments_provider_ref ON "payments" (provider_ref) WHERE provider_ref IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_payments_paid_at ON "payments" (paid_at);

@@ -32,3 +32,11 @@ ALTER TABLE "spj" ADD CONSTRAINT "spj_driver_id_drivers_id_fk" FOREIGN KEY ("dri
 ALTER TABLE "spj" ADD CONSTRAINT "spj_vehicle_id_vehicles_id_fk" FOREIGN KEY ("vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "spj_cost_lines" ADD CONSTRAINT "spj_cost_lines_spj_id_spj_id_fk" FOREIGN KEY ("spj_id") REFERENCES "public"."spj"("id") ON DELETE no action ON UPDATE no action;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_spj_trip_id ON "spj" (trip_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_spj_status ON "spj" (status);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_spj_driver_id ON "spj" (driver_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_spj_cost_lines_spj_id ON "spj_cost_lines" (spj_id);
