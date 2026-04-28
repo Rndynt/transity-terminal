@@ -23,6 +23,9 @@ import {
 } from "./booking.helpers";
 import { requirePermission, SYSTEM_CONTEXT, type ServiceContext } from "@modules/rbac/rbac.guard";
 import { revertPromoApplicationsForBooking } from "@modules/promos/promoRevert";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("bookings.service");
 
 /**
  * S1-09 (Sprint 2): tiket dan booking adalah fondasi pendapatan, jadi
@@ -542,9 +545,9 @@ export class BookingsService {
             legIndexes,
           });
         } catch (e) {
-          console.error(
-            `[RELEASE_PENDING] engine cancelSeats failed for ${passenger.seatNo}, enqueuing:`,
-            e,
+          log.error(
+            { err: e, op: "releasePendingBooking", seatNo: passenger.seatNo, bookingId },
+            "engine cancelSeats failed, enqueuing"
           );
           await enqueueCancelSeats({
             tripId: booking.tripId,
@@ -634,9 +637,9 @@ export class BookingsService {
                 legIndexes,
               });
             } catch (e) {
-              console.error(
-                `[CLEANUP] engine cancelSeats failed for booking=${booking.id} seat=${passenger.seatNo}, enqueuing:`,
-                e,
+              log.error(
+                { err: e, op: "cleanupExpiredPendingBookings", bookingId: booking.id, seatNo: passenger.seatNo },
+                "engine cancelSeats failed, enqueuing"
               );
               await enqueueCancel!({
                 tripId: booking.tripId,
@@ -652,9 +655,9 @@ export class BookingsService {
           }
         }
 
-        console.log(`[CLEANUP] Expired pending booking ${booking.id} canceled and seats released`);
+        log.info({ bookingId: booking.id, seatCount: seatNos.length }, "expired pending booking canceled and seats released");
       } catch (error) {
-        console.error(`[CLEANUP] Failed to cleanup expired booking ${booking.id}:`, error);
+        log.error({ err: error, bookingId: booking.id }, "failed to cleanup expired booking");
       }
     }
   }

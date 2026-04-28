@@ -21,6 +21,9 @@
 import type { FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 import { captureError } from "./observability/sentry";
+import { createComponentLogger } from "./lib/logger";
+
+const log = createComponentLogger("errorHandler");
 
 export type AppError = Error & {
   status?: number;
@@ -64,7 +67,7 @@ export function registerGlobalErrorHandler(app: FastifyInstance) {
 
     reply.code(status).send({ message });
     if (status === 500) {
-      console.error(err);
+      log.error({ err, route: request.url, method: request.method }, "unhandled 500");
     }
   });
 }

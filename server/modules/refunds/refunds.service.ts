@@ -16,6 +16,9 @@ import { webSocketService } from "@server/realtime/ws";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 import { revertPromoApplicationsForBooking } from "@modules/promos/promoRevert";
 import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "@server/constants/pagination";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("refunds.service");
 
 function getRows(result: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(result)) return result as Array<Record<string, unknown>>;
@@ -237,7 +240,7 @@ export class RefundsService {
             legIndexes,
           });
         } catch (e) {
-          console.error('[REFUNDS] engine cancelSeats failed, enqueuing for retry:', e);
+          log.error({ err: e, tripId: booking.tripId, seatNo: p.seatNo, refundId: id }, "engine cancelSeats failed, enqueuing for retry");
           await enqueueCancelSeats({
             tripId: booking.tripId,
             seatNo: p.seatNo,

@@ -1,6 +1,7 @@
 import { db } from "@server/db";
 import { eq, and, or, desc, sql, inArray, isNull, gte, lte } from "drizzle-orm";
 import { fromZonedHHMMToUtc } from "@server/utils/timezone";
+import { createComponentLogger } from "@server/lib/logger";
 import { ManifestEntry, ManifestFull, ManifestCargoEntry } from "@server/storage.interface";
 import {
   tripPatterns, patternStops, tripBases, trips, tripStopTimes, tripLegs,
@@ -18,6 +19,8 @@ import {
   type CargoAvailableTrip,
   type Outlet,
 } from "@shared/schema";
+
+const log = createComponentLogger("scheduling.repo");
 
 /**
  * Shape of one element in `trip_bases.default_stop_times` (jsonb).
@@ -624,7 +627,7 @@ export class SchedulingRepository {
           hasPriceRule
         });
       } catch (error) {
-        console.warn(`Skipping virtual trip for base ${base.id}:`, error);
+        log.warn({ baseId: base.id, err: error }, "skipping virtual trip");
         continue;
       }
     }
@@ -1370,7 +1373,7 @@ export class SchedulingRepository {
           legCount: destPs.stopSequence - originPs.stopSequence,
         });
       } catch (error) {
-        console.warn(`Skipping virtual cargo trip for base ${base.id}:`, error);
+        log.warn({ baseId: base.id, err: error }, "skipping virtual cargo trip");
         continue;
       }
     }

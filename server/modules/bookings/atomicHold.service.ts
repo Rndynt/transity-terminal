@@ -4,6 +4,9 @@ import { seatInventory, seatHolds } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { webSocketService } from "@server/realtime/ws";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("atomicHold");
 
 /**
  * P2 §10.7 — a leg conflicts on hold creation iff:
@@ -149,7 +152,7 @@ export class AtomicHoldService {
 
       return result;
     } catch (error) {
-      console.error(`[ATOMIC_HOLD] Hold creation failed:`, error);
+      log.error({ err: error, tripId, seatNo }, "hold creation failed");
       return {
         success: false,
         reason: 'TRANSACTION_ERROR',
@@ -194,7 +197,7 @@ export class AtomicHoldService {
 
       return { success: false };
     } catch (error) {
-      console.error(`[ATOMIC_HOLD] Hold release failed:`, error);
+      log.error({ err: error, holdRef }, "hold release failed");
       return { success: false };
     }
   }

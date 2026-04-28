@@ -13,6 +13,9 @@ import { revertPromoApplicationsForBooking } from "@modules/promos/promoRevert";
 import { isEngineEnabled, HoldsAdapter } from "@modules/holds/holdsAdapter";
 import { AtomicHoldService } from "./atomicHold.service";
 import { enqueueCancelSeats } from "@modules/holds/compensationQueue";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("unseat.service");
 
 /**
  * S1-09 (Sprint 2): unseat & re-assign kursi memengaruhi inventory dan
@@ -128,7 +131,7 @@ export class UnseatService {
           legIndexes,
         });
       } catch (e) {
-        console.error('[UNSEAT] engine cancelSeats failed, enqueuing:', e);
+        log.error({ err: e, tripId: booking.tripId, seatNo: passenger.seatNo }, "engine cancelSeats failed, enqueuing");
         await enqueueCancelSeats({
           tripId: booking.tripId,
           seatNo: passenger.seatNo,
@@ -223,7 +226,7 @@ export class UnseatService {
             legIndexes,
           });
         } catch (e) {
-          console.error(`[UNSEAT] engine cancelSeats failed for seat ${p.seatNo}, enqueuing:`, e);
+          log.error({ err: e, tripId: booking.tripId, seatNo: p.seatNo }, "engine cancelSeats failed, enqueuing");
           await enqueueCancelSeats({
             tripId: booking.tripId,
             seatNo: p.seatNo,
@@ -366,7 +369,7 @@ export class UnseatService {
             legIndexes,
           });
         } catch (e) {
-          console.error('[UNSEAT] engine cancelSeats failed after cancel tx commit, enqueuing:', e);
+          log.error({ err: e, tripId: booking.tripId, seatNo: passengerRow.seatNo, op: "postCancelTxCommit" }, "engine cancelSeats failed, enqueuing");
           await enqueueCancelSeats({
             tripId: booking.tripId,
             seatNo: passengerRow.seatNo,

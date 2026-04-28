@@ -1,5 +1,8 @@
 import { parseISO, getDay } from "date-fns";
 import { fromZonedTime, formatInTimeZone, toZonedTime as dateFnsToZonedTime } from "date-fns-tz";
+import { createComponentLogger } from "../lib/logger";
+
+const log = createComponentLogger("timezone");
 
 // Valid time format regex: HH:MM or HH:MM:SS with colon separator ONLY
 const TIME_FORMAT_REGEX = /^\d{2}:\d{2}(:\d{2})?$/;
@@ -28,7 +31,7 @@ export function normalizeTimeFormat(timeStr: string | null | undefined): string 
   
   // Validate format after normalization
   if (!TIME_FORMAT_REGEX.test(normalized)) {
-    console.warn(`[TIMEZONE] Invalid time format: "${timeStr}". Expected HH:MM or HH:MM:SS`);
+    log.warn({ timeStr }, "invalid time format; expected HH:MM or HH:MM:SS");
     return null;
   }
   
@@ -40,7 +43,7 @@ export function normalizeTimeFormat(timeStr: string | null | undefined): string 
   // Validate time values (hours 0-23, minutes 0-59, seconds 0-59)
   const parts = normalized.split(':').map(Number);
   if (parts[0] > 23 || parts[1] > 59 || parts[2] > 59) {
-    console.warn(`[TIMEZONE] Invalid time values: "${timeStr}"`);
+    log.warn({ timeStr }, "invalid time values (hours/minutes/seconds out of range)");
     return null;
   }
   

@@ -43,6 +43,9 @@ async function withAdvisoryLock<T>(lockId: number, fn: () => Promise<T>): Promis
 import { webSocketService } from './realtime/ws';
 import { buildScheduleSnapshot } from './lib/scheduleSnapshot';
 import { fireAndForget } from './lib/consoleWebhook';
+import { createComponentLogger } from './lib/logger';
+
+const log = createComponentLogger('scheduler');
 
 const SNAPSHOT_INTERVAL_MS = parseInt(
   process.env.CONSOLE_SNAPSHOT_INTERVAL_MS || `${10 * 60 * 1000}`,
@@ -70,7 +73,7 @@ export class Scheduler {
   }
 
   async cleanupExpiredHolds(): Promise<void> {
-    console.log('[SCHEDULER] Running expired holds cleanup...');
+    log.debug('running expired holds cleanup');
     
     try {
       const now = new Date();
@@ -82,7 +85,7 @@ export class Scheduler {
           .for('update', { skipLocked: true });
 
         if (holds.length === 0) {
-          console.log('[SCHEDULER] No expired holds to clean up');
+          log.debug('no expired holds to clean up');
           return [];
         }
 
@@ -100,7 +103,7 @@ export class Scheduler {
             lt(seatHolds.expiresAt, now)
           ));
 
-        console.log(`[SCHEDULER] Cleaned up ${holds.length} expired holds`);
+        log.info({ count: holds.length }, 'cleaned up expired holds');
         return holds;
       });
 
@@ -116,7 +119,7 @@ export class Scheduler {
         }
       }
     } catch (error) {
-      console.error('[SCHEDULER] Error cleaning up expired holds:', error);
+      log.error({ err: error }, 'error cleaning up expired holds');
     }
   }
 
@@ -164,12 +167,10 @@ export class Scheduler {
       });
 
       if (deleted > 0) {
-        console.log(
-          `[SCHEDULER] engine-mode seat_holds sweep: ${deleted} expired row(s) removed`,
-        );
+        log.info({ deleted }, 'engine-mode seat_holds sweep completed');
       }
     } catch (error) {
-      console.error('[SCHEDULER] Error in engine-mode seat_holds sweep:', error);
+      log.error({ err: error }, 'error in engine-mode seat_holds sweep');
     }
   }
 
@@ -188,10 +189,10 @@ export class Scheduler {
 
       const count = result.rows?.length || 0;
       if (count > 0) {
-        console.log(`[SCHEDULER] Cleaned up ${count} orphan holdRefs in seat_inventory`);
+        log.info({ count }, 'cleaned up orphan holdRefs in seat_inventory');
       }
     } catch (error) {
-      console.error('[SCHEDULER] Error cleaning up orphan holdRefs:', error);
+      log.error({ err: error }, 'error cleaning up orphan holdRefs');
     }
   }
 
@@ -224,11 +225,12 @@ export class Scheduler {
         trips: allTrips,
         emittedAt: new Date().toISOString(),
       });
-      console.log(
-        `[SCHEDULER] Pushed schedule snapshot to Console (${allTrips.length} trips, next ${SNAPSHOT_DAYS_AHEAD} days)`
+      log.info(
+        { trips: allTrips.length, daysAhead: SNAPSHOT_DAYS_AHEAD },
+        'pushed schedule snapshot to console'
       );
     } catch (error) {
-      console.error('[SCHEDULER] Error pushing schedule snapshot:', error);
+      log.error({ err: error }, 'error pushing schedule snapshot');
     }
   }
 
@@ -238,12 +240,9 @@ export class Scheduler {
       (process.env.RESERVATION_ENGINE_ENABLED ?? 'false').toLowerCase() === 'true';
 
     if (engineOwnsHolds) {
-      console.log(
-        '[SCHEDULER] RESERVATION_ENGINE_ENABLED=true — engine sidecar owns ' +
-          'seat_inventory.hold_ref reaping; local orphan-ref cleanup DISABLED. ' +
-          'TT still sweeps expired seat_holds rows locally to prevent the ' +
-          'table from growing unbounded (P2 §7). Pending-booking cleanup ' +
-          'remains active.',
+      log.info(
+        { engineOwnsHolds: true },
+        'RESERVATION_ENGINE_ENABLED=true — engine sidecar owns seat_inventory.hold_ref reaping; local orphan-ref cleanup disabled. TT still sweeps expired seat_holds rows locally (P2 §7). Pending-booking cleanup remains active.'
       );
     }
 
@@ -262,7 +261,7 @@ export class Scheduler {
 
         if (config.pendingBookingAutoRelease) {
           await withAdvisoryLock(LOCK_PENDING_BOOK, async () => {
-            console.log('[SCHEDULER] Running expired pending bookings cleanup...');
+            log.debug('running expired pending bookings cleanup');
             await this.bookingsService.cleanupExpiredPendingBookings();
           });
         }
@@ -274,18 +273,19 @@ export class Scheduler {
             const { runOnce } = await import('@modules/holds/compensationQueue');
             const r = await runOnce();
             if (r.attempted > 0) {
-              console.log(
-                `[SCHEDULER] engine compensation queue: ${r.succeeded}/${r.attempted} drained`,
+              log.info(
+                { succeeded: r.succeeded, attempted: r.attempted },
+                'engine compensation queue drained'
               );
             }
           });
         }
       } catch (error) {
-        console.error('[SCHEDULER] Error during cleanup:', error);
+        log.error({ err: error }, 'error during cleanup');
       }
     }, 60 * 1000); // Every 1 minute
 
-    console.log('[SCHEDULER] Cleanup scheduler started (runs every 1 minute)');
+    log.info({ intervalMs: 60_000 }, 'cleanup scheduler started');
 
     // S2-08: notifications cleanup. Berjalan jauh lebih jarang (default 6 jam)
     // karena DELETE TTL tidak perlu high-frequency dan akan berat di run
@@ -298,15 +298,22 @@ export class Scheduler {
             const svc = new NotificationsService();
             const deleted = await svc.cleanupOldNotifications();
             if (deleted > 0) {
-              console.log(`[SCHEDULER] notifications cleanup: ${deleted} row dihapus (TTL read=${process.env.NOTIF_READ_TTL_DAYS || 90}d, unread=${process.env.NOTIF_UNREAD_TTL_DAYS || 180}d)`);
+              log.info(
+                {
+                  deleted,
+                  ttlReadDays: parseInt(process.env.NOTIF_READ_TTL_DAYS || '90', 10),
+                  ttlUnreadDays: parseInt(process.env.NOTIF_UNREAD_TTL_DAYS || '180', 10),
+                },
+                'notifications cleanup completed'
+              );
             }
           });
         } catch (e) {
-          console.error('[SCHEDULER] notifications cleanup gagal:', e);
+          log.error({ err: e }, 'notifications cleanup failed');
         }
       };
       this.notifCleanupIntervalId = setInterval(runNotifCleanup, NOTIF_CLEANUP_INTERVAL_MS);
-      console.log(`[SCHEDULER] Notifications cleanup started (every ${Math.round(NOTIF_CLEANUP_INTERVAL_MS / 1000 / 60)} minutes)`);
+      log.info({ intervalMin: Math.round(NOTIF_CLEANUP_INTERVAL_MS / 1000 / 60) }, 'notifications cleanup started');
       // Kick once on startup supaya backlog dari deploy sebelumnya langsung
       // dibersihkan tanpa menunggu interval pertama.
       void runNotifCleanup();
@@ -328,10 +335,9 @@ export class Scheduler {
       this.snapshotIntervalId = setInterval(() => {
         void withAdvisoryLock(LOCK_SNAPSHOT_PUSH, () => this.pushScheduleSnapshot());
       }, SNAPSHOT_INTERVAL_MS);
-      console.log(
-        `[SCHEDULER] Schedule snapshot push started (every ${Math.round(
-          SNAPSHOT_INTERVAL_MS / 1000
-        )}s, ${SNAPSHOT_DAYS_AHEAD} days ahead)`
+      log.info(
+        { intervalSec: Math.round(SNAPSHOT_INTERVAL_MS / 1000), daysAhead: SNAPSHOT_DAYS_AHEAD },
+        'schedule snapshot push started'
       );
       // Kick once on startup so a freshly-restarted Terminal pushes immediately.
       void withAdvisoryLock(LOCK_SNAPSHOT_PUSH, () => this.pushScheduleSnapshot());
@@ -342,17 +348,17 @@ export class Scheduler {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
-      console.log('[SCHEDULER] Cleanup scheduler stopped');
+      log.info('cleanup scheduler stopped');
     }
     if (this.snapshotIntervalId) {
       clearInterval(this.snapshotIntervalId);
       this.snapshotIntervalId = null;
-      console.log('[SCHEDULER] Schedule snapshot push stopped');
+      log.info('schedule snapshot push stopped');
     }
     if (this.notifCleanupIntervalId) {
       clearInterval(this.notifCleanupIntervalId);
       this.notifCleanupIntervalId = null;
-      console.log('[SCHEDULER] Notifications cleanup stopped');
+      log.info('notifications cleanup stopped');
     }
   }
 }
