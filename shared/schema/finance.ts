@@ -34,7 +34,11 @@ export const tripCostItems = pgTable("trip_cost_items", {
   isAdvance:  boolean("is_advance").notNull().default(true),
   notes:      text("notes"),
   createdAt:  timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  // PR α-1: FK index untuk list cost items per template + delete-cascade.
+  // Migration 0015 mendaftarkan index yang sama.
+  idxTripCostItemsTemplateId: sql`CREATE INDEX IF NOT EXISTS idx_trip_cost_items_template_id ON ${table} (template_id)`,
+}));
 
 export const tripCostItemsRelations = relations(tripCostItems, ({ one }) => ({
   template: one(tripCostTemplates, { fields: [tripCostItems.templateId], references: [tripCostTemplates.id] })

@@ -2,6 +2,7 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import { DriversService } from "./drivers.service";
 import { IStorage } from "@server/storage.interface";
 import { insertDriverSchema } from "@shared/schema";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 
 export class DriversController {
   private service: DriversService;
@@ -23,20 +24,20 @@ export class DriversController {
 
   async create(req: FastifyRequest, reply: FastifyReply) {
     const data = insertDriverSchema.parse(req.body);
-    const driver = await this.service.createDriver(data);
+    const driver = await this.service.createDriver(data, buildServiceContext(req));
     reply.code(201).send(driver);
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
     const data = insertDriverSchema.partial().parse(req.body);
-    const driver = await this.service.updateDriver(id, data);
+    const driver = await this.service.updateDriver(id, data, buildServiceContext(req));
     reply.send(driver);
   }
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
-    await this.service.deleteDriver(id);
+    await this.service.deleteDriver(id, buildServiceContext(req));
     reply.code(204).send();
   }
 }

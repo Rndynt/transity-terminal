@@ -2,6 +2,10 @@ import { IStorage } from "@server/storage.interface";
 import { InsertBooking, Booking } from "@shared/schema";
 import { HoldsService } from "@modules/holds/holds.service";
 import { AtomicHoldService } from "./atomicHold.service";
+import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
+import { enqueueCancelSeats } from "@modules/holds/compensationQueue";
+import { getConfig } from "../../config";
+import { randomBytes, randomUUID } from "node:crypto";
 import { PrintService } from "@modules/printing/print.service";
 import { db } from "@server/db";
 import { bookings as bookingsTable, payments as paymentsTable, printJobs as printJobsTable, seatHolds, seatInventory, promotions as promotionsTable, vouchers as vouchersTable, bookingPromoApplications as bookingPromoApplicationsTable } from "@shared/schema";
@@ -17,15 +21,40 @@ import {
   calculateBookingTotal,
   generateBookingCode,
 } from "./booking.helpers";
+import { requirePermission, SYSTEM_CONTEXT, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { revertPromoApplicationsForBooking } from "@modules/promos/promoRevert";
+import { createComponentLogger } from "@server/lib/logger";
 
+const log = createComponentLogger("bookings.service");
+
+/**
+ * S1-09 (Sprint 2): tiket dan booking adalah fondasi pendapatan, jadi
+ * setiap method yang membuat / membatalkan booking memanggil
+ * `requirePermission(ctx, ...)` agar guard tetap berjalan walaupun
+ * service di-import langsung dari modul lain.
+ *
+ * Pemetaan flag:
+ *   - createBooking, createPendingBooking → `action.booking.create`
+ *   - releasePendingBooking               → `action.booking.cancel`
+ *   - cleanupExpiredPendingBookings       → cron internal, wajib pakai
+ *     `SYSTEM_CONTEXT` (lihat `server/scheduler.ts`).
+ *
+ * Method baca (`getAllBookings`, `getBookingById`, `getPendingBookings`,
+ * `createHold`, `releaseHold`, `isHoldOwner`) tidak di-guard di sini
+ * karena route HTTP-nya sudah diperiksa oleh `requireFlag`. Hold/release
+ * di-guard di sisi route saja supaya customer-app yang sudah lewat
+ * `requireAppAuth` tetap bisa pegang kursi tanpa menyentuh staff RBAC.
+ */
 export class BookingsService {
   private holdsService: HoldsService;
   private atomicHoldService: AtomicHoldService;
+  private holdsAdapter: HoldsAdapter;
   private printService: PrintService;
 
   constructor(private storage: IStorage) {
     this.holdsService = new HoldsService();
     this.atomicHoldService = new AtomicHoldService(storage);
+    this.holdsAdapter = new HoldsAdapter(this.atomicHoldService);
     this.printService = new PrintService();
   }
 
@@ -37,7 +66,7 @@ export class BookingsService {
     return await this.storage.getBookingsPaginated(options);
   }
 
-  async getBookingById(id: string): Promise<Booking & { passengers?: any[]; payments?: any[]; tripDetails?: any; originStop?: any; destinationStop?: any; outlet?: any; vehicle?: any; departAt?: any; arriveAt?: any; promoApplications?: any[] }> {
+  async getBookingById(id: string): Promise<Booking & { passengers?: Awaited<ReturnType<IStorage['getPassengers']>>; payments?: Awaited<ReturnType<IStorage['getPayments']>>; tripDetails?: Awaited<ReturnType<IStorage['getTripById']>>; originStop?: Awaited<ReturnType<IStorage['getStopById']>> | null; destinationStop?: Awaited<ReturnType<IStorage['getStopById']>> | null; outlet?: Awaited<ReturnType<IStorage['getOutletById']>> | null; vehicle?: Awaited<ReturnType<IStorage['getVehicleById']>> | null; departAt?: string | Date | null; arriveAt?: string | Date | null; promoApplications?: Array<{ promoName: string; source: 'auto' | 'manual'; discountAmount: number; voucherCode?: string | null }> }> {
     const booking = await this.storage.getBookingById(id);
     if (!booking) {
       throw new Error(`Booking with id ${id} not found`);
@@ -95,9 +124,11 @@ export class BookingsService {
     bookingData: InsertBooking,
     passengers: { fullName: string; phone?: string; idNumber?: string; seatNo: string }[],
     payment: { method: 'cash' | 'qr' | 'ewallet' | 'bank'; amount: number },
-    idempotencyKey?: string,
-    promoCode?: string
-  ): Promise<{ booking: Booking; printPayload: any }> {
+    idempotencyKey: string | undefined,
+    promoCode: string | undefined,
+    ctx: ServiceContext
+  ): Promise<{ booking: Booking; printPayload: Awaited<ReturnType<PrintService['generatePrintPayload']>> }> {
+    requirePermission(ctx, "action.booking.create");
 
     // B1: Idempotency — if same key was already used, return the existing booking
     // unchanged. This protects against double-charge from network retries.
@@ -135,10 +166,28 @@ export class BookingsService {
       throw new Error(`Payment amount ${paymentAmount} does not match expected total ${expectedTotal}`);
     }
 
+    // Engine mode: pre-generate booking ID and confirm seats in the engine
+    // BEFORE opening the local DB tx. The engine has its own DB tx and we
+    // cannot compose them. If the engine confirm fails, we exit before any
+    // TT state changes; if the local tx below later fails, we run a
+    // best-effort compensating cancel-seats call (see catch block).
+    const preGeneratedBookingId = isEngineEnabled() ? randomUUID() : undefined;
+    let engineConfirmed: Array<{ seatNo: string; holdRef: string }> = [];
+    if (preGeneratedBookingId) {
+      engineConfirmed = await this.holdsAdapter.confirmForBooking({
+        bookingId: preGeneratedBookingId,
+        tripId: bookingData.tripId,
+        seatNos,
+        legIndexes,
+        operatorId,
+      });
+    }
+
     let booking: Booking;
     try {
       booking = await db.transaction(async (tx) => {
       const [newBooking] = await tx.insert(bookingsTable).values({
+        ...(preGeneratedBookingId ? { id: preGeneratedBookingId } : {}),
         ...bookingData,
         bookingCode: generateBookingCode(),
         status: 'paid',
@@ -166,12 +215,28 @@ export class BookingsService {
       }
 
       await insertPassengerRows(tx, newBooking.id, passengers, fareQuote);
-      await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);
+      // In engine mode, the engine already marked seats booked via
+      // confirmForBooking() above. Skip the local SQL to avoid double-write.
+      if (!preGeneratedBookingId) {
+        await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);
+      }
 
+      // CSO booking is created with status='paid' immediately (the cash/QR
+      // has already changed hands at the counter), so the payment row MUST
+      // match — otherwise finance reports that filter `status='success'`
+      // miss every CSO transaction, and the partial index
+      // idx_payments_paid_date (WHERE status='success') is bypassed.
+      // Generate a `PAY-<hex>` providerRef to match the shape used by
+      // app.service.processPaymentWebhook, which is what gateway-driven
+      // payments write into the same table.
+      const paymentRef = `PAY-${randomBytes(12).toString('hex').toUpperCase()}`;
       await tx.insert(paymentsTable).values({
         method: payment.method,
         amount: payment.amount.toString(),
-        bookingId: newBooking.id
+        bookingId: newBooking.id,
+        status: 'success',
+        providerRef: paymentRef,
+        paidAt: new Date(),
       });
 
       await tx.insert(printJobsTable).values({
@@ -226,10 +291,30 @@ export class BookingsService {
           .where(eq(bookingsTable.idempotencyKey, idempotencyKey))
           .limit(1);
         if (existing) {
+          // Engine-mode race: we already confirmed seats in the engine but
+          // the local insert lost the idempotency race. The winning request
+          // holds the canonical seat→booking_id linkage in the engine; OUR
+          // confirms point at a non-existent booking_id. Compensate by
+          // freeing what we confirmed so the winner's seats remain intact.
+          if (engineConfirmed.length > 0) {
+            await this.holdsAdapter.compensateConfirms(
+              bookingData.tripId,
+              engineConfirmed,
+              legIndexes,
+            );
+          }
           const bookingWithRelations = await this.getBookingById(existing.id);
           const printPayload = await this.printService.generatePrintPayload(existing.id);
           return { booking: bookingWithRelations, printPayload };
         }
+      }
+      // Any other tx failure with engine confirms in flight: compensate.
+      if (engineConfirmed.length > 0) {
+        await this.holdsAdapter.compensateConfirms(
+          bookingData.tripId,
+          engineConfirmed,
+          legIndexes,
+        );
       }
       throw err;
     }
@@ -255,7 +340,7 @@ export class BookingsService {
 
     const ttlClass: 'short' | 'long' = ttlSeconds <= 600 ? 'short' : 'long';
     
-    const result = await this.atomicHoldService.atomicHold({
+    const result = await this.holdsAdapter.hold({
       tripId,
       seatNo,
       legIndexes,
@@ -290,15 +375,16 @@ export class BookingsService {
   }
 
   async releaseHold(holdRef: string): Promise<void> {
-    await this.atomicHoldService.releaseHoldByRef(holdRef);
+    await this.holdsAdapter.release(holdRef);
   }
 
   async createPendingBooking(
     bookingData: InsertBooking,
     passengers: { fullName: string; phone?: string; idNumber?: string; seatNo: string }[],
-    operatorId: string
+    operatorId: string,
+    ctx: ServiceContext
   ): Promise<{ booking: Booking; pendingExpiresAt: Date }> {
-    const { getConfig } = await import("../../config");
+    requirePermission(ctx, "action.booking.create");
     const config = getConfig();
     
     const legIndexes = computeLegIndexes(bookingData.originSeq, bookingData.destinationSeq);
@@ -318,8 +404,26 @@ export class BookingsService {
 
     const snapshots = await fetchBookingSnapshots(this.storage, bookingData.tripId, bookingData.originStopId, bookingData.destinationStopId, bookingData.outletId, bookingData.originSeq);
 
-    const booking = await db.transaction(async (tx) => {
+    // Engine mode: confirm seats BEFORE the local tx (see createPaidBooking
+    // for the full rationale). Pre-generate booking ID so engine and TT
+    // agree on the canonical id.
+    const preGeneratedPendingId = isEngineEnabled() ? randomUUID() : undefined;
+    let pendingEngineConfirmed: Array<{ seatNo: string; holdRef: string }> = [];
+    if (preGeneratedPendingId) {
+      pendingEngineConfirmed = await this.holdsAdapter.confirmForBooking({
+        bookingId: preGeneratedPendingId,
+        tripId: bookingData.tripId,
+        seatNos,
+        legIndexes,
+        operatorId,
+      });
+    }
+
+    let booking;
+    try {
+      booking = await db.transaction(async (tx) => {
       const [newBooking] = await tx.insert(bookingsTable).values({
+        ...(preGeneratedPendingId ? { id: preGeneratedPendingId } : {}),
         ...bookingData,
         bookingCode: generateBookingCode(),
         status: 'pending',
@@ -348,10 +452,23 @@ export class BookingsService {
       }
 
       await insertPassengerRows(tx, newBooking.id, passengers, fareQuote);
-      await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);
+      // Engine mode: seats already confirmed via confirmForBooking() above.
+      if (!preGeneratedPendingId) {
+        await confirmSeatsBooked(tx, bookingData.tripId, seatNos, legIndexes, operatorId);
+      }
 
       return newBooking;
-    });
+      });
+    } catch (err) {
+      if (pendingEngineConfirmed.length > 0) {
+        await this.holdsAdapter.compensateConfirms(
+          bookingData.tripId,
+          pendingEngineConfirmed,
+          legIndexes,
+        );
+      }
+      throw err;
+    }
 
     const bookingWithRelations = await this.getBookingById(booking.id);
     return { booking: bookingWithRelations, pendingExpiresAt };
@@ -374,7 +491,8 @@ export class BookingsService {
     return await db.select().from(bookingsTable).where(and(...conditions));
   }
 
-  async releasePendingBooking(bookingId: string, operatorId: string): Promise<void> {
+  async releasePendingBooking(bookingId: string, operatorId: string, ctx: ServiceContext): Promise<void> {
+    requirePermission(ctx, "action.booking.cancel");
     const booking = await this.storage.getBookingById(bookingId);
     if (!booking) {
       throw new Error(`Booking with id ${bookingId} not found`);
@@ -388,8 +506,12 @@ export class BookingsService {
     const seatNos = passengers.map(p => p.seatNo);
     const legIndexes = computeLegIndexes(booking.originSeq, booking.destinationSeq);
 
+    // Engine mode owns inventory writes — skip the inline SQL and let the
+    // post-tx engine cancel-seats call handle the seat release per-seat.
+    const engineMode = isEngineEnabled();
+
     await db.transaction(async (tx) => {
-      if (seatNos.length > 0) {
+      if (!engineMode && seatNos.length > 0) {
         await tx
           .update(seatInventory)
           .set({ booked: false, holdRef: null })
@@ -403,16 +525,55 @@ export class BookingsService {
       await tx.update(bookingsTable)
         .set({ status: 'cancelled' })
         .where(eq(bookingsTable.id, bookingId));
+
+      // S1-03: decrement promo usage + revert voucher saat pending → cancelled.
+      // Helper keeps GREATEST-guarded decrement + voucher revert identical
+      // across this path, unseat.service, and refunds.service (P2 §5).
+      await revertPromoApplicationsForBooking(tx, bookingId);
     });
 
     await this.holdsService.releaseHoldsByOwner(operatorId, bookingId);
 
-    for (const passenger of passengers) {
-      webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
+    if (engineMode && seatNos.length > 0) {
+      // Per-seat cancel via adapter; failures enqueue for scheduler retry
+      // so a transient engine outage cannot leak seats from sale.
+      for (const passenger of passengers) {
+        try {
+          await this.holdsAdapter.cancelSeats({
+            tripId: booking.tripId,
+            seatNo: passenger.seatNo,
+            legIndexes,
+          });
+        } catch (e) {
+          log.error(
+            { err: e, op: "releasePendingBooking", seatNo: passenger.seatNo, bookingId },
+            "engine cancelSeats failed, enqueuing"
+          );
+          await enqueueCancelSeats({
+            tripId: booking.tripId,
+            seatNo: passenger.seatNo,
+            legIndexes,
+            context: { source: 'releasePendingBooking', bookingId, passengerId: passenger.id },
+          });
+        }
+      }
+    } else {
+      // Adapter already emitted in engine path; only emit here for legacy.
+      for (const passenger of passengers) {
+        webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
+      }
     }
   }
 
-  async cleanupExpiredPendingBookings(): Promise<void> {
+  /**
+   * Dipanggil oleh `server/scheduler.ts` (cron internal). Pelaku adalah
+   * sistem — wajib pakai `SYSTEM_CONTEXT`. `requirePermission` akan
+   * meloloskan SYSTEM_CONTEXT (lihat rbac.guard.ts) namun menolak ctx
+   * user biasa, sehingga method ini tidak bisa dipanggil dari HTTP
+   * controller secara tidak sengaja.
+   */
+  async cleanupExpiredPendingBookings(ctx: ServiceContext = SYSTEM_CONTEXT): Promise<void> {
+    requirePermission(ctx, 'action.booking.cancel');
     const now = new Date();
 
     const expiredPendingBookings = await db
@@ -436,6 +597,9 @@ export class BookingsService {
       passengersByBooking.set(p.bookingId, list);
     }
 
+    const engineMode = isEngineEnabled();
+    const enqueueCancel = engineMode ? enqueueCancelSeats : null;
+
     for (const booking of expiredPendingBookings) {
       try {
         const bookingPassengers = passengersByBooking.get(booking.id) || [];
@@ -443,7 +607,8 @@ export class BookingsService {
         const legIndexes = computeLegIndexes(booking.originSeq, booking.destinationSeq);
 
         await db.transaction(async (tx) => {
-          if (seatNos.length > 0) {
+          if (!engineMode && seatNos.length > 0) {
+            // Engine owns inventory writes — see release path above.
             await tx
               .update(seatInventory)
               .set({ booked: false, holdRef: null })
@@ -457,15 +622,42 @@ export class BookingsService {
           await tx.update(bookingsTable)
             .set({ status: 'cancelled' })
             .where(eq(bookingsTable.id, booking.id));
+
+          // S1-03: decrement promo usage + revert voucher pada cleanup expired.
+          // Shared helper — see P2 §5 for dedup context.
+          await revertPromoApplicationsForBooking(tx, booking.id);
         });
 
-        for (const passenger of bookingPassengers) {
-          webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
+        if (engineMode && seatNos.length > 0) {
+          for (const passenger of bookingPassengers) {
+            try {
+              await this.holdsAdapter.cancelSeats({
+                tripId: booking.tripId,
+                seatNo: passenger.seatNo,
+                legIndexes,
+              });
+            } catch (e) {
+              log.error(
+                { err: e, op: "cleanupExpiredPendingBookings", bookingId: booking.id, seatNo: passenger.seatNo },
+                "engine cancelSeats failed, enqueuing"
+              );
+              await enqueueCancel!({
+                tripId: booking.tripId,
+                seatNo: passenger.seatNo,
+                legIndexes,
+                context: { source: 'cleanupExpiredPendingBookings', bookingId: booking.id, passengerId: passenger.id },
+              });
+            }
+          }
+        } else {
+          for (const passenger of bookingPassengers) {
+            webSocketService.emitInventoryUpdated(booking.tripId, passenger.seatNo, legIndexes);
+          }
         }
 
-        console.log(`[CLEANUP] Expired pending booking ${booking.id} canceled and seats released`);
+        log.info({ bookingId: booking.id, seatCount: seatNos.length }, "expired pending booking canceled and seats released");
       } catch (error) {
-        console.error(`[CLEANUP] Failed to cleanup expired booking ${booking.id}:`, error);
+        log.error({ err: error, bookingId: booking.id }, "failed to cleanup expired booking");
       }
     }
   }

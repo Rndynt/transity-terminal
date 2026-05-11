@@ -155,6 +155,10 @@ export class AppController {
   async getCities(_req: FastifyRequest, reply: FastifyReply) {
     try {
       const cities = await this.service.getCities();
+      // T-CON-02: cities jarang berubah; izinkan caching publik 5 menit
+      // (sesuai TTL CITIES di Console gateway aggregator). swr=60 supaya
+      // worker bisa serve stale sambil refresh background.
+      reply.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
       reply.send(cities);
     } catch (e: unknown) {
       reply.code(500).send({ error: errMsg(e) });
@@ -164,6 +168,8 @@ export class AppController {
   async getServiceLines(_req: FastifyRequest, reply: FastifyReply) {
     try {
       const lines = await this.service.getServiceLines();
+      // T-CON-02: service-lines metadata stabil, sama TTL dengan cities.
+      reply.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
       reply.send(lines);
     } catch (e: unknown) {
       reply.code(500).send({ error: errMsg(e) });
@@ -182,7 +188,7 @@ export class AppController {
   async searchTrips(req: FastifyRequest, reply: FastifyReply) {
     const parsed = searchSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", code: 'VALIDATION_ERROR', details: parsed.error.flatten() });
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const channel: 'OTA' | 'APP' = isServiceClient ? 'OTA' : 'APP';
     const result = await this.service.searchTrips({
       ...parsed.data,
@@ -244,7 +250,7 @@ export class AppController {
   }
 
   async createBooking(req: FastifyRequest, reply: FastifyReply) {
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const parsed = createBookingSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
     const userId = isServiceClient ? null : (req.appUser?.userId ?? null);
@@ -309,7 +315,7 @@ export class AppController {
   }
 
   async getBookingDetail(req: FastifyRequest, reply: FastifyReply) {
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const userId = isServiceClient ? undefined : (req.appUser?.userId ?? undefined);
     try {
       const detail = await this.service.getBookingDetail((req.params as { id: string }).id, userId);
@@ -324,7 +330,7 @@ export class AppController {
   }
 
   async getPaymentStatus(req: FastifyRequest, reply: FastifyReply) {
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const userId = isServiceClient ? undefined : (req.appUser?.userId ?? undefined);
     try {
       const result = await this.service.getPaymentStatus((req.params as { id: string }).id, userId!);
@@ -378,7 +384,7 @@ export class AppController {
   }
 
   async cancelBooking(req: FastifyRequest, reply: FastifyReply) {
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const userId = isServiceClient ? null : (req.appUser?.userId ?? null);
     try {
       await this.service.cancelBooking((req.params as { id: string }).id, userId);
@@ -398,7 +404,7 @@ export class AppController {
   async payBooking(req: FastifyRequest, reply: FastifyReply) {
     const parsed = payBookingSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
     const userId = isServiceClient ? null : (req.appUser?.userId ?? null);
     try {
       const result = await this.service.payBooking((req.params as { id: string }).id, parsed.data.paymentMethod, parsed.data.voucherCode, userId);
@@ -446,6 +452,27 @@ export class AppController {
     }
   }
 
+  // T-CON-03: batch fetch by IDs untuk Console reconciler.
+  // Format: GET /api/app/bookings?ids=uuid1,uuid2,...  (max 50).
+  async batchBookings(req: FastifyRequest, reply: FastifyReply) {
+    const query = req.query as { ids?: string };
+    const raw = (query.ids ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    if (raw.length === 0) {
+      return reply.code(400).send({ error: 'ids query parameter is required' });
+    }
+    if (raw.length > 50) {
+      return reply.code(400).send({ error: 'Maximum 50 IDs per batch request' });
+    }
+    // Dedupe — Console kadang kirim duplikat tidak sengaja.
+    const ids = Array.from(new Set(raw));
+    try {
+      const result = await this.service.getBookingsByIds(ids);
+      reply.send(result);
+    } catch (e: unknown) {
+      reply.code(500).send({ error: errMsg(e) });
+    }
+  }
+
   async createReview(req: FastifyRequest, reply: FastifyReply) {
     const parsed = createReviewSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "Validation failed", details: parsed.error.flatten() });
@@ -467,10 +494,18 @@ export class AppController {
 
   async trackCargo(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const result = await this.service.trackCargo((req.params as { waybillNumber: string }).waybillNumber);
+      const waybillNumber = (req.params as { waybillNumber: string }).waybillNumber;
+      // S1-06: secret bisa dikirim via query (?secret=) atau header X-Tracking-Secret.
+      const q = (req.query as { secret?: string; s?: string } | undefined) || {};
+      const headerSecret = (req.headers['x-tracking-secret'] as string | undefined) || undefined;
+      const secret: string | undefined = q.secret || q.s || headerSecret;
+      const result = await this.service.trackCargo(waybillNumber, secret);
       reply.send(result);
     } catch (e: unknown) {
-      reply.code(404).send({ error: errMsg(e) });
+      const msg = errMsg(e);
+      // 401 untuk secret salah, 404 untuk waybill tidak ada.
+      if (msg.includes('Tracking secret')) return reply.code(401).send({ error: msg });
+      reply.code(404).send({ error: msg });
     }
   }
 

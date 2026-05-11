@@ -46,7 +46,11 @@ export const spjCostLines = pgTable("spj_cost_lines", {
   isAdvance:       boolean("is_advance").notNull().default(true),
   notes:           text("notes"),
   createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  // PR α-1: FK index untuk list cost lines per SPJ + delete-cascade-by-spj
+  // (spj.service.ts:229,256). Migration 0015 mendaftarkan index yang sama.
+  idxSpjCostLinesSpjId: sql`CREATE INDEX IF NOT EXISTS idx_spj_cost_lines_spj_id ON ${table} (spj_id)`,
+}));
 
 export const spjCostLinesRelations = relations(spjCostLines, ({ one }) => ({
   spj: one(spj, { fields: [spjCostLines.spjId], references: [spj.id] })

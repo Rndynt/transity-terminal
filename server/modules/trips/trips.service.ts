@@ -1,9 +1,24 @@
 import { IStorage } from "@server/storage.interface";
-import { InsertTrip, Trip } from "@shared/schema";
+import { InsertTrip, Trip, Stop, Outlet, Payment } from "@shared/schema";
 import { TripLegsService } from "@modules/tripLegs/tripLegs.service";
 import { SeatInventoryService } from "@modules/seatInventory/seatInventory.service";
 import { fireAndForget } from "@server/lib/consoleWebhook";
 import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("trips.service");
+
+/**
+ * Single seat entry in `layouts.seat_map` (jsonb). Layouts are seeded
+ * client-side and have a stable shape — coordinates + seat label.
+ */
+interface LayoutSeat {
+  seat_no: string;
+  row?: number;
+  col?: number;
+  type?: string;
+  available?: boolean;
+}
 
 export class TripsService {
   private tripLegsService: TripLegsService;
@@ -23,7 +38,7 @@ export class TripsService {
       if (!payload) return;
       fireAndForget({ event, trip: payload, emittedAt: new Date().toISOString() });
     } catch (err) {
-      console.warn("[trips.service] failed to build webhook payload:", (err as Error).message);
+      log.warn({ err, event, tripId: trip.id }, "failed to build webhook payload");
     }
   }
 
@@ -81,13 +96,13 @@ export class TripsService {
         if (newVehicle && currentVehicle && newVehicle.layoutId === currentVehicle.layoutId) {
           const onlyVehicleAndSafe = changedFields.every(f => f === 'vehicleId' || safeFields.has(f));
           if (onlyVehicleAndSafe) {
-            (data as any).snapVehiclePlate = newVehicle.plate;
+            data.snapVehiclePlate = newVehicle.plate;
           } else {
             const hasBookings = await this.storage.tripHasBookings(id);
             if (hasBookings) {
               throw new Error("Tidak bisa mengubah struktur trip (layout, pola) jika sudah ada booking aktif");
             }
-            (data as any).snapVehiclePlate = newVehicle.plate;
+            data.snapVehiclePlate = newVehicle.plate;
           }
         } else {
           const hasBookings = await this.storage.tripHasBookings(id);
@@ -95,9 +110,9 @@ export class TripsService {
             throw new Error("Tidak bisa mengganti kendaraan dengan layout berbeda jika sudah ada booking aktif. Gunakan kendaraan dengan layout yang sama.");
           }
           if (newVehicle) {
-            (data as any).snapVehiclePlate = newVehicle.plate;
-            (data as any).layoutId = newVehicle.layoutId;
-            (data as any).capacity = newVehicle.capacity;
+            data.snapVehiclePlate = newVehicle.plate;
+            data.layoutId = newVehicle.layoutId;
+            data.capacity = newVehicle.capacity;
           }
         }
       } else {
@@ -110,10 +125,10 @@ export class TripsService {
 
     if (data.driverId && data.driverId !== trip.driverId) {
       const driver = await this.storage.getDriverById(data.driverId);
-      (data as any).snapDriverName = driver?.name || null;
+      data.snapDriverName = driver?.name || null;
     }
     if (data.driverId === null) {
-      (data as any).snapDriverName = null;
+      data.snapDriverName = null;
     }
     
     const updated = await this.storage.updateTrip(id, data);
@@ -281,7 +296,7 @@ export class TripsService {
       isMultiSeat?: boolean;
     }> = {};
     
-    const seatMap = layout.seatMap as any[];
+    const seatMap = layout.seatMap as LayoutSeat[];
     seatMap.forEach(seat => {
       seatAvailability[seat.seat_no] = { available: true, held: false, bookedType: null, bookingStatus: null, isMultiSeat: false };
     });
@@ -387,6 +402,12 @@ export class TripsService {
         vehicle: unknown;
         departAt: unknown;
         arriveAt: unknown;
+        promoApplications: Array<{
+          promoName: string;
+          source: 'auto' | 'manual';
+          discountAmount: number;
+          voucherCode: string | null;
+        }>;
       };
       passenger: typeof allPassengers[number];
       otherPassengers: unknown[];
@@ -436,11 +457,11 @@ export class TripsService {
         promoAppsByBooking.set(a.bookingId, list);
       }
 
-      const stopsMap = new Map<string, any>();
-      stopsData.forEach((s: any) => { if (s) stopsMap.set(s.id, s); });
-      const outletsMap = new Map<string, any>();
-      outletsData.forEach((o: any) => { if (o) outletsMap.set(o.id, o); });
-      const paymentsByBooking = new Map<string, any[]>();
+      const stopsMap = new Map<string, Stop>();
+      stopsData.forEach((s: Stop | undefined) => { if (s) stopsMap.set(s.id, s); });
+      const outletsMap = new Map<string, Outlet>();
+      outletsData.forEach((o: Outlet | undefined) => { if (o) outletsMap.set(o.id, o); });
+      const paymentsByBooking = new Map<string, Payment[]>();
       for (const p of allPayments) {
         const list = paymentsByBooking.get(p.bookingId) || [];
         list.push(p);
@@ -504,7 +525,7 @@ export class TripsService {
             departAt,
             arriveAt,
             promoApplications: promoAppsByBooking.get(booking.id) || [],
-          } as any,
+          },
           passenger: seatPassenger,
           otherPassengers,
           payments

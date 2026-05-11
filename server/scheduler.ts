@@ -11,6 +11,13 @@ const LOCK_HOLDS_CLEANUP = 8240_001;
 const LOCK_ORPHAN_REFS   = 8240_002;
 const LOCK_PENDING_BOOK  = 8240_003;
 const LOCK_SNAPSHOT_PUSH = 8240_004;
+const LOCK_ENGINE_COMP   = 8240_005;
+// S2-08: notifications cleanup berjalan jauh lebih jarang dari hold reaper.
+// Lock terpisah supaya cleanup yang lambat (DELETE besar pertama kali) tidak
+// menahan lock cleanup hold yang dipakai tiap menit.
+const LOCK_NOTIF_CLEAN   = 8240_006;
+// Interval cleanup notifikasi: 6 jam default (4× per hari sudah cukup).
+const NOTIF_CLEANUP_INTERVAL_MS = parseInt(process.env.NOTIF_CLEANUP_INTERVAL_MS || `${6 * 60 * 60 * 1000}`, 10);
 
 // IMPORTANT: session-level pg advisory locks are bound to a *single
 // connection*. The default `db` client uses a connection pool — two separate
@@ -36,6 +43,9 @@ async function withAdvisoryLock<T>(lockId: number, fn: () => Promise<T>): Promis
 import { webSocketService } from './realtime/ws';
 import { buildScheduleSnapshot } from './lib/scheduleSnapshot';
 import { fireAndForget } from './lib/consoleWebhook';
+import { createComponentLogger } from './lib/logger';
+
+const log = createComponentLogger('scheduler');
 
 const SNAPSHOT_INTERVAL_MS = parseInt(
   process.env.CONSOLE_SNAPSHOT_INTERVAL_MS || `${10 * 60 * 1000}`,
@@ -56,13 +66,14 @@ export class Scheduler {
   private bookingsService: BookingsService;
   private intervalId: NodeJS.Timeout | null = null;
   private snapshotIntervalId: NodeJS.Timeout | null = null;
+  private notifCleanupIntervalId: NodeJS.Timeout | null = null;
 
   constructor() {
     this.bookingsService = new BookingsService(storage);
   }
 
   async cleanupExpiredHolds(): Promise<void> {
-    console.log('[SCHEDULER] Running expired holds cleanup...');
+    log.debug('running expired holds cleanup');
     
     try {
       const now = new Date();
@@ -74,7 +85,7 @@ export class Scheduler {
           .for('update', { skipLocked: true });
 
         if (holds.length === 0) {
-          console.log('[SCHEDULER] No expired holds to clean up');
+          log.debug('no expired holds to clean up');
           return [];
         }
 
@@ -92,7 +103,7 @@ export class Scheduler {
             lt(seatHolds.expiresAt, now)
           ));
 
-        console.log(`[SCHEDULER] Cleaned up ${holds.length} expired holds`);
+        log.info({ count: holds.length }, 'cleaned up expired holds');
         return holds;
       });
 
@@ -108,7 +119,58 @@ export class Scheduler {
         }
       }
     } catch (error) {
-      console.error('[SCHEDULER] Error cleaning up expired holds:', error);
+      log.error({ err: error }, 'error cleaning up expired holds');
+    }
+  }
+
+  /**
+   * P2 §7: engine-mode safety net for `seat_holds`.
+   *
+   * When `RESERVATION_ENGINE_ENABLED=true` the Rust sidecar owns
+   * `seat_inventory.hold_ref` and emits its own WS releases. But the
+   * sidecar does NOT touch TT's `seat_holds` table — that's a TT-local
+   * artefact of legacy paths and of post-confirm state that the adapter
+   * never actively cleans up (`HoldsAdapter.confirmForBooking` relies on
+   * engine-side ownership of release). Without this sweep the table
+   * grows unbounded and `idx_seat_holds_trip_id` scans slow down.
+   *
+   * This variant deliberately:
+   *   - Deletes expired rows from `seat_holds` only.
+   *   - Does NOT touch `seat_inventory.hold_ref` — writing there would
+   *     fight the engine and could clear a valid confirmed slot.
+   *   - Does NOT emit `holdsReleased` — the engine already publishes
+   *     that via its own pub/sub.
+   *   - Uses `FOR UPDATE SKIP LOCKED` so concurrent booking flows that
+   *     happen to be updating / extending the same row don't block.
+   */
+  async cleanupExpiredSeatHoldsOnly(): Promise<void> {
+    try {
+      const now = new Date();
+      const deleted = await db.transaction(async (tx) => {
+        const holds = await tx
+          .select({ holdRef: seatHolds.holdRef })
+          .from(seatHolds)
+          .where(lt(seatHolds.expiresAt, now))
+          .for('update', { skipLocked: true });
+
+        if (holds.length === 0) return 0;
+
+        const refs = holds.map(h => h.holdRef);
+        await tx
+          .delete(seatHolds)
+          .where(and(
+            inArray(seatHolds.holdRef, refs),
+            lt(seatHolds.expiresAt, now)
+          ));
+
+        return holds.length;
+      });
+
+      if (deleted > 0) {
+        log.info({ deleted }, 'engine-mode seat_holds sweep completed');
+      }
+    } catch (error) {
+      log.error({ err: error }, 'error in engine-mode seat_holds sweep');
     }
   }
 
@@ -127,10 +189,10 @@ export class Scheduler {
 
       const count = result.rows?.length || 0;
       if (count > 0) {
-        console.log(`[SCHEDULER] Cleaned up ${count} orphan holdRefs in seat_inventory`);
+        log.info({ count }, 'cleaned up orphan holdRefs in seat_inventory');
       }
     } catch (error) {
-      console.error('[SCHEDULER] Error cleaning up orphan holdRefs:', error);
+      log.error({ err: error }, 'error cleaning up orphan holdRefs');
     }
   }
 
@@ -163,39 +225,107 @@ export class Scheduler {
         trips: allTrips,
         emittedAt: new Date().toISOString(),
       });
-      console.log(
-        `[SCHEDULER] Pushed schedule snapshot to Console (${allTrips.length} trips, next ${SNAPSHOT_DAYS_AHEAD} days)`
+      log.info(
+        { trips: allTrips.length, daysAhead: SNAPSHOT_DAYS_AHEAD },
+        'pushed schedule snapshot to console'
       );
     } catch (error) {
-      console.error('[SCHEDULER] Error pushing schedule snapshot:', error);
+      log.error({ err: error }, 'error pushing schedule snapshot');
     }
   }
 
   start(): void {
     const config = getConfig();
-    
+    const engineOwnsHolds =
+      (process.env.RESERVATION_ENGINE_ENABLED ?? 'false').toLowerCase() === 'true';
+
+    if (engineOwnsHolds) {
+      log.info(
+        { engineOwnsHolds: true },
+        'RESERVATION_ENGINE_ENABLED=true — engine sidecar owns seat_inventory.hold_ref reaping; local orphan-ref cleanup disabled. TT still sweeps expired seat_holds rows locally (P2 §7). Pending-booking cleanup remains active.'
+      );
+    }
+
     // Run cleanup every 60 seconds. Wrap each job in a Postgres advisory lock
     // so multi-instance deployments do not run the same cleanup multiple times.
     this.intervalId = setInterval(async () => {
       try {
-        await withAdvisoryLock(LOCK_HOLDS_CLEANUP, () => this.cleanupExpiredHolds());
-        await withAdvisoryLock(LOCK_ORPHAN_REFS, () => this.cleanupOrphanHoldRefs());
+        if (!engineOwnsHolds) {
+          await withAdvisoryLock(LOCK_HOLDS_CLEANUP, () => this.cleanupExpiredHolds());
+          await withAdvisoryLock(LOCK_ORPHAN_REFS, () => this.cleanupOrphanHoldRefs());
+        } else {
+          // Engine mode: only reap TT's local `seat_holds` table. The engine
+          // sidecar handles `seat_inventory.hold_ref` + WS broadcast itself.
+          await withAdvisoryLock(LOCK_HOLDS_CLEANUP, () => this.cleanupExpiredSeatHoldsOnly());
+        }
 
         if (config.pendingBookingAutoRelease) {
           await withAdvisoryLock(LOCK_PENDING_BOOK, async () => {
-            console.log('[SCHEDULER] Running expired pending bookings cleanup...');
+            log.debug('running expired pending bookings cleanup');
             await this.bookingsService.cleanupExpiredPendingBookings();
           });
         }
+
+        // Drain queued engine compensations (cancel-seats calls that
+        // failed after a local tx commit). No-op when flag is off.
+        if (engineOwnsHolds) {
+          await withAdvisoryLock(LOCK_ENGINE_COMP, async () => {
+            const { runOnce } = await import('@modules/holds/compensationQueue');
+            const r = await runOnce();
+            if (r.attempted > 0) {
+              log.info(
+                { succeeded: r.succeeded, attempted: r.attempted },
+                'engine compensation queue drained'
+              );
+            }
+          });
+        }
       } catch (error) {
-        console.error('[SCHEDULER] Error during cleanup:', error);
+        log.error({ err: error }, 'error during cleanup');
       }
     }, 60 * 1000); // Every 1 minute
 
-    console.log('[SCHEDULER] Cleanup scheduler started (runs every 1 minute)');
+    log.info({ intervalMs: 60_000 }, 'cleanup scheduler started');
 
-    // Run immediately on start
-    this.cleanupExpiredHolds();
+    // S2-08: notifications cleanup. Berjalan jauh lebih jarang (default 6 jam)
+    // karena DELETE TTL tidak perlu high-frequency dan akan berat di run
+    // pertama setelah deploy dengan tabel besar.
+    if (NOTIF_CLEANUP_INTERVAL_MS > 0) {
+      const runNotifCleanup = async () => {
+        try {
+          await withAdvisoryLock(LOCK_NOTIF_CLEAN, async () => {
+            const { NotificationsService } = await import('@modules/notifications/notifications.service');
+            const svc = new NotificationsService();
+            const deleted = await svc.cleanupOldNotifications();
+            if (deleted > 0) {
+              log.info(
+                {
+                  deleted,
+                  ttlReadDays: parseInt(process.env.NOTIF_READ_TTL_DAYS || '90', 10),
+                  ttlUnreadDays: parseInt(process.env.NOTIF_UNREAD_TTL_DAYS || '180', 10),
+                },
+                'notifications cleanup completed'
+              );
+            }
+          });
+        } catch (e) {
+          log.error({ err: e }, 'notifications cleanup failed');
+        }
+      };
+      this.notifCleanupIntervalId = setInterval(runNotifCleanup, NOTIF_CLEANUP_INTERVAL_MS);
+      log.info({ intervalMin: Math.round(NOTIF_CLEANUP_INTERVAL_MS / 1000 / 60) }, 'notifications cleanup started');
+      // Kick once on startup supaya backlog dari deploy sebelumnya langsung
+      // dibersihkan tanpa menunggu interval pertama.
+      void runNotifCleanup();
+    }
+
+    // Run immediately on start so a backlog from the previous process
+    // gets swept without waiting a full minute.
+    if (!engineOwnsHolds) {
+      this.cleanupExpiredHolds();
+    } else {
+      void this.cleanupExpiredSeatHoldsOnly();
+    }
 
     // Periodic schedule snapshot push to Console — this is the safety net so
     // that even if every fire-and-forget delivery fails (e.g. Console is down
@@ -205,10 +335,9 @@ export class Scheduler {
       this.snapshotIntervalId = setInterval(() => {
         void withAdvisoryLock(LOCK_SNAPSHOT_PUSH, () => this.pushScheduleSnapshot());
       }, SNAPSHOT_INTERVAL_MS);
-      console.log(
-        `[SCHEDULER] Schedule snapshot push started (every ${Math.round(
-          SNAPSHOT_INTERVAL_MS / 1000
-        )}s, ${SNAPSHOT_DAYS_AHEAD} days ahead)`
+      log.info(
+        { intervalSec: Math.round(SNAPSHOT_INTERVAL_MS / 1000), daysAhead: SNAPSHOT_DAYS_AHEAD },
+        'schedule snapshot push started'
       );
       // Kick once on startup so a freshly-restarted Terminal pushes immediately.
       void withAdvisoryLock(LOCK_SNAPSHOT_PUSH, () => this.pushScheduleSnapshot());
@@ -219,12 +348,17 @@ export class Scheduler {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
-      console.log('[SCHEDULER] Cleanup scheduler stopped');
+      log.info('cleanup scheduler stopped');
     }
     if (this.snapshotIntervalId) {
       clearInterval(this.snapshotIntervalId);
       this.snapshotIntervalId = null;
-      console.log('[SCHEDULER] Schedule snapshot push stopped');
+      log.info('schedule snapshot push stopped');
+    }
+    if (this.notifCleanupIntervalId) {
+      clearInterval(this.notifCleanupIntervalId);
+      this.notifCleanupIntervalId = null;
+      log.info('notifications cleanup stopped');
     }
   }
 }

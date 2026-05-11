@@ -2,6 +2,31 @@ import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { log } from '@server/vite';
 import { createSocketIoAdapter } from './redis';
+import { verifyToken, type AppUserPayload } from '@server/modules/app/app.auth';
+import { createComponentLogger } from '@server/lib/logger';
+
+const wsLog = createComponentLogger('ws');
+
+// S2-07: kategori klien yang sudah authenticate di handshake.
+// - 'service' = backend trusted (Console BE, engine, internal scheduler) yang
+//   memegang TERMINAL_SERVICE_KEY. Boleh subscribe room operator/CSO.
+// - 'app-user' = end user mobile/web yang punya JWT valid. Boleh subscribe
+//   room publik (trip seatmap) saja, tidak boleh ke base/cso.
+// - 'anonymous' = belum login. Boleh subscribe trip room (seatmap shopping)
+//   saja. Tidak akses base/cso.
+type SocketAuthKind = 'service' | 'app-user' | 'anonymous';
+
+interface SocketAuthData {
+  kind: SocketAuthKind;
+  user?: AppUserPayload;
+}
+
+declare module 'socket.io' {
+  interface Socket {
+    // S2-07: state auth yang di-attach oleh middleware handshake.
+    data: SocketAuthData;
+  }
+}
 
 // WebSocket event types
 export interface WSEvents {
@@ -35,7 +60,7 @@ class WebSocketService {
     } else if (isProd) {
       // Production tanpa CORS_ORIGINS yang valid → CLOSE (no cross-origin allowed).
       // Set CORS_ORIGINS=https://yourdomain,https://other untuk membuka.
-      console.warn('[ws] CORS_ORIGINS not set (or set to "*") in production. Cross-origin WS connections will be REJECTED. Set CORS_ORIGINS=https://yourdomain to enable.');
+      wsLog.warn('CORS_ORIGINS not set (or set to "*") in production. Cross-origin WS connections will be REJECTED. Set CORS_ORIGINS=https://yourdomain to enable.');
       allowedOrigins = false;
     } else {
       // Development → permisif.
@@ -61,15 +86,86 @@ class WebSocketService {
         log('Redis not configured — using in-memory adapter (single-instance only)', 'websocket');
       }
     } catch (err) {
-      console.error('[ws] failed to attach redis adapter, falling back to in-memory:', err);
+      wsLog.error({ err }, 'failed to attach redis adapter, falling back to in-memory');
     }
 
+    // S2-07: handshake middleware — authenticate sekali pas connect, simpan
+    // hasil di socket.data. Kalau token JWT atau serviceKey invalid eksplisit
+    // (kasih tapi salah), tolak koneksi. Kalau tidak kasih sama sekali, treat
+    // anonymous (untuk seatmap shopping publik).
+    const expectedServiceKey = process.env.TERMINAL_SERVICE_KEY?.trim();
+    // S2-07: default STRICT mode di production (NODE_ENV=production); dev
+    // tetap permisif supaya operator UI lama yang anon subscribe ke base/cso
+    // tidak break. Operator boleh paksa via STRICT_WS_AUTH=1 atau matikan
+    // via STRICT_WS_AUTH=0 (override eksplisit). `isProd` sudah dideklarasikan
+    // di atas (CORS branch).
+    const explicitStrict = process.env.STRICT_WS_AUTH;
+    const strictWsAuth = explicitStrict === '1' || (isProd && explicitStrict !== '0');
+    if (!strictWsAuth) {
+      log('STRICT_WS_AUTH off — base/cso room subscriptions allow anonymous (legacy compat). Set STRICT_WS_AUTH=1 to enforce service-key.', 'websocket');
+    } else {
+      log('STRICT_WS_AUTH on — base/cso room subscriptions require service-key.', 'websocket');
+    }
+    this.io.use((socket, next) => {
+      const auth = (socket.handshake.auth || {}) as { token?: string; serviceKey?: string };
+
+      // Service-key path (Console BE, engine internal).
+      if (auth.serviceKey) {
+        if (!expectedServiceKey) {
+          // CR-S2-07-HIGH: klien KIRIM serviceKey tapi server tidak punya
+          // expectedServiceKey untuk verify → ini misconfiguration ops yang
+          // berbahaya (key bisa accidentally bocor + di-trust). Reject
+          // eksplisit; jangan downgrade jadi anonymous.
+          wsLog.error('handshake rejected: client supplied serviceKey but TERMINAL_SERVICE_KEY env not configured on server');
+          return next(new Error('service key auth not configured on server'));
+        }
+        if (auth.serviceKey !== expectedServiceKey) {
+          return next(new Error('invalid service key'));
+        }
+        socket.data = { kind: 'service' };
+        return next();
+      }
+
+      // JWT path (app user).
+      if (auth.token) {
+        try {
+          const payload = verifyToken(auth.token);
+          socket.data = { kind: 'app-user', user: payload };
+          return next();
+        } catch {
+          return next(new Error('invalid token'));
+        }
+      }
+
+      // Tidak kirim auth → anonymous (cuma boleh trip room).
+      socket.data = { kind: 'anonymous' };
+      next();
+    });
+
     this.io.on('connection', (socket: Socket) => {
-      log(`WebSocket client connected: ${socket.id}`, 'websocket');
-      
+      log(`WebSocket client connected: ${socket.id} kind=${socket.data.kind}`, 'websocket');
+
+      // S3-05 (post-review fix): track connected clients gauge supaya
+      // Grafana panel #6 ada data. Decrement on disconnect.
+      void import('../observability/metrics').then(m => m.incWsClient()).catch(() => {});
+      socket.on('disconnect', () => {
+        void import('../observability/metrics').then(m => m.decWsClient()).catch(() => {});
+      });
+
+      // S2-07 helper: kirim error ke klien tanpa disconnect.
+      const denySubscribe = (roomName: string, reason: string) => {
+        log(`Client ${socket.id} (${socket.data.kind}) DENIED subscribe to ${roomName}: ${reason}`, 'websocket');
+        socket.emit('subscribe-error', { room: roomName, reason });
+      };
+
       // Handle room subscriptions
       socket.on('subscribe-trip', (tripId: string) => {
         const roomName = `trip:${tripId}`;
+        // Trip room (seatmap) bersifat publik untuk shopping — semua kind boleh.
+        // Tetap validate input: tripId harus non-empty string.
+        if (typeof tripId !== 'string' || !tripId) {
+          return denySubscribe(roomName, 'invalid tripId');
+        }
         socket.join(roomName);
         log(`Client ${socket.id} subscribed to ${roomName}`, 'websocket');
       });
@@ -82,6 +178,18 @@ class WebSocketService {
 
       socket.on('subscribe-base', (baseId: string) => {
         const roomName = `base:${baseId}`;
+        if (typeof baseId !== 'string' || !baseId) {
+          return denySubscribe(roomName, 'invalid baseId');
+        }
+        // Base (operator) room — service-only. App-user / anonymous tidak boleh.
+        // S2-07: di STRICT mode (production hardening) tolak. Di legacy mode
+        // (default) hanya log warning supaya operator UI lama tidak break.
+        if (socket.data.kind !== 'service') {
+          if (strictWsAuth) {
+            return denySubscribe(roomName, 'service auth required');
+          }
+          log(`[STRICT_WS_AUTH=warn] Client ${socket.id} (${socket.data.kind}) subscribed to ${roomName} without service auth`, 'websocket');
+        }
         socket.join(roomName);
         log(`Client ${socket.id} subscribed to ${roomName}`, 'websocket');
       });
@@ -94,6 +202,16 @@ class WebSocketService {
 
       socket.on('subscribe-cso', (outletId: string, serviceDate: string) => {
         const roomName = `cso:${outletId}:${serviceDate}`;
+        if (typeof outletId !== 'string' || !outletId || typeof serviceDate !== 'string' || !serviceDate) {
+          return denySubscribe(roomName, 'invalid outletId/serviceDate');
+        }
+        // CSO room (outlet ops dashboard) — service-only.
+        if (socket.data.kind !== 'service') {
+          if (strictWsAuth) {
+            return denySubscribe(roomName, 'service auth required');
+          }
+          log(`[STRICT_WS_AUTH=warn] Client ${socket.id} (${socket.data.kind}) subscribed to ${roomName} without service auth`, 'websocket');
+        }
         socket.join(roomName);
         log(`Client ${socket.id} subscribed to ${roomName}`, 'websocket');
       });

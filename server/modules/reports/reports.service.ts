@@ -72,12 +72,12 @@ export class ReportsService {
     const totalCharge = feeAfterCredit + ppnAmount;
 
     const dailyMap = new Map<string, { ticket: number; cargo: number }>();
-    for (const row of data.ticketDaily as any[]) {
+    for (const row of data.ticketDaily as Array<{ date: string; gross_amount: string | number }>) {
       const existing = dailyMap.get(row.date) || { ticket: 0, cargo: 0 };
       existing.ticket = Number(row.gross_amount);
       dailyMap.set(row.date, existing);
     }
-    for (const row of data.cargoDaily as any[]) {
+    for (const row of data.cargoDaily as Array<{ date: string; gross_amount: string | number }>) {
       const existing = dailyMap.get(row.date) || { ticket: 0, cargo: 0 };
       existing.cargo = Number(row.gross_amount);
       dailyMap.set(row.date, existing);
@@ -110,17 +110,17 @@ export class ReportsService {
         total_charge: totalCharge,
       },
       daily,
-      ticketByRoute: (data.ticketByRoute as any[]).map(r => ({
+      ticketByRoute: (data.ticketByRoute as Array<Record<string, unknown> & { gross_amount: string | number }>).map(r => ({
         ...r,
         gross_amount: Number(r.gross_amount),
         fee: Number(r.gross_amount) * feeRate,
       })),
-      cargoByRoute: (data.cargoByRoute as any[]).map(r => ({
+      cargoByRoute: (data.cargoByRoute as Array<Record<string, unknown> & { gross_amount: string | number }>).map(r => ({
         ...r,
         gross_amount: Number(r.gross_amount),
         fee: Number(r.gross_amount) * feeRate,
       })),
-      ticketByOutlet: (data.ticketByOutlet as any[]).map(r => ({
+      ticketByOutlet: (data.ticketByOutlet as Array<Record<string, unknown> & { gross_amount: string | number }>).map(r => ({
         ...r,
         gross_amount: Number(r.gross_amount),
         fee: Number(r.gross_amount) * feeRate,

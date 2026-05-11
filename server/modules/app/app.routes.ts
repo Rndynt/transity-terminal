@@ -3,14 +3,11 @@ import { AppController } from "./app.controller";
 import { IStorage } from "@server/storage.interface";
 import { appAuthMiddleware } from "./app.auth";
 
-const ALLOWED_APP_ORIGINS = (process.env.APP_CORS_ORIGINS || '*').split(',').map(s => s.trim());
 const getTerminalServiceKey = () => process.env.TERMINAL_SERVICE_KEY || '';
 
-function getAppCorsOrigin(reqOrigin: string | undefined): string {
-  if (ALLOWED_APP_ORIGINS.includes('*')) return '*';
-  if (reqOrigin && ALLOWED_APP_ORIGINS.includes(reqOrigin)) return reqOrigin;
-  return '';
-}
+// S1-08: CORS sekarang ditangani sentral di server/index.ts via @fastify/cors.
+// Route-level header injection di sini DIHAPUS supaya tidak konflik /
+// menumpuk header ganda dengan global CORS handler.
 
 function serviceKeyMiddleware(req: FastifyRequest, reply: FastifyReply, done: () => void) {
   const incomingKey = req.headers['x-service-key'] as string | undefined;
@@ -19,7 +16,7 @@ function serviceKeyMiddleware(req: FastifyRequest, reply: FastifyReply, done: ()
       reply.code(401).send({ error: 'Missing X-Service-Key header', code: 'MISSING_SERVICE_KEY' });
       return;
     }
-    (req as any).isServiceClient = true;
+    req.isServiceClient = true;
     done();
     return;
   }
@@ -31,32 +28,13 @@ function serviceKeyMiddleware(req: FastifyRequest, reply: FastifyReply, done: ()
     reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
     return;
   }
-  (req as any).isServiceClient = true;
+  req.isServiceClient = true;
   done();
 }
 
 export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
-  app.addHook('preHandler', async (req, reply) => {
-    if (!req.url.startsWith('/api/app/')) return;
-    const origin = getAppCorsOrigin(req.headers.origin);
-    if (origin) {
-      reply.header('Access-Control-Allow-Origin', origin);
-      reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Service-Key');
-      if (origin !== '*') reply.header('Vary', 'Origin');
-    }
-  });
-
-  app.options('/api/app/*', async (req, reply) => {
-    const origin = getAppCorsOrigin(req.headers.origin);
-    if (origin) {
-      reply.header('Access-Control-Allow-Origin', origin);
-      reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Service-Key');
-      if (origin !== '*') reply.header('Vary', 'Origin');
-    }
-    reply.code(204).send();
-  });
+  // CORS preflight + headers di-handle global oleh @fastify/cors (lihat
+  // server/index.ts). Tidak ada lagi route-level injection di sini.
 
   const appController = new AppController(storage);
 
@@ -85,7 +63,7 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
       if (incomingKey !== getTerminalServiceKey()) {
         return reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
       }
-      (req as any).isServiceClient = true;
+      req.isServiceClient = true;
     } else {
       await appAuthMiddleware(req, reply);
     }
@@ -94,7 +72,14 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
   app.get('/api/app/bookings/find-ota', { preHandler: [serviceKeyMiddleware] }, async (req, reply) => appController.findOtaBooking(req, reply));
   app.post('/api/app/bookings', { preHandler: [bookingAuthMiddleware] }, async (req, reply) => appController.createBooking(req, reply));
   app.get('/api/app/bookings', { preHandler: [bookingAuthMiddleware] }, async (req, reply) => {
-    const isServiceClient = (req as any).isServiceClient === true;
+    const isServiceClient = req.isServiceClient === true;
+    const q = req.query as { ids?: string };
+    // T-CON-03: kalau service client kirim `?ids=`, dispatch ke batch handler
+    // (1 query DB) supaya Console reconciler tidak perlu N kali GET /:id.
+    // User app (non service-client) tidak boleh pakai batch shortcut.
+    if (isServiceClient && typeof q.ids === 'string' && q.ids.trim().length > 0) {
+      return appController.batchBookings(req, reply);
+    }
     if (isServiceClient) {
       return appController.listBookings(req, reply);
     }

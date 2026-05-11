@@ -6,56 +6,147 @@
       "idx": 0,
       "version": "7",
       "when": 1773697680593,
-      "tag": "0000_keen_franklin_richards",
+      "tag": "0001_extensions",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1773897600000,
-      "tag": "0001_cargo_tables",
+      "when": 1773697681593,
+      "tag": "0002_enums",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1773984000000,
-      "tag": "0002_app_users_reviews",
+      "when": 1773697682593,
+      "tag": "0003_users",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "7",
-      "when": 1773862407918,
-      "tag": "0003_schema_sync",
+      "when": 1773697683593,
+      "tag": "0004_geography",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "7",
-      "when": 1774067592346,
-      "tag": "0004_thin_xorn",
+      "when": 1773697684593,
+      "tag": "0005_fleet",
       "breakpoints": true
     },
     {
       "idx": 5,
       "version": "7",
-      "when": 1774271399967,
-      "tag": "0005_init",
+      "when": 1773697685593,
+      "tag": "0006_rbac",
       "breakpoints": true
     },
     {
       "idx": 6,
       "version": "7",
-      "when": 1774357800000,
-      "tag": "0006_users_schema",
+      "when": 1773697686593,
+      "tag": "0007_promotions",
       "breakpoints": true
     },
     {
       "idx": 7,
       "version": "7",
-      "when": 1775204707299,
-      "tag": "0007_seat_inventory_constraint",
+      "when": 1773697687593,
+      "tag": "0008_app_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1773697688593,
+      "tag": "0009_scheduling_patterns",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1773697689593,
+      "tag": "0010_scheduling_bases",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1773697690593,
+      "tag": "0011_trips",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1773697691593,
+      "tag": "0012_inventory_and_holds",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1773697692593,
+      "tag": "0013_pricing",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1773697693593,
+      "tag": "0014_bookings_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1773697694593,
+      "tag": "0015_bookings_extras",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1773697695593,
+      "tag": "0016_cargo",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1773697696593,
+      "tag": "0017_spj",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1773697697593,
+      "tag": "0018_cashier",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1773697698593,
+      "tag": "0019_engine_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1773697699593,
+      "tag": "0020_settings_and_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1773697700593,
+      "tag": "0021_views",
       "breakpoints": true
     }
   ]

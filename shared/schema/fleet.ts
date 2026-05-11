@@ -48,7 +48,11 @@ export const vehicles = pgTable("vehicles", {
   notes:     text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true })
-});
+}, (table) => ({
+  // PR α-1: FK index untuk fleet ops (vehicles per layout). Migration 0015
+  // mendaftarkan index yang sama dengan `IF NOT EXISTS`.
+  idxVehiclesLayoutId: sql`CREATE INDEX IF NOT EXISTS idx_vehicles_layout_id ON ${table} (layout_id)`,
+}));
 
 export const insertVehicleSchema = createInsertSchema(vehicles).omit({ id: true, createdAt: true });
 export type Vehicle = typeof vehicles.$inferSelect;

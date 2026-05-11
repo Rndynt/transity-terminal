@@ -5,6 +5,7 @@ import { RescheduleService } from "./reschedule.service";
 import { IStorage } from "@server/storage.interface";
 import { insertBookingSchema, insertPassengerSchema, insertPaymentSchema } from "@shared/schema";
 import { z } from "zod";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 
 const createBookingSchema = z.object({
   tripId: z.string().uuid(),
@@ -74,6 +75,23 @@ const reschedulePassengerSchema = z.object({
 const cancelTicketSchema = z.object({
   reason: z.string().min(1, 'Alasan pembatalan wajib diisi')
 });
+
+/**
+ * Errors thrown by booking flows commonly carry: a status code (HTTP),
+ * a name (e.g. ZodError, EngineCancelDeferredError), a message string,
+ * and Zod-shaped `.errors` / `.issues` arrays. This is a structural type
+ * for safe property access in the catch blocks below.
+ */
+type BookingFlowError = Error & {
+  statusCode?: number;
+  errors?: unknown;
+  issues?: Array<{ message?: string }>;
+};
+
+function asBookingError(e: unknown): BookingFlowError {
+  if (e instanceof Error) return e as BookingFlowError;
+  return new Error(typeof e === 'string' ? e : String(e)) as BookingFlowError;
+}
 
 export class BookingsController {
   private bookingsService: BookingsService;
@@ -171,11 +189,16 @@ export class BookingsController {
         passengers,
         payment,
         idempotencyKey,
-        promoCode
+        promoCode,
+        buildServiceContext(req)
       );
       
       reply.code(201).send(result);
-    } catch (error: any) {
+    } catch (rawError) {
+      const error = asBookingError(rawError);
+      // S1-09 / Task #6: PermissionDeniedError punya statusCode=403; forward
+      // ke global errorHandler (server/index.ts) supaya tidak ter-flatten ke 500.
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Booking creation error');
       
       if (error.name === 'ZodError') {
@@ -262,7 +285,8 @@ export class BookingsController {
           details: result.reason
         });
       }
-    } catch (error: any) {
+    } catch (rawError) {
+      const error = asBookingError(rawError);
       req.log.error({ err: error }, 'Hold creation error');
       reply.code(500).send({
         error: 'Internal server error',
@@ -330,11 +354,14 @@ export class BookingsController {
       const result = await this.bookingsService.createPendingBooking(
         bookingDataWithStringAmount,
         passengers,
-        operatorId
+        operatorId,
+        buildServiceContext(req)
       );
       
       reply.code(201).send(result);
-    } catch (error: any) {
+    } catch (rawError) {
+      const error = asBookingError(rawError);
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Pending booking creation error');
       
       if (error.name === 'ZodError') {
@@ -374,9 +401,11 @@ export class BookingsController {
       const { id } = req.params as { id: string };
       const operatorId = req.user?.id ?? 'system';
       
-      await this.bookingsService.releasePendingBooking(id, operatorId);
+      await this.bookingsService.releasePendingBooking(id, operatorId, buildServiceContext(req));
       reply.code(204).send();
-    } catch (error: any) {
+    } catch (rawError) {
+      const error = asBookingError(rawError);
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Release pending booking error');
       reply.code(500).send({
         error: 'Internal server error',
@@ -391,9 +420,11 @@ export class BookingsController {
       const { passengerId } = req.params as { passengerId: string };
       const { reason } = unseatPassengerSchema.parse(req.body || {});
       const performedBy = req.user?.id ?? 'system';
-      const result = await this.unseatService.unseatPassenger(passengerId, performedBy, reason);
+      const result = await this.unseatService.unseatPassenger(passengerId, performedBy, reason, buildServiceContext(req));
       reply.send(result);
-    } catch (error: any) {
+    } catch (rawError) {
+      const error = asBookingError(rawError);
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Unseat passenger error');
       reply.code(error.message.includes('tidak ditemukan') ? 404 : 400).send({
         error: error.message,
@@ -407,13 +438,54 @@ export class BookingsController {
       const { bookingId } = req.params as { bookingId: string };
       const { reason } = unseatPassengerSchema.parse(req.body || {});
       const performedBy = req.user?.id ?? 'system';
-      const result = await this.unseatService.unseatAllPassengers(bookingId, performedBy, reason);
+      const result = await this.unseatService.unseatAllPassengers(bookingId, performedBy, reason, buildServiceContext(req));
       reply.send(result);
-    } catch (error: any) {
+    } catch (rawError) {
+      const error = asBookingError(rawError);
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Unseat all passengers error');
       reply.code(error.message.includes('tidak ditemukan') ? 404 : 400).send({
         error: error.message,
         code: 'UNSEAT_ERROR'
+      });
+    }
+  }
+
+  async cancelPassenger(req: FastifyRequest, reply: FastifyReply) {
+    try {
+      const { id } = req.params as { id: string };
+      const { reason } = cancelTicketSchema.parse(req.body || {});
+      const performedBy = req.user?.id ?? 'system';
+      const result = await this.unseatService.cancelPassengerTicket(
+        id,
+        reason,
+        performedBy,
+        buildServiceContext(req),
+      );
+      reply.send(result.passenger);
+    } catch (rawError) {
+      const error = asBookingError(rawError);
+      if (error?.statusCode === 403) throw error;
+
+      // Engine seat-release deferred — booking is already cancelled but
+      // the seat is not yet sellable. 502 matches the pre-refactor
+      // behavior so the CSO client keeps showing its existing retry UX.
+      if (error?.name === 'EngineCancelDeferredError') {
+        req.log.warn({ err: error }, 'Cancel passenger: engine release deferred');
+        return reply.code(502).send({ error: error.message, code: 'ENGINE_DEFERRED' });
+      }
+
+      if (error.name === 'ZodError') {
+        return reply.code(400).send({
+          error: error.issues?.[0]?.message || 'Validation failed',
+          code: 'VALIDATION_ERROR',
+        });
+      }
+
+      req.log.error({ err: error }, 'Cancel passenger error');
+      reply.code(error.message.includes('tidak ditemukan') ? 404 : 400).send({
+        error: error.message,
+        code: 'CANCEL_ERROR',
       });
     }
   }
@@ -433,10 +505,13 @@ export class BookingsController {
         data.newOriginSeq,
         data.newDestinationSeq,
         performedBy,
-        data.reason
+        data.reason,
+        buildServiceContext(req)
       );
       reply.send(result);
-    } catch (error: any) {
+    } catch (rawError) {
+      const error = asBookingError(rawError);
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Reschedule passenger error');
       const status = error.message.includes('tidak ditemukan') ? 404
         : error.message.includes('tidak tersedia') ? 409 : 400;
@@ -452,9 +527,11 @@ export class BookingsController {
       const { passengerId } = req.params as { passengerId: string };
       const { newSeatNo } = z.object({ newSeatNo: z.string() }).parse(req.body);
       const performedBy = req.user?.id ?? 'system';
-      const result = await this.unseatService.assignSeatToUnseated(passengerId, newSeatNo, performedBy);
+      const result = await this.unseatService.assignSeatToUnseated(passengerId, newSeatNo, performedBy, buildServiceContext(req));
       reply.send(result);
-    } catch (error: any) {
+    } catch (rawError) {
+      const error = asBookingError(rawError);
+      if (error?.statusCode === 403) throw error;
       req.log.error({ err: error }, 'Assign seat to unseated error');
       const status = error.message.includes('tidak ditemukan') ? 404
         : error.message.includes('tidak tersedia') ? 409
@@ -471,7 +548,8 @@ export class BookingsController {
       const { bookingId } = req.params as { bookingId: string };
       const history = await this.unseatService.getBookingHistory(bookingId);
       reply.send(history);
-    } catch (error: any) {
+    } catch (rawError) {
+      const error = asBookingError(rawError);
       req.log.error({ err: error }, 'Get booking history error');
       reply.code(500).send({
         error: error.message,

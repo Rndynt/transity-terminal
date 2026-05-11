@@ -4,6 +4,7 @@ import { SchedulerService } from "./scheduler.service";
 import { TripsService } from "@modules/trips/trips.service";
 import { z } from "zod";
 import { requireFlag } from "@modules/rbac/rbac.middleware";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 import { webSocketService } from "@server/realtime/ws";
 
 export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage) {
@@ -42,19 +43,20 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
       return reply.code(400).send({ message: 'Invalid request', errors: parsed.error.flatten() });
     }
 
-    const user = (req as any).user;
+    const user = req.user;
     const exception = await schedulerService.addException(
       parsed.data.baseId,
       parsed.data.exceptionDate,
       parsed.data.reason,
-      user?.id || null,
+      user?.id || undefined,
+      buildServiceContext(req),
     );
     reply.code(201).send(exception);
   });
 
   app.delete('/api/scheduler/exceptions/:id', { preHandler: [requireFlag('action.trip.close')] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
-    await schedulerService.removeException(id);
+    await schedulerService.removeException(id, buildServiceContext(req));
     reply.send({ success: true });
   });
 
@@ -84,7 +86,7 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
     if (!parsed.success) {
       return reply.code(400).send({ message: 'Invalid request', errors: parsed.error.flatten() });
     }
-    const user = (req as any).user;
+    const user = req.user;
     const exception = await schedulerService.addStopException(
       parsed.data.baseId,
       parsed.data.exceptionDate,
@@ -92,9 +94,13 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
       parsed.data.disableBoarding,
       parsed.data.disableAlighting,
       parsed.data.reason,
-      user?.id || null,
+      user?.id || undefined,
+      buildServiceContext(req),
     );
-    webSocketService.broadcast('STOP_EXCEPTION_CHANGED', {
+    // Scope ke base room — clients (CargoTerminalPage, TripSelector) subscribe
+    // ke base:{baseId} bila trip base ini relevan dengan view mereka. Hindari
+    // global broadcast yang fanout ke semua connected client.
+    webSocketService.emitToBase(parsed.data.baseId, 'STOP_EXCEPTION_CHANGED', {
       baseId: parsed.data.baseId,
       serviceDate: parsed.data.exceptionDate,
       stopId: parsed.data.stopId,
@@ -105,9 +111,9 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
   app.delete('/api/scheduler/stop-exceptions/:id', { preHandler: [requireFlag('action.trip.close')] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const exception = await schedulerService.getStopExceptionById(id);
-    await schedulerService.removeStopException(id);
+    await schedulerService.removeStopException(id, buildServiceContext(req));
     if (exception) {
-      webSocketService.broadcast('STOP_EXCEPTION_CHANGED', {
+      webSocketService.emitToBase(exception.baseId, 'STOP_EXCEPTION_CHANGED', {
         baseId: exception.baseId,
         serviceDate: exception.exceptionDate,
         stopId: exception.stopId,
@@ -131,7 +137,7 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
     }
 
     try {
-      const updateData: Record<string, any> = {};
+      const updateData: Record<string, unknown> = {};
       if (parsed.data.driverId !== undefined) updateData.driverId = parsed.data.driverId;
       if (parsed.data.vehicleId !== undefined) updateData.vehicleId = parsed.data.vehicleId;
 
@@ -147,8 +153,9 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
         vehicleId: updated.vehicleId,
         vehiclePlate: vehicle?.plate || updated.snapVehiclePlate || null,
       });
-    } catch (err: any) {
-      return reply.code(400).send({ message: err.message || 'Failed to update assignment' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update assignment';
+      return reply.code(400).send({ message });
     }
   });
 }

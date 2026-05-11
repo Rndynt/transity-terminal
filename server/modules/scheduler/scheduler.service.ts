@@ -8,6 +8,10 @@ import { scheduleExceptions, patternStops, scheduleStopExceptions } from "@share
 import { stops } from "@shared/schema/network";
 import { fireAndForget } from "@server/lib/consoleWebhook";
 import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("scheduler.service");
 
 export type CalendarItem = {
   id: string;
@@ -186,7 +190,8 @@ export class SchedulerService {
     return map;
   }
 
-  async addException(baseId: string, exceptionDate: string, reason?: string, createdBy?: string) {
+  async addException(baseId: string, exceptionDate: string, reason: string | undefined, createdBy: string | undefined, ctx: ServiceContext) {
+    requirePermission(ctx, 'action.trip.close');
     const [inserted] = await db.insert(scheduleExceptions).values({
       baseId,
       exceptionDate,
@@ -213,15 +218,17 @@ export class SchedulerService {
         emittedAt: new Date().toISOString(),
       });
     } catch (err) {
-      console.warn("[scheduler.addException] webhook emit failed:", (err as Error).message);
+      log.warn({ err, op: "addException" }, "webhook emit failed");
     }
   }
 
-  async removeException(exceptionId: string) {
+  async removeException(exceptionId: string, ctx: ServiceContext) {
+    requirePermission(ctx, 'action.trip.close');
     await db.delete(scheduleExceptions).where(eq(scheduleExceptions.id, exceptionId));
   }
 
-  async addStopException(baseId: string, exceptionDate: string, stopId: string, disableBoarding: boolean, disableAlighting: boolean, reason?: string, createdBy?: string) {
+  async addStopException(baseId: string, exceptionDate: string, stopId: string, disableBoarding: boolean, disableAlighting: boolean, reason: string | undefined, createdBy: string | undefined, ctx: ServiceContext) {
+    requirePermission(ctx, 'action.trip.close');
     const [inserted] = await db.insert(scheduleStopExceptions).values({
       baseId,
       exceptionDate,
@@ -242,7 +249,8 @@ export class SchedulerService {
     return row || null;
   }
 
-  async removeStopException(exceptionId: string) {
+  async removeStopException(exceptionId: string, ctx: ServiceContext) {
+    requirePermission(ctx, 'action.trip.close');
     await db.delete(scheduleStopExceptions).where(eq(scheduleStopExceptions.id, exceptionId));
   }
 
@@ -284,9 +292,9 @@ export class SchedulerService {
   }
 
   private getBaseDepartureTime(base: TripBase): string {
-    const stopTimes = base.defaultStopTimes as any[];
+    const stopTimes = base.defaultStopTimes as Array<{ stopSequence: number; departAt?: string | null; arriveAt?: string | null }>;
     if (Array.isArray(stopTimes) && stopTimes.length > 0) {
-      const first = stopTimes.find((s: any) => s.stopSequence === 1) || stopTimes[0];
+      const first = stopTimes.find((s) => s.stopSequence === 1) || stopTimes[0];
       return first.departAt || first.arriveAt || '00:00';
     }
     return '00:00';
@@ -307,7 +315,7 @@ export class SchedulerService {
       GROUP BY b.trip_id
     `);
 
-    for (const row of rows.rows as any[]) {
+    for (const row of rows.rows as Array<{ tripId: string; count: number }>) {
       result.set(row.tripId, row.count);
     }
     return result;

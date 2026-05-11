@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { db } from "@server/db";
 import { 
   bookingGroups as bookingGroupsTable, 
@@ -16,7 +17,44 @@ import { PricingService } from "@modules/pricing/pricing.service";
 import { PrintService } from "@modules/printing/print.service";
 import { IStorage } from "@server/storage.interface";
 import { Booking, BookingGroup } from "@shared/schema";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 
+interface OutboundPassengerInput {
+  name: string;
+  seatNo: string;
+}
+interface ReturnPassengerInput {
+  seatNo: string;
+}
+export interface RoundTripBookingInput {
+  outbound: {
+    tripId: string;
+    originStopId: string;
+    destinationStopId: string;
+    originSeq: number;
+    destinationSeq: number;
+    outletId?: string;
+    passengers: OutboundPassengerInput[];
+  };
+  return: {
+    tripId: string;
+    originStopId: string;
+    destinationStopId: string;
+    originSeq: number;
+    destinationSeq: number;
+    passengers: ReturnPassengerInput[];
+  };
+  payment: {
+    method: 'cash' | 'qr' | 'ewallet' | 'bank';
+    amount: number;
+  };
+}
+
+/**
+ * S1-09 (Sprint 2): round-trip booking sama dengan dua booking sekaligus
+ * jadi guard `action.booking.create` harus aktif walaupun service
+ * dipanggil langsung (mis. dari batch import OTA di masa depan).
+ */
 export class RoundTripService {
   private pricingService: PricingService;
   private printService: PrintService;
@@ -26,7 +64,8 @@ export class RoundTripService {
     this.printService = new PrintService();
   }
 
-  async createRoundTripBooking(data: any, operatorId: string) {
+  async createRoundTripBooking(data: RoundTripBookingInput, operatorId: string, ctx: ServiceContext) {
+    requirePermission(ctx, "action.booking.create");
     const { outbound, return: returnData, payment } = data;
 
     // 1. Validasi jumlah seats outbound == return
@@ -41,8 +80,8 @@ export class RoundTripService {
     ]);
 
     // 3. Validasi kedua hold masih aktif
-    const outboundSeatNos = outbound.passengers.map((p: any) => p.seatNo);
-    const returnSeatNos = returnData.passengers.map((p: any) => p.seatNo);
+    const outboundSeatNos = outbound.passengers.map((p) => p.seatNo);
+    const returnSeatNos = returnData.passengers.map((p) => p.seatNo);
 
     const [outboundHolds, returnHolds] = await Promise.all([
       db.select().from(seatHolds).where(and(
@@ -93,8 +132,8 @@ export class RoundTripService {
     const returnLegIndexes: number[] = [];
     for (let i = returnData.originSeq; i < returnData.destinationSeq; i++) returnLegIndexes.push(i);
 
-    const outboundSeatNosArr = outbound.passengers.map((p: any) => p.seatNo);
-    const returnSeatNosArr = returnData.passengers.map((p: any) => p.seatNo);
+    const outboundSeatNosArr = outbound.passengers.map((p) => p.seatNo);
+    const returnSeatNosArr = returnData.passengers.map((p) => p.seatNo);
 
     // 6. DB Transaction with advisory lock to prevent deadlocks
     const result = await db.transaction(async (tx) => {
@@ -107,7 +146,10 @@ export class RoundTripService {
         groupCode,
         type: 'round_trip',
         channel: 'CSO',
-        totalAmount: Math.round(totalAmount),
+        // §3.8: booking_groups.totalAmount is numeric(12,2) → string at
+        // runtime. Keep IDR-rounded semantics for now via Math.round, but
+        // the schema accepts fractions if a future commission flow needs it.
+        totalAmount: Math.round(totalAmount).toFixed(2),
         outletId: outbound.outletId || null,
         createdBy: operatorId
       }).returning();
@@ -135,7 +177,7 @@ export class RoundTripService {
         snapOutletName: outletData?.name || null,
       }).returning();
 
-      const outboundPaxValues = outbound.passengers.map((p: any) => ({
+      const outboundPaxValues = outbound.passengers.map((p) => ({
         bookingId: outboundBooking.id,
         fullName: p.name,
         seatNo: p.seatNo,
@@ -183,7 +225,7 @@ export class RoundTripService {
         snapOutletName: outletData?.name || null,
       }).returning();
 
-      const returnPaxValues = returnData.passengers.map((retP: any, i: number) => ({
+      const returnPaxValues = returnData.passengers.map((retP, i) => ({
         bookingId: returnBooking.id,
         fullName: outbound.passengers[i].name,
         seatNo: retP.seatNo,
@@ -208,10 +250,20 @@ export class RoundTripService {
           eq(seatHolds.operatorId, operatorId)
         ));
 
+      // Round-trip booking is created with status='paid' for both legs
+      // (line 176 above), so the payment row needs the matching
+      // status='success' + paidAt + providerRef — otherwise finance
+      // reports that filter on status='success' miss every round-trip
+      // sale and the partial index idx_payments_paid_date is bypassed.
+      // Single payment row covers both legs (amount = outbound + return).
+      const paymentRef = `PAY-${randomBytes(12).toString('hex').toUpperCase()}`;
       await tx.insert(paymentsTable).values({
         bookingId: outboundBooking.id,
         method: payment.method,
-        amount: totalAmount.toString()
+        amount: totalAmount.toString(),
+        status: 'success',
+        providerRef: paymentRef,
+        paidAt: new Date(),
       });
 
       await tx.insert(printJobsTable).values([

@@ -2,13 +2,21 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import jwt from "jsonwebtoken";
 
 function getJwtSecret(): string {
+  // P1-2 §3.12: tidak ada fallback "dev secret" lagi. Sebelumnya kalau
+  // JWT_SECRET tidak ter-set di non-production env, app pakai
+  // "transity-dev-" + REPL_ID — predictable per-deploy. Kalau env staging
+  // lupa set JWT_SECRET, attacker bisa forge token mudah karena REPL_ID
+  // public dari URL Replit.
+  //
+  // Note: server/index.ts:validateBootEnv juga enforce JWT_SECRET >=32
+  // chars saat boot, jadi production app pasti sudah punya secret valid.
+  // Pengecekan di sini guard untuk import paths alternatif (test runner,
+  // CLI script) yang tidak lewat boot validation.
   const secret = process.env.JWT_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("FATAL: JWT_SECRET environment variable is required in production");
-    }
-    console.warn("[app.auth] JWT_SECRET env var not set. Using development fallback. Set JWT_SECRET for production!");
-    return "transity-dev-" + (process.env.REPL_ID || "local-dev-only");
+    throw new Error(
+      "FATAL: JWT_SECRET environment variable is required. Generate via: openssl rand -hex 32"
+    );
   }
   return secret;
 }

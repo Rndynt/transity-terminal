@@ -4,6 +4,37 @@ import { seatInventory, seatHolds } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { webSocketService } from "@server/realtime/ws";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("atomicHold");
+
+/**
+ * P2 §10.7 — a leg conflicts on hold creation iff:
+ *   (a) it is already booked, OR
+ *   (b) its hold_ref points at an *active* seat_holds row.
+ *
+ * A hold row is active when either:
+ *   - h.expires_at > now()                  (TTL window still open), OR
+ *   - h.booking_id IS NOT NULL              (already confirmed; the
+ *     release path nulls hold_ref on cancel, so a non-null
+ *     booking_id always wins regardless of expires_at).
+ *
+ * An orphan hold_ref (no matching seat_holds row, or one whose
+ * expires_at lapsed without a booking_id) is treated as a tombstone
+ * the reaper will sweep — atomicHold overwrites it and proceeds.
+ *
+ * This must stay aligned with the engine implementation in
+ * `engine/crates/engine-core/src/hold.rs::run_hold_txn`.
+ */
+function isHoldActive(
+  holdExpiresAt: Date | null,
+  holdBookingId: string | null,
+  now: Date,
+): boolean {
+  if (holdBookingId !== null) return true;
+  if (holdExpiresAt !== null) return holdExpiresAt > now;
+  return false;
+}
 
 /**
  * P2 §10.7 — a leg conflicts on hold creation iff:
@@ -62,11 +93,17 @@ export class AtomicHoldService {
       const result = await db.transaction(async (tx) => {
         // P2 §10.7 — leftJoin seat_holds so we can ignore expired
         // holds whose hold_ref is still pinned on inventory because
-        // the reaper hasn't swept yet. `for('update')` locks the
-        // result rows; drizzle locks both sides of the join, but
-        // seat_holds is read-only here so the extra lock is benign.
-        // The matching engine query uses `FOR UPDATE OF i` for the
-        // same reason — see hold.rs.
+        // the reaper hasn't swept yet.
+        //
+        // The lock MUST be scoped with `{ of: seatInventory }`:
+        // PostgreSQL forbids a bare `FOR UPDATE` when the query
+        // contains an outer join because the nullable (right) side
+        // is not lockable — Postgres errors out with "FOR UPDATE
+        // cannot be applied to the nullable side of an outer join".
+        // Scoping the lock to the inventory table only mirrors the
+        // engine's `FOR UPDATE OF i` in
+        // engine/crates/engine-core/src/hold.rs::run_hold_txn.
+        // seat_holds rows are read-only inside this transaction.
         const inventoryRows = await tx
           .select({
             booked: seatInventory.booked,
@@ -81,7 +118,7 @@ export class AtomicHoldService {
             eq(seatInventory.seatNo, seatNo),
             inArray(seatInventory.legIndex, legIndexes)
           ))
-          .for('update');
+          .for('update', { of: seatInventory });
 
         if (inventoryRows.length !== legIndexes.length) {
           return {
@@ -143,7 +180,7 @@ export class AtomicHoldService {
 
       return result;
     } catch (error) {
-      console.error(`[ATOMIC_HOLD] Hold creation failed:`, error);
+      log.error({ err: error, tripId, seatNo }, "hold creation failed");
       return {
         success: false,
         reason: 'TRANSACTION_ERROR',
@@ -188,7 +225,7 @@ export class AtomicHoldService {
 
       return { success: false };
     } catch (error) {
-      console.error(`[ATOMIC_HOLD] Hold release failed:`, error);
+      log.error({ err: error, holdRef }, "hold release failed");
       return { success: false };
     }
   }

@@ -1,6 +1,9 @@
 import IORedis, { type Redis, type RedisOptions } from 'ioredis';
 import { createAdapter } from '@socket.io/redis-adapter';
 import type { Adapter } from 'socket.io-adapter';
+import { createComponentLogger } from '../lib/logger';
+
+const log = createComponentLogger('redis');
 
 export function getRedisUrl(): string | null {
   const raw = process.env.REDIS_URL?.trim();
@@ -8,16 +11,16 @@ export function getRedisUrl(): string | null {
   try {
     const u = new URL(raw);
     if (u.protocol !== 'redis:' && u.protocol !== 'rediss:') {
-      console.warn(`[redis] REDIS_URL has unsupported protocol "${u.protocol}". Use redis:// or rediss://. Falling back to in-memory.`);
+      log.warn({ protocol: u.protocol }, 'REDIS_URL has unsupported protocol; use redis:// or rediss://. Falling back to in-memory.');
       return null;
     }
     if (!u.hostname) {
-      console.warn('[redis] REDIS_URL is missing a hostname. Falling back to in-memory.');
+      log.warn('REDIS_URL is missing a hostname. Falling back to in-memory.');
       return null;
     }
     return raw;
   } catch {
-    console.warn('[redis] REDIS_URL is not a valid URL. Expected format: redis://[user:pass@]host:port[/db]. Falling back to in-memory.');
+    log.warn('REDIS_URL is not a valid URL. Expected format: redis://[user:pass@]host:port[/db]. Falling back to in-memory.');
     return null;
   }
 }
@@ -38,13 +41,13 @@ function buildClient(url: string, role: string, opts: Partial<RedisOptions> = {}
     ...opts,
   });
   client.on('error', (err) => {
-    console.error(`[redis:${role}] error: ${err?.message || err}`);
+    log.error({ role, err }, 'redis client error');
   });
   client.on('reconnecting', (delay: number) => {
-    console.warn(`[redis:${role}] reconnecting in ${delay}ms`);
+    log.warn({ role, delayMs: delay }, 'redis reconnecting');
   });
   client.on('ready', () => {
-    console.log(`[redis:${role}] ready`);
+    log.info({ role }, 'redis ready');
   });
   return client;
 }
@@ -61,7 +64,7 @@ export async function createSocketIoAdapter(): Promise<SocketIoAdapterBundle | n
   const pubClient = buildClient(url, 'sio-pub');
   const subClient = pubClient.duplicate();
   subClient.on('error', (err) => {
-    console.error(`[redis:sio-sub] error: ${err?.message || err}`);
+    log.error({ role: 'sio-sub', err }, 'redis sub client error');
   });
   try {
     await Promise.all([
@@ -69,7 +72,7 @@ export async function createSocketIoAdapter(): Promise<SocketIoAdapterBundle | n
       subClient.status === 'ready' ? Promise.resolve() : new Promise<void>((res) => subClient.once('ready', () => res())),
     ]);
   } catch (err) {
-    console.error('[redis:socket.io] failed to ready clients:', err);
+    log.error({ err }, 'socket.io failed to ready redis clients');
     pubClient.disconnect();
     subClient.disconnect();
     return null;

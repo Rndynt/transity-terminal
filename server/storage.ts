@@ -1,8 +1,13 @@
-import { IStorage, ManifestEntry, ManifestFull, ManifestCargoEntry } from "./storage.interface";
+import {
+  IStorage, ManifestEntry, ManifestFull, ManifestCargoEntry,
+  TripStopTimeWithEffectiveFlags, BulkUpsertStopTimeInput,
+  ActivePassengerForTrip, UnseatedPassengerForTrip,
+} from "./storage.interface";
 import {
   FleetRepository, NetworkRepository, SchedulingRepository,
   BookingRepository, CargoRepository, FinanceRepository
 } from "./repositories";
+import { getRequestContext } from "./lib/requestContext";
 import type {
   Driver, InsertDriver, Stop, InsertStop, Outlet, InsertOutlet,
   Vehicle, InsertVehicle, Layout, InsertLayout,
@@ -12,7 +17,7 @@ import type {
   SeatInventory, InsertSeatInventory, PriceRule, InsertPriceRule,
   Booking, InsertBooking, Passenger, InsertPassenger,
   Payment, InsertPayment, PrintJob, InsertPrintJob,
-  CargoShipment, InsertCargoShipment, CargoType, InsertCargoType,
+  CargoShipment, CargoShipmentListItem, InsertCargoShipment, CargoType, InsertCargoType,
   CargoRate, InsertCargoRate, CsoAvailableTrip, CargoAvailableTrip,
   TripCostTemplate, InsertTripCostTemplate, TripCostItem, InsertTripCostItem,
   Promotion, InsertPromotion, PromoCondition, PromoConditionInput, Voucher, InsertVoucher,
@@ -34,36 +39,111 @@ export class DatabaseStorage implements IStorage {
   updateDriver(id: string, data: Partial<InsertDriver>): Promise<Driver> { return this.fleet.updateDriver(id, data); }
   deleteDriver(id: string): Promise<void> { return this.fleet.deleteDriver(id); }
   getVehicles(): Promise<Vehicle[]> { return this.fleet.getVehicles(); }
-  getVehicleById(id: string): Promise<Vehicle | undefined> { return this.fleet.getVehicleById(id); }
+  getVehicleById(id: string): Promise<Vehicle | undefined> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.fleet.getVehicleById(id);
+    const cached = ctx.vehicleCache.get(id);
+    if (cached) return cached;
+    const promise = this.fleet.getVehicleById(id);
+    ctx.vehicleCache.set(id, promise);
+    promise.catch(() => { ctx.vehicleCache.delete(id); });
+    return promise;
+  }
   createVehicle(data: InsertVehicle): Promise<Vehicle> { return this.fleet.createVehicle(data); }
-  updateVehicle(id: string, data: Partial<InsertVehicle>): Promise<Vehicle> { return this.fleet.updateVehicle(id, data); }
-  deleteVehicle(id: string): Promise<void> { return this.fleet.deleteVehicle(id); }
+  updateVehicle(id: string, data: Partial<InsertVehicle>): Promise<Vehicle> {
+    getRequestContext()?.vehicleCache.delete(id);
+    return this.fleet.updateVehicle(id, data);
+  }
+  deleteVehicle(id: string): Promise<void> {
+    getRequestContext()?.vehicleCache.delete(id);
+    return this.fleet.deleteVehicle(id);
+  }
   getLayouts(): Promise<Layout[]> { return this.fleet.getLayouts(); }
-  getLayoutById(id: string): Promise<Layout | undefined> { return this.fleet.getLayoutById(id); }
+  getLayoutById(id: string): Promise<Layout | undefined> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.fleet.getLayoutById(id);
+    const cached = ctx.layoutCache.get(id);
+    if (cached) return cached;
+    const promise = this.fleet.getLayoutById(id);
+    ctx.layoutCache.set(id, promise);
+    promise.catch(() => { ctx.layoutCache.delete(id); });
+    return promise;
+  }
   createLayout(data: InsertLayout): Promise<Layout> { return this.fleet.createLayout(data); }
-  updateLayout(id: string, data: Partial<InsertLayout>): Promise<Layout> { return this.fleet.updateLayout(id, data); }
-  deleteLayout(id: string): Promise<void> { return this.fleet.deleteLayout(id); }
+  updateLayout(id: string, data: Partial<InsertLayout>): Promise<Layout> {
+    getRequestContext()?.layoutCache.delete(id);
+    return this.fleet.updateLayout(id, data);
+  }
+  deleteLayout(id: string): Promise<void> {
+    getRequestContext()?.layoutCache.delete(id);
+    return this.fleet.deleteLayout(id);
+  }
 
   // Network
   getStops(): Promise<Stop[]> { return this.network.getStops(); }
-  getStopById(id: string): Promise<Stop | undefined> { return this.network.getStopById(id); }
+  getStopById(id: string): Promise<Stop | undefined> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.network.getStopById(id);
+    const cached = ctx.stopCache.get(id);
+    if (cached) return cached;
+    const promise = this.network.getStopById(id);
+    ctx.stopCache.set(id, promise);
+    promise.catch(() => { ctx.stopCache.delete(id); });
+    return promise;
+  }
   getStopsByIds(ids: string[]): Promise<Stop[]> { return this.network.getStopsByIds(ids); }
   createStop(data: InsertStop): Promise<Stop> { return this.network.createStop(data); }
-  updateStop(id: string, data: Partial<InsertStop>): Promise<Stop> { return this.network.updateStop(id, data); }
-  deleteStop(id: string): Promise<void> { return this.network.deleteStop(id); }
+  updateStop(id: string, data: Partial<InsertStop>): Promise<Stop> {
+    getRequestContext()?.stopCache.delete(id);
+    return this.network.updateStop(id, data);
+  }
+  deleteStop(id: string): Promise<void> {
+    getRequestContext()?.stopCache.delete(id);
+    return this.network.deleteStop(id);
+  }
   getOutlets(): Promise<Outlet[]> { return this.network.getOutlets(); }
-  getOutletById(id: string): Promise<Outlet | undefined> { return this.network.getOutletById(id); }
+  getOutletById(id: string): Promise<Outlet | undefined> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.network.getOutletById(id);
+    const cached = ctx.outletCache.get(id);
+    if (cached) return cached;
+    const promise = this.network.getOutletById(id);
+    ctx.outletCache.set(id, promise);
+    promise.catch(() => { ctx.outletCache.delete(id); });
+    return promise;
+  }
   getOutletsByIds(ids: string[]): Promise<Outlet[]> { return this.network.getOutletsByIds(ids); }
   createOutlet(data: InsertOutlet): Promise<Outlet> { return this.network.createOutlet(data); }
-  updateOutlet(id: string, data: Partial<InsertOutlet>): Promise<Outlet> { return this.network.updateOutlet(id, data); }
-  deleteOutlet(id: string): Promise<void> { return this.network.deleteOutlet(id); }
+  updateOutlet(id: string, data: Partial<InsertOutlet>): Promise<Outlet> {
+    getRequestContext()?.outletCache.delete(id);
+    return this.network.updateOutlet(id, data);
+  }
+  deleteOutlet(id: string): Promise<void> {
+    getRequestContext()?.outletCache.delete(id);
+    return this.network.deleteOutlet(id);
+  }
 
   // Scheduling
   getTripPatterns(): Promise<TripPattern[]> { return this.scheduling.getTripPatterns(); }
-  getTripPatternById(id: string): Promise<TripPattern | undefined> { return this.scheduling.getTripPatternById(id); }
+  getTripPatternById(id: string): Promise<TripPattern | undefined> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.scheduling.getTripPatternById(id);
+    const cached = ctx.tripPatternCache.get(id);
+    if (cached) return cached;
+    const promise = this.scheduling.getTripPatternById(id);
+    ctx.tripPatternCache.set(id, promise);
+    promise.catch(() => { ctx.tripPatternCache.delete(id); });
+    return promise;
+  }
   createTripPattern(data: InsertTripPattern): Promise<TripPattern> { return this.scheduling.createTripPattern(data); }
-  updateTripPattern(id: string, data: Partial<InsertTripPattern>): Promise<TripPattern> { return this.scheduling.updateTripPattern(id, data); }
-  deleteTripPattern(id: string): Promise<void> { return this.scheduling.deleteTripPattern(id); }
+  updateTripPattern(id: string, data: Partial<InsertTripPattern>): Promise<TripPattern> {
+    getRequestContext()?.tripPatternCache.delete(id);
+    return this.scheduling.updateTripPattern(id, data);
+  }
+  deleteTripPattern(id: string): Promise<void> {
+    getRequestContext()?.tripPatternCache.delete(id);
+    return this.scheduling.deleteTripPattern(id);
+  }
   getPatternStops(patternId: string): Promise<Array<PatternStop & { stop: Stop | null }>> { return this.scheduling.getPatternStops(patternId); }
   getPatternStopsByPatternIds(patternIds: string[]): Promise<Map<string, Array<PatternStop & { stop: Stop | null }>>> { return this.scheduling.getPatternStopsByPatternIds(patternIds); }
   getTripPatternsByIds(patternIds: string[]): Promise<Map<string, TripPattern>> { return this.scheduling.getTripPatternsByIds(patternIds); }
@@ -84,17 +164,32 @@ export class DatabaseStorage implements IStorage {
   getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]> {
     return this.scheduling.getCargoAvailableTrips(serviceDate, originStopId, destinationStopId);
   }
-  getTripById(id: string): Promise<Trip | undefined> { return this.scheduling.getTripById(id); }
+  getTripById(id: string): Promise<Trip | undefined> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.scheduling.getTripById(id);
+    const cached = ctx.tripCache.get(id);
+    if (cached) return cached;
+    const promise = this.scheduling.getTripById(id);
+    ctx.tripCache.set(id, promise);
+    promise.catch(() => { ctx.tripCache.delete(id); });
+    return promise;
+  }
   createTrip(data: InsertTrip): Promise<Trip> { return this.scheduling.createTrip(data); }
-  updateTrip(id: string, data: Partial<InsertTrip>): Promise<Trip> { return this.scheduling.updateTrip(id, data); }
-  deleteTrip(id: string): Promise<void> { return this.scheduling.deleteTrip(id); }
+  updateTrip(id: string, data: Partial<InsertTrip>): Promise<Trip> {
+    getRequestContext()?.tripCache.delete(id);
+    return this.scheduling.updateTrip(id, data);
+  }
+  deleteTrip(id: string): Promise<void> {
+    getRequestContext()?.tripCache.delete(id);
+    return this.scheduling.deleteTrip(id);
+  }
   getTripStopTimes(tripId: string): Promise<TripStopTime[]> { return this.scheduling.getTripStopTimes(tripId); }
   getTripStopTimesByTripIds(tripIds: string[]): Promise<Map<string, TripStopTime[]>> { return this.scheduling.getTripStopTimesByTripIds(tripIds); }
   createTripStopTime(data: InsertTripStopTime): Promise<TripStopTime> { return this.scheduling.createTripStopTime(data); }
   updateTripStopTime(id: string, data: Partial<InsertTripStopTime>): Promise<TripStopTime> { return this.scheduling.updateTripStopTime(id, data); }
   deleteTripStopTime(id: string): Promise<void> { return this.scheduling.deleteTripStopTime(id); }
-  getTripStopTimesWithEffectiveFlags(tripId: string): Promise<any[]> { return this.scheduling.getTripStopTimesWithEffectiveFlags(tripId); }
-  bulkUpsertTripStopTimes(tripId: string, stopTimes: any[]): Promise<void> { return this.scheduling.bulkUpsertTripStopTimes(tripId, stopTimes); }
+  getTripStopTimesWithEffectiveFlags(tripId: string): Promise<TripStopTimeWithEffectiveFlags[]> { return this.scheduling.getTripStopTimesWithEffectiveFlags(tripId); }
+  bulkUpsertTripStopTimes(tripId: string, stopTimes: BulkUpsertStopTimeInput[]): Promise<void> { return this.scheduling.bulkUpsertTripStopTimes(tripId, stopTimes); }
   getTripLegs(tripId: string): Promise<TripLeg[]> { return this.scheduling.getTripLegs(tripId); }
   createTripLeg(data: InsertTripLeg): Promise<TripLeg> { return this.scheduling.createTripLeg(data); }
   deleteTripLegs(tripId: string): Promise<void> { return this.scheduling.deleteTripLegs(tripId); }
@@ -125,7 +220,7 @@ export class DatabaseStorage implements IStorage {
   getActiveBookingsByTripIds(tripIds: string[]): Promise<Map<string, Booking[]>> { return this.booking.getActiveBookingsByTripIds(tripIds); }
   getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }> { return this.booking.getBookingsPaginated(options); }
   getBookingById(id: string): Promise<Booking | undefined> { return this.booking.getBookingById(id); }
-  createBooking(data: InsertBooking): Promise<Booking> { return this.booking.createBooking(data); }
+  createBooking(data: InsertBooking & { bookingCode: string }): Promise<Booking> { return this.booking.createBooking(data); }
   updateBooking(id: string, data: Partial<InsertBooking>): Promise<Booking> { return this.booking.updateBooking(id, data); }
   getBookingByCode(bookingCode: string): Promise<Booking | undefined> { return this.booking.getBookingByCode(bookingCode); }
   getPassengers(bookingId: string): Promise<Passenger[]> { return this.booking.getPassengers(bookingId); }
@@ -133,8 +228,8 @@ export class DatabaseStorage implements IStorage {
   getPassengerByTicketNumber(ticketNumber: string): Promise<Passenger | undefined> { return this.booking.getPassengerByTicketNumber(ticketNumber); }
   createPassenger(data: InsertPassenger): Promise<Passenger> { return this.booking.createPassenger(data); }
   updatePassenger(id: string, data: Partial<InsertPassenger>): Promise<Passenger> { return this.booking.updatePassenger(id, data); }
-  getActivePassengersForTrip(tripId: string): Promise<any[]> { return this.booking.getActivePassengersForTrip(tripId); }
-  getUnseatedPassengers(tripId: string): Promise<any[]> { return this.booking.getUnseatedPassengers(tripId); }
+  getActivePassengersForTrip(tripId: string): Promise<ActivePassengerForTrip[]> { return this.booking.getActivePassengersForTrip(tripId); }
+  getUnseatedPassengers(tripId: string): Promise<UnseatedPassengerForTrip[]> { return this.booking.getUnseatedPassengers(tripId); }
   getPayments(bookingId: string): Promise<Payment[]> { return this.booking.getPayments(bookingId); }
   getPaymentsByBookingIds(bookingIds: string[]): Promise<Payment[]> { return this.booking.getPaymentsByBookingIds(bookingIds); }
   createPayment(data: InsertPayment): Promise<Payment> { return this.booking.createPayment(data); }
@@ -154,10 +249,14 @@ export class DatabaseStorage implements IStorage {
   findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string, tripId?: string): Promise<CargoRate | undefined> {
     return this.cargo.findCargoRate(cargoTypeId, originStopId, destinationStopId, tripId, (id) => this.scheduling.getTripById(id));
   }
-  getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]> { return this.cargo.getCargoShipments(filters); }
+  getCargoShipments(
+    filters?: { tripId?: string; status?: string; outletId?: string },
+    opts?: { limit?: number; offset?: number }
+  ): Promise<CargoShipmentListItem[]> { return this.cargo.getCargoShipments(filters, opts); }
+  countCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<number> { return this.cargo.countCargoShipments(filters); }
   getCargoShipmentById(id: string): Promise<CargoShipment | undefined> { return this.cargo.getCargoShipmentById(id); }
   getCargoShipmentByWaybill(waybillNumber: string): Promise<CargoShipment | undefined> { return this.cargo.getCargoShipmentByWaybill(waybillNumber); }
-  createCargoShipment(data: InsertCargoShipment): Promise<CargoShipment> { return this.cargo.createCargoShipment(data); }
+  createCargoShipment(data: InsertCargoShipment & { trackingSecret: string }): Promise<CargoShipment> { return this.cargo.createCargoShipment(data); }
   updateCargoShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment> { return this.cargo.updateCargoShipment(id, data); }
 
   // Finance

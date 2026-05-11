@@ -1,11 +1,14 @@
 import { IStorage } from "@server/storage.interface";
 import { PricingService } from "@modules/pricing/pricing.service";
-import { PromosService, type PromoApplicationItem } from "@modules/promos/promos.service";
+import { PromosService, type PromoApplicationItem, type PromoValidationResult } from "@modules/promos/promos.service";
 import { passengers as passengersTable, seatInventory, seatHolds } from "@shared/schema";
 import { scheduleStopExceptions } from "@shared/schema/scheduling";
 import { generateBookingCode, generateTicketNumber } from "@server/utils/codeGenerator";
 import { db } from "@server/db";
 import { eq, and, inArray, gt, sql } from "drizzle-orm";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("booking.helpers");
 
 export { generateBookingCode, generateTicketNumber };
 
@@ -24,8 +27,8 @@ export async function quoteFareForBooking(
   const pricingService = new PricingService(storage);
   try {
     return await pricingService.quoteFare(tripId, originSeq, destinationSeq);
-  } catch (err: any) {
-    if (err.message === 'NO_PRICE_RULE') {
+  } catch (err) {
+    if (err instanceof Error && err.message === 'NO_PRICE_RULE') {
       throw new Error('Trip ini belum memiliki aturan harga. Hubungi admin untuk mengatur harga sebelum memesan tiket.');
     }
     throw err;
@@ -58,7 +61,7 @@ export async function fetchBookingSnapshots(
 
   if (!departureHHMM && originSeq != null) {
     const stopTimes = await storage.getTripStopTimes(tripId);
-    const originST = stopTimes.find((st: any) => st.stopSequence === originSeq);
+    const originST = stopTimes.find(st => st.stopSequence === originSeq);
     if (originST?.departAt) {
       departureHHMM = String(originST.departAt).slice(11, 16);
     }
@@ -76,10 +79,12 @@ export async function insertPassengerRows(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   bookingId: string,
   passengers: { fullName: string; phone?: string; idNumber?: string; seatNo: string }[],
-  fareQuote: { perPassenger: string | number; breakdown: any }
+  fareQuote: { perPassenger: string | number; breakdown: unknown }
 ) {
-  for (const pax of passengers) {
-    await tx.insert(passengersTable).values({
+  if (passengers.length === 0) return;
+  // Bulk insert: 1 round-trip per booking (vs N round-trip sebelumnya).
+  await tx.insert(passengersTable).values(
+    passengers.map((pax) => ({
       bookingId,
       ticketNumber: generateTicketNumber(),
       fullName: pax.fullName,
@@ -88,8 +93,8 @@ export async function insertPassengerRows(
       seatNo: pax.seatNo,
       fareAmount: fareQuote.perPassenger.toString(),
       fareBreakdown: fareQuote.breakdown,
-    });
-  }
+    }))
+  );
 }
 
 export async function validateBoardingAlighting(
@@ -100,8 +105,8 @@ export async function validateBoardingAlighting(
 ): Promise<void> {
   const stopTimes = await storage.getTripStopTimesWithEffectiveFlags(tripId);
 
-  const originStop = stopTimes.find((st: any) => st.stopSequence === originSeq);
-  const destinationStop = stopTimes.find((st: any) => st.stopSequence === destinationSeq);
+  const originStop = stopTimes.find((st) => st.stopSequence === originSeq);
+  const destinationStop = stopTimes.find((st) => st.stopSequence === destinationSeq);
 
   if (!originStop) {
     throw new Error(`Origin stop at sequence ${originSeq} not found`);
@@ -111,13 +116,13 @@ export async function validateBoardingAlighting(
   }
 
   if (!originStop.effectiveBoardingAllowed) {
-    const error = new Error('Boarding not allowed at this stop');
-    (error as any).code = 'boarding-not-allowed';
+    const error: Error & { code?: string } = new Error('Boarding not allowed at this stop');
+    error.code = 'boarding-not-allowed';
     throw error;
   }
   if (!destinationStop.effectiveAlightingAllowed) {
-    const error = new Error('Alighting not allowed at this stop');
-    (error as any).code = 'alighting-not-allowed';
+    const error: Error & { code?: string } = new Error('Alighting not allowed at this stop');
+    error.code = 'alighting-not-allowed';
     throw error;
   }
 
@@ -132,13 +137,13 @@ export async function validateBoardingAlighting(
 
     for (const ex of stopExceptions) {
       if (ex.stopId === originStop.stopId && ex.disableBoarding) {
-        const error = new Error('Titik naik ini ditutup sementara oleh operasional');
-        (error as any).code = 'stop-closed-by-ops';
+        const error: Error & { code?: string } = new Error('Titik naik ini ditutup sementara oleh operasional');
+        error.code = 'stop-closed-by-ops';
         throw error;
       }
       if (ex.stopId === destinationStop.stopId && ex.disableAlighting) {
-        const error = new Error('Titik turun ini ditutup sementara oleh operasional');
-        (error as any).code = 'stop-closed-by-ops';
+        const error: Error & { code?: string } = new Error('Titik turun ini ditutup sementara oleh operasional');
+        error.code = 'stop-closed-by-ops';
         throw error;
       }
     }
@@ -312,7 +317,7 @@ export interface PromoResult {
   discountAmount: number;
   promoId: string | undefined;
   voucherCode: string | undefined;
-  promoValidation: any;
+  promoValidation: PromoValidationResult | undefined;
   applications: PromoApplicationItem[];
 }
 
@@ -334,7 +339,7 @@ export async function calculateBookingTotal(
   let discountAmount = 0;
   let promoId: string | undefined;
   let voucherCode: string | undefined;
-  let promoValidation: any;
+  let promoValidation: PromoValidationResult | undefined;
   let applications: PromoApplicationItem[] = [];
 
   // Lazy-load trip hanya kalau dibutuhkan promo flow
@@ -390,7 +395,7 @@ export async function calculateBookingTotal(
         }];
       }
     } catch (err) {
-      console.warn('[calculateBookingTotal] auto-apply lookup failed:', err);
+      log.warn({ err, op: "calculateBookingTotal" }, "auto-apply lookup failed");
     }
   }
 

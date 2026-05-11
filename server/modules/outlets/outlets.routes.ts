@@ -1,9 +1,9 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, RouteShorthandOptions } from "fastify";
 import { OutletsController } from "./outlets.controller";
 import { IStorage } from "@server/storage.interface";
 import { requireFlag } from "@modules/rbac/rbac.middleware";
 
-export function registerOutletsRoutes(app: FastifyInstance, storage: IStorage, cacheHook: any) {
+export function registerOutletsRoutes(app: FastifyInstance, storage: IStorage, cacheHook: RouteShorthandOptions) {
   const controller = new OutletsController(storage);
 
   app.get('/api/outlets', { ...cacheHook }, async (req, reply) => controller.getAll(req, reply));

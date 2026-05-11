@@ -10,6 +10,9 @@ import { db } from "@server/db";
 import { eq, and } from "drizzle-orm";
 import { fireAndForget } from "@server/lib/consoleWebhook";
 import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("tripBases.service");
 
 async function emitTripWebhook(
   storage: IStorage,
@@ -23,8 +26,33 @@ async function emitTripWebhook(
     if (!payload) return;
     fireAndForget({ event, trip: payload, emittedAt: new Date().toISOString() });
   } catch (err) {
-    console.warn("[tripBases.service] failed to emit webhook:", (err as Error).message);
+    log.warn({ err, event, tripId }, "failed to emit trip webhook");
   }
+}
+
+/**
+ * Detects PostgreSQL `unique_violation` (SQLSTATE 23505). node-pg and
+ * neon-serverless surface it on `err.code`; drizzle sometimes wraps the
+ * driver error and the code ends up on `err.cause.code` instead. We
+ * keep the old message-match as a last-resort fallback, but the code
+ * check is the deterministic path — relying on the human-readable
+ * message was the bug this helper replaces.
+ */
+function isPgUniqueViolation(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as { code?: unknown }).code;
+  if (code === "23505") return true;
+  const causeCode = (err as { cause?: { code?: unknown } }).cause?.code;
+  if (causeCode === "23505") return true;
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    return (
+      msg.includes("duplicate key") ||
+      msg.includes("unique constraint") ||
+      msg.includes("unique violation")
+    );
+  }
+  return false;
 }
 
 export class TripBasesService {
@@ -113,16 +141,37 @@ export class TripBasesService {
   }
 
   /**
-   * Get eligible bases for a given service date
+   * Get eligible bases for a given service date.
+   *
+   * Performance: pre-fetch all schedule exceptions for `serviceDate` in one
+   * query, then evaluate each base's eligibility in-memory. Avoids the N+1
+   * pattern of `getAllTripBases() + per-base isBaseEligible()`.
    */
   async getEligibleBases(serviceDate: string): Promise<TripBase[]> {
     const allBases = await this.getAllTripBases();
+    if (allBases.length === 0) return [];
+
+    const exceptionRows = await db.select({ baseId: scheduleExceptions.baseId })
+      .from(scheduleExceptions)
+      .where(eq(scheduleExceptions.exceptionDate, serviceDate));
+    const exceptedBaseIds = new Set(exceptionRows.map(r => r.baseId).filter((id): id is string => id != null));
+
+    const serviceDateObj = parseISO(serviceDate);
     const eligibleBases: TripBase[] = [];
 
     for (const base of allBases) {
-      if (await this.isBaseEligible(base, serviceDate)) {
-        eligibleBases.push(base);
-      }
+      if (!base.active) continue;
+      if (base.validFrom && serviceDateObj < parseISO(base.validFrom)) continue;
+      if (base.validTo && serviceDateObj > parseISO(base.validTo)) continue;
+
+      const timezone = ensureDefaultTimezone(base.timezone);
+      const dayOfWeek = getDayInTZ(serviceDate, timezone);
+      const dayFlags = [base.sun, base.mon, base.tue, base.wed, base.thu, base.fri, base.sat];
+      if (!dayFlags[dayOfWeek]) continue;
+
+      if (exceptedBaseIds.has(base.id)) continue;
+
+      eligibleBases.push(base);
     }
 
     return eligibleBases;
@@ -133,8 +182,8 @@ export class TripBasesService {
    * Handles overnight routes: if a converted timestamp is <= the previous one, it means midnight
    * was crossed, so we add the accumulated day offset to keep times strictly increasing.
    */
-  computeDefaultTimestamps(base: TripBase, serviceDate: string): any[] {
-    const defaultStopTimes = base.defaultStopTimes as any[];
+  computeDefaultTimestamps(base: TripBase, serviceDate: string): Array<{ stopSequence: number; arriveAt: Date | null; departAt: Date | null }> {
+    const defaultStopTimes = base.defaultStopTimes as Array<{ stopSequence: number; arriveAt: string | null; departAt: string | null }>;
     
     if (!Array.isArray(defaultStopTimes)) {
       throw new Error('defaultStopTimes must be an array');
@@ -143,7 +192,7 @@ export class TripBasesService {
     const timezone = ensureDefaultTimezone(base.timezone);
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-    const result: any[] = [];
+    const result: Array<{ stopSequence: number; arriveAt: Date | null; departAt: Date | null }> = [];
     let dayOffset = 0;
     let lastTimestamp: Date | null = null;
 
@@ -176,7 +225,11 @@ export class TripBasesService {
       if (normalizedArriveAt) {
         const raw = fromZonedHHMMToUtc(serviceDate, normalizedArriveAt, timezone);
         if (raw) {
-          if (lastTimestamp && raw.getTime() + dayOffset * ONE_DAY_MS <= lastTimestamp.getTime()) {
+          // §3.7: bump day offset only when the candidate timestamp would be
+          // STRICTLY EARLIER than the previous one (genuine midnight wrap).
+          // Using `<` instead of `<=` so equal timestamps (e.g. dwell=0
+          // depart === arrive) don't trigger a spurious dayOffset++.
+          if (lastTimestamp && raw.getTime() + dayOffset * ONE_DAY_MS < lastTimestamp.getTime()) {
             dayOffset++;
           }
           arriveAtTimestamp = new Date(raw.getTime() + dayOffset * ONE_DAY_MS);
@@ -185,13 +238,26 @@ export class TripBasesService {
       }
 
       if (normalizedDepartAt) {
-        const raw = fromZonedHHMMToUtc(serviceDate, normalizedDepartAt, timezone);
-        if (raw) {
-          if (lastTimestamp && raw.getTime() + dayOffset * ONE_DAY_MS <= lastTimestamp.getTime()) {
-            dayOffset++;
+        // §3.7: when arriveAt === departAt within the same stop (dwell=0),
+        // they map to the SAME instant. Skip the recomputation entirely so
+        // a 23:59 dwell-0 stop right before midnight does not double-bump
+        // dayOffset (depart's raw <= last arrive's raw triggers the bump,
+        // even though it's the same instant).
+        if (
+          normalizedArriveAt &&
+          normalizedArriveAt === normalizedDepartAt &&
+          arriveAtTimestamp
+        ) {
+          departAtTimestamp = arriveAtTimestamp;
+        } else {
+          const raw = fromZonedHHMMToUtc(serviceDate, normalizedDepartAt, timezone);
+          if (raw) {
+            if (lastTimestamp && raw.getTime() + dayOffset * ONE_DAY_MS < lastTimestamp.getTime()) {
+              dayOffset++;
+            }
+            departAtTimestamp = new Date(raw.getTime() + dayOffset * ONE_DAY_MS);
+            lastTimestamp = departAtTimestamp;
           }
-          departAtTimestamp = new Date(raw.getTime() + dayOffset * ONE_DAY_MS);
-          lastTimestamp = departAtTimestamp;
         }
       }
 
@@ -230,119 +296,128 @@ export class TripBasesService {
       throw new Error('base-not-eligible');
     }
 
-    // 3. Begin transaction to create trip
+    // 3. Prepare the row data up-front (no DB writes yet) so we can treat
+    // the create-trip step as the single race-point. All unique keys on
+    // `trips` funnel through the one insert on line marked below.
+    const patternStops = await this.storage.getPatternStops(base.patternId);
+
+    let vehicleId = base.defaultVehicleId;
+    if (!vehicleId) {
+      const pattern = await this.storage.getTripPatternById(base.patternId);
+      if (pattern?.defaultLayoutId) {
+        const vehicles = await this.storage.getVehicles();
+        const compatibleVehicle = vehicles.find(v => v.layoutId === pattern.defaultLayoutId);
+        vehicleId = compatibleVehicle?.id || null;
+      }
+      if (!vehicleId) {
+        throw new Error('No suitable vehicle found for trip base. Please assign a default vehicle to the trip base or ensure vehicles exist for the pattern layout.');
+      }
+    }
+
+    let capacity = base.capacity || null;
+    if (!capacity) {
+      const vehicle = await this.storage.getVehicleById(vehicleId);
+      capacity = vehicle?.capacity || null;
+    }
+    if (!capacity && base.defaultLayoutId) {
+      const layout = await this.storage.getLayoutById(base.defaultLayoutId);
+      capacity = layout?.seatMap ? (layout.seatMap as Array<unknown>).length : null;
+    }
+
+    const timestamps = this.computeDefaultTimestamps(base, serviceDate);
+    const firstStopTime = timestamps.find(t => t.stopSequence === 1);
+    const timezone = ensureDefaultTimezone(base.timezone);
+    const originDepartHHMM = firstStopTime?.departAt
+      ? formatTimeInTZ(firstStopTime.departAt, timezone)
+      : null;
+
+    const [pattern, driver, vehicle] = await Promise.all([
+      this.storage.getTripPatternById(base.patternId),
+      base.defaultDriverId ? this.storage.getDriverById(base.defaultDriverId) : null,
+      this.storage.getVehicleById(vehicleId),
+    ]);
+
+    const tripData: InsertTrip = {
+      patternId: base.patternId,
+      serviceDate,
+      vehicleId,
+      layoutId: base.defaultLayoutId,
+      capacity: capacity || 50,
+      status: 'scheduled',
+      channelFlags: base.channelFlags as InsertTrip['channelFlags'],
+      baseId: base.id,
+      driverId: base.defaultDriverId,
+      originDepartHHMM,
+      snapRouteName: pattern?.name || null,
+      snapRouteCode: pattern?.code || null,
+      snapDriverName: driver?.name || null,
+      snapVehiclePlate: vehicle?.plate || null,
+    };
+
+    const tripStopTimesData = timestamps.map(ts => {
+      const patternStop = patternStops.find(ps => ps.stopSequence === ts.stopSequence);
+      if (!patternStop) {
+        throw new Error(`Pattern stop not found for sequence ${ts.stopSequence}`);
+      }
+      return {
+        stopId: patternStop.stopId,
+        stopSequence: ts.stopSequence,
+        arriveAt: ts.arriveAt,
+        departAt: ts.departAt,
+        dwellSeconds: patternStop.dwellSeconds || 0,
+        boardingAllowed: null,
+        alightingAllowed: null,
+      };
+    });
+
+    // 4. Attempt creation. The unique constraint on trips(base_id,
+    // service_date) is our race serializer — two concurrent calls both
+    // reach here, one wins `createTrip`, the other sees 23505 and
+    // re-reads the winner's row. If any step *after* createTrip throws
+    // (bulkUpsertTripStopTimes, deriveLegsFromTrip, precomputeInventory),
+    // the new trip row stays in the DB as an orphan: no legs, no stop
+    // times, no inventory. This is latent behavior that has existed
+    // since the method was written; PR #11 tried to clean it up via
+    // `storage.deleteTrip` and introduced a worse bug — `deleteTrip` is
+    // a soft-delete but neither the `uniq_trip_base_per_day` unique
+    // index nor `getTripByBaseAndDate` filters on `deleted_at`, so the
+    // cleanup permanently poisoned the (base_id, service_date) slot.
+    // Proper fix requires either (a) threading a tx through every step,
+    // or (b) hard-deleting the orphan with explicit cascade on child
+    // tables, or (c) making the unique index partial on deleted_at IS
+    // NULL. None of those fit a regression hotfix, so we back off to
+    // the pre-#11 behavior: let the orphan stay. The defense-in-depth
+    // `deletedAt` filter on `getTripByBaseAndDate` (see
+    // scheduling.repository.ts) ensures any unrelated soft-delete on a
+    // trip does not cause this method to hand out a cancelled id.
     let tripIdResolved: string;
     let isFreshlyCreated = false;
     try {
-      // Get pattern stops for this base
-      const patternStops = await this.storage.getPatternStops(base.patternId);
-      
-      // Ensure we have a valid vehicle ID
-      let vehicleId = base.defaultVehicleId;
-      if (!vehicleId) {
-        // Get pattern's default layout to find a vehicle
-        const pattern = await this.storage.getTripPatternById(base.patternId);
-        if (pattern?.defaultLayoutId) {
-          // Find a vehicle that uses this layout
-          const vehicles = await this.storage.getVehicles();
-          const compatibleVehicle = vehicles.find(v => v.layoutId === pattern.defaultLayoutId);
-          vehicleId = compatibleVehicle?.id || null;
-        }
-        
-        if (!vehicleId) {
-          throw new Error('No suitable vehicle found for trip base. Please assign a default vehicle to the trip base or ensure vehicles exist for the pattern layout.');
-        }
-      }
+      const trip = await this.storage.createTrip(tripData); // race point — unique (base_id, service_date)
 
-      // Determine capacity
-      let capacity = base.capacity || null;
-      if (!capacity) {
-        const vehicle = await this.storage.getVehicleById(vehicleId);
-        capacity = vehicle?.capacity || null;
-      }
-      if (!capacity && base.defaultLayoutId) {
-        const layout = await this.storage.getLayoutById(base.defaultLayoutId);
-        capacity = layout?.seatMap ? (layout.seatMap as any[]).length : null;
-      }
-
-      // Extract origin departure time for sorting using base timezone
-      const timestamps = this.computeDefaultTimestamps(base, serviceDate);
-      const firstStopTime = timestamps.find(t => t.stopSequence === 1);
-      const timezone = ensureDefaultTimezone(base.timezone);
-      const originDepartHHMM = firstStopTime?.departAt ? 
-        formatTimeInTZ(firstStopTime.departAt, timezone) : null;
-
-      const [pattern, driver, vehicle] = await Promise.all([
-        this.storage.getTripPatternById(base.patternId),
-        base.defaultDriverId ? this.storage.getDriverById(base.defaultDriverId) : null,
-        this.storage.getVehicleById(vehicleId),
-      ]);
-
-      const tripData: InsertTrip = {
-        patternId: base.patternId,
-        serviceDate,
-        vehicleId,
-        layoutId: base.defaultLayoutId,
-        capacity: capacity || 50,
-        status: 'scheduled',
-        channelFlags: base.channelFlags as any,
-        baseId: base.id,
-        driverId: base.defaultDriverId,
-        originDepartHHMM,
-        snapRouteName: pattern?.name || null,
-        snapRouteCode: pattern?.code || null,
-        snapDriverName: driver?.name || null,
-        snapVehiclePlate: vehicle?.plate || null,
-      };
-
-      const trip = await this.storage.createTrip(tripData);
-      
-      // Create trip stop times from defaultStopTimes
-      const tripStopTimesData = timestamps.map(ts => {
-        const patternStop = patternStops.find(ps => ps.stopSequence === ts.stopSequence);
-        if (!patternStop) {
-          throw new Error(`Pattern stop not found for sequence ${ts.stopSequence}`);
-        }
-        
-        return {
-          tripId: trip.id,
-          stopId: patternStop.stopId,
-          stopSequence: ts.stopSequence,
-          arriveAt: ts.arriveAt,
-          departAt: ts.departAt,
-          dwellSeconds: patternStop.dwellSeconds || 0,
-          boardingAllowed: null, // inherit from pattern
-          alightingAllowed: null // inherit from pattern
-        };
-      });
-
-      // Bulk upsert trip stop times
       if (tripStopTimesData.length > 0) {
-        await this.storage.bulkUpsertTripStopTimes(trip.id, tripStopTimesData);
+        await this.storage.bulkUpsertTripStopTimes(
+          trip.id,
+          tripStopTimesData.map(r => ({ ...r, tripId: trip.id })),
+        );
       }
 
-      // Derive trip legs
       await this.tripLegsService.deriveLegsFromTrip(trip);
-
       await this.seatInventoryService.precomputeInventory(trip);
 
       tripIdResolved = trip.id;
       isFreshlyCreated = true;
     } catch (error) {
-      // Handle race condition: if unique constraint violation, fetch the existing trip
-      if (error instanceof Error && (
-        error.message.includes('unique') ||
-        error.message.includes('duplicate') ||
-        error.message.includes('violates unique constraint')
-      )) {
-        // Another request already created the trip, fetch it
-        const existingTrip = await this.storage.getTripByBaseAndDate(baseId, serviceDate);
-        if (existingTrip) {
-          tripIdResolved = existingTrip.id;
-        } else {
-          // If still not found, there might be a deeper issue
+      if (isPgUniqueViolation(error)) {
+        // Race-loss at createTrip: another concurrent request committed
+        // first. Re-read and return the winner's id. The winner row is
+        // guaranteed to be `deletedAt IS NULL` here because createTrip
+        // only inserts live rows.
+        const winnerTrip = await this.storage.getTripByBaseAndDate(baseId, serviceDate);
+        if (!winnerTrip) {
           throw new Error(`Failed to materialize trip for base ${baseId} on ${serviceDate}: unique constraint violation but no existing trip found`);
         }
+        tripIdResolved = winnerTrip.id;
       } else {
         throw error;
       }
@@ -384,7 +459,7 @@ export class TripBasesService {
   /**
    * Validate the structure of defaultStopTimes
    */
-  private validateDefaultStopTimes(defaultStopTimes: any): void {
+  private validateDefaultStopTimes(defaultStopTimes: unknown): void {
     if (!Array.isArray(defaultStopTimes)) {
       throw new Error('defaultStopTimes must be an array');
     }
@@ -393,17 +468,17 @@ export class TripBasesService {
       throw new Error('defaultStopTimes must not be empty');
     }
 
-    for (const stopTime of defaultStopTimes) {
+    for (const stopTime of defaultStopTimes as Array<{ stopSequence?: unknown; arriveAt?: unknown; departAt?: unknown }>) {
       if (!stopTime.stopSequence || typeof stopTime.stopSequence !== 'number') {
         throw new Error('Each stop time must have a numeric stopSequence');
       }
-      
+
       // Validate time format (HH:MM:SS or HH:MM)
-      if (stopTime.arriveAt && !/^\d{2}:\d{2}(:\d{2})?$/.test(stopTime.arriveAt)) {
+      if (stopTime.arriveAt && !/^\d{2}:\d{2}(:\d{2})?$/.test(String(stopTime.arriveAt))) {
         throw new Error(`Invalid arriveAt format: ${stopTime.arriveAt}. Expected HH:MM or HH:MM:SS`);
       }
-      
-      if (stopTime.departAt && !/^\d{2}:\d{2}(:\d{2})?$/.test(stopTime.departAt)) {
+
+      if (stopTime.departAt && !/^\d{2}:\d{2}(:\d{2})?$/.test(String(stopTime.departAt))) {
         throw new Error(`Invalid departAt format: ${stopTime.departAt}. Expected HH:MM or HH:MM:SS`);
       }
     }

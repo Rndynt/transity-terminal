@@ -1,7 +1,20 @@
 import { IStorage } from "@server/storage.interface";
-import { InsertCargoShipment, CargoShipment, CargoAvailableTrip, cargoStatusEnum, cargoShipments } from "@shared/schema";
+import { InsertCargoShipment, CargoShipment, CargoShipmentListItem, CargoAvailableTrip, cargoStatusEnum, cargoShipments } from "@shared/schema";
 import { db } from "@server/db";
 import { sql, eq } from "drizzle-orm";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+
+/**
+ * S1-09: lihat `server/modules/rbac/README.md`. Mapping flag:
+ *   - createShipment                            → action.cargo.create
+ *   - updateShipment / updateShipmentStatus     → action.cargo.manage
+ * Read methods (getAll/getById/getByWaybill) tetap terbuka karena route
+ * juga membolehkan publik untuk tracking — sumber otoritatif.
+ *
+ * Catatan: customer-app booking memanggil `createShipment` lewat
+ * `app.service.createAppCargo`. Karena customer bukan staf RBAC, caller
+ * itu memakai `SYSTEM_CONTEXT` secara eksplisit.
+ */
 
 const VALID_STATUSES = cargoStatusEnum.enumValues;
 type CargoStatus = typeof VALID_STATUSES[number];
@@ -38,7 +51,7 @@ export class CargoService {
     const yy = String(now.getUTCFullYear()).slice(-2);
     const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(now.getUTCDate()).padStart(2, '0');
-    const result: any = await db.execute(sql`SELECT nextval('cargo_waybill_seq') AS id`);
+    const result = await db.execute(sql`SELECT nextval('cargo_waybill_seq') AS id`) as { rows?: Array<{ id: string | number }> };
     const id = String(result.rows?.[0]?.id ?? 0).padStart(6, '0');
     return `WB-${yy}${mm}${dd}-${id}`;
   }
@@ -86,8 +99,15 @@ export class CargoService {
     return this.storage.getCargoAvailableTrips(serviceDate, originStopId, destinationStopId);
   }
 
-  async getAllShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]> {
-    return await this.storage.getCargoShipments(filters);
+  async getAllShipments(
+    filters?: { tripId?: string; status?: string; outletId?: string },
+    opts?: { limit?: number; offset?: number }
+  ): Promise<CargoShipmentListItem[]> {
+    return await this.storage.getCargoShipments(filters, opts);
+  }
+
+  async countShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<number> {
+    return await this.storage.countCargoShipments(filters);
   }
 
   async getShipmentById(id: string): Promise<CargoShipment> {
@@ -102,7 +122,11 @@ export class CargoService {
     return shipment;
   }
 
-  async createShipment(data: Omit<InsertCargoShipment, 'waybillNumber'>): Promise<CargoShipment> {
+  async createShipment(
+    data: Omit<InsertCargoShipment, 'waybillNumber'>,
+    ctx: ServiceContext,
+  ): Promise<CargoShipment> {
+    requirePermission(ctx, "action.cargo.create");
     if (data.cargoTypeId && data.originStopId && data.destinationStopId && data.weightKg) {
       const weight = parseFloat(String(data.weightKg));
       if (weight > 0) {
@@ -129,18 +153,37 @@ export class CargoService {
     } catch {
       waybillNumber = this.generateWaybillNumber();
     }
-    return await this.storage.createCargoShipment({ ...data, waybillNumber });
+
+    // S1-06: server-side tracking secret. Public tracking endpoint butuh
+    // (waybill, secret) supaya tidak bisa di-enumerate. Secret di-print
+    // di label pengirim — tidak pernah expose ke daftar admin/operator.
+    const { randomBytes } = await import("node:crypto");
+    const trackingSecret = randomBytes(8).toString("hex");
+
+    // trackingSecret di-omit dari insertCargoShipmentSchema (server-generated),
+    // jadi kita lampirkan eksplisit di sini sebagai field tambahan yang sah.
+    const payload: InsertCargoShipment & { trackingSecret: string } = {
+      ...data,
+      waybillNumber,
+      trackingSecret,
+    };
+    return await this.storage.createCargoShipment(payload);
   }
 
-  async updateShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment> {
+  async updateShipment(
+    id: string,
+    data: Partial<InsertCargoShipment>,
+    ctx: ServiceContext,
+  ): Promise<CargoShipment> {
+    requirePermission(ctx, "action.cargo.manage");
     // B4: lock + update in the SAME transaction. Using tx.update keeps the
     // write on the same connection that holds the row lock — calling the
     // global storage.updateCargoShipment would go through `db` (different
     // connection) and break the lock semantics.
     return await db.transaction(async (tx) => {
-      const lockResult: any = await tx.execute(
+      const lockResult = await tx.execute(
         sql`SELECT id FROM cargo_shipments WHERE id = ${id} FOR UPDATE`
-      );
+      ) as { rows?: Array<{ id: string }> };
       if (!lockResult.rows?.[0]) {
         throw new Error('Cargo shipment not found');
       }
@@ -152,15 +195,20 @@ export class CargoService {
     });
   }
 
-  async updateShipmentStatus(id: string, newStatus: string): Promise<CargoShipment> {
+  async updateShipmentStatus(
+    id: string,
+    newStatus: string,
+    ctx: ServiceContext,
+  ): Promise<CargoShipment> {
+    requirePermission(ctx, "action.cargo.manage");
     if (!VALID_STATUSES.includes(newStatus as CargoStatus)) {
       throw new Error(`Invalid status: ${newStatus}. Valid: ${VALID_STATUSES.join(', ')}`);
     }
 
     return await db.transaction(async (tx) => {
-      const result: any = await tx.execute(
+      const result = await tx.execute(
         sql`SELECT status FROM cargo_shipments WHERE id = ${id} FOR UPDATE`
-      );
+      ) as { rows?: Array<{ status?: string | null }> };
       const row = result.rows?.[0];
       if (!row) {
         throw new Error('Cargo shipment not found');

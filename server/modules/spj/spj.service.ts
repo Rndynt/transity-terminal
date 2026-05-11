@@ -2,6 +2,67 @@ import { db } from "@server/db";
 import { spj, spjCostLines, trips, drivers, vehicles, tripPatterns, tripCostTemplates, tripCostItems } from "@shared/schema";
 import type { Spj, SpjCostLine, SpjWithDetails } from "@shared/schema";
 import { eq, sql, desc } from "drizzle-orm";
+import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "@server/constants/pagination";
+
+type CostCategory = 'bbm' | 'tol' | 'makan' | 'parkir' | 'lainnya';
+
+/** Raw row shape returned by spj LEFT JOIN drivers/vehicles/trips/trip_patterns. */
+interface SpjJoinedRow {
+  id: string;
+  spj_number: string;
+  trip_id: string;
+  driver_id: string;
+  vehicle_id: string;
+  status: 'draft' | 'issued' | 'on_trip' | 'settled' | null;
+  issued_at: Date | null;
+  settled_at: Date | null;
+  notes: string | null;
+  created_at: Date | null;
+  updated_at: Date | null;
+  driver_name: string | null;
+  driver_code: string | null;
+  driver_phone: string | null;
+  driver_license_no: string | null;
+  vehicle_code: string | null;
+  vehicle_plate: string | null;
+  trip_service_date: string | null;
+  trip_pattern_name: string | null;
+  trip_pattern_code: string | null;
+  pattern_id?: string | null;
+}
+
+interface PatternStopRow {
+  stop_sequence: number;
+  stop_name: string | null;
+  stop_code: string | null;
+  boarding_allowed: boolean | null;
+  alighting_allowed: boolean | null;
+}
+
+interface TripRow {
+  driver_id: string | null;
+  vehicle_id: string | null;
+  pattern_id: string | null;
+}
+
+interface CostTemplateItemRow {
+  category: CostCategory;
+  label: string;
+  amount: string;
+  is_advance: boolean;
+  notes: string | null;
+}
+
+interface RevenueRow {
+  ticket_revenue: string | null;
+  cargo_revenue: string | null;
+}
+
+interface CostSummaryRow {
+  total_actual_cost: string | null;
+  total_estimated_cost: string | null;
+  total_advance: string | null;
+}
 
 export class SpjService {
   async generateSpjNumber(): Promise<string> {
@@ -10,11 +71,15 @@ export class SpjService {
     const result = await db.execute(
       sql`SELECT COUNT(*)::int as count FROM spj WHERE spj_number LIKE ${prefix + '%'}`
     );
-    const count = (result.rows?.[0] as any)?.count || 0;
+    const count = (result.rows?.[0] as { count?: number } | undefined)?.count || 0;
     return `${prefix}-${String(count + 1).padStart(4, '0')}`;
   }
 
-  async getAll(): Promise<SpjWithDetails[]> {
+  async getAll(opts?: { limit?: number; offset?: number }): Promise<SpjWithDetails[]> {
+    // β-2: enforce hard cap. Operator dengan ratusan SPJ historis sebelumnya
+    // pull all rows tanpa LIMIT (heavy LEFT JOIN x N). Default 200, max 1000.
+    const limit = Math.min(Math.max(opts?.limit ?? LIST_DEFAULT_LIMIT, 1), LIST_MAX_LIMIT);
+    const offset = Math.max(opts?.offset ?? 0, 0);
     const rows = await db.execute(sql`
       SELECT s.*,
         d.name as driver_name, d.code as driver_code, d.phone as driver_phone, d.license_no as driver_license_no,
@@ -27,8 +92,9 @@ export class SpjService {
       LEFT JOIN trips t ON s.trip_id = t.id
       LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
       ORDER BY s.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
     `);
-    return (rows.rows || []).map(this.mapRow);
+    return (rows.rows as unknown as SpjJoinedRow[] || []).map(this.mapRow);
   }
 
   async getById(id: string): Promise<SpjWithDetails | null> {
@@ -46,11 +112,13 @@ export class SpjService {
       WHERE s.id = ${id}
     `);
     if (!rows.rows?.length) return null;
-    const spjData = this.mapRow(rows.rows[0]);
+    const spjData = this.mapRow(rows.rows[0] as unknown as SpjJoinedRow) as SpjWithDetails & {
+      stops?: Array<{ sequence: number; stopName: string | null; stopCode: string | null; boardingAllowed: boolean | null; alightingAllowed: boolean | null }>;
+    };
     const lines = await this.getCostLines(id);
     spjData.costLines = lines;
 
-    const patternId = (rows.rows[0] as any).pattern_id;
+    const patternId = (rows.rows[0] as unknown as SpjJoinedRow).pattern_id;
     if (patternId) {
       const stopsRows = await db.execute(sql`
         SELECT ps.stop_sequence, ps.boarding_allowed, ps.alighting_allowed,
@@ -60,7 +128,8 @@ export class SpjService {
         WHERE ps.pattern_id = ${patternId} AND ps.deleted_at IS NULL
         ORDER BY ps.stop_sequence ASC
       `);
-      (spjData as any).stops = (stopsRows.rows || []).map((r: any) => ({
+      const rowList = (stopsRows.rows || []) as unknown as PatternStopRow[];
+      spjData.stops = rowList.map((r) => ({
         sequence: r.stop_sequence,
         stopName: r.stop_name,
         stopCode: r.stop_code,
@@ -87,7 +156,7 @@ export class SpjService {
       WHERE s.trip_id = ${tripId}
     `);
     if (!rows.rows?.length) return null;
-    const spjData = this.mapRow(rows.rows[0]);
+    const spjData = this.mapRow(rows.rows[0] as unknown as SpjJoinedRow);
     const lines = await this.getCostLines(spjData.id);
     spjData.costLines = lines;
     return spjData;
@@ -99,7 +168,7 @@ export class SpjService {
       WHERE t.id = ${tripId}
     `);
     if (!tripRows.rows?.length) throw new Error("Trip tidak ditemukan");
-    const trip = tripRows.rows[0] as any;
+    const trip = tripRows.rows[0] as unknown as TripRow;
 
     const existing = await db.execute(sql`SELECT id FROM spj WHERE trip_id = ${tripId}`);
     if (existing.rows?.length) throw new Error("SPJ sudah ada untuk trip ini");
@@ -107,7 +176,7 @@ export class SpjService {
     const driverId = overrides?.driverId || trip.driver_id;
     if (!driverId) throw new Error("Driver belum ditugaskan ke trip ini. Assign driver terlebih dahulu.");
 
-    const vehicleId = overrides?.vehicleId || trip.vehicle_id;
+    const vehicleId = (overrides?.vehicleId || trip.vehicle_id)!;
     const spjNumber = await this.generateSpjNumber();
 
     const created = await db.transaction(async (tx) => {
@@ -128,7 +197,7 @@ export class SpjService {
       `);
 
       if (templateRows.rows?.length) {
-        for (const item of templateRows.rows as any[]) {
+        for (const item of templateRows.rows as unknown as CostTemplateItemRow[]) {
           await tx.insert(spjCostLines).values({
             spjId: spjRecord.id,
             category: item.category,
@@ -147,7 +216,7 @@ export class SpjService {
   }
 
   async updateStatus(id: string, status: 'draft' | 'issued' | 'on_trip' | 'settled'): Promise<Spj> {
-    const updates: any = { status, updatedAt: new Date() };
+    const updates: Partial<typeof spj.$inferInsert> = { status, updatedAt: new Date() };
     if (status === 'issued') updates.issuedAt = new Date();
     if (status === 'settled') updates.settledAt = new Date();
 
@@ -175,7 +244,7 @@ export class SpjService {
   async addCostLine(spjId: string, data: { category: string; label: string; estimatedAmount: string; isAdvance: boolean; notes?: string }): Promise<SpjCostLine> {
     const [created] = await db.insert(spjCostLines).values({
       spjId,
-      category: data.category as any,
+      category: data.category as CostCategory,
       label: data.label,
       estimatedAmount: data.estimatedAmount,
       isAdvance: data.isAdvance,
@@ -211,8 +280,8 @@ export class SpjService {
       JOIN spj s ON scl.spj_id = s.id
       WHERE s.trip_id = ${tripId}
     `);
-    const rev = revenue.rows?.[0] as any || {};
-    const cost = costs.rows?.[0] as any || {};
+    const rev = (revenue.rows?.[0] as unknown as RevenueRow | undefined) || ({} as Partial<RevenueRow>);
+    const cost = (costs.rows?.[0] as unknown as CostSummaryRow | undefined) || ({} as Partial<CostSummaryRow>);
     const ticketRevenue = parseFloat(rev.ticket_revenue || '0');
     const cargoRevenue = parseFloat(rev.cargo_revenue || '0');
     const totalRevenue = ticketRevenue + cargoRevenue;
@@ -231,7 +300,7 @@ export class SpjService {
     };
   }
 
-  private mapRow(row: any): SpjWithDetails {
+  private mapRow(row: SpjJoinedRow): SpjWithDetails {
     return {
       id: row.id,
       spjNumber: row.spj_number,
@@ -253,6 +322,6 @@ export class SpjService {
       tripServiceDate: row.trip_service_date,
       tripPatternName: row.trip_pattern_name,
       tripPatternCode: row.trip_pattern_code,
-    };
+    } as SpjWithDetails;
   }
 }

@@ -22,6 +22,11 @@ import {
   createSeatHoldsForBooking,
   generateBookingCode,
 } from "@modules/bookings/booking.helpers";
+import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
+import { AtomicHoldService } from "@modules/bookings/atomicHold.service";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("app.service");
 
 interface OperatorSummary {
   id: string;
@@ -215,10 +220,97 @@ interface PaymentStatusResponse {
 interface WebhookResult {
   status: 'success' | 'failed';
   bookingId: string;
+  // S2-09: di-set true kalau webhook re-delivered (replay-safe response).
+  idempotent?: boolean;
+}
+
+/**
+ * Shape of one element in `trip_bases.default_stop_times` (jsonb).
+ * Mirrors the editor-side `DefaultStopTime` in `TripBaseFormDialog.tsx`
+ * and the identically-named type in `scheduling.repository.ts`.
+ */
+interface DefaultStopTime {
+  stopSequence: number;
+  stopName?: string;
+  stopCode?: string;
+  arriveAt?: string | null;
+  departAt?: string | null;
+}
+
+/**
+ * Shape of `price_rules.rule` jsonb payload that the app currently
+ * honours. Extra keys are ignored so downstream consumers stay
+ * forward-compatible with richer rule shapes.
+ */
+interface PriceRuleData {
+  basePricePerLeg?: number;
+  multiplier?: number;
+  pricingMode?: 'flat' | 'per_leg' | string;
+}
+
+/**
+ * Summary row returned by `getUserBookings` / `getBookingsByIds` /
+ * `listBookings`. The drizzle select projects the listed columns;
+ * `holdExpiresAt` + `finalAmount` + optional origin/destination/
+ * passengerCount are decorations computed per-row.
+ */
+interface BookingListItem {
+  id: string;
+  tripId: string;
+  serviceDate: string | null;
+  patternCode?: string | null;
+  patternName?: string | null;
+  originStopId: string | null;
+  destinationStopId: string | null;
+  originSeq?: number | null;
+  destinationSeq?: number | null;
+  status: string | null;
+  totalAmount: string | null;
+  discountAmount: string | null;
+  channel: string | null;
+  pendingExpiresAt: Date | null;
+  createdAt: Date | null;
+  bookingCode?: string | null;
+  voucherCode?: string | null;
+  snapOriginStopName?: string | null;
+  snapDestinationStopName?: string | null;
+  origin?: { name: string; code: string; city: string | null } | null;
+  destination?: { name: string; code: string; city: string | null } | null;
+  passengerCount?: number;
+  holdExpiresAt: string | null;
+  finalAmount: string;
 }
 
 export class AppService {
   constructor(private storage: IStorage) {}
+
+  /**
+   * Lazily-constructed HoldsAdapter used by the B2C / OTA / WEB seat
+   * flows. Each call site guards on `isEngineEnabled()` first so this
+   * is effectively dead code when the flag is off; constructing the
+   * adapter is cheap though (just wires the Node atomic-hold fallback)
+   * so we don't bother with caching.
+   */
+  private holdsAdapter(): HoldsAdapter {
+    return new HoldsAdapter(new AtomicHoldService(this.storage));
+  }
+
+  /**
+   * B2C convention for engine operator_id. Matches `createdBy` semantics
+   * so confirmForBooking's operator-ownership check resolves correctly:
+   *   - APP / WEB with login user: "app:<userId>"
+   *   - OTA (service-to-service):  "OTA:<salesChannelCode|unknown>"
+   *   - Anything else:             "service-client"
+   */
+  private engineOperatorId(
+    userId: string | null,
+    channel: string | null,
+    salesChannelCode: string | null | undefined,
+  ): string {
+    if (userId) return `app:${userId}`;
+    if (channel === "OTA") return `OTA:${salesChannelCode ?? "unknown"}`;
+    return "service-client";
+  }
 
   async register(email: string, password: string, name: string, phone?: string): Promise<{ user: Omit<AppUser, "passwordHash">; token: string }> {
     const existing = await db.select().from(appUsers).where(eq(appUsers.email, email.toLowerCase())).limit(1);
@@ -463,7 +555,7 @@ export class AppService {
             };
           }
         } catch (err) {
-          console.warn('[searchTrips] promo lookup failed for trip', trip.tripId, err);
+          log.warn({ err, tripId: trip.tripId, op: "searchTrips" }, "promo lookup failed for trip");
         }
       }
 
@@ -688,7 +780,7 @@ export class AppService {
       if (!pattern) continue;
 
       const pStops = patternStopsMap.get(base.patternId) || [];
-      const defaultTimes = (base.defaultStopTimes as any[]) || [];
+      const defaultTimes = (base.defaultStopTimes as DefaultStopTime[] | null) || [];
 
       const hasOrigin = pStops.some(ps => originStopIds.includes(ps.stopId));
       const hasDestAfterOrigin = pStops.some(ps => {
@@ -703,8 +795,8 @@ export class AppService {
       const destPS = destPSList.length > 0 ? destPSList[destPSList.length - 1] : null;
       if (!originPS || !destPS) continue;
 
-      const originTime = defaultTimes.find((t: any) => t.stopSequence === originPS.stopSequence);
-      const destTime = defaultTimes.find((t: any) => t.stopSequence === destPS.stopSequence);
+      const originTime = defaultTimes.find(t => t.stopSequence === originPS.stopSequence);
+      const destTime = defaultTimes.find(t => t.stopSequence === destPS.stopSequence);
 
       const originDepartUtc = originTime?.departAt ? fromZonedHHMMToUtc(params.date, originTime.departAt, 'Asia/Jakarta') : null;
       const destArriveUtc = destTime?.arriveAt ? fromZonedHHMMToUtc(params.date, destTime.arriveAt, 'Asia/Jakarta') : null;
@@ -716,7 +808,7 @@ export class AppService {
       let fareQuote = 0;
       const cachedRule = priceRulesByPattern.get(base.patternId);
       if (cachedRule) {
-        const ruleData = cachedRule as any;
+        const ruleData = cachedRule as PriceRuleData | null;
         const basePricePerLeg: number = ruleData?.basePricePerLeg ?? 0;
         const multiplier: number = ruleData?.multiplier ?? 1;
         const pricingMode: string = ruleData?.pricingMode ?? 'per_leg';
@@ -729,14 +821,14 @@ export class AppService {
       }
 
       const stopsData: TripStopPointWithCity[] = pStops.map(ps => {
-        const t = defaultTimes.find((dt: any) => dt.stopSequence === ps.stopSequence);
+        const t = defaultTimes.find(dt => dt.stopSequence === ps.stopSequence);
         const departUtc = t?.departAt ? fromZonedHHMMToUtc(params.date, t.departAt, 'Asia/Jakarta') : null;
         const arriveUtc = t?.arriveAt ? fromZonedHHMMToUtc(params.date, t.arriveAt, 'Asia/Jakarta') : null;
         return {
           stopId: ps.stopId,
-          name: (ps as any).stop?.name || '',
-          code: (ps as any).stop?.code || '',
-          city: (ps as any).stop?.city || undefined,
+          name: ps.stop?.name || '',
+          code: ps.stop?.code || '',
+          city: ps.stop?.city || undefined,
           sequence: ps.stopSequence,
           departAt: departUtc?.toISOString() || null,
           arriveAt: arriveUtc?.toISOString() || null,
@@ -757,16 +849,16 @@ export class AppService {
         operatorLogo: null,
         origin: {
           stopId: originPS.stopId,
-          name: (originPS as any).stop?.name || '',
-          code: (originPS as any).stop?.code || '',
+          name: originPS.stop?.name || '',
+          code: originPS.stop?.code || '',
           sequence: originPS.stopSequence,
           departAt: originDepartUtc?.toISOString() || null,
           arriveAt: null,
         },
         destination: {
           stopId: destPS.stopId,
-          name: (destPS as any).stop?.name || '',
-          code: (destPS as any).stop?.code || '',
+          name: destPS.stop?.name || '',
+          code: destPS.stop?.code || '',
           sequence: destPS.stopSequence,
           departAt: null,
           arriveAt: destArriveUtc?.toISOString() || null,
@@ -795,9 +887,9 @@ export class AppService {
         ORDER BY priority ASC
         LIMIT 1
       `);
-      const result = Array.isArray(rows) ? rows : (rows as any).rows || [];
-      if (result.length > 0) {
-        const ruleData = result[0].rule as any;
+      const rowList = (Array.isArray(rows) ? rows : rows.rows) as Array<{ rule: unknown }>;
+      if (rowList.length > 0) {
+        const ruleData = rowList[0].rule as PriceRuleData | null;
         const basePricePerLeg: number = ruleData?.basePricePerLeg ?? 0;
         const multiplier: number = ruleData?.multiplier ?? 1;
         const pricingMode: string = ruleData?.pricingMode ?? 'per_leg';
@@ -870,12 +962,11 @@ export class AppService {
       this.storage.getTripStopTimesWithEffectiveFlags(resolvedId)
     ]);
 
-    const stopIdsForDetail = [...new Set(stopTimes.map((st: any) => st.stopId))];
+    const stopIdsForDetail = [...new Set(stopTimes.map((st: { stopId: string }) => st.stopId))];
     const allStopsForDetail = await this.storage.getStopsByIds(stopIdsForDetail);
     const stopsDetailMap = new Map(allStopsForDetail.map(s => [s.id, s]));
 
-    const stopsData: TripDetailResponse['stops'] = stopTimes.map(
-      (st: { stopId: string; stopName?: string; stopCode?: string; stopSequence: number; arriveAt: string | null; departAt: string | null; effectiveBoardingAllowed: boolean; effectiveAlightingAllowed: boolean }) => {
+    const stopsData: TripDetailResponse['stops'] = stopTimes.map((st) => {
         const stop = stopsDetailMap.get(st.stopId);
         return {
           stopId: st.stopId as string,
@@ -1029,74 +1120,132 @@ export class AppService {
 
     const snapshots = await fetchBookingSnapshots(this.storage, resolvedTripId, params.originStopId, params.destinationStopId, null, params.originSeq);
 
-    const bookingId = await db.transaction(async (tx) => {
-      await checkSeatsAvailable(tx, resolvedTripId, seatNos, legIndexes);
+    // createdBy semantics:
+    //   - APP / WEB (user login): "app:<userId>"
+    //   - OTA (service-client): "OTA:<salesChannelCode>" agar log audit informatif.
+    //     Fallback "OTA:unknown" kalau Console belum mengirim sales channel.
+    const createdBy = params.userId
+      ? `app:${params.userId}`
+      : channel === 'OTA'
+        ? `OTA:${params.salesChannelCode ?? 'unknown'}`
+        : 'service-client';
 
-      // createdBy semantics:
-      //   - APP / WEB (user login): "app:<userId>"
-      //   - OTA (service-client): "OTA:<salesChannelCode>" agar log audit informatif.
-      //     Fallback "OTA:unknown" kalau Console belum mengirim sales channel.
-      const createdBy = params.userId
-        ? `app:${params.userId}`
-        : channel === 'OTA'
-          ? `OTA:${params.salesChannelCode ?? 'unknown'}`
-          : 'service-client';
+    // Engine-mode: pre-generate the booking UUID so the engine.hold call
+    // (which must run BEFORE we open the TT booking tx — the engine runs
+    // its own tx and cannot compose with ours) can carry a deterministic
+    // idempotency key derived from bookingId+seatNo, and so the hold
+    // rows the engine writes can be stitched to this bookingId.
+    //
+    // On hold success we open the booking tx; on tx failure we compensate
+    // by releasing every hold the engine placed for this bookingId.
+    const useEngine = isEngineEnabled();
+    const { randomUUID } = await import('crypto');
+    const pregenBookingId = useEngine ? randomUUID() : null;
 
-      const [booking] = await tx.insert(bookings).values({
+    // The min expires_at returned by the engine drives our local
+    // pendingExpiresAt so TT's hold-window UI and engine ledger agree.
+    let engineExpiresAt: Date = holdExpiresAt;
+
+    if (useEngine) {
+      const operatorId = this.engineOperatorId(params.userId, channel, params.salesChannelCode);
+      const created = await this.holdsAdapter().holdForBooking({
+        bookingId: pregenBookingId!,
         tripId: resolvedTripId,
-        bookingCode: generateBookingCode(),
-        originStopId: params.originStopId,
-        destinationStopId: params.destinationStopId,
-        originSeq: params.originSeq,
-        destinationSeq: params.destinationSeq,
-        appUserId: params.userId,
-        channel,
-        status: 'pending',
-        pendingExpiresAt: holdExpiresAt,
-        totalAmount: totalAmount.toString(),
-        discountAmount: (promoResult.discountAmount || 0).toString(),
-        promoId: promoResult.promoId ?? null,
-        voucherCode: promoResult.voucherCode ?? null,
-        ...snapshots,
-        createdBy,
-        salesChannelCode: channel === 'OTA' ? params.salesChannelCode ?? null : null,
-        salesChannelName: channel === 'OTA' ? params.salesChannelName ?? null : null
-      }).returning({ id: bookings.id });
+        seatNos,
+        legIndexes,
+        operatorId,
+        ttlClass: 'short',
+      });
+      // Use the tightest expires_at the engine returned so TT never
+      // claims a longer window than the engine will honour.
+      engineExpiresAt = created.reduce(
+        (min, c) => (c.expiresAt < min ? c.expiresAt : min),
+        created[0]?.expiresAt ?? holdExpiresAt,
+      );
+    }
 
-      // Persist semua aplikasi promo (auto / manual / stacked)
-      if (promoResult.applications && promoResult.applications.length > 0) {
-        await tx.insert(bookingPromoApplications).values(
-          promoResult.applications.map(a => ({
-            bookingId: booking.id,
-            promoId: a.promoId,
-            promoCode: a.promoCode,
-            voucherId: a.voucherId ?? null,
-            voucherCode: a.voucherCode ?? null,
-            source: a.source,
-            discountAmount: a.discountAmount.toString(),
-          }))
-        );
-      }
+    let bookingId: string;
+    try {
+      bookingId = await db.transaction(async (tx) => {
+        if (!useEngine) {
+          // Legacy path: engine ledger doesn't exist, so TT performs the
+          // atomic seat check + hold write inline. When engine is on,
+          // both steps already happened above (engine.hold is atomic).
+          await checkSeatsAvailable(tx, resolvedTripId, seatNos, legIndexes);
+        }
 
-      await insertPassengerRows(tx, booking.id, params.passengers, fareQuote);
-      await createSeatHoldsForBooking(tx, resolvedTripId, booking.id, seatNos, legIndexes, params.userId, holdExpiresAt);
-
-      if (params.paymentMethod) {
-        const { randomBytes } = await import('crypto');
-        const paymentRef = `PAY-${randomBytes(12).toString('hex').toUpperCase()}`;
-
-        await tx.insert(payments).values({
-          bookingId: booking.id,
-          method: params.paymentMethod,
-          amount: totalAmount.toString(),
+        const [booking] = await tx.insert(bookings).values({
+          ...(pregenBookingId ? { id: pregenBookingId } : {}),
+          tripId: resolvedTripId,
+          bookingCode: generateBookingCode(),
+          originStopId: params.originStopId,
+          destinationStopId: params.destinationStopId,
+          originSeq: params.originSeq,
+          destinationSeq: params.destinationSeq,
+          appUserId: params.userId,
+          channel,
           status: 'pending',
-          providerRef: paymentRef,
-          paidAt: null,
-        });
-      }
+          pendingExpiresAt: useEngine ? engineExpiresAt : holdExpiresAt,
+          totalAmount: totalAmount.toString(),
+          discountAmount: (promoResult.discountAmount || 0).toString(),
+          promoId: promoResult.promoId ?? null,
+          voucherCode: promoResult.voucherCode ?? null,
+          ...snapshots,
+          createdBy,
+          salesChannelCode: channel === 'OTA' ? params.salesChannelCode ?? null : null,
+          salesChannelName: channel === 'OTA' ? params.salesChannelName ?? null : null
+        }).returning({ id: bookings.id });
 
-      return booking.id;
-    });
+        // Persist semua aplikasi promo (auto / manual / stacked)
+        if (promoResult.applications && promoResult.applications.length > 0) {
+          await tx.insert(bookingPromoApplications).values(
+            promoResult.applications.map(a => ({
+              bookingId: booking.id,
+              promoId: a.promoId,
+              promoCode: a.promoCode,
+              voucherId: a.voucherId ?? null,
+              voucherCode: a.voucherCode ?? null,
+              source: a.source,
+              discountAmount: a.discountAmount.toString(),
+            }))
+          );
+        }
+
+        await insertPassengerRows(tx, booking.id, params.passengers, fareQuote);
+        if (!useEngine) {
+          // Engine-mode: hold rows already exist in seat_holds (written
+          // by the engine) and booking_id was stitched in by
+          // holdForBooking's linking UPDATE. No tx-local hold insert.
+          await createSeatHoldsForBooking(tx, resolvedTripId, booking.id, seatNos, legIndexes, params.userId, holdExpiresAt);
+        }
+
+        if (params.paymentMethod) {
+          const { randomBytes } = await import('crypto');
+          const paymentRef = `PAY-${randomBytes(12).toString('hex').toUpperCase()}`;
+
+          await tx.insert(payments).values({
+            bookingId: booking.id,
+            method: params.paymentMethod,
+            amount: totalAmount.toString(),
+            status: 'pending',
+            providerRef: paymentRef,
+            paidAt: null,
+          });
+        }
+
+        return booking.id;
+      });
+    } catch (e) {
+      // Tx failed after engine already placed holds → compensate.
+      if (useEngine && pregenBookingId) {
+        try {
+          await this.holdsAdapter().releaseForBooking(pregenBookingId, resolvedTripId);
+        } catch (relErr) {
+          log.error({ err: relErr, op: "appBooking" }, "compensation release after tx failure failed");
+        }
+      }
+      throw e;
+    }
 
     return this.getBookingDetail(bookingId);
   }
@@ -1104,7 +1253,22 @@ export class AppService {
   async processPaymentWebhook(providerRef: string, gatewayStatus: 'success' | 'failed'): Promise<WebhookResult> {
     const [payment] = await db.select().from(payments).where(eq(payments.providerRef, providerRef)).limit(1);
     if (!payment) throw new Error("Payment not found");
-    if (payment.status !== 'pending') throw new Error("Payment already processed");
+
+    // S2-09: replay-safe idempotency. Webhook payment gateway sering re-deliver
+    // event yang sama (network retry, manual replay dari dashboard). Untuk
+    // event yang sudah diproses, kita harus return 200 + idempotent flag
+    // supaya gateway tidak menganggap kita gagal terus dan akhirnya
+    // mark integration broken. Kebenaran finansial dijaga oleh status
+    // payment sendiri — tidak ada side-effect karena tidak masuk transaction.
+    if (payment.status !== 'pending') {
+      const replayBooking = await this.storage.getBookingById(payment.bookingId);
+      const finalStatus: 'success' | 'failed' = payment.status === 'success' ? 'success' : 'failed';
+      return {
+        status: finalStatus,
+        bookingId: replayBooking?.id ?? payment.bookingId,
+        idempotent: true,
+      };
+    }
 
     const booking = await this.storage.getBookingById(payment.bookingId);
     if (!booking) throw new Error("Booking not found");
@@ -1115,24 +1279,37 @@ export class AppService {
     for (let i = booking.originSeq; i < booking.destinationSeq; i++) legIndexes.push(i);
 
     const seatNos = pax.map(p => p.seatNo);
+    const useEngine = isEngineEnabled();
 
     if (gatewayStatus === 'failed') {
       await db.transaction(async (tx) => {
         await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
         await tx.update(bookings).set({ status: 'cancelled' }).where(eq(bookings.id, booking.id));
 
-        await tx.update(seatInventory)
-          .set({ holdRef: null })
-          .where(and(
-            eq(seatInventory.tripId, booking.tripId),
-            inArray(seatInventory.seatNo, seatNos),
-            inArray(seatInventory.legIndex, legIndexes)
+        if (!useEngine) {
+          await tx.update(seatInventory)
+            .set({ holdRef: null })
+            .where(and(
+              eq(seatInventory.tripId, booking.tripId),
+              inArray(seatInventory.seatNo, seatNos),
+              inArray(seatInventory.legIndex, legIndexes)
+            ));
+          await tx.delete(seatHolds).where(and(
+            eq(seatHolds.tripId, booking.tripId),
+            inArray(seatHolds.seatNo, seatNos)
           ));
-        await tx.delete(seatHolds).where(and(
-          eq(seatHolds.tripId, booking.tripId),
-          inArray(seatHolds.seatNo, seatNos)
-        ));
+        }
       });
+      // Engine mode: release holds AFTER the TT tx commits. On release
+      // failure the engine hold will expire at its TTL anyway, so
+      // best-effort is acceptable.
+      if (useEngine) {
+        try {
+          await this.holdsAdapter().releaseForBooking(booking.id, booking.tripId);
+        } catch (e) {
+          log.error({ err: e, op: "webhook.failedPayment" }, "releaseForBooking failed (will expire at TTL)");
+        }
+      }
       // Realtime: webhook 'failed' membebaskan kursi → refresh seatmap CSO
       for (const seatNo of seatNos) {
         webSocketService.emitInventoryUpdated(booking.tripId, seatNo, legIndexes);
@@ -1140,84 +1317,107 @@ export class AppService {
       return { status: 'failed', bookingId: booking.id };
     }
 
-    await db.transaction(async (tx) => {
-      const activeHolds = await tx.select().from(seatHolds)
-        .where(and(
-          eq(seatHolds.bookingId, booking.id),
-          gt(seatHolds.expiresAt, new Date())
-        ));
+    // Success path. Engine mode: confirm seats in the engine BEFORE we
+    // open the TT tx so a tx failure is compensated with cancel-seats
+    // (the engine runs its own tx, no composition with ours possible).
+    let engineConfirmed: Array<{ seatNo: string; holdRef: string }> = [];
+    if (useEngine) {
+      const operatorId = this.engineOperatorId(booking.appUserId, booking.channel ?? null, booking.salesChannelCode ?? null);
+      engineConfirmed = await this.holdsAdapter().confirmForBooking({
+        bookingId: booking.id,
+        tripId: booking.tripId,
+        seatNos,
+        legIndexes,
+        operatorId,
+      });
+    }
 
-      if (activeHolds.length === 0) {
-        await tx.update(seatInventory)
-          .set({ holdRef: null })
-          .where(and(
-            eq(seatInventory.tripId, booking.tripId),
-            inArray(seatInventory.seatNo, seatNos),
-            inArray(seatInventory.legIndex, legIndexes)
-          ));
-        await tx.delete(seatHolds).where(and(
-          eq(seatHolds.tripId, booking.tripId),
-          inArray(seatHolds.seatNo, seatNos)
-        ));
-        await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
-        await tx.update(bookings).set({ status: 'cancelled' }).where(eq(bookings.id, booking.id));
-        throw new Error("Seat holds have expired. Booking cannot be confirmed.");
-      }
+    try {
+      await db.transaction(async (tx) => {
+        if (!useEngine) {
+          // Legacy ledger check — only needed when we own seat_inventory.
+          const activeHolds = await tx.select().from(seatHolds)
+            .where(and(
+              eq(seatHolds.bookingId, booking.id),
+              gt(seatHolds.expiresAt, new Date())
+            ));
 
-      const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
-      const seatArr = sql`ARRAY[${sql.join(seatNos.map(s => sql`${s}`), sql`, `)}]`;
-      const seatRows = await tx.execute(sql`
-        SELECT seat_no, booked FROM seat_inventory
-        WHERE trip_id = ${booking.tripId}
-          AND seat_no = ANY(${seatArr})
-          AND leg_index = ANY(${legArr})
-        FOR UPDATE
-      `);
-      const bookedSeat = (seatRows.rows as Record<string, unknown>[]).find(r => r.booked === true);
-      if (bookedSeat) {
-        await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
-        await tx.update(bookings).set({ status: 'cancelled' }).where(eq(bookings.id, booking.id));
-        await tx.update(seatInventory)
-          .set({ holdRef: null })
-          .where(and(
-            eq(seatInventory.tripId, booking.tripId),
-            inArray(seatInventory.seatNo, seatNos),
-            inArray(seatInventory.legIndex, legIndexes)
-          ));
-        await tx.delete(seatHolds).where(and(
-          eq(seatHolds.tripId, booking.tripId),
-          inArray(seatHolds.seatNo, seatNos)
-        ));
-        throw new Error(`Seat ${bookedSeat.seat_no} is no longer available. Booking canceled.`);
-      }
+          if (activeHolds.length === 0) {
+            await tx.update(seatInventory)
+              .set({ holdRef: null })
+              .where(and(
+                eq(seatInventory.tripId, booking.tripId),
+                inArray(seatInventory.seatNo, seatNos),
+                inArray(seatInventory.legIndex, legIndexes)
+              ));
+            await tx.delete(seatHolds).where(and(
+              eq(seatHolds.tripId, booking.tripId),
+              inArray(seatHolds.seatNo, seatNos)
+            ));
+            await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
+            await tx.update(bookings).set({ status: 'cancelled' }).where(eq(bookings.id, booking.id));
+            throw new Error("Seat holds have expired. Booking cannot be confirmed.");
+          }
 
-      // Idempotency guard: hanya satu path (webhook ATAU payBooking) memenangkan
-      // transisi pending→confirmed → mencegah double-increment promo usage.
-      const [bookingUpdate] = await tx.update(bookings)
-        .set({ status: 'confirmed' })
-        .where(and(eq(bookings.id, booking.id), eq(bookings.status, 'pending')))
-        .returning({ id: bookings.id });
-      if (!bookingUpdate) {
-        throw new Error('Booking sudah dikonfirmasi atau dibatalkan');
-      }
+          const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
+          const seatArr = sql`ARRAY[${sql.join(seatNos.map(s => sql`${s}`), sql`, `)}]`;
+          const seatRows = await tx.execute(sql`
+            SELECT seat_no, booked FROM seat_inventory
+            WHERE trip_id = ${booking.tripId}
+              AND seat_no = ANY(${seatArr})
+              AND leg_index = ANY(${legArr})
+            FOR UPDATE
+          `);
+          const bookedSeat = (seatRows.rows as Record<string, unknown>[]).find(r => r.booked === true);
+          if (bookedSeat) {
+            await tx.update(payments).set({ status: 'failed' }).where(eq(payments.id, payment.id));
+            await tx.update(bookings).set({ status: 'cancelled' }).where(eq(bookings.id, booking.id));
+            await tx.update(seatInventory)
+              .set({ holdRef: null })
+              .where(and(
+                eq(seatInventory.tripId, booking.tripId),
+                inArray(seatInventory.seatNo, seatNos),
+                inArray(seatInventory.legIndex, legIndexes)
+              ));
+            await tx.delete(seatHolds).where(and(
+              eq(seatHolds.tripId, booking.tripId),
+              inArray(seatHolds.seatNo, seatNos)
+            ));
+            throw new Error(`Seat ${bookedSeat.seat_no} is no longer available. Booking canceled.`);
+          }
+        }
 
-      await tx.update(seatInventory)
-        .set({ booked: true, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, booking.tripId),
-          inArray(seatInventory.seatNo, seatNos),
-          inArray(seatInventory.legIndex, legIndexes)
-        ));
+        // Idempotency guard: hanya satu path (webhook ATAU payBooking) memenangkan
+        // transisi pending→confirmed → mencegah double-increment promo usage.
+        const [bookingUpdate] = await tx.update(bookings)
+          .set({ status: 'confirmed' })
+          .where(and(eq(bookings.id, booking.id), eq(bookings.status, 'pending')))
+          .returning({ id: bookings.id });
+        if (!bookingUpdate) {
+          throw new Error('Booking sudah dikonfirmasi atau dibatalkan');
+        }
 
-      await tx.delete(seatHolds)
-        .where(and(
-          eq(seatHolds.tripId, booking.tripId),
-          inArray(seatHolds.seatNo, seatNos)
-        ));
+        if (!useEngine) {
+          // Engine mode: the engine already set booked=true (and deleted
+          // the hold row) on engine.confirm. TT doesn't touch the ledger.
+          await tx.update(seatInventory)
+            .set({ booked: true, holdRef: null })
+            .where(and(
+              eq(seatInventory.tripId, booking.tripId),
+              inArray(seatInventory.seatNo, seatNos),
+              inArray(seatInventory.legIndex, legIndexes)
+            ));
 
-      await tx.update(payments)
-        .set({ status: 'success', paidAt: new Date() })
-        .where(eq(payments.id, payment.id));
+          await tx.delete(seatHolds)
+            .where(and(
+              eq(seatHolds.tripId, booking.tripId),
+              inArray(seatHolds.seatNo, seatNos)
+            ));
+        }
+
+        await tx.update(payments)
+          .set({ status: 'success', paidAt: new Date() })
+          .where(eq(payments.id, payment.id));
 
       // Increment usage utk semua promo yang ter-apply ke booking ini.
       const apps = await tx.select().from(bookingPromoApplications)
@@ -1245,8 +1445,26 @@ export class AppService {
             throw new Error('Voucher sudah digunakan');
           }
         }
+        }
+      });
+    } catch (e) {
+      // Engine confirms already succeeded at this point, so seats are
+      // booked in the engine ledger — compensate by cancelling them,
+      // otherwise TT rolled-back but engine still holds the seats.
+      if (useEngine && engineConfirmed.length > 0) {
+        try {
+          await this.holdsAdapter().compensateConfirms(
+            booking.tripId,
+            engineConfirmed,
+            legIndexes,
+            { source: 'processPaymentWebhook', bookingId: booking.id },
+          );
+        } catch (compErr) {
+          log.error({ err: compErr, op: "webhook" }, "compensateConfirms after tx failure failed");
+        }
       }
-    });
+      throw e;
+    }
 
     // Realtime: payment webhook sukses → kursi confirmed, refresh seatmap CSO
     for (const seatNo of seatNos) {
@@ -1275,7 +1493,7 @@ export class AppService {
       const expiryTime = booking.pendingExpiresAt ? new Date(booking.pendingExpiresAt).getTime() : 0;
       const cancelledRecently = expiryTime > 0 && (Date.now() - expiryTime) < graceWindowMs;
       if (cancelledRecently) {
-        console.log(`[OTA] Grace period: re-activating recently cancelled OTA booking ${bookingId}`);
+        log.info({ bookingId, op: "otaGracePeriod" }, "re-activating recently cancelled OTA booking");
         isGracePeriodRecovery = true;
       } else {
         throw new Error(`Booking cannot be confirmed. Current status: ${booking.status}`);
@@ -1290,58 +1508,111 @@ export class AppService {
     const seatNos = pax.map(p => p.seatNo);
 
     const expectedStatus = isGracePeriodRecovery ? 'cancelled' : 'pending';
+    const useEngine = isEngineEnabled();
 
-    await db.transaction(async (tx) => {
-      if (seatNos.length > 0) {
-        const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
-        const seatArr = sql`ARRAY[${sql.join(seatNos.map(s => sql`${s}`), sql`, `)}]`;
-        const seatRows = await tx.execute(sql`
-          SELECT seat_no, booked FROM seat_inventory
-          WHERE trip_id = ${booking.tripId}
-            AND seat_no = ANY(${seatArr})
-            AND leg_index = ANY(${legArr})
-          FOR UPDATE
-        `);
-        const alreadyBooked = (seatRows.rows as Record<string, unknown>[]).find(r => r.booked === true);
-        if (alreadyBooked) {
-          throw new Error(`Cannot confirm: seat ${alreadyBooked.seat_no} is already booked by another passenger`);
+    // Grace-period recovery reanimates a 'cancelled' booking. In engine
+    // mode its holds have been released (or expired) already, so we
+    // re-hold them BEFORE confirming. If re-hold fails (another party
+    // grabbed the seat during the grace window), surface a clean error.
+    if (useEngine && isGracePeriodRecovery && seatNos.length > 0) {
+      const operatorId = this.engineOperatorId(booking.appUserId, booking.channel ?? null, booking.salesChannelCode ?? null);
+      try {
+        await this.holdsAdapter().holdForBooking({
+          bookingId: booking.id,
+          tripId: booking.tripId,
+          seatNos,
+          legIndexes,
+          operatorId,
+          ttlClass: 'short',
+        });
+      } catch (e) {
+        throw new Error(
+          `Grace-period OTA reactivation failed — seat no longer available in engine ledger: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
+
+    let engineConfirmed: Array<{ seatNo: string; holdRef: string }> = [];
+    if (useEngine && seatNos.length > 0) {
+      const operatorId = this.engineOperatorId(booking.appUserId, booking.channel ?? null, booking.salesChannelCode ?? null);
+      engineConfirmed = await this.holdsAdapter().confirmForBooking({
+        bookingId: booking.id,
+        tripId: booking.tripId,
+        seatNos,
+        legIndexes,
+        operatorId,
+      });
+    }
+
+    try {
+      await db.transaction(async (tx) => {
+        if (!useEngine && seatNos.length > 0) {
+          const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
+          const seatArr = sql`ARRAY[${sql.join(seatNos.map(s => sql`${s}`), sql`, `)}]`;
+          const seatRows = await tx.execute(sql`
+            SELECT seat_no, booked FROM seat_inventory
+            WHERE trip_id = ${booking.tripId}
+              AND seat_no = ANY(${seatArr})
+              AND leg_index = ANY(${legArr})
+            FOR UPDATE
+          `);
+          const alreadyBooked = (seatRows.rows as Record<string, unknown>[]).find(r => r.booked === true);
+          if (alreadyBooked) {
+            throw new Error(`Cannot confirm: seat ${alreadyBooked.seat_no} is already booked by another passenger`);
+          }
+        }
+
+        const [updated] = await tx.update(bookings)
+          .set({ status: 'confirmed', channel: 'OTA' })
+          .where(and(eq(bookings.id, booking.id), eq(bookings.status, expectedStatus)))
+          .returning({ id: bookings.id });
+
+        if (!updated) {
+          throw new Error(`Booking status changed concurrently. Expected: ${expectedStatus}`);
+        }
+
+        if (!useEngine) {
+          await tx.update(seatInventory)
+            .set({ booked: true, holdRef: null })
+            .where(and(
+              eq(seatInventory.tripId, booking.tripId),
+              inArray(seatInventory.seatNo, seatNos),
+              inArray(seatInventory.legIndex, legIndexes)
+            ));
+
+          await tx.delete(seatHolds)
+            .where(and(
+              eq(seatHolds.tripId, booking.tripId),
+              inArray(seatHolds.seatNo, seatNos)
+            ));
+        }
+
+        const { randomBytes } = await import('crypto');
+        const paymentRef = providerRef || `OTA-${randomBytes(12).toString('hex').toUpperCase()}`;
+        await tx.insert(payments).values({
+          bookingId: booking.id,
+          method: 'online',
+          amount: booking.totalAmount,
+          status: 'success',
+          providerRef: paymentRef,
+          paidAt: new Date(),
+        });
+      });
+    } catch (e) {
+      if (useEngine && engineConfirmed.length > 0) {
+        try {
+          await this.holdsAdapter().compensateConfirms(
+            booking.tripId,
+            engineConfirmed,
+            legIndexes,
+            { source: 'confirmOtaPayment', bookingId: booking.id },
+          );
+        } catch (compErr) {
+          log.error({ err: compErr, op: "otaConfirm" }, "compensateConfirms after tx failure failed");
         }
       }
-
-      const [updated] = await tx.update(bookings)
-        .set({ status: 'confirmed', channel: 'OTA' })
-        .where(and(eq(bookings.id, booking.id), eq(bookings.status, expectedStatus)))
-        .returning({ id: bookings.id });
-
-      if (!updated) {
-        throw new Error(`Booking status changed concurrently. Expected: ${expectedStatus}`);
-      }
-
-      await tx.update(seatInventory)
-        .set({ booked: true, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, booking.tripId),
-          inArray(seatInventory.seatNo, seatNos),
-          inArray(seatInventory.legIndex, legIndexes)
-        ));
-
-      await tx.delete(seatHolds)
-        .where(and(
-          eq(seatHolds.tripId, booking.tripId),
-          inArray(seatHolds.seatNo, seatNos)
-        ));
-
-      const { randomBytes } = await import('crypto');
-      const paymentRef = providerRef || `OTA-${randomBytes(12).toString('hex').toUpperCase()}`;
-      await tx.insert(payments).values({
-        bookingId: booking.id,
-        method: 'online',
-        amount: booking.totalAmount,
-        status: 'success',
-        providerRef: paymentRef,
-        paidAt: new Date(),
-      });
-    });
+      throw e;
+    }
 
     // Broadcast realtime seatmap update ke semua CSO yang sedang buka trip ini
     // Ini yang bikin seatmap langsung berubah dari kuning (hold) ke hijau/merah (confirmed)
@@ -1361,16 +1632,29 @@ export class AppService {
       .where(and(
         eq(bookings.tripId, tripId),
         eq(bookings.channel, 'OTA'),
-        inArray(bookings.status, ['pending', 'confirmed'] as any[])
+        inArray(bookings.status, ['pending', 'confirmed'])
       ))
       .orderBy(
         sql`CASE WHEN ${bookings.status} = 'pending' THEN 0 ELSE 1 END`,
         desc(bookings.createdAt)
       );
 
+    if (results.length === 0) return null;
+
+    // Batch passenger lookup → group by bookingId, then iterate ranked bookings
+    // (pending first, then by createdAt desc) untuk pick first match.
+    const allPassengers = await this.storage.getPassengersByBookingIds(
+      results.map(b => b.id)
+    );
+    const seatsByBooking = new Map<string, string[]>();
+    for (const p of allPassengers) {
+      const arr = seatsByBooking.get(p.bookingId);
+      if (arr) arr.push(p.seatNo);
+      else seatsByBooking.set(p.bookingId, [p.seatNo]);
+    }
+
     for (const booking of results) {
-      const pax = await this.storage.getPassengers(booking.id);
-      const bookingSeats = pax.map(p => p.seatNo).sort();
+      const bookingSeats = (seatsByBooking.get(booking.id) ?? []).slice().sort();
       if (sortedInput.length === bookingSeats.length &&
           sortedInput.every((s, i) => s === bookingSeats[i])) {
         return this.getBookingDetail(booking.id);
@@ -1400,7 +1684,7 @@ export class AppService {
     };
   }
 
-  async getUserBookings(userId: string): Promise<any[]> {
+  async getUserBookings(userId: string): Promise<BookingListItem[]> {
     const result = await db.select({
       id: bookings.id,
       tripId: bookings.tripId,
@@ -1567,12 +1851,47 @@ export class AppService {
       throw new Error("Booking cannot be canceled");
     }
 
+    // S2-02: cancellable rules — trip yang sudah berangkat (closed) tidak
+    // boleh dibatalkan dari sisi customer. Customer harus minta refund via
+    // RefundsService (yang punya alur approval staff). Trip yang batal di
+    // level operasional juga ditolak supaya customer tahu kondisinya.
+    const trip = await this.storage.getTripById(booking.tripId);
+    if (trip) {
+      if (trip.status === 'closed') {
+        throw new Error('Trip sudah berangkat — gunakan menu refund untuk pengajuan pengembalian dana.');
+      }
+      if (trip.status === 'cancelled') {
+        throw new Error('Trip sudah dibatalkan operator — kompensasi diproses otomatis, tidak perlu cancel manual.');
+      }
+    }
+
     const pax = await this.storage.getPassengers(bookingId);
     const seatNos = pax.map(p => p.seatNo);
     const legIndexes = computeLegIndexes(booking.originSeq, booking.destinationSeq);
 
+    // S2-02: capture status awal untuk decide apakah perlu kompensasi
+    // engine. Hanya booking yang sudah 'confirmed' yang punya seat ledger
+    // terbooking di engine; 'pending' cuma punya hold yang akan expire sendiri.
+    const wasConfirmed = booking.status === 'confirmed';
+    const useEngine = isEngineEnabled();
+
     await db.transaction(async (tx) => {
-      if (seatNos.length > 0) {
+      // CAS guard: hanya satu cancel yang menang (idempotent untuk client retry).
+      const [bookingUpdate] = await tx.update(bookings)
+        .set({ status: 'cancelled' })
+        .where(and(
+          eq(bookings.id, bookingId),
+          inArray(bookings.status, ['pending', 'confirmed']),
+        ))
+        .returning({ id: bookings.id });
+      if (!bookingUpdate) {
+        throw new Error('Booking sudah dibatalkan atau tidak dalam status yang dapat dibatalkan');
+      }
+
+      if (!useEngine && seatNos.length > 0) {
+        // Legacy-only SQL writes. Engine mode delegates seat ledger
+        // updates to the engine via the post-commit release / cancel
+        // below (confirmed seats) and natural TTL expiry (pending holds).
         await tx.update(seatInventory)
           .set({ booked: false, holdRef: null })
           .where(and(
@@ -1587,11 +1906,37 @@ export class AppService {
           eq(seatHolds.bookingId, bookingId)
         ));
       }
-
-      await tx.update(bookings)
-        .set({ status: 'cancelled' })
-        .where(eq(bookings.id, bookingId));
     });
+
+    if (useEngine && seatNos.length > 0) {
+      if (wasConfirmed) {
+        // Confirmed seats live in engine's booked ledger. Use the
+        // compensation queue so a transient engine outage doesn't fail
+        // the cancel that already committed in TT — scheduler retries.
+        try {
+          const { enqueueCancelSeats } = await import('@modules/holds/compensationQueue');
+          for (const seatNo of seatNos) {
+            await enqueueCancelSeats({
+              tripId: booking.tripId,
+              seatNo,
+              legIndexes,
+              context: { source: 'cancelBooking', bookingId },
+            });
+          }
+        } catch (e) {
+          log.error({ err: e, op: "cancelConfirmed" }, "enqueueCancelSeats after confirmed cancel failed");
+        }
+      } else {
+        // Pending → holds in engine. Release directly so clients see
+        // the seat free immediately; falling back to TTL expiry would
+        // leave it held for HOLD_TTL_SHORT_SECONDS.
+        try {
+          await this.holdsAdapter().releaseForBooking(bookingId, booking.tripId);
+        } catch (e) {
+          log.error({ err: e, op: "cancelPending" }, "releaseForBooking on pending cancel failed (will expire at TTL)");
+        }
+      }
+    }
 
     // Realtime: kursi yang dibebaskan harus refresh di seatmap CSO
     for (const seatNo of seatNos) {
@@ -1774,106 +2119,143 @@ export class AppService {
     const paymentRef = `PAY-${randomBytes(12).toString('hex').toUpperCase()}`;
 
     let paymentId = '';
+    const useEngine = isEngineEnabled();
 
-    await db.transaction(async (tx) => {
-      const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
-      const seatArr = sql`ARRAY[${sql.join(seatNos.map(s => sql`${s}`), sql`, `)}]`;
-      const seatRows = await tx.execute(sql`
-        SELECT seat_no, booked FROM seat_inventory
-        WHERE trip_id = ${booking.tripId}
-          AND seat_no = ANY(${seatArr})
-          AND leg_index = ANY(${legArr})
-        FOR UPDATE
-      `);
-      const bookedSeat = (seatRows.rows as Record<string, unknown>[]).find(r => r.booked === true);
-      if (bookedSeat) {
-        throw new Error(`Seat ${bookedSeat.seat_no} is no longer available`);
-      }
-
-      const [payment] = await tx.insert(payments).values({
+    // Engine confirm must happen BEFORE we open the TT tx so a tx
+    // rollback leaves nothing half-done; the engine runs its own tx.
+    let engineConfirmed: Array<{ seatNo: string; holdRef: string }> = [];
+    if (useEngine && seatNos.length > 0) {
+      const operatorId = this.engineOperatorId(booking.appUserId, booking.channel ?? null, booking.salesChannelCode ?? null);
+      engineConfirmed = await this.holdsAdapter().confirmForBooking({
         bookingId: booking.id,
-        method: paymentMethod,
-        amount: finalAmount.toString(),
-        status: 'success',
-        providerRef: paymentRef,
-        paidAt: new Date(),
-      }).returning({ id: payments.id });
-      paymentId = payment.id;
+        tripId: booking.tripId,
+        seatNos,
+        legIndexes,
+        operatorId,
+      });
+    }
 
-      // Status guard: hanya satu path (payBooking ATAU webhook) yang boleh
-      // memenangkan transisi pending→confirmed. Mencegah double-increment usage.
-      const [bookingUpdate] = await tx.update(bookings).set({
-        status: 'confirmed',
-        discountAmount: discountAmount.toString(),
-        voucherCode: voucherCode?.toUpperCase() || booking.voucherCode || null,
-        promoId: usedPromoId,
-      }).where(and(eq(bookings.id, bookingId), eq(bookings.status, 'pending')))
-        .returning({ id: bookings.id });
-      if (!bookingUpdate) {
-        throw new Error('Booking sudah dikonfirmasi atau dibatalkan');
-      }
-
-      // Sinkronkan applications: hapus yg lama, insert hasil pay-time validation.
-      // Jika user tidak input voucher baru, pendingApplications adalah copy dari
-      // existing rows → re-insert idempotent.
-      if (voucherCode) {
-        await tx.delete(bookingPromoApplications).where(eq(bookingPromoApplications.bookingId, bookingId));
-        if (pendingApplications.length > 0) {
-          await tx.insert(bookingPromoApplications).values(
-            pendingApplications.map(a => ({
-              bookingId,
-              promoId: a.promoId,
-              promoCode: a.promoCode,
-              voucherId: a.voucherId,
-              voucherCode: a.voucherCode,
-              source: a.source,
-              discountAmount: a.discountAmount.toString(),
-            }))
-          );
-        }
-      }
-
-      await tx.update(seatInventory)
-        .set({ booked: true, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, booking.tripId),
-          inArray(seatInventory.seatNo, seatNos),
-          inArray(seatInventory.legIndex, legIndexes)
-        ));
-
-      await tx.delete(seatHolds)
-        .where(and(
-          eq(seatHolds.tripId, booking.tripId),
-          inArray(seatHolds.seatNo, seatNos)
-        ));
-
-      // Increment usage utk SETIAP applied promo dgn guard usageLimit + active.
-      // Pola sama dgn bookings.service.ts createBooking utk konsistensi.
-      for (const app of pendingApplications) {
-        const [promoUpdate] = await tx.update(promotions)
-          .set({ usageCount: sql`COALESCE(${promotions.usageCount}, 0) + 1` })
-          .where(and(
-            eq(promotions.id, app.promoId),
-            eq(promotions.isActive, true),
-            sql`(${promotions.usageLimit} IS NULL OR ${promotions.usageCount} < ${promotions.usageLimit})`
-          ))
-          .returning({ id: promotions.id });
-        if (!promoUpdate) {
-          throw new Error('Promo sudah tidak tersedia atau kuota habis');
-        }
-        if (app.voucherId) {
-          const [voucherUpdate] = await tx.update(vouchers).set({
-            status: 'used',
-            usedAt: new Date(),
-            usedByBookingId: bookingId,
-          }).where(and(eq(vouchers.id, app.voucherId), eq(vouchers.status, 'active')))
-            .returning({ id: vouchers.id });
-          if (!voucherUpdate) {
-            throw new Error('Voucher sudah digunakan');
+    try {
+      await db.transaction(async (tx) => {
+        if (!useEngine) {
+          // Engine-mode: engine.confirm already advanced the booked
+          // ledger atomically, so the TT-side pre-flight is redundant.
+          const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
+          const seatArr = sql`ARRAY[${sql.join(seatNos.map(s => sql`${s}`), sql`, `)}]`;
+          const seatRows = await tx.execute(sql`
+            SELECT seat_no, booked FROM seat_inventory
+            WHERE trip_id = ${booking.tripId}
+              AND seat_no = ANY(${seatArr})
+              AND leg_index = ANY(${legArr})
+            FOR UPDATE
+          `);
+          const bookedSeat = (seatRows.rows as Record<string, unknown>[]).find(r => r.booked === true);
+          if (bookedSeat) {
+            throw new Error(`Seat ${bookedSeat.seat_no} is no longer available`);
           }
         }
+
+        const [payment] = await tx.insert(payments).values({
+          bookingId: booking.id,
+          method: paymentMethod,
+          amount: finalAmount.toString(),
+          status: 'success',
+          providerRef: paymentRef,
+          paidAt: new Date(),
+        }).returning({ id: payments.id });
+        paymentId = payment.id;
+
+        // Status guard: hanya satu path (payBooking ATAU webhook) yang boleh
+        // memenangkan transisi pending→confirmed. Mencegah double-increment usage.
+        const [bookingUpdate] = await tx.update(bookings).set({
+          status: 'confirmed',
+          discountAmount: discountAmount.toString(),
+          voucherCode: voucherCode?.toUpperCase() || booking.voucherCode || null,
+          promoId: usedPromoId,
+        }).where(and(eq(bookings.id, bookingId), eq(bookings.status, 'pending')))
+          .returning({ id: bookings.id });
+        if (!bookingUpdate) {
+          throw new Error('Booking sudah dikonfirmasi atau dibatalkan');
+        }
+
+        // Sinkronkan applications: hapus yg lama, insert hasil pay-time validation.
+        // Jika user tidak input voucher baru, pendingApplications adalah copy dari
+        // existing rows → re-insert idempotent.
+        if (voucherCode) {
+          await tx.delete(bookingPromoApplications).where(eq(bookingPromoApplications.bookingId, bookingId));
+          if (pendingApplications.length > 0) {
+            await tx.insert(bookingPromoApplications).values(
+              pendingApplications.map(a => ({
+                bookingId,
+                promoId: a.promoId,
+                promoCode: a.promoCode,
+                voucherId: a.voucherId,
+                voucherCode: a.voucherCode,
+                source: a.source,
+                discountAmount: a.discountAmount.toString(),
+              }))
+            );
+          }
+        }
+
+        if (!useEngine) {
+          await tx.update(seatInventory)
+            .set({ booked: true, holdRef: null })
+            .where(and(
+              eq(seatInventory.tripId, booking.tripId),
+              inArray(seatInventory.seatNo, seatNos),
+              inArray(seatInventory.legIndex, legIndexes)
+            ));
+
+          await tx.delete(seatHolds)
+            .where(and(
+              eq(seatHolds.tripId, booking.tripId),
+              inArray(seatHolds.seatNo, seatNos)
+            ));
+        }
+
+        // Increment usage utk SETIAP applied promo dgn guard usageLimit + active.
+        // Pola sama dgn bookings.service.ts createBooking utk konsistensi.
+        for (const app of pendingApplications) {
+          const [promoUpdate] = await tx.update(promotions)
+            .set({ usageCount: sql`COALESCE(${promotions.usageCount}, 0) + 1` })
+            .where(and(
+              eq(promotions.id, app.promoId),
+              eq(promotions.isActive, true),
+              sql`(${promotions.usageLimit} IS NULL OR ${promotions.usageCount} < ${promotions.usageLimit})`
+            ))
+            .returning({ id: promotions.id });
+          if (!promoUpdate) {
+            throw new Error('Promo sudah tidak tersedia atau kuota habis');
+          }
+          if (app.voucherId) {
+            const [voucherUpdate] = await tx.update(vouchers).set({
+              status: 'used',
+              usedAt: new Date(),
+              usedByBookingId: bookingId,
+            }).where(and(eq(vouchers.id, app.voucherId), eq(vouchers.status, 'active')))
+              .returning({ id: vouchers.id });
+            if (!voucherUpdate) {
+              throw new Error('Voucher sudah digunakan');
+            }
+          }
+        }
+      });
+    } catch (e) {
+      if (useEngine && engineConfirmed.length > 0) {
+        try {
+          await this.holdsAdapter().compensateConfirms(
+            booking.tripId,
+            engineConfirmed,
+            legIndexes,
+            { source: 'payBooking', bookingId },
+          );
+        } catch (compErr) {
+          log.error({ err: compErr, op: "payBooking" }, "compensateConfirms after tx failure failed");
+        }
       }
-    });
+      throw e;
+    }
 
     // Realtime: kursi sudah dibayar/confirmed, refresh seatmap CSO
     for (const seatNo of seatNos) {
@@ -1901,7 +2283,7 @@ export class AppService {
     page?: number;
     limit?: number;
   }): Promise<{
-    data: any[];
+    data: BookingListItem[];
     total: number;
     page: number;
     limit: number;
@@ -1912,7 +2294,7 @@ export class AppService {
 
     const conditions = [];
     if (filters.status) {
-      conditions.push(eq(bookings.status, filters.status as any));
+      conditions.push(eq(bookings.status, filters.status as typeof bookings.status.enumValues[number]));
     }
     if (filters.date) {
       conditions.push(eq(trips.serviceDate, filters.date));
@@ -1977,6 +2359,59 @@ export class AppService {
     return { data, total, page, limit, hasMore: (page - 1) * limit + data.length < total };
   }
 
+  // T-CON-03: batch fetch — kembalikan ringkasan booking utk N IDs dalam 1
+  // round-trip DB (Console reconciler polling per-booking → batch). Skip ID
+  // yang tidak ditemukan, tidak melempar error. Caller wajib limit ids.length.
+  async getBookingsByIds(ids: string[]): Promise<{ bookings: BookingListItem[] }> {
+    if (ids.length === 0) return { bookings: [] };
+
+    const result = await db.select({
+      id: bookings.id,
+      bookingCode: bookings.bookingCode,
+      tripId: bookings.tripId,
+      serviceDate: trips.serviceDate,
+      status: bookings.status,
+      totalAmount: bookings.totalAmount,
+      discountAmount: bookings.discountAmount,
+      voucherCode: bookings.voucherCode,
+      channel: bookings.channel,
+      pendingExpiresAt: bookings.pendingExpiresAt,
+      originStopId: bookings.originStopId,
+      destinationStopId: bookings.destinationStopId,
+      snapOriginStopName: bookings.snapOriginStopName,
+      snapDestinationStopName: bookings.snapDestinationStopName,
+      createdAt: bookings.createdAt,
+    })
+    .from(bookings)
+    .innerJoin(trips, eq(bookings.tripId, trips.id))
+    .where(inArray(bookings.id, ids));
+
+    const foundIds = result.map(b => b.id);
+    let holdExpiryMap = new Map<string, string | null>();
+    if (foundIds.length > 0) {
+      const holds = await db.select({
+        bookingId: seatHolds.bookingId,
+        expiresAt: seatHolds.expiresAt,
+      }).from(seatHolds)
+        .where(inArray(seatHolds.bookingId, foundIds));
+      for (const h of holds) {
+        if (h.bookingId && !holdExpiryMap.has(h.bookingId)) {
+          holdExpiryMap.set(h.bookingId, h.expiresAt?.toISOString() ?? null);
+        }
+      }
+    }
+
+    const data = result.map(b => ({
+      ...b,
+      holdExpiresAt: b.status === 'pending'
+        ? (holdExpiryMap.get(b.id) || b.pendingExpiresAt?.toISOString() || null)
+        : null,
+      finalAmount: (Number(b.totalAmount ?? 0) - Number(b.discountAmount ?? 0)).toString(),
+    }));
+
+    return { bookings: data };
+  }
+
   async createReview(data: { userId: string; tripId: string; bookingId?: string; rating: number; comment?: string }): Promise<Review> {
     if (data.rating < 1 || data.rating > 5) throw new Error("Rating must be between 1 and 5");
 
@@ -2013,7 +2448,7 @@ export class AppService {
     return result;
   }
 
-  async trackCargo(waybillNumber: string): Promise<{
+  async trackCargo(waybillNumber: string, trackingSecret?: string | null): Promise<{
     waybillNumber: string;
     status: string | null;
     origin: { name: string; code: string; city: string | null } | null;
@@ -2029,6 +2464,20 @@ export class AppService {
   }> {
     const shipment = await this.storage.getCargoShipmentByWaybill(waybillNumber);
     if (!shipment) throw new Error("Shipment not found");
+
+    // S1-06: validasi tracking secret. Constant-time compare via Buffer
+    // supaya tidak rawan timing attack. Backfilled rows yang sengaja punya
+    // secret kosong tetap di-tolak — operator harus regenerate label.
+    const expected = shipment.trackingSecret;
+    const provided = (trackingSecret || '').trim();
+    if (!expected || !provided) {
+      throw new Error("Tracking secret diperlukan");
+    }
+    const a = Buffer.from(expected);
+    const b = Buffer.from(provided);
+    if (a.length !== b.length) throw new Error("Tracking secret tidak valid");
+    const { timingSafeEqual } = await import("node:crypto");
+    if (!timingSafeEqual(a, b)) throw new Error("Tracking secret tidak valid");
 
     const [origin, dest, trip] = await Promise.all([
       this.storage.getStopById(shipment.originStopId),
@@ -2073,8 +2522,13 @@ export class AppService {
     notes?: string;
   }): Promise<Record<string, unknown>> {
     const { CargoService } = await import("../cargo/cargo.service");
+    const { SYSTEM_CONTEXT } = await import("../rbac/rbac.guard");
     const cargoService = new CargoService(this.storage);
 
+    // Customer-app booking flow: customer punya app-auth sendiri (lihat
+    // app.auth.ts), bukan staf RBAC, jadi pakai SYSTEM_CONTEXT secara
+    // eksplisit. Otorisasi customer dilakukan di route layer
+    // (`requireAppAuth`) sebelum sampai ke method ini.
     const shipment = await cargoService.createShipment({
       tripId: params.tripId,
       originStopId: params.originStopId,
@@ -2091,7 +2545,7 @@ export class AppService {
       channel: 'APP',
       createdBy: `app:${params.userId}`,
       notes: params.notes
-    });
+    }, SYSTEM_CONTEXT);
 
     return shipment;
   }

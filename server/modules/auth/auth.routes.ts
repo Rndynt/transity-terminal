@@ -50,7 +50,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
   app.post("/api/auth/sign-up/email", { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
     if (DEV_BYPASS_AUTH) {
       return reply.send({
-        user: { ...DEV_USER, email: (req.body as any).email, name: (req.body as any).name },
+        user: { ...DEV_USER, email: (req.body as { email?: string }).email, name: (req.body as { name?: string }).name },
         session: {
           id: "dev-session-001",
           token: "dev-token",
@@ -190,8 +190,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
     let realmioUser: { userId: string; email: string; name: string };
     try {
       realmioUser = await createRealmioUser(name, email, password);
-    } catch (err: any) {
-      return reply.code(422).send({ message: err.message || "Gagal membuat akun di sistem autentikasi" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal membuat akun di sistem autentikasi";
+      return reply.code(422).send({ message });
     }
 
     const { roles } = await import("../../../shared/schema");

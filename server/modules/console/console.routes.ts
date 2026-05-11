@@ -1,9 +1,13 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import { createHash } from "node:crypto";
+import { sql, inArray, and } from "drizzle-orm";
+import { db } from "@server/db";
+import { bookings } from "@shared/schema/booking";
 import type { IStorage } from "@server/storage.interface";
 import { buildScheduleSnapshot } from "@server/lib/scheduleSnapshot";
 
 export function registerConsoleRoutes(app: FastifyInstance, storage: IStorage) {
-  const requireServiceKey = (req: any, reply: any): boolean => {
+  const requireServiceKey = (req: FastifyRequest, reply: FastifyReply): boolean => {
     const incoming = req.headers["x-service-key"] as string | undefined;
     const expected = process.env.TERMINAL_SERVICE_KEY || "";
     if (!expected) {
@@ -42,6 +46,71 @@ export function registerConsoleRoutes(app: FastifyInstance, storage: IStorage) {
       });
     }
 
+    // ETag fingerprint berdasarkan signal yang invalidate KETIKA seat
+    // availability berubah, tidak hanya trip metadata. Komponen:
+    //   - channel + limit + serviceDate + tripCount + max(trips.updatedAt)
+    //   - active booking count (pending|confirmed|paid) untuk trip2 hari ini
+    //   - max(bookings.createdAt) untuk trip2 hari ini
+    // Booking insert (createdAt baru) atau cancel (count berubah) → fingerprint
+    // berbeda → ETag baru → 304 tidak akan stale walaupun seatmap berubah.
+    let maxTripUpdatedTs = 0;
+    for (const t of allTripsForDay) {
+      const u = (t as { updatedAt?: Date | string | null }).updatedAt;
+      if (u) {
+        const ts = u instanceof Date ? u.getTime() : Date.parse(String(u));
+        if (Number.isFinite(ts) && ts > maxTripUpdatedTs) maxTripUpdatedTs = ts;
+      }
+    }
+
+    // Sub-query 1 round-trip ke DB utk ambil booking signal hari ini.
+    // Filter status active supaya cancel/expired langsung change count.
+    let activeBookingCount = 0;
+    let maxBookingCreatedTs = 0;
+    if (allTripsForDay.length > 0) {
+      const tripIds = allTripsForDay.map((t) => t.id);
+      const sigRows = await db
+        .select({
+          cnt: sql<number>`count(*)::int`,
+          maxCreated: sql<Date | null>`max(${bookings.createdAt})`,
+        })
+        .from(bookings)
+        .where(
+          and(
+            inArray(bookings.tripId, tripIds),
+            inArray(bookings.status, ["pending", "confirmed", "paid"] as Array<typeof bookings.status._.data>)
+          )
+        );
+      activeBookingCount = sigRows[0]?.cnt ?? 0;
+      const mc = sigRows[0]?.maxCreated;
+      if (mc) {
+        maxBookingCreatedTs = mc instanceof Date ? mc.getTime() : Date.parse(String(mc));
+      }
+    }
+
+    const fingerprint = [
+      channelParam,
+      limit,
+      serviceDate,
+      allTripsForDay.length,
+      maxTripUpdatedTs,
+      activeBookingCount,
+      maxBookingCreatedTs,
+    ].join("|");
+    const etag = `W/"sched-${createHash("sha1").update(fingerprint).digest("hex").slice(0, 16)}"`;
+
+    // Always set cache headers regardless of cache hit/miss
+    reply.header("Cache-Control", "private, max-age=60, must-revalidate");
+    reply.header("ETag", etag);
+
+    const ifNoneMatch = req.headers["if-none-match"];
+    if (typeof ifNoneMatch === "string" && ifNoneMatch === etag) {
+      req.log.info(
+        { serviceDate, channels: channelParam, etag },
+        "console.schedules.snapshot.304"
+      );
+      return reply.code(304).send();
+    }
+
     const t0 = Date.now();
     const snapshot = await buildScheduleSnapshot(storage, serviceDate, allTripsForDay);
     const t1 = Date.now();
@@ -52,6 +121,7 @@ export function registerConsoleRoutes(app: FastifyInstance, storage: IStorage) {
         skippedPast: allTripsForDay.length - snapshot.length,
         ms: t1 - t0,
         serviceDate,
+        etag,
       },
       "console.schedules.snapshot.built"
     );

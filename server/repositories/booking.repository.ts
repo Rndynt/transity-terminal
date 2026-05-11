@@ -7,18 +7,11 @@ import {
   type Payment, type InsertPayment,
   type PrintJob, type InsertPrintJob
 } from "@shared/schema";
-
-// P5: pagination guards. Any unbounded listing must default to a sane cap so
-// a careless `GET /api/bookings` cannot pull 100K rows into memory.
-const BOOKINGS_DEFAULT_LIMIT = 200;
-const BOOKINGS_MAX_LIMIT = 1000;
-
-function clampPageSize(pageSize: number | undefined): number {
-  const n = Math.floor(Number(pageSize) || BOOKINGS_DEFAULT_LIMIT);
-  if (n <= 0) return BOOKINGS_DEFAULT_LIMIT;
-  if (n > BOOKINGS_MAX_LIMIT) return BOOKINGS_MAX_LIMIT;
-  return n;
-}
+import {
+  BOOKINGS_DEFAULT_LIMIT,
+  BOOKINGS_MAX_LIMIT,
+  clampBookingsPageSize as clampPageSize,
+} from "@server/constants/pagination";
 
 export class BookingRepository {
   async getBookings(tripId?: string): Promise<Booking[]> {
@@ -80,7 +73,10 @@ export class BookingRepository {
     return booking;
   }
 
-  async createBooking(data: InsertBooking): Promise<Booking> {
+  async createBooking(data: InsertBooking & { bookingCode: string }): Promise<Booking> {
+    // §3.9a: bookingCode dihilangkan dari InsertBooking (services
+    // generate via generateBookingCode()), jadi caller wajib supply
+    // ke repo helper ini.
     const [booking] = await db.insert(bookings).values(data).returning();
     return booking;
   }
@@ -119,7 +115,7 @@ export class BookingRepository {
     return passenger;
   }
 
-  async getActivePassengersForTrip(tripId: string): Promise<any[]> {
+  async getActivePassengersForTrip(tripId: string): Promise<import("@server/storage.interface").ActivePassengerForTrip[]> {
     const rows = await db.execute(sql`
       SELECT
         p.id,
@@ -146,10 +142,10 @@ export class BookingRepository {
         AND COALESCE(p.ticket_status, 'active') NOT IN ('cancelled', 'refunded', 'unseated')
       ORDER BY p.full_name ASC
     `);
-    return rows.rows as any[];
+    return rows.rows as unknown as import("@server/storage.interface").ActivePassengerForTrip[];
   }
 
-  async getUnseatedPassengers(tripId: string): Promise<any[]> {
+  async getUnseatedPassengers(tripId: string): Promise<import("@server/storage.interface").UnseatedPassengerForTrip[]> {
     const rows = await db.execute(sql`
       SELECT
         p.id,
@@ -170,7 +166,7 @@ export class BookingRepository {
         AND COALESCE(p.ticket_status, 'active') = 'unseated'
       ORDER BY p.full_name ASC
     `);
-    return rows.rows as any[];
+    return rows.rows as unknown as import("@server/storage.interface").UnseatedPassengerForTrip[];
   }
 
   async getPayments(bookingId: string): Promise<Payment[]> {

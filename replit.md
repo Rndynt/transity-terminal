@@ -226,6 +226,14 @@ Following Sprint 0 security fixes, these data integrity issues from the Blink AI
 - **H-06**: `getPendingBookings` replaced in-memory filtering (loaded all bookings) with direct DB query using `WHERE status='pending' AND pendingExpiresAt > now`
 - **H-11**: `deleteTrip` already validates active bookings at repository level (throws `TRIP_HAS_ACTIVE_BOOKINGS`); confirmed no service-level gap
 
+## Console Performance Optimizations (T-CON 01-05 — Completed)
+Performance fixes setelah deep-analysis konsumsi API Console→Terminal (gateway aggregator polling 4 hot-path tiap 15s):
+- **T-CON-01**: ETag W/"sched-<hash>" + `Cache-Control: private, max-age=60` di `/api/console/schedules`. Hash dari serviceDate + tripCount + max(updatedAt). If-None-Match → 304, skip rebuild snapshot mahal (5 query DB)
+- **T-CON-02**: `Cache-Control: public, max-age=300, stale-while-revalidate=60` di `/api/app/cities` & `/api/app/service-lines`. TTL selaras Console aggregator CITIES/SERVICE_LINES TTL (5m)
+- **T-CON-03**: Batch endpoint `GET /api/app/bookings?ids=uuid1,uuid2,...` (max 50). Service-key only. Console reconciler dari N HTTP req → 1 req + 2 query DB. Skip ID tidak ditemukan tanpa error
+- **T-CON-04**: Rate-limit aware service-key. Bucket `service:<8-prefix>` dengan `RATE_LIMIT_MAX_SERVICE` (default 3000/min) untuk Console; `RATE_LIMIT_MAX` (300/min) tetap untuk user IP. Eliminasi false 429 di production
+- **T-CON-05**: x-request-id propagation. Fastify `requestIdHeader: 'x-request-id'`, onSend hook echo balik ke response header utk SEMUA request, log line append [reqId]. Header masuk → di-echo, tidak ada → auto-gen `req-N`
+
 ## UI/UX & Type Safety Fixes (Sprint 3+4 — Completed)
 - **F4**: Loading states added to TripsManager dropdown queries (patterns/vehicles/layouts/drivers) with disabled state and "Memuat..." placeholders
 - **F5**: setTimeout cleanup fixed in RouteTimeline (useEffect return clearTimeout) and useWebSocket (reconnect timer ref + cleanup on disconnect)
@@ -264,3 +272,83 @@ Environment variables required:
 - `TERMINAL_SERVICE_KEY` — service key for X-Service-Key auth
 - `PAYMENT_WEBHOOK_SECRET` — HMAC secret for webhook verification
 
+
+## Reservation Engine (Sidecar — Optional)
+
+For high-volume operators who want stronger seat-conflict guarantees and
+out-of-process reaping, TT can offload hold/release/cancel-seats inventory
+writes to a Rust **Reservation Engine** sidecar (separate repo). The sidecar
+runs alongside the `terminal` container in the same Docker network, owns its
+own DB tx for the `seat_holds` / `seat_inventory` tables, and exposes a small
+HTTP API authenticated with HMAC-SHA256.
+
+### How to enable
+Set in `.env`:
+```
+RESERVATION_ENGINE_ENABLED=true
+RESERVATION_ENGINE_URL=http://engine:8000
+RESERVATION_ENGINE_HMAC_SECRET=<openssl rand -hex 32, must match engine>
+```
+Then layer the engine compose overlay on top of the standard TT compose.
+
+### What is wired
+All seat-inventory writes go through the adapter
+(`server/modules/holds/holdsAdapter.ts`):
+- `POST hold` → `bookings.service.ts createHold`
+- `DELETE release` → `bookings.service.ts releaseHold`
+- `POST confirm` (multi-seat with compensation) → `bookings.service.ts`
+   `createPaidBooking` & `createPendingBooking` (pre-tx, with `cancelSeats`
+   compensation if the local booking insert fails)
+- `POST cancel-seats` → `bookings.routes.ts` ticket cancel +
+   `unseat.service.ts` (`unseatPassenger`, `unseatAllPassengers`)
+- `POST hold` + `POST confirm` + `POST cancel-seats` → `reschedule.service.ts`
+   (`reschedulePassenger`, `batchRescheduleForTripClose`) via the
+   `holdAndConfirmShort()` helper for the new seat and `cancelSeats()` for
+   the old seat, with per-pax compensation
+
+When the flag is **off**, every code path is byte-for-byte identical to
+before (adapter falls through to `AtomicHoldService` and the legacy inline
+SQL). Local hold reaper and orphan-ref cleanup in `server/scheduler.ts` are
+auto-disabled when the flag is on (the engine reaps); the pending-booking
+cleanup keeps running.
+
+### Operational caveats (engine mode)
+- Engine `confirm` and `hold` calls happen **before** the local booking tx.
+  If the local tx then fails, the adapter runs a best-effort compensating
+  `cancel-seats` to free what was already booked in the engine. Compensation
+  is logged but never throws.
+- `reschedule`, `unseat`, ticket-cancel and pending-booking cleanup all free
+  seats in the engine **after** the local tx commits. If that call fails,
+  the row is enqueued to `engine_compensation_queue` (migration `0009`) and
+  the scheduler retries it every minute under advisory lock
+  `LOCK_ENGINE_COMP`. Hard cap: 50 attempts per row — exceeded rows stay in
+  the table with `attempts >= 50` and `last_error` populated for SQL audit;
+  they are never silently dropped.
+- Retry SLA: a transient engine outage of up to ~50 minutes is fully
+  self-healing. Longer outages need an operator to clear queue rows by hand
+  (`SELECT * FROM engine_compensation_queue WHERE attempts >= 50;`).
+- Cancel-handler 502 response means the booking **is** cancelled but the
+  seat-release was queued; the seat reappears on sale within ~1 minute.
+- Booking IDs are pre-generated with `crypto.randomUUID()` so engine and TT
+  agree on the canonical id before either side persists state.
+- WebSocket emits: in engine mode the adapter is the **single source** of
+  inventory-update events (it emits internally on hold / release /
+  cancelSeats / holdAndConfirmShort). Caller-side `emitInventoryUpdated`
+  loops are gated behind `!engineMode` so each seat change broadcasts
+  exactly once.
+
+### Engine startup safety
+On boot the engine probes `seat_holds` and `seat_inventory` with a 0-row
+`SELECT` listing every column it expects. If the database is the wrong
+Neon project (no TT migrations) the process exits 1 immediately with a
+descriptive error, instead of waiting until first traffic to fail.
+
+### Smoke test
+`scripts/engine-smoke-test.sh` runs hold → confirm → cancel-seats against
+a live engine sidecar; intended to be wired into the deploy pipeline as a
+gate after each operator's container is rolled.
+
+### Spec
+See `engine/docs/TT_HOLDS_ADAPTER_INSTRUCTIONS.md` and
+`engine/docs/TRANSITY_TERMINAL_INTEGRATION.md` in the engine repo for
+endpoint contracts, signing, and error codes.

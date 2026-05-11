@@ -1,9 +1,9 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, RouteShorthandOptions } from "fastify";
 import { StopsController } from "./stops.controller";
 import { IStorage } from "@server/storage.interface";
 import { requireFlag } from "@modules/rbac/rbac.middleware";
 
-export function registerStopsRoutes(app: FastifyInstance, storage: IStorage, cacheHook: any) {
+export function registerStopsRoutes(app: FastifyInstance, storage: IStorage, cacheHook: RouteShorthandOptions) {
   const controller = new StopsController(storage);
 
   app.get('/api/stops', { ...cacheHook }, async (req, reply) => controller.getAll(req, reply));

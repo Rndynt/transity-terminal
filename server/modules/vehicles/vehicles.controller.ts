@@ -2,6 +2,7 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import { VehiclesService } from "./vehicles.service";
 import { IStorage } from "@server/storage.interface";
 import { insertVehicleSchema } from "@shared/schema";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
 
 export class VehiclesController {
   private vehiclesService: VehiclesService;
@@ -23,20 +24,20 @@ export class VehiclesController {
 
   async create(req: FastifyRequest, reply: FastifyReply) {
     const validatedData = insertVehicleSchema.parse(req.body);
-    const vehicle = await this.vehiclesService.createVehicle(validatedData);
+    const vehicle = await this.vehiclesService.createVehicle(validatedData, buildServiceContext(req));
     reply.code(201).send(vehicle);
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
     const validatedData = insertVehicleSchema.partial().parse(req.body);
-    const vehicle = await this.vehiclesService.updateVehicle(id, validatedData);
+    const vehicle = await this.vehiclesService.updateVehicle(id, validatedData, buildServiceContext(req));
     reply.send(vehicle);
   }
 
   async delete(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
-    await this.vehiclesService.deleteVehicle(id);
+    await this.vehiclesService.deleteVehicle(id, buildServiceContext(req));
     reply.code(204).send();
   }
 }

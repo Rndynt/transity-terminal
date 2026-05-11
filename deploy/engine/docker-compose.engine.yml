@@ -1,0 +1,41 @@
+services:
+  terminal:
+    environment:
+      - RESERVATION_ENGINE_ENABLED=${RESERVATION_ENGINE_ENABLED:-false}
+      - RESERVATION_ENGINE_URL=http://engine:8000
+      - RESERVATION_ENGINE_HMAC_SECRET=${RESERVATION_ENGINE_HMAC_SECRET}
+
+  engine:
+    image: ${ENGINE_IMAGE:-ghcr.io/rndynt/transity-engine}:${ENGINE_IMAGE_TAG:-latest}
+    container_name: transity-terminal-${OPERATOR_SLUG}-engine
+    restart: unless-stopped
+    expose:
+      - "8000"
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - RUST_LOG=${ENGINE_LOG_LEVEL:-info}
+      - ENGINE_DATABASE_URL=${ENGINE_DATABASE_URL:-${DATABASE_URL}}
+      - RESERVATION_ENGINE_HMAC_SECRET=${RESERVATION_ENGINE_HMAC_SECRET}
+      - HMAC_SKEW_SECS=${HMAC_SKEW_SECS:-60}
+      - REAPER_INTERVAL_SECS=${REAPER_INTERVAL_SECS:-60}
+      - DB_MIN_CONN=${DB_MIN_CONN:-2}
+      - DB_MAX_CONN=${DB_MAX_CONN:-10}
+      - IDEMPOTENCY_MAX=${IDEMPOTENCY_MAX:-10000}
+      - REDIS_URL=${REDIS_URL:-}
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8000/api/v1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - transity-terminals-net
+
+networks:
+  transity-terminals-net:
+    external: true
+    name: transity-terminals-net

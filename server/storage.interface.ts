@@ -2,13 +2,14 @@ import type {
   Stop, Outlet, Vehicle, Layout, TripPattern,
   PatternStop, TripBase, Trip, TripWithDetails, TripStopTime, TripLeg,
   SeatInventory, PriceRule, Booking, Passenger,
-  Payment, PrintJob, CargoShipment, CargoType, CargoRate,
+  Payment, PrintJob, CargoShipment, CargoShipmentListItem, CargoType, CargoRate,
   Driver, InsertDriver,
   InsertStop, InsertOutlet, InsertVehicle, InsertLayout,
   InsertTripPattern, InsertPatternStop, InsertTripBase, InsertTrip,
   InsertTripStopTime, InsertPriceRule, InsertBooking,
   InsertPassenger, InsertPayment, InsertPrintJob, InsertCargoShipment,
   InsertCargoType, InsertCargoRate,
+  InsertTripLeg, InsertSeatInventory,
   TripCostTemplate, InsertTripCostTemplate,
   TripCostItem, InsertTripCostItem,
   CsoAvailableTrip, CargoAvailableTrip,
@@ -16,6 +17,88 @@ import type {
   Voucher, InsertVoucher,
   BookingPromoApplication, InsertBookingPromoApplication
 } from "@shared/schema";
+
+/**
+ * Shape returned by {@link IStorage.getTripStopTimesWithEffectiveFlags}.
+ * Includes raw trip-level and pattern-level boarding/alighting flags plus
+ * resolved `effective*` values (trip override falls back to pattern, then
+ * defaults to true).
+ */
+export interface TripStopTimeWithEffectiveFlags {
+  id: string;
+  tripId: string;
+  stopId: string;
+  stopSequence: number;
+  arriveAt: Date | null;
+  departAt: Date | null;
+  dwellSeconds: number | null;
+  boardingAllowed: boolean | null;
+  alightingAllowed: boolean | null;
+  stopName: string | null;
+  stopCode: string | null;
+  tripBoardingAllowed: boolean | null;
+  tripAlightingAllowed: boolean | null;
+  patternBoardingAllowed: boolean | null;
+  patternAlightingAllowed: boolean | null;
+  effectiveBoardingAllowed: boolean;
+  effectiveAlightingAllowed: boolean;
+}
+
+/**
+ * Input row for {@link IStorage.bulkUpsertTripStopTimes}. The repository
+ * accepts a partial trip-stop-time payload — only `stopId` and
+ * `stopSequence` are required to identify and order the row; the rest
+ * fall through to defaults (e.g. `dwellSeconds ?? 0`).
+ */
+export interface BulkUpsertStopTimeInput {
+  stopId: string;
+  stopSequence: number;
+  arriveAt?: Date | null;
+  departAt?: Date | null;
+  dwellSeconds?: number | null;
+  boardingAllowed?: boolean | null;
+  alightingAllowed?: boolean | null;
+}
+
+/**
+ * Shape returned by {@link IStorage.getActivePassengersForTrip} — a
+ * passenger row joined with its booking and origin/destination stop names,
+ * filtered to non-cancelled, non-refunded, non-unseated tickets.
+ */
+export interface ActivePassengerForTrip {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  seatNo: string | null;
+  ticketNumber: string;
+  ticketStatus: 'active' | 'cancelled' | 'checked_in' | 'refunded' | 'unseated' | 'no_show' | null;
+  fareAmount: string | null;
+  bookingCode: string;
+  bookingId: string;
+  originStopId: string;
+  destinationStopId: string;
+  originSeq: number;
+  destinationSeq: number;
+  originStopName: string | null;
+  destinationStopName: string | null;
+}
+
+/**
+ * Shape returned by {@link IStorage.getUnseatedPassengers} — same as the
+ * active variant but limited to `ticket_status='unseated'` and without
+ * seat / sequence fields.
+ */
+export interface UnseatedPassengerForTrip {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  ticketNumber: string;
+  fareAmount: string | null;
+  bookingCode: string;
+  bookingId: string;
+  originStopName: string | null;
+  destinationStopName: string | null;
+}
 
 export interface ManifestEntry {
   ticketNumber: string | null;
@@ -137,19 +220,19 @@ export interface IStorage {
 
   getTripStopTimes(tripId: string): Promise<TripStopTime[]>;
   getTripStopTimesByTripIds(tripIds: string[]): Promise<Map<string, TripStopTime[]>>;
-  getTripStopTimesWithEffectiveFlags(tripId: string): Promise<any[]>;
+  getTripStopTimesWithEffectiveFlags(tripId: string): Promise<TripStopTimeWithEffectiveFlags[]>;
   createTripStopTime(data: InsertTripStopTime): Promise<TripStopTime>;
   updateTripStopTime(id: string, data: Partial<InsertTripStopTime>): Promise<TripStopTime>;
   deleteTripStopTime(id: string): Promise<void>;
-  bulkUpsertTripStopTimes(tripId: string, stopTimes: any[]): Promise<void>;
+  bulkUpsertTripStopTimes(tripId: string, stopTimes: BulkUpsertStopTimeInput[]): Promise<void>;
 
   getTripLegs(tripId: string): Promise<TripLeg[]>;
-  createTripLeg(data: any): Promise<TripLeg>;
+  createTripLeg(data: InsertTripLeg): Promise<TripLeg>;
   deleteTripLegs(tripId: string): Promise<void>;
 
   getSeatInventory(tripId: string, legIndexes?: number[]): Promise<SeatInventory[]>;
-  createSeatInventory(data: any[]): Promise<SeatInventory[]>;
-  updateSeatInventory(tripId: string, seatNo: string, legIndexes: number[], updates: any): Promise<void>;
+  createSeatInventory(data: InsertSeatInventory[]): Promise<SeatInventory[]>;
+  updateSeatInventory(tripId: string, seatNo: string, legIndexes: number[], updates: Partial<InsertSeatInventory>): Promise<void>;
   deleteSeatInventory(tripId: string): Promise<void>;
 
   getPriceRules(): Promise<PriceRule[]>;
@@ -164,7 +247,7 @@ export interface IStorage {
   getBookingsPaginated(options: { tripId?: string; outletId?: string; page: number; pageSize: number }): Promise<{ data: Booking[]; total: number }>;
   getBookingById(id: string): Promise<Booking | undefined>;
   getBookingByCode(bookingCode: string): Promise<Booking | undefined>;
-  createBooking(data: InsertBooking): Promise<Booking>;
+  createBooking(data: InsertBooking & { bookingCode: string }): Promise<Booking>;
   updateBooking(id: string, data: Partial<InsertBooking>): Promise<Booking>;
 
   getPassengers(bookingId: string): Promise<Passenger[]>;
@@ -196,10 +279,14 @@ export interface IStorage {
   deleteCargoRate(id: string): Promise<void>;
   findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string, tripId?: string): Promise<CargoRate | undefined>;
 
-  getCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<CargoShipment[]>;
+  getCargoShipments(
+    filters?: { tripId?: string; status?: string; outletId?: string },
+    opts?: { limit?: number; offset?: number }
+  ): Promise<CargoShipmentListItem[]>;
+  countCargoShipments(filters?: { tripId?: string; status?: string; outletId?: string }): Promise<number>;
   getCargoShipmentById(id: string): Promise<CargoShipment | undefined>;
   getCargoShipmentByWaybill(waybillNumber: string): Promise<CargoShipment | undefined>;
-  createCargoShipment(data: InsertCargoShipment): Promise<CargoShipment>;
+  createCargoShipment(data: InsertCargoShipment & { trackingSecret: string }): Promise<CargoShipment>;
   updateCargoShipment(id: string, data: Partial<InsertCargoShipment>): Promise<CargoShipment>;
 
   getTripCostTemplates(patternId?: string): Promise<TripCostTemplate[]>;
@@ -239,8 +326,8 @@ export interface IStorage {
   tripHasBookings(tripId: string): Promise<boolean>;
   getTripByBaseAndDate(baseId: string, serviceDate: string): Promise<Trip | undefined>;
   releaseHoldsForTrip(tripId: string): Promise<void>;
-  getActivePassengersForTrip(tripId: string): Promise<any[]>;
-  getUnseatedPassengers(tripId: string): Promise<any[]>;
+  getActivePassengersForTrip(tripId: string): Promise<ActivePassengerForTrip[]>;
+  getUnseatedPassengers(tripId: string): Promise<UnseatedPassengerForTrip[]>;
 
   getActiveBookingCountForStop(stopId: string): Promise<number>;
   getActiveTripsForStop(stopId: string): Promise<number>;

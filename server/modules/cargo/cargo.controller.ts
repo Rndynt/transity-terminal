@@ -2,6 +2,8 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import { CargoService } from "./cargo.service";
 import { IStorage } from "@server/storage.interface";
 import { insertCargoShipmentSchema, insertCargoTypeSchema, insertCargoRateSchema } from "@shared/schema";
+import { buildServiceContext } from "@modules/rbac/rbac.guard";
+import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "@server/constants/pagination";
 
 export class CargoController {
   private cargoService: CargoService;
@@ -13,22 +15,32 @@ export class CargoController {
   }
 
   async getAll(req: FastifyRequest, reply: FastifyReply) {
-    const { tripId, status } = req.query as any;
+    const query = (req.query as { tripId?: string; status?: string; outletId?: string; page?: string; pageSize?: string } | undefined) || {};
+    const { tripId, status } = query;
     const scopedOutlet = req.scopedOutletId ?? req.rbac?.outletId ?? null;
-    const outletId = scopedOutlet ?? (req.query as any).outletId;
-    const shipments = await this.cargoService.getAllShipments({
+    const outletId = scopedOutlet ?? query.outletId;
+    const filters = {
       tripId: tripId as string,
       status: status as string,
-      outletId: outletId as string
-    });
-    const pageParam = (req.query as any).page;
+      outletId: outletId as string,
+    };
+    const pageParam = query.page;
+
     if (pageParam) {
+      // β-2: SQL-level pagination (sebelumnya pull all rows lalu .slice() di JS).
       const page = Math.max(1, parseInt(pageParam) || 1);
-      const pageSize = Math.min(100, Math.max(1, parseInt((req.query as any).pageSize) || 50));
-      const total = shipments.length;
-      const paginated = shipments.slice((page - 1) * pageSize, page * pageSize);
-      return reply.send({ data: paginated, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+      const pageSize = Math.min(LIST_MAX_LIMIT, Math.max(1, parseInt(query.pageSize ?? '') || 50));
+      const offset = (page - 1) * pageSize;
+      const [data, total] = await Promise.all([
+        this.cargoService.getAllShipments(filters, { limit: pageSize, offset }),
+        this.cargoService.countShipments(filters),
+      ]);
+      return reply.send({ data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
     }
+
+    // β-2: cap legacy unwrapped response juga supaya tidak unbounded.
+    // Caller yang butuh > LIST_DEFAULT_LIMIT row harus pakai ?page query.
+    const shipments = await this.cargoService.getAllShipments(filters, { limit: LIST_DEFAULT_LIMIT });
     reply.send(shipments);
   }
 
@@ -50,14 +62,14 @@ export class CargoController {
     if (scopedOutlet) {
       validated.outletId = scopedOutlet;
     }
-    const shipment = await this.cargoService.createShipment(validated);
+    const shipment = await this.cargoService.createShipment(validated, buildServiceContext(req));
     reply.code(201).send(shipment);
   }
 
   async update(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
     const validated = insertCargoShipmentSchema.partial().parse(req.body);
-    const shipment = await this.cargoService.updateShipment(id, validated);
+    const shipment = await this.cargoService.updateShipment(id, validated, buildServiceContext(req));
     reply.send(shipment);
   }
 
@@ -68,7 +80,7 @@ export class CargoController {
       return reply.code(400).send({ error: 'Status is required' });
     }
     try {
-      const shipment = await this.cargoService.updateShipmentStatus(id, status);
+      const shipment = await this.cargoService.updateShipmentStatus(id, status, buildServiceContext(req));
       reply.send(shipment);
     } catch (error: unknown) {
       const err = error as Error;
@@ -80,7 +92,7 @@ export class CargoController {
   }
 
   async getAvailableTrips(req: FastifyRequest, reply: FastifyReply) {
-    const { date, originStopId, destinationStopId } = req.query as any;
+    const { date, originStopId, destinationStopId } = (req.query as { date?: string; originStopId?: string; destinationStopId?: string } | undefined) || {};
     if (!date || !originStopId || !destinationStopId) {
       return reply.code(400).send({ error: 'date, originStopId, destinationStopId are required' });
     }

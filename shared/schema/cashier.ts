@@ -18,7 +18,10 @@ export const cashierSessions = pgTable("cashier_sessions", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   idxCashierSessionsOutletStatus: sql`CREATE INDEX IF NOT EXISTS idx_cashier_sessions_outlet_status ON ${table} (outlet_id, status)`,
-  idxCashierSessionsStaffId: sql`CREATE INDEX IF NOT EXISTS idx_cashier_sessions_staff_id ON ${table} (staff_id)`
+  idxCashierSessionsStaffId: sql`CREATE INDEX IF NOT EXISTS idx_cashier_sessions_staff_id ON ${table} (staff_id)`,
+  // S1-02: per (outlet, staff) sesi open. Multiple staff di outlet sama OK,
+  // tapi 1 staff tidak boleh punya 2 sesi open di outlet yg sama.
+  uniqCashierSessionsOutletStaffOpen: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_cashier_sessions_outlet_staff_open ON ${table} (outlet_id, staff_id) WHERE status = 'open'`
 }));
 
 export const cashierSettlements = pgTable("cashier_settlements", {

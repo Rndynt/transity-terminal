@@ -3,6 +3,18 @@ import { sql } from "drizzle-orm";
 
 type SeedSet = "nusa" | "buskita";
 
+/**
+ * Seed context shape is identical between buskita and nusa
+ * (`server/seeds/{nusa,buskita}/context.ts`). Typed as a structural
+ * `Record` here because the actual type is loaded via dynamic import
+ * and TS can't statically resolve `${base}/context`. Seed runners cast
+ * to the concrete `SeedContext` they need internally.
+ */
+type SeedCtx = Record<string, unknown>;
+
+interface CountRow { c: string | number }
+interface CityRow { city: string }
+
 async function loadSeedModules(set: SeedSet) {
   const base = set === "nusa" ? "./nusa" : "./buskita";
   const { createSeedContext } = await import(`${base}/context`);
@@ -19,15 +31,15 @@ async function loadSeedModules(set: SeedSet) {
   return {
     createSeedContext,
     modules: {
-      stops:     { name: "Stops & Outlets",    deps: [] as string[],                    run: async (ctx: any) => { await seedStops(ctx); await seedOutlets(ctx); } },
-      layouts:   { name: "Seat Layouts",        deps: [] as string[],                    run: async (ctx: any) => { await seedLayouts(ctx); } },
-      vehicles:  { name: "Vehicles",            deps: ["layouts"],                       run: async (ctx: any) => { await seedVehicles(ctx); } },
-      patterns:  { name: "Trip Patterns",       deps: ["stops", "layouts"],              run: async (ctx: any) => { await seedPatterns(ctx); await seedPatternStops(ctx); } },
-      prices:    { name: "Price Rules",         deps: ["patterns"],                      run: async (ctx: any) => { await seedPrices(ctx); } },
-      tripbases: { name: "Trip Bases",          deps: ["patterns", "vehicles"],          run: async (ctx: any) => { await seedTripBases(ctx); } },
-      cargo:     { name: "Cargo Types & Rates", deps: [] as string[],                    run: async (ctx: any) => { await seedCargo(); } },
-      trips:     { name: "Materialize Trips",   deps: ["tripbases"],                     run: async (ctx: any) => { await seedTrips(ctx); } },
-      rbac:      { name: "RBAC & Feature Flags",deps: [] as string[],                    run: async (ctx: any) => { await seedRbac(); } },
+      stops:     { name: "Stops & Outlets",    deps: [] as string[],                    run: async (ctx: SeedCtx) => { await seedStops(ctx); await seedOutlets(ctx); } },
+      layouts:   { name: "Seat Layouts",        deps: [] as string[],                    run: async (ctx: SeedCtx) => { await seedLayouts(ctx); } },
+      vehicles:  { name: "Vehicles",            deps: ["layouts"],                       run: async (ctx: SeedCtx) => { await seedVehicles(ctx); } },
+      patterns:  { name: "Trip Patterns",       deps: ["stops", "layouts"],              run: async (ctx: SeedCtx) => { await seedPatterns(ctx); await seedPatternStops(ctx); } },
+      prices:    { name: "Price Rules",         deps: ["patterns"],                      run: async (ctx: SeedCtx) => { await seedPrices(ctx); } },
+      tripbases: { name: "Trip Bases",          deps: ["patterns", "vehicles"],          run: async (ctx: SeedCtx) => { await seedTripBases(ctx); } },
+      cargo:     { name: "Cargo Types & Rates", deps: [] as string[],                    run: async (_ctx: SeedCtx) => { await seedCargo(); } },
+      trips:     { name: "Materialize Trips",   deps: ["tripbases"],                     run: async (ctx: SeedCtx) => { await seedTrips(ctx); } },
+      rbac:      { name: "RBAC & Feature Flags",deps: [] as string[],                    run: async (_ctx: SeedCtx) => { await seedRbac(); } },
     },
   };
 }
@@ -100,11 +112,11 @@ async function printSummary() {
   console.log("\n═══════════════════════════════════════════");
   console.log("  SEED SELESAI");
   console.log("═══════════════════════════════════════════");
-  console.log(`  Kota        : ${(cityList.rows as any[]).map((r: any) => r.city).join(', ')}`);
-  console.log(`  Stops       : ${(stopCount.rows[0] as any).c}`);
-  console.log(`  Trip Bases  : ${(baseCount.rows[0] as any).c}`);
-  console.log(`  Trips       : ${(tripCountDB.rows[0] as any).c}`);
-  console.log(`  Seat Inv    : ${(invCount.rows[0] as any).c} baris`);
+  console.log(`  Kota        : ${(cityList.rows as unknown as CityRow[]).map(r => r.city).join(', ')}`);
+  console.log(`  Stops       : ${(stopCount.rows[0] as unknown as CountRow).c}`);
+  console.log(`  Trip Bases  : ${(baseCount.rows[0] as unknown as CountRow).c}`);
+  console.log(`  Trips       : ${(tripCountDB.rows[0] as unknown as CountRow).c}`);
+  console.log(`  Seat Inv    : ${(invCount.rows[0] as unknown as CountRow).c} baris`);
   console.log("═══════════════════════════════════════════\n");
 }
 

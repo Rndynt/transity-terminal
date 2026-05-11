@@ -34,7 +34,12 @@ export const cargoRates = pgTable("cargo_rates", {
   pricePerLeg:        numeric("price_per_leg", { precision: 12, scale: 2 }).notNull().default('0'),
   minCharge:          numeric("min_charge", { precision: 12, scale: 2 }).notNull().default('0'),
   createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
-});
+}, (table) => ({
+  // PR α-1: composite index untuk findCargoRate (cargo.repository.ts:65).
+  // Setiap insert cargo shipment hit query ini 1-3x (global / pattern / trip
+  // scope chain). Migration 0015 mendaftarkan index yang sama.
+  idxCargoRatesLookup: sql`CREATE INDEX IF NOT EXISTS idx_cargo_rates_lookup ON ${table} (cargo_type_id, scope, scope_ref_id, is_active)`,
+}));
 
 export const cargoRatesRelations = relations(cargoRates, ({ one }) => ({
   cargoType: one(cargoTypes, { fields: [cargoRates.cargoTypeId], references: [cargoTypes.id] }),
@@ -71,6 +76,12 @@ export const cargoShipments = pgTable("cargo_shipments", {
   paymentMethod:      paymentMethodEnum("payment_method"),
   paidAt:             timestamp("paid_at", { withTimezone: true }),
   notes:              text("notes"),
+  // S1-06: secret yang harus disertakan saat tracking publik (mencegah
+  // enumerasi waybill). Di-generate server-side di cargo.service.ts setiap
+  // insert, tidak pernah expose ke operator UI; tercetak di label
+  // pengirim/penerima. Tidak ada default DB — migration 0011 sudah backfill
+  // row lama dan DROP DEFAULT di semua lingkungan.
+  trackingSecret:     text("tracking_secret").notNull(),
   createdBy:          text("created_by"),
   createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
@@ -96,7 +107,7 @@ export const cargoShipmentsRelations = relations(cargoShipments, ({ one }) => ({
 
 const numericCoerce = z.union([z.string(), z.number().transform(String)]);
 export const insertCargoShipmentSchema = createInsertSchema(cargoShipments)
-  .omit({ id: true, createdAt: true })
+  .omit({ id: true, createdAt: true, trackingSecret: true })
   .extend({
     weightKg: numericCoerce.optional().nullable(),
     lengthCm: numericCoerce.optional().nullable(),
@@ -108,3 +119,16 @@ export const insertCargoShipmentSchema = createInsertSchema(cargoShipments)
   });
 export type CargoShipment = typeof cargoShipments.$inferSelect;
 export type InsertCargoShipment = z.infer<typeof insertCargoShipmentSchema>;
+
+// S1-06: row shape khusus listing kargo untuk operator. Sengaja DROP
+// `trackingSecret` (rahasia hanya muncul di label & endpoint tracking publik)
+// dan menambahkan kolom join origin/destination stop yang dipakai UI daftar.
+// Pisahkan dari `CargoShipment` agar mismatch select object langsung
+// tertangkap TypeScript kalau ada yang menyelipkan/menghapus kolom di
+// `getCargoShipments` (server/repositories/cargo.repository.ts).
+export type CargoShipmentListItem = Omit<CargoShipment, 'trackingSecret'> & {
+  originStopCode: string | null;
+  originStopName: string | null;
+  destinationStopCode: string | null;
+  destinationStopName: string | null;
+};

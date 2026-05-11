@@ -1,0 +1,18 @@
+# S3-02: pre-commit hook untuk TransityTerminal.
+# Aktifkan dengan menjalankan `npx husky` SATU KALI di fresh checkout
+# (set core.hooksPath ke .husky). Untuk auto-aktivasi tanpa langkah
+# manual, tambahkan ke package.json:  "scripts": { "prepare": "husky" }
+# (perubahan package.json menunggu user approval — lihat
+# RUNBOOK-DEV-SETUP.md).
+
+# Jalankan lint-staged: cuma file yang di-stage yang dicek (cepat).
+npx lint-staged
+
+# Typecheck full project (lambat tapi aman). Comment baris ini kalau
+# project sudah cukup besar dan typecheck pre-commit terlalu lambat;
+# kalau di-comment, pastikan CI (S3-01) menangkap typecheck error.
+npx tsc --noEmit || {
+  echo "[pre-commit] tsc --noEmit FAILED. Perbaiki TS error sebelum commit."
+  echo "[pre-commit] (atau bypass: git commit --no-verify — gunakan sparingly)"
+  exit 1
+}

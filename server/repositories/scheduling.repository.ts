@@ -1,6 +1,7 @@
 import { db } from "@server/db";
 import { eq, and, or, desc, sql, inArray, isNull, gte, lte } from "drizzle-orm";
 import { fromZonedHHMMToUtc } from "@server/utils/timezone";
+import { createComponentLogger } from "@server/lib/logger";
 import { ManifestEntry, ManifestFull, ManifestCargoEntry } from "@server/storage.interface";
 import {
   tripPatterns, patternStops, tripBases, trips, tripStopTimes, tripLegs,
@@ -15,8 +16,103 @@ import {
   type SeatInventory, type InsertSeatInventory,
   type PriceRule, type InsertPriceRule,
   type CsoAvailableTrip,
-  type CargoAvailableTrip
+  type CargoAvailableTrip,
+  type Outlet,
 } from "@shared/schema";
+
+const log = createComponentLogger("scheduling.repo");
+
+/**
+ * Shape of one element in `trip_bases.default_stop_times` (jsonb).
+ * Mirrors the editor-side `DefaultStopTime` in
+ * `client/src/components/masters/TripBaseFormDialog.tsx`. Kept local
+ * because the schema column is typed as `jsonb` with no runtime
+ * validator — this is the de-facto contract the application relies on.
+ */
+type DefaultStopTime = {
+  stopSequence: number;
+  stopName?: string;
+  stopCode?: string;
+  arriveAt?: string | null;
+  departAt?: string | null;
+};
+
+/**
+ * Row shape returned by the CSO real-trip CTE query in
+ * `getRealTripsForCso`. Column aliases (snake_case) are whatever the
+ * SELECT list produces, not drizzle column names.
+ */
+type CsoRealTripRow = {
+  trip_id: string;
+  base_id: string | null;
+  pattern_id: string;
+  pattern_code: string;
+  vehicle_code: string | null;
+  vehicle_plate: string | null;
+  capacity: number | null;
+  status: string | null;
+  depart_at_outlet: string | null;
+  final_arrival_at: string | null;
+  outlet_stop_sequence: number | null;
+  stop_count: number;
+  pattern_stops: string | null;
+  available_seats: number | string | null;
+  has_price_rule: boolean;
+};
+
+/** Row shape for `SELECT pattern_id, STRING_AGG(...) AS path/pattern_path`. */
+type PatternPathRow = {
+  pattern_id: string;
+  path?: string | null;
+  pattern_path?: string | null;
+};
+
+/**
+ * Row shape for the cargo real-trip SELECT. Same trip-metadata surface
+ * as `CsoRealTripRow` but without the capacity / availability / outlet
+ * columns (cargo doesn't need seats).
+ */
+type CargoRealTripRow = {
+  trip_id: string;
+  base_id: string | null;
+  pattern_id: string;
+  vehicle_id: string | null;
+  status: string | null;
+  pattern_code: string;
+  vehicle_code: string | null;
+  vehicle_plate: string | null;
+};
+
+/** Row shape for the per-trip stop-times SELECT used by the cargo path. */
+type CargoTripStopRow = {
+  trip_id: string;
+  stop_id: string;
+  stop_sequence: number;
+  depart_at: string | null;
+  arrive_at: string | null;
+};
+
+/** Row shape returned by `recordManifestPrint`'s UPDATE ... RETURNING. */
+type ManifestPrintRow = { firstPrintedAt: string | Date | null };
+
+/**
+ * Row shape for the trip-header SELECT inside `getManifestFull`. All
+ * fields come back aliased with quoted identifiers so property names
+ * are camelCase here.
+ */
+type ManifestHeaderRow = {
+  tripId?: string;
+  serviceDate?: string;
+  departureTime?: string | null;
+  firstPrintedAt?: string | Date | null;
+  routeName?: string;
+  vehiclePlate?: string;
+  vehicleType?: string;
+  driverName?: string | null;
+  driverLicense?: string | null;
+  originStop?: string;
+  destinationStop?: string;
+};
 
 export class SchedulingRepository {
   async getTripPatterns(): Promise<TripPattern[]> {
@@ -250,7 +346,7 @@ export class SchedulingRepository {
     .orderBy(trips.serviceDate) as unknown as TripWithDetails[];
   }
 
-  async getCsoAvailableTrips(serviceDate: string, outletId: string, getOutletById: (id: string) => Promise<any>): Promise<CsoAvailableTrip[]> {
+  async getCsoAvailableTrips(serviceDate: string, outletId: string, getOutletById: (id: string) => Promise<Outlet | undefined>): Promise<CsoAvailableTrip[]> {
     const outlet = await getOutletById(outletId);
     if (!outlet) {
       throw new Error(`Outlet with id ${outletId} not found`);
@@ -413,7 +509,7 @@ export class SchedulingRepository {
       LEFT JOIN pattern_paths pp ON pp.pattern_id = et.pattern_id
     `);
 
-    return (result.rows as any[]).map(row => ({
+    return (result.rows as CsoRealTripRow[]).map(row => ({
       tripId: row.trip_id,
       baseId: row.base_id || undefined,
       patternId: row.pattern_id || undefined,
@@ -425,7 +521,7 @@ export class SchedulingRepository {
         plate: row.vehicle_plate
       } : null,
       capacity: row.capacity,
-      status: (row.status || 'scheduled') as any,
+      status: (row.status || 'scheduled') as CsoAvailableTrip['status'],
       departAtAtOutlet: row.depart_at_outlet,
       finalArrivalAt: row.final_arrival_at,
       stopCount: row.stop_count,
@@ -487,7 +583,7 @@ export class SchedulingRepository {
       patternStopsMap.set(ps.patternId, list);
     }
     const patternPathMap = new Map<string, string>();
-    for (const row of patternPathRows.rows as any[]) {
+    for (const row of patternPathRows.rows as PatternPathRow[]) {
       patternPathMap.set(row.pattern_id, row.pattern_path || '');
     }
     
@@ -531,7 +627,7 @@ export class SchedulingRepository {
           hasPriceRule
         });
       } catch (error) {
-        console.warn(`Skipping virtual trip for base ${base.id}:`, error);
+        log.warn({ baseId: base.id, err: error }, "skipping virtual trip");
         continue;
       }
     }
@@ -561,7 +657,7 @@ export class SchedulingRepository {
     departAtOutlet: string | null;
     finalArrivalAt: string | null;
   } {
-    const defaultStopTimes = base.defaultStopTimes as any[];
+    const defaultStopTimes = base.defaultStopTimes as DefaultStopTime[];
     const outletTime = defaultStopTimes.find(st => st.stopSequence === outletSequence);
     const finalTime = defaultStopTimes.find(st => st.stopSequence === maxSequence);
     
@@ -659,7 +755,7 @@ export class SchedulingRepository {
     await db.update(tripStopTimes).set({ deletedAt: new Date() }).where(eq(tripStopTimes.id, id));
   }
 
-  async getTripStopTimesWithEffectiveFlags(tripId: string): Promise<any[]> {
+  async getTripStopTimesWithEffectiveFlags(tripId: string): Promise<import("@server/storage.interface").TripStopTimeWithEffectiveFlags[]> {
     const result = await db
       .select({
         id: tripStopTimes.id,
@@ -695,7 +791,7 @@ export class SchedulingRepository {
     }));
   }
 
-  async bulkUpsertTripStopTimes(tripId: string, stopTimes: any[]): Promise<void> {
+  async bulkUpsertTripStopTimes(tripId: string, stopTimes: import("@server/storage.interface").BulkUpsertStopTimeInput[]): Promise<void> {
     await db.transaction(async (tx) => {
       await tx.update(tripStopTimes).set({ deletedAt: new Date() }).where(
         and(eq(tripStopTimes.tripId, tripId), isNull(tripStopTimes.deletedAt))
@@ -806,10 +902,19 @@ export class SchedulingRepository {
   }
 
   async getTripByBaseAndDate(baseId: string, serviceDate: string): Promise<Trip | undefined> {
+    // Skip soft-deleted rows: `deleteTrip` only flips `deletedAt` +
+    // `status='cancelled'` and does NOT free the unique slot on
+    // `uniq_trip_base_per_day`. Without this filter, any caller that
+    // resolves a trip by (base, date) would inherit a cancelled
+    // ghost trip — seats all released, legs soft-deleted, status
+    // cancelled — as if it were live. All callers of this method use
+    // the returned id to read live data (seatmap, manifest, emission
+    // targets), so handing back a soft-deleted id is always wrong.
     const [trip] = await db.select().from(trips)
       .where(and(
         eq(trips.baseId, baseId),
-        eq(trips.serviceDate, serviceDate)
+        eq(trips.serviceDate, serviceDate),
+        isNull(trips.deletedAt),
       ));
     return trip;
   }
@@ -860,7 +965,7 @@ export class SchedulingRepository {
       WHERE id = ${tripId}
       RETURNING manifest_first_printed_at AS "firstPrintedAt"
     `);
-    const row = rows.rows[0] as any;
+    const row = rows.rows[0] as ManifestPrintRow | undefined;
     return row?.firstPrintedAt ? new Date(row.firstPrintedAt).toISOString() : null;
   }
 
@@ -895,7 +1000,7 @@ export class SchedulingRepository {
       WHERE t.id = ${tripId}
     `);
 
-    const tripRow = (tripRows.rows[0] || {}) as any;
+    const tripRow = (tripRows.rows[0] || {}) as ManifestHeaderRow;
 
     const passengerRows = await db.execute(sql`
       SELECT
@@ -946,8 +1051,8 @@ export class SchedulingRepository {
     const cargoList = cargoRows.rows as unknown as ManifestCargoEntry[];
 
     const totalTicketRevenue = passengerList.reduce((sum, p) => sum + parseFloat(p.fareAmount || '0'), 0);
-    const totalCargoRevenue = cargoList.reduce((sum, c) => sum + parseFloat((c as any).totalAmount || '0'), 0);
-    const totalCargoWeight = cargoList.reduce((sum, c) => sum + parseFloat((c as any).weightKg || '0'), 0);
+    const totalCargoRevenue = cargoList.reduce((sum, c) => sum + parseFloat(c.totalAmount || '0'), 0);
+    const totalCargoWeight = cargoList.reduce((sum, c) => sum + parseFloat(c.weightKg || '0'), 0);
 
     const serviceDate = tripRow.serviceDate ? String(tripRow.serviceDate).replace(/-/g, '') : 'XXXXXX';
     const manifestNumber = `MNF-${tripId.slice(-6).toUpperCase()}-${serviceDate}`;
@@ -1060,9 +1165,8 @@ export class SchedulingRepository {
         AND t.status NOT IN ('cancelled')
     `);
 
-    if ((result.rows as any[]).length === 0) return [];
-
-    const tripRows = result.rows as any[];
+    const tripRows = result.rows as CargoRealTripRow[];
+    if (tripRows.length === 0) return [];
     const uniquePatternIds = [...new Set(tripRows.map(r => r.pattern_id as string))];
     const uniqueBaseIds = [...new Set(tripRows.filter(r => r.base_id).map(r => r.base_id as string))];
     const tripIds = tripRows.map(r => r.trip_id as string);
@@ -1100,13 +1204,13 @@ export class SchedulingRepository {
       patternStopsByPattern.set(ps.patternId, list);
     }
     const patternPathMap = new Map<string, string>();
-    for (const row of patternPathRows.rows as any[]) {
+    for (const row of patternPathRows.rows as PatternPathRow[]) {
       patternPathMap.set(row.pattern_id, row.path || '');
     }
-    const basesMap = new Map((basesRows as any[]).map(b => [b.id, b]));
+    const basesMap = new Map((basesRows as TripBase[]).map(b => [b.id, b]));
 
-    const tstByTrip = new Map<string, any[]>();
-    for (const row of tstRows.rows as any[]) {
+    const tstByTrip = new Map<string, CargoTripStopRow[]>();
+    for (const row of tstRows.rows as CargoTripStopRow[]) {
       const list = tstByTrip.get(row.trip_id) || [];
       list.push(row);
       tstByTrip.set(row.trip_id, list);
@@ -1126,8 +1230,8 @@ export class SchedulingRepository {
 
       const tripStops = tstByTrip.get(row.trip_id);
       if (tripStops && tripStops.length > 0) {
-        const originTst = tripStops.find((ts: any) => ts.stop_id === originStopId);
-        const destTst = tripStops.find((ts: any) => ts.stop_id === destinationStopId);
+        const originTst = tripStops.find(ts => ts.stop_id === originStopId);
+        const destTst = tripStops.find(ts => ts.stop_id === destinationStopId);
         if (originTst) departAtOrigin = originTst.depart_at || originTst.arrive_at || null;
         if (destTst) arriveAtDestination = destTst.arrive_at || destTst.depart_at || null;
       }
@@ -1135,9 +1239,9 @@ export class SchedulingRepository {
       if (!departAtOrigin && row.base_id) {
         const base = basesMap.get(row.base_id);
         if (base) {
-          const defaultStopTimes = base.defaultStopTimes as any[];
-          const originTime = defaultStopTimes?.find((st: any) => st.stopSequence === originPs.stopSequence);
-          const destTime = defaultStopTimes?.find((st: any) => st.stopSequence === destPs.stopSequence);
+          const defaultStopTimes = base.defaultStopTimes as DefaultStopTime[];
+          const originTime = defaultStopTimes?.find(st => st.stopSequence === originPs.stopSequence);
+          const destTime = defaultStopTimes?.find(st => st.stopSequence === destPs.stopSequence);
           if (originTime?.departAt) {
             const utc = fromZonedHHMMToUtc(serviceDate, originTime.departAt, "Asia/Jakarta");
             departAtOrigin = utc?.toISOString() ?? null;
@@ -1165,7 +1269,7 @@ export class SchedulingRepository {
           code: row.vehicle_code,
           plate: row.vehicle_plate
         } : null,
-        status: (row.status || 'scheduled') as any,
+        status: (row.status || 'scheduled') as CargoAvailableTrip['status'],
         departAtOrigin,
         arriveAtDestination,
         originStopSequence: originPs.stopSequence,
@@ -1215,7 +1319,7 @@ export class SchedulingRepository {
       patternStopsMap.set(ps.patternId, list);
     }
     const patternPathMap = new Map<string, string>();
-    for (const row of patternPathRows.rows as any[]) {
+    for (const row of patternPathRows.rows as PatternPathRow[]) {
       patternPathMap.set(row.pattern_id, row.pattern_path || '');
     }
 
@@ -1233,9 +1337,9 @@ export class SchedulingRepository {
         if (!originPs || !destPs) continue;
         if (originPs.stopSequence >= destPs.stopSequence) continue;
 
-        const defaultStopTimes = base.defaultStopTimes as any[];
-        const originTime = defaultStopTimes?.find((st: any) => st.stopSequence === originPs.stopSequence);
-        const destTime = defaultStopTimes?.find((st: any) => st.stopSequence === destPs.stopSequence);
+        const defaultStopTimes = base.defaultStopTimes as DefaultStopTime[];
+        const originTime = defaultStopTimes?.find(st => st.stopSequence === originPs.stopSequence);
+        const destTime = defaultStopTimes?.find(st => st.stopSequence === destPs.stopSequence);
 
         let departAtOrigin: string | null = null;
         let arriveAtDestination: string | null = null;
@@ -1269,7 +1373,7 @@ export class SchedulingRepository {
           legCount: destPs.stopSequence - originPs.stopSequence,
         });
       } catch (error) {
-        console.warn(`Skipping virtual cargo trip for base ${base.id}:`, error);
+        log.warn({ baseId: base.id, err: error }, "skipping virtual cargo trip");
         continue;
       }
     }

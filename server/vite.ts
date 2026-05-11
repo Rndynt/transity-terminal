@@ -1,20 +1,19 @@
 import fs from "fs";
 import path from "path";
+import type { Server } from "http";
 import type { FastifyInstance } from "fastify";
+import type { LogErrorOptions } from "vite";
+import { logger } from "./lib/logger";
 
+/**
+ * Boot/lifecycle log helper. Backed by pino sehingga timestamp & format
+ * konsisten dengan structured log lain. `source` jadi `component` field.
+ */
 export function log(message: string, source = "fastify") {
-  const formattedTime = new Date().toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Jakarta",
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
+  logger.info({ component: source }, message);
 }
 
-export async function setupVite(app: FastifyInstance, server: any) {
+export async function setupVite(app: FastifyInstance, server: Server) {
   const viteLib = await import("vite");
   const createViteServer = viteLib.createServer;
   const createLogger = viteLib.createLogger;
@@ -36,7 +35,7 @@ export async function setupVite(app: FastifyInstance, server: any) {
     configFile: false,
     customLogger: {
       ...viteLogger,
-      error: (msg: string, options?: any) => {
+      error: (msg: string, options?: LogErrorOptions) => {
         viteLogger.error(msg, options);
         process.exit(1);
       },

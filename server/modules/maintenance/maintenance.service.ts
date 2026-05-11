@@ -1,6 +1,9 @@
 import { db } from "@server/db";
-import { vehicleMaintenances } from "@shared/schema";
+import { vehicleMaintenances, type InsertVehicleMaintenance, type VehicleMaintenance } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
+
+type MaintenanceCreateInput = Omit<InsertVehicleMaintenance, 'vehicleId' | 'createdBy' | 'cost'> & { cost?: string | number | null };
+type MaintenanceUpdateInput = Partial<Pick<VehicleMaintenance, 'status' | 'completedDate' | 'odometerKm' | 'notes' | 'description'>> & { cost?: string | number | null };
 
 export class MaintenanceService {
   async getByVehicle(vehicleId: string) {
@@ -19,10 +22,10 @@ export class MaintenanceService {
       ORDER BY vm.scheduled_date ASC
       LIMIT 20
     `);
-    return Array.isArray(result) ? result : (result as any).rows || [];
+    return Array.isArray(result) ? result : (result as { rows?: unknown[] }).rows || [];
   }
 
-  async create(vehicleId: string, data: any, createdBy: string) {
+  async create(vehicleId: string, data: MaintenanceCreateInput, createdBy: string) {
     const [row] = await db.insert(vehicleMaintenances).values({
       vehicleId,
       type: data.type,
@@ -41,8 +44,8 @@ export class MaintenanceService {
     return row;
   }
 
-  async update(id: string, data: any) {
-    const updates: any = { updatedAt: new Date() };
+  async update(id: string, data: MaintenanceUpdateInput) {
+    const updates: Partial<VehicleMaintenance> & { updatedAt: Date } = { updatedAt: new Date() };
     if (data.status) updates.status = data.status;
     if (data.completedDate) updates.completedDate = data.completedDate;
     if (data.odometerKm) updates.odometerKm = data.odometerKm;

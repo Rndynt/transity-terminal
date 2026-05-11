@@ -1,9 +1,9 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, RouteShorthandOptions } from "fastify";
 import { LayoutsController } from "./layouts.controller";
 import { IStorage } from "@server/storage.interface";
 import { requireFlag } from "@modules/rbac/rbac.middleware";
 
-export function registerLayoutsRoutes(app: FastifyInstance, storage: IStorage, cacheHook: any) {
+export function registerLayoutsRoutes(app: FastifyInstance, storage: IStorage, cacheHook: RouteShorthandOptions) {
   const controller = new LayoutsController(storage);
 
   app.get('/api/layouts', { ...cacheHook }, async (req, reply) => controller.getAll(req, reply));

@@ -2,8 +2,23 @@ import { db } from "@server/db";
 import { bookings, passengers, seatInventory, bookingHistory } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
-import { IStorage } from "@server/storage.interface";
+import { IStorage, type ActivePassengerForTrip } from "@server/storage.interface";
 import { generateBookingCode } from "@server/utils/codeGenerator";
+import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
+import { AtomicHoldService } from "./atomicHold.service";
+import { enqueueCancelSeats } from "@modules/holds/compensationQueue";
+import { randomUUID } from "node:crypto";
+import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { createComponentLogger } from "@server/lib/logger";
+
+const log = createComponentLogger("reschedule.service");
+
+/**
+ * S1-09 (Sprint 2): operasi reschedule berisiko ganti kursi & buat
+ * booking baru, jadi tetap di-guard di service-layer.
+ *   - reschedulePassenger        → `action.passenger.reschedule`
+ *   - batchRescheduleForTripClose → `action.trip.batch_reschedule`
+ */
 
 function getLegIndexes(originSeq: number, destinationSeq: number): number[] {
   const legs: number[] = [];
@@ -23,8 +38,10 @@ export class RescheduleService {
     newOriginSeq: number,
     newDestinationSeq: number,
     performedBy: string,
-    reason?: string
-  ): Promise<{ success: boolean; oldBooking: any; newBooking: any }> {
+    reason: string | undefined,
+    ctx: ServiceContext
+  ): Promise<{ success: boolean; oldBooking: typeof bookings.$inferSelect; newBooking: typeof bookings.$inferSelect }> {
+    requirePermission(ctx, "action.passenger.reschedule");
     const passenger = await db.select().from(passengers).where(eq(passengers.id, passengerId)).then(r => r[0]);
     if (!passenger) throw new Error("Penumpang tidak ditemukan");
     if (passenger.ticketStatus === 'unseated' || passenger.ticketStatus === 'cancelled') {
@@ -64,22 +81,49 @@ export class RescheduleService {
 
     let resultBookingId = booking.id;
 
-    await db.transaction(async (tx) => {
-      await tx.update(seatInventory)
-        .set({ booked: false, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, oldTripId),
-          eq(seatInventory.seatNo, oldSeatNo),
-          inArray(seatInventory.legIndex, oldLegIndexes)
-        ));
+    // Engine mode: book the new seat (hold→confirm) BEFORE the local tx, so
+    // the engine owns the inventory write. We pre-generate the new booking
+    // ID if the reschedule will split into a new booking, so the engine
+    // confirm can carry the canonical id forward. Old seat is freed AFTER
+    // the local tx commits (so a tx-fail compensation only has to revert
+    // the new seat, not also re-book the old one).
+    const engineMode = isEngineEnabled();
+    const engineOperatorId = booking.createdBy || performedBy;
+    const willSplit = !(isSoleActivePassenger || !tripChanged);
+    const preGenNewBookingId = engineMode && willSplit ? randomUUID() : undefined;
+    let engineNewSeatBooked = false;
+    if (engineMode) {
+      const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+      await adapter.holdAndConfirmShort({
+        bookingId: preGenNewBookingId ?? booking.id,
+        tripId: newTripId,
+        seatNo: newSeatNo,
+        legIndexes: newLegIndexes,
+        operatorId: engineOperatorId,
+      });
+      engineNewSeatBooked = true;
+    }
 
-      await tx.update(seatInventory)
-        .set({ booked: true, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, newTripId),
-          eq(seatInventory.seatNo, newSeatNo),
-          inArray(seatInventory.legIndex, newLegIndexes)
-        ));
+    try {
+    await db.transaction(async (tx) => {
+      // Inventory writes are owned by the engine when the flag is on.
+      if (!engineMode) {
+        await tx.update(seatInventory)
+          .set({ booked: false, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, oldTripId),
+            eq(seatInventory.seatNo, oldSeatNo),
+            inArray(seatInventory.legIndex, oldLegIndexes)
+          ));
+
+        await tx.update(seatInventory)
+          .set({ booked: true, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, newTripId),
+            eq(seatInventory.seatNo, newSeatNo),
+            inArray(seatInventory.legIndex, newLegIndexes)
+          ));
+      }
 
       if (isSoleActivePassenger || !tripChanged) {
         await tx.update(passengers)
@@ -97,6 +141,7 @@ export class RescheduleService {
           .where(eq(bookings.id, booking.id));
       } else {
         const [newBooking] = await tx.insert(bookings).values({
+          ...(preGenNewBookingId ? { id: preGenNewBookingId } : {}),
           bookingCode: generateBookingCode(),
           tripId: newTripId,
           originStopId: newOriginStopId,
@@ -143,15 +188,73 @@ export class RescheduleService {
         performedBy
       });
     });
-
-    for (const legIdx of oldLegIndexes) {
-      webSocketService.emitInventoryUpdated(oldTripId, oldSeatNo, [legIdx]);
+    } catch (err) {
+      // Local tx failed AFTER we already booked the new seat in the engine.
+      // Compensate by freeing the new seat so it doesn't leak. If the
+      // compensating engine call ALSO fails (rare double-failure), enqueue
+      // it so the scheduler retries — never give up silently.
+      if (engineMode && engineNewSeatBooked) {
+        const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+        try {
+          await adapter.cancelSeats({
+            tripId: newTripId,
+            seatNo: newSeatNo,
+            legIndexes: newLegIndexes,
+          });
+        } catch (e) {
+          log.error({ err: e, op: "reschedule", tripId: newTripId }, "compensation cancelSeats(new) failed, enqueuing");
+          
+          await enqueueCancelSeats({
+            tripId: newTripId,
+            seatNo: newSeatNo,
+            legIndexes: newLegIndexes,
+            context: { source: 'reschedulePassenger.compensation', passengerId, originalBookingId: booking.id },
+          });
+        }
+      }
+      throw err;
     }
-    for (const legIdx of newLegIndexes) {
-      webSocketService.emitInventoryUpdated(newTripId, newSeatNo, [legIdx]);
+
+    // Engine mode: now that the local state is consistent with the new
+    // booking, free the OLD seat in the engine. If this fails, enqueue it
+    // for asynchronous retry — the reschedule itself is already complete
+    // on TT side and we do not want to roll the new seat back.
+    if (engineMode) {
+      const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+      try {
+        await adapter.cancelSeats({
+          tripId: oldTripId,
+          seatNo: oldSeatNo,
+          legIndexes: oldLegIndexes,
+        });
+      } catch (e) {
+        log.error({ err: e, op: "reschedule", tripId: oldTripId }, "engine cancelSeats(old) failed, enqueuing for retry");
+        
+        await enqueueCancelSeats({
+          tripId: oldTripId,
+          seatNo: oldSeatNo,
+          legIndexes: oldLegIndexes,
+          context: { source: 'reschedulePassenger.cancelOld', passengerId, originalBookingId: booking.id },
+        });
+      }
+    }
+
+    // In engine mode the adapter.cancelSeats() and holdAndConfirmShort()
+    // calls already emitted per-seat inventory events. Skip the duplicate
+    // caller-side broadcast to keep WS traffic lean.
+    if (!engineMode) {
+      for (const legIdx of oldLegIndexes) {
+        webSocketService.emitInventoryUpdated(oldTripId, oldSeatNo, [legIdx]);
+      }
+      for (const legIdx of newLegIndexes) {
+        webSocketService.emitInventoryUpdated(newTripId, newSeatNo, [legIdx]);
+      }
     }
 
     const updatedBooking = await this.storage.getBookingById(resultBookingId);
+    if (!updatedBooking) {
+      throw new Error("Booking tidak ditemukan setelah reschedule");
+    }
     return {
       success: true,
       oldBooking: updatedBooking,
@@ -167,8 +270,10 @@ export class RescheduleService {
     newOriginSeq: number,
     newDestinationSeq: number,
     performedBy: string,
-    reason: string
-  ): Promise<{ succeeded: any[]; failed: any[] }> {
+    reason: string,
+    ctx: ServiceContext
+  ): Promise<{ succeeded: Array<ActivePassengerForTrip & { newSeatNo: string }>; failed: Array<ActivePassengerForTrip & { failReason: string }> }> {
+    requirePermission(ctx, "action.trip.batch_reschedule");
     const activePassengers = await this.storage.getActivePassengersForTrip(oldTripId);
     if (activePassengers.length === 0) {
       return { succeeded: [], failed: [] };
@@ -200,11 +305,11 @@ export class RescheduleService {
         return numA - numB || a.localeCompare(b);
       });
 
-    const succeeded: any[] = [];
-    const failed: any[] = [];
+    const succeeded: Array<ActivePassengerForTrip & { newSeatNo: string }> = [];
+    const failed: Array<ActivePassengerForTrip & { failReason: string }> = [];
     let seatIdx = 0;
 
-    const passengersByBooking = new Map<string, any[]>();
+    const passengersByBooking = new Map<string, ActivePassengerForTrip[]>();
     for (const pax of activePassengers) {
       const arr = passengersByBooking.get(pax.bookingId) || [];
       arr.push(pax);
@@ -212,7 +317,10 @@ export class RescheduleService {
     }
 
     for (const pax of activePassengers) {
-      const preferredSeat = pax.seatNo;
+      // Active (non-unseated) passengers always have a seat; the storage
+      // contract returns `seatNo: string | null` because the column is
+      // nullable, but the SQL filter excludes unseated tickets.
+      const preferredSeat = pax.seatNo!;
       let targetSeat: string | null = null;
 
       if (fullyAvailableSeats.includes(preferredSeat)) {
@@ -231,22 +339,51 @@ export class RescheduleService {
       try {
         const oldLegIndexes = getLegIndexes(pax.originSeq, pax.destinationSeq);
 
-        await db.transaction(async (tx) => {
-          await tx.update(seatInventory)
-            .set({ booked: false, holdRef: null })
-            .where(and(
-              eq(seatInventory.tripId, oldTripId),
-              eq(seatInventory.seatNo, pax.seatNo),
-              inArray(seatInventory.legIndex, oldLegIndexes)
-            ));
+        // Engine mode: book the new seat (hold→confirm) BEFORE the local
+        // tx, on a per-pax basis. We pre-decide whether this pax will keep
+        // its existing booking row or land on a freshly-split one so the
+        // engine confirm carries the right canonical booking_id. Old seat
+        // is freed AFTER the local tx commits; failures are logged.
+        const engineMode = isEngineEnabled();
+        const siblingsForPax = passengersByBooking.get(pax.bookingId) || [];
+        const allSiblingsInBatchForPax = siblingsForPax.every(s =>
+          activePassengers.some(ap => ap.id === s.id),
+        );
+        const willSplit = !allSiblingsInBatchForPax;
+        const preGenSplitBookingId =
+          engineMode && willSplit ? randomUUID() : undefined;
+        let engineNewBooked = false;
+        if (engineMode) {
+          const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+          await adapter.holdAndConfirmShort({
+            bookingId: preGenSplitBookingId ?? pax.bookingId,
+            tripId: newTripId,
+            seatNo: targetSeat!,
+            legIndexes: newLegIndexes,
+            operatorId: performedBy,
+          });
+          engineNewBooked = true;
+        }
 
-          await tx.update(seatInventory)
-            .set({ booked: true, holdRef: null })
-            .where(and(
-              eq(seatInventory.tripId, newTripId),
-              eq(seatInventory.seatNo, targetSeat!),
-              inArray(seatInventory.legIndex, newLegIndexes)
-            ));
+        try {
+        await db.transaction(async (tx) => {
+          if (!engineMode) {
+            await tx.update(seatInventory)
+              .set({ booked: false, holdRef: null })
+              .where(and(
+                eq(seatInventory.tripId, oldTripId),
+                eq(seatInventory.seatNo, preferredSeat),
+                inArray(seatInventory.legIndex, oldLegIndexes)
+              ));
+
+            await tx.update(seatInventory)
+              .set({ booked: true, holdRef: null })
+              .where(and(
+                eq(seatInventory.tripId, newTripId),
+                eq(seatInventory.seatNo, targetSeat!),
+                inArray(seatInventory.legIndex, newLegIndexes)
+              ));
+          }
 
           await tx.update(passengers)
             .set({ seatNo: targetSeat! })
@@ -270,6 +407,7 @@ export class RescheduleService {
           } else {
             const oldBooking = await this.storage.getBookingById(pax.bookingId);
             const [newBooking] = await tx.insert(bookings).values({
+              ...(preGenSplitBookingId ? { id: preGenSplitBookingId } : {}),
               bookingCode: generateBookingCode(),
               tripId: newTripId,
               originStopId: newOriginStopId,
@@ -278,7 +416,7 @@ export class RescheduleService {
               destinationSeq: newDestinationSeq,
               channel: oldBooking?.channel || 'CSO',
               outletId: oldBooking?.outletId,
-              totalAmount: pax.fareAmount,
+              totalAmount: pax.fareAmount ?? '0',
               discountAmount: '0',
               currency: oldBooking?.currency || 'IDR',
               createdBy: performedBy,
@@ -313,13 +451,66 @@ export class RescheduleService {
             performedBy,
           });
         });
-
-        const oldLegIdx = getLegIndexes(pax.originSeq, pax.destinationSeq);
-        for (const legIdx of oldLegIdx) {
-          webSocketService.emitInventoryUpdated(oldTripId, pax.seatNo, [legIdx]);
+        } catch (txErr) {
+          // Compensate: free the new seat we already booked in the engine.
+          // Enqueue if even the compensating call fails so the scheduler
+          // can drain it later.
+          if (engineMode && engineNewBooked) {
+            const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+            try {
+              await adapter.cancelSeats({
+                tripId: newTripId,
+                seatNo: targetSeat!,
+                legIndexes: newLegIndexes,
+              });
+            } catch (e) {
+              log.error({ err: e, op: "rescheduleBatch", tripId: newTripId }, "compensation cancelSeats(new) failed, enqueuing");
+              
+              await enqueueCancelSeats({
+                tripId: newTripId,
+                seatNo: targetSeat!,
+                legIndexes: newLegIndexes,
+                context: { source: 'batchReschedule.compensation', passengerId: pax.id },
+              });
+            }
+          }
+          throw txErr;
         }
-        for (const legIdx of newLegIndexes) {
-          webSocketService.emitInventoryUpdated(newTripId, targetSeat, [legIdx]);
+
+        // Engine mode: free the old seat after tx commit. On failure,
+        // enqueue for scheduler retry (do not roll back the new seat).
+        if (engineMode) {
+          const adapter = new HoldsAdapter(new AtomicHoldService(this.storage));
+          try {
+            await adapter.cancelSeats({
+              tripId: oldTripId,
+              seatNo: preferredSeat,
+              legIndexes: oldLegIndexes,
+            });
+          } catch (e) {
+            log.error(
+              { err: e, op: "rescheduleBatch", paxId: pax.id, tripId: oldTripId },
+              "engine cancelSeats(old) failed, enqueuing"
+            );
+            
+            await enqueueCancelSeats({
+              tripId: oldTripId,
+              seatNo: preferredSeat,
+              legIndexes: oldLegIndexes,
+              context: { source: 'batchReschedule.cancelOld', passengerId: pax.id },
+            });
+          }
+        }
+
+        // Adapter already emitted per-seat WS events in engine mode.
+        if (!engineMode) {
+          const oldLegIdx = getLegIndexes(pax.originSeq, pax.destinationSeq);
+          for (const legIdx of oldLegIdx) {
+            webSocketService.emitInventoryUpdated(oldTripId, preferredSeat, [legIdx]);
+          }
+          for (const legIdx of newLegIndexes) {
+            webSocketService.emitInventoryUpdated(newTripId, targetSeat, [legIdx]);
+          }
         }
 
         succeeded.push({ ...pax, newSeatNo: targetSeat });
