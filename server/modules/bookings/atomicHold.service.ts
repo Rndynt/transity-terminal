@@ -36,6 +36,34 @@ function isHoldActive(
   return false;
 }
 
+/**
+ * P2 §10.7 — a leg conflicts on hold creation iff:
+ *   (a) it is already booked, OR
+ *   (b) its hold_ref points at an *active* seat_holds row.
+ *
+ * A hold row is active when either:
+ *   - h.expires_at > now()                  (TTL window still open), OR
+ *   - h.booking_id IS NOT NULL              (already confirmed; the
+ *     release path nulls hold_ref on cancel, so a non-null
+ *     booking_id always wins regardless of expires_at).
+ *
+ * An orphan hold_ref (no matching seat_holds row, or one whose
+ * expires_at lapsed without a booking_id) is treated as a tombstone
+ * the reaper will sweep — atomicHold overwrites it and proceeds.
+ *
+ * This must stay aligned with the engine implementation in
+ * `engine/crates/engine-core/src/hold.rs::run_hold_txn`.
+ */
+function isHoldActive(
+  holdExpiresAt: Date | null,
+  holdBookingId: string | null,
+  now: Date,
+): boolean {
+  if (holdBookingId !== null) return true;
+  if (holdExpiresAt !== null) return holdExpiresAt > now;
+  return false;
+}
+
 export interface SeatHoldRequest {
   tripId: string;
   seatNo: string;
