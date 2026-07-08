@@ -2,7 +2,9 @@
 
 **Sistem Ticketing Bus Transit Multi-Operator**
 
-TransityTerminal adalah sistem ticketing bus transit multi-operator yang komprehensif, mendukung pengelolaan rute, perjalanan, kursi, pemesanan, kargo, SPJ, dan harga dinamis. Sistem ini dirancang untuk operasional real-time dengan dukungan WebSocket untuk update inventaris kursi secara live.
+TransityTerminal adalah sistem terminal/operator untuk ticketing bus, shuttle, dan travel multi-stop. Sistem ini mendukung operasional CSO, rute, perjalanan, kursi, reservasi, pembayaran, kargo, SPJ, manifest, kasir, refund, laporan, RBAC, realtime seat inventory, dan sinkronisasi schedule ke TransityConsole.
+
+README ini adalah entrypoint project. Detail fitur tetap berada di `docs/FEATURES.md`; README ini merangkum kondisi codebase saat ini berdasarkan struktur `client/`, `server/`, `shared/schema/`, `migrations/`, `deploy/`, dan commit history terbaru.
 
 ---
 
@@ -28,7 +30,7 @@ Dokumentasi teknis lengkap dengan penjelasan cara kerja, teknologi, dan logika p
 | [12. WebSocket](docs/FEATURES.md#12-real-time-websocket) | Rooms, events, fallback polling |
 | [13. Laporan](docs/FEATURES.md#13-laporan--analitik) | 8 jenis report, snapshot-based, cara perhitungan |
 | [14. Unseat & Reschedule](docs/FEATURES.md#14-unseat-reschedule--riwayat-booking) | Unseat, assign, reschedule, batch reschedule, cancel, audit trail |
-| [15. Aplikasi Mobile](docs/FEATURES.md#15-aplikasi-mobile-b2c) | Expo React Native B2C |
+| [15. Public App API](#public-app--ota-api) | Endpoint `/api/app/*` untuk customer-facing client / OTA |
 | [16. Optimasi Performa](docs/FEATURES.md#16-optimasi-performa) | Index, N+1 fix, paralelisasi, caching |
 | [17. Database & Skema](docs/FEATURES.md#17-database--skema) | Semua tabel dengan keterangan |
 | [18. Data Integrity](docs/FEATURES.md#18-data-integrity--snapshot-system) | Snapshot columns, impact check, backfill |
@@ -47,1154 +49,763 @@ Dokumentasi teknis lengkap dengan penjelasan cara kerja, teknologi, dan logika p
 - [API Endpoints](#api-endpoints)
 - [Alur Booking](#alur-booking)
 - [Virtual Scheduling](#virtual-scheduling)
-- [Otorisasi (RBAC + ABAC + Feature Flags)](#otorisasi-rbac--abac--feature-flags)
+- [Otorisasi RBAC + Feature Flags](#otorisasi-rbac--feature-flags)
 - [Real-time Events](#real-time-events)
+- [Reservation Engine Adapter](#reservation-engine-adapter)
 - [Struktur Project](#struktur-project)
-- [Status Fitur](#status-fitur)
+- [Deployment](#deployment)
+- [Testing & CI](#testing--ci)
+- [Status Codebase Saat Ini](#status-codebase-saat-ini)
 
 ---
 
 ## Fitur Utama
 
 ### Operasional
-- **Terminal Reservasi CSO** — Dua mode booking: *Sekali Jalan* (one-way, 7-step flow) dan *Pulang Pergi/PP* (round-trip, satu transaksi dengan dua trip terhubung via `booking_groups`). Seat map real-time, passenger form, inline payment, print ticket.
-- **Pulang Pergi (PP)** — Booking dua arah dalam satu transaksi. Flow 4-step (Pergi → Pulang → Penumpang → Selesai). Outbound dan return seat hold harus aktif sebelum submit. Menghasilkan `groupCode` yang menghubungkan kedua booking.
-- **Jadwal Harian** — Unified daily schedule dengan driver assignment, manifest access, SPJ creation
-- **Kargo** — Waybill generation (TRN-YYYYMMDD-XXXXX), tariff calculation, status lifecycle tracking
-- **SPJ (Surat Perintah Jalan)** — Trip work orders dengan cost lines, settlement, profit calculation
-- **Manifest Perjalanan** — Trip manifest dengan dukungan thermal printer 80mm
-- **Dashboard** — Ringkasan operasional: total trip, booking, revenue, kargo, load factor, alert, dan recent bookings
-- **Kasir** — Buka/tutup sesi kasir harian, approval sesi, breakdown settlement, live transaction summary (auto-refresh 30s)
-- **Refund** — Buat/approve/proses refund dengan pencarian booking code. CSO buat, manager/finance approve & proses
-- **Pelanggan (CRM)** — Profil pelanggan dengan tag (regular/vip/frequent/blacklist) dan riwayat booking
-- **Console Schedule Sync** — Push otomatis perubahan jadwal ke TransityConsole via webhook HMAC-signed (`schedule.created/updated/deleted`). Auto-recovery setelah outage Console: scheduler trigger full snapshot push begitu Console healthy kembali. Operator tidak perlu klik "Sync" manual.
-- **Console Connection Status** — Halaman `/admin/settings` menampilkan live status koneksi Console (healthy / degraded / down), timestamp push terakhir, antrian retry, dan tombol "Push snapshot now" untuk manual trigger. Auto-refresh 30 detik.
+
+- **Terminal Reservasi CSO** — Flow reservasi internal operator dengan pencarian trip, seat map, passenger form, payment, hold kursi, dan print ticket.
+- **Pulang Pergi (PP)** — Booking dua arah dalam satu transaksi melalui `booking_groups` dan flow round-trip service.
+- **Jadwal Harian** — Unified daily schedule dengan driver assignment, manifest access, SPJ creation, dan status operasional trip.
+- **Kargo** — Waybill, perhitungan tarif kargo, cargo type/rate, status lifecycle, dan tracking publik.
+- **SPJ (Surat Perintah Jalan)** — Work order perjalanan, cost lines, settlement, dan kalkulasi biaya trip.
+- **Manifest Perjalanan** — Manifest penumpang per trip dengan format print thermal 80mm.
+- **Dashboard** — Ringkasan trip, booking, revenue, kargo, load factor, alert, dan recent bookings.
+- **Kasir** — Buka/tutup sesi kasir, approval session, settlement breakdown, dan transaksi harian.
+- **Refund** — Create, approve, process, reject refund dengan pembagian role CSO/manager/finance/owner.
+- **Pelanggan (CRM)** — Profil pelanggan, tag pelanggan, dan riwayat booking.
+- **Maintenance** — Modul maintenance operasional untuk kendaraan/aktivitas terkait armada.
+- **Notifications** — Notifikasi internal untuk event operasional.
 
 ### Master Data
-- **Halte (Stops)** — Titik berhenti/terminal dengan koordinat GPS
-- **Pola Perjalanan (Trip Patterns)** — Template rute dengan urutan pemberhentian, boarding/alighting flags
-- **Kendaraan (Vehicles)** — Armada bus dengan kapasitas dan layout kursi
-- **Pengemudi (Drivers)** — Data pengemudi dengan lisensi
-- **Outlet** — Lokasi penjualan tiket terhubung ke stop
-- **Layout Kursi** — Konfigurasi visual layout kursi bus (grid-based)
-- **Aturan Harga (Price Rules)** — Harga dinamis scope-based (pattern/trip/leg/time) dengan mode per-leg dan flat
-- **Promo & Voucher** — Kode diskon, voucher generation, usage limits
+
+- **Halte / Stops** — Titik berhenti/terminal dengan koordinat GPS.
+- **Outlet** — Lokasi penjualan tiket yang terhubung dengan stop.
+- **Kendaraan / Vehicles** — Armada bus dengan kapasitas dan layout kursi.
+- **Layout Kursi** — Konfigurasi visual kursi berbasis grid.
+- **Pengemudi / Drivers** — Data pengemudi dan lisensi.
+- **Trip Patterns** — Template rute dengan urutan stop dan aturan boarding/alighting.
+- **Trip Bases** — Jadwal template yang dapat dimaterialisasi menjadi trip aktual.
+- **Trips** — Instance perjalanan aktual/materialized.
+- **Price Rules** — Harga dinamis berdasarkan pattern, trip, leg, waktu, dan channel.
+- **Promotions & Vouchers** — Promo code, voucher generation, usage limit.
+- **Cargo Types & Cargo Rates** — Tipe barang dan tarif kargo.
 
 ### Booking & Seat Management
-- **Virtual → Real Trip** — Trip bases auto-materialize saat booking pertama
-- **Seat Inventory** — Pre-computed per seat per leg, real-time hold system dengan TTL
-- **Unseat / Reassign / Reschedule** — Full seat management dengan mandatory reason notes dan audit trail
-- **Batch Reschedule on Close** — Saat close trip, otomatis deteksi penumpang aktif dan batch reschedule ke trip lain
-- **WebSocket Broadcast** — Update ketersediaan kursi real-time ke semua terminal CSO
+
+- **Virtual → Real Trip** — Trip base dapat dimaterialisasi saat ada kebutuhan booking.
+- **Seat Inventory** — Inventori kursi per seat dan per leg.
+- **Seat Hold** — Hold kursi dengan TTL, expiry, release, dan confirm.
+- **Unseat / Reassign / Reschedule** — Manajemen kursi lanjutan dengan reason note dan audit trail.
+- **Batch Reschedule on Close** — Penanganan penumpang aktif saat trip ditutup/reschedule.
+- **WebSocket Broadcast** — Update seat map real-time ke terminal CSO yang membuka trip yang sama.
 
 ### Laporan (Reports)
-- Revenue, Sales, Trip Profitability, Load Factor, Cancellations, Cargo, Payments, Commercial Fee
-- Filter tanggal dengan presets, selector outlet/channel/route
-- Snapshot-based: laporan historis menggunakan data snapshot saat transaksi, bukan data master terkini
+
+- Revenue report.
+- Sales report.
+- Trip profitability report.
+- Load factor report.
+- Cancellations report.
+- Cargo report.
+- Payments report.
+- Commercial fee report.
+
+Laporan memakai pendekatan snapshot untuk menjaga histori transaksi agar tidak berubah akibat perubahan master data di masa depan.
 
 ### Admin
-- **Staff Management** — CRUD dengan role assignment dan outlet scoping
-- **Feature Flags** — Toggle akses fitur per flag key
-- **RBAC Roles** — `owner`, `manager`, `finance`, `spv_operations`, `operations`, `spv_cso`, `cso`
-- **Outlet Scoping** — Batasi akses data ke outlet yang di-assign
 
-### Mobile (B2C)
-- Expo React Native app di `/apps/mobile`
-- Sistem auth terpisah (`/api/app/auth/*`)
-- Pencarian trip, booking, tracking kargo
+- **Staff Management** — Manajemen user/staff terminal.
+- **RBAC Roles** — Role, permission flag, outlet scoping, dan guard backend/frontend.
+- **Feature Flags** — Toggle akses fitur per flag key.
+- **Outlet Scoping** — Batasi akses data berdasarkan outlet user.
+- **Settings** — Konfigurasi operator, integrasi Console, dan setting terminal.
+
+### Public App / OTA API
+
+Repo ini menyediakan API customer-facing di `/api/app/*`, misalnya auth app user, pencarian trip, booking, payment, voucher, review, dan cargo tracking.
+
+Catatan penting: source aplikasi mobile penuh tidak menjadi bagian utama repo ini saat ini. Server hanya memiliki dukungan untuk melayani build `/mobile` jika artefak `apps/mobile/dist` tersedia, sedangkan flow utama repo tetap web terminal + backend API.
+
+### TransityConsole Integration
+
+- Schedule snapshot endpoint untuk Console.
+- HMAC-signed webhook untuk schedule changes.
+- Console connection status di settings.
+- OTA booking lookup dan OTA payment confirmation.
+- Service-to-service API memakai `X-Service-Key`.
 
 ---
 
 ## Arsitektur Sistem
 
+```text
+┌────────────────────────────────────────────────────────────────────┐
+│                         CLIENT (React + Vite)                      │
+│  CSO │ Schedule │ Manifest │ SPJ │ Cargo │ Reports │ Admin │ CRM   │
+│                         Wouter + TanStack Query                    │
+└───────────────────────────────┬────────────────────────────────────┘
+                                │ HTTP / WebSocket
+                                ▼
+┌────────────────────────────────────────────────────────────────────┐
+│                    SERVER (Fastify 5 + TypeScript)                 │
+│  Env Guard │ CORS │ Helmet │ Rate Limit │ Metrics │ Logger │ RBAC  │
+│                                                                    │
+│  routes.ts                                                         │
+│    ├── Auth / Realmio                                              │
+│    ├── Terminal Protected API                                      │
+│    ├── Public App API                                              │
+│    ├── Console Service API                                         │
+│    └── Health / Metrics                                            │
+│                                                                    │
+│  Modules                                                           │
+│    bookings │ holds │ trips │ tripBases │ tripPatterns │ payments  │
+│    cargo │ spj │ cashier │ refunds │ reports │ rbac │ settings    │
+│                                                                    │
+│  Repositories / Storage Facade                                     │
+│  Socket.IO realtime                                                │
+└───────────────────────────────┬────────────────────────────────────┘
+                                │
+                                ▼
+┌────────────────────────────────────────────────────────────────────┐
+│                         POSTGRESQL DATABASE                        │
+│  users │ fleet │ network │ scheduling │ inventory │ booking        │
+│  cargo │ finance │ spj │ rbac │ notifications │ cashier │ refunds │
+└────────────────────────────────────────────────────────────────────┘
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     CLIENT (React + Vite)                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
-│  │   CSO    │  │ Masters  │  │  Admin   │  │ Reports  │      │
-│  │   Page   │  │   Page   │  │   Page   │  │   Pages  │      │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘      │
-│       └──────────────┴──────────────┴──────────────┘            │
-│                          │                                      │
-│                   React Query + Wouter                          │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ HTTP/WebSocket
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    SERVER (Fastify 5 + TypeScript)               │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │                    Auth & RBAC Layer                        │ │
-│  │  Realmio Auth │ RBAC Middleware │ Feature Flags │ Outlet   │ │
-│  └───────────────────────┬────────────────────────────────────┘ │
-│                          │                                      │
-│  ┌───────────────────────▼────────────────────────────────────┐ │
-│  │                    Routes Layer (104+ endpoints)            │ │
-│  │  preHandler arrays │ async handlers │ Zod validation       │ │
-│  └───────────────────────┬────────────────────────────────────┘ │
-│                          │                                      │
-│  ┌───────────────────────▼────────────────────────────────────┐ │
-│  │                  Controllers Layer                         │ │
-│  │  Bookings │ Pricing │ Cargo │ SPJ │ Reports │ Admin ...   │ │
-│  └───────────────────────┬────────────────────────────────────┘ │
-│                          │                                      │
-│  ┌───────────────────────▼────────────────────────────────────┐ │
-│  │                   Services Layer                           │ │
-│  │  BookingsService │ PricingService │ RbacService │ ...      │ │
-│  └───────────────────────┬────────────────────────────────────┘ │
-│                          │                                      │
-│  ┌───────────────────────▼────────────────────────────────────┐ │
-│  │                  Storage Layer (IStorage)                   │ │
-│  │              DatabaseStorage (Drizzle ORM)                  │ │
-│  └───────────────────────┬────────────────────────────────────┘ │
-│                          │                                      │
-│  ┌───────────────────────▼────────────────────────────────────┐ │
-│  │                 WebSocket Service                          │ │
-│  │        Socket.IO (Real-time Event Broadcasting)            │ │
-│  └────────────────────────────────────────────────────────────┘ │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    DATABASE (PostgreSQL)                         │
-│  stops │ outlets │ vehicles │ layouts │ trip_patterns │         │
-│  pattern_stops │ trip_bases │ trips │ trip_stop_times │        │
-│  trip_legs │ seat_inventory │ seat_holds │ price_rules │       │
-│  bookings │ passengers │ payments │ print_jobs │               │
-│  booking_groups │ staff_members │ feature_flags │ drivers │   │
-│  booking_history │ spj │ spj_cost_lines │ promotions │        │
-│  vouchers │ cargo_types │ cargo_rates │ cargo_shipments │      │
-│  refunds │ cashier_sessions │ customers │ notifications │      │
-└─────────────────────────────────────────────────────────────────┘
+
+### Runtime Bootstrap
+
+Entry point server ada di `server/index.ts`.
+
+Boot flow utama:
+
+1. Load environment dari `server/lib/loadEnv`.
+2. Init observability/Sentry jika dikonfigurasi.
+3. Setup Fastify server.
+4. Register security middleware: CORS, Helmet, rate limit, compression, raw body parser untuk webhook.
+5. Register request context, metrics hook, logger, dan error handler.
+6. Validate production environment.
+7. Jalankan migration saat `RUN_MIGRATIONS_ON_BOOT !== false`.
+8. Seed RBAC default.
+9. Register semua route dari `server/routes.ts`.
+10. Serve static frontend production dari `dist/public` atau Vite middleware saat development.
+11. Init Socket.IO realtime service.
+12. Start scheduler.
+
+### Backend Layering
+
+```text
+Route
+  → middleware / preHandler
+  → controller
+  → service
+  → repository / storage facade
+  → database
 ```
+
+Pola ini belum sepenuhnya identik di semua module karena masih ada facade `server/storage.ts`, tetapi domain utama sudah dipisah ke `server/modules/*` dan `server/repositories/*`.
+
+### Frontend Layering
+
+```text
+Page
+  → component / hook
+  → API client
+  → TanStack Query
+  → Fastify API
+```
+
+Frontend memakai:
+
+- `client/src/App.tsx` sebagai router utama.
+- `client/src/pages/*` untuk halaman domain.
+- `client/src/components/*` untuk UI dan domain components.
+- `client/src/hooks/*` untuk flow booking, seat hold, realtime, dan utilitas state.
+- `client/src/lib/*` untuk API client, auth, permissions, dan query client.
 
 ---
 
 ## Tech Stack
 
 ### Backend
-- **Runtime**: Node.js 20 + TypeScript
-- **Framework**: Fastify 5 (async-first, preHandler hooks)
-- **ORM**: Drizzle ORM
-- **Database**: PostgreSQL (Neon Serverless compatible)
-- **Real-time**: Socket.IO
-- **Validation**: Zod + drizzle-zod
-- **Auth**: Realmio (whitelabel OpenID Connect)
-- **Authorization**: RBAC + ABAC + Feature Flags
+
+- **Runtime**: Node.js 20.
+- **Language**: TypeScript ESM.
+- **Framework**: Fastify 5.
+- **ORM**: Drizzle ORM.
+- **Database**: PostgreSQL / Neon-compatible PostgreSQL.
+- **Validation**: Zod + drizzle-zod.
+- **Realtime**: Socket.IO.
+- **Logging**: Pino structured logging.
+- **Observability**: Prometheus metrics via `prom-client`, Sentry optional.
+- **Security**: Helmet, CORS guard, rate limiting, service key guard, production env guard.
+- **Optional infra**: Redis untuk multi-instance WebSocket adapter dan rate-limit store.
 
 ### Frontend
-- **Framework**: React 18
-- **Build Tool**: Vite
-- **Styling**: Tailwind CSS 4
-- **State Management**: TanStack Query (React Query)
-- **Routing**: Wouter
-- **UI Components**: Radix UI + shadcn/ui
-- **Icons**: Lucide React
 
-### Mobile
-- **Framework**: Expo React Native
-- **Location**: `/apps/mobile`
+- **Framework**: React 18.
+- **Build Tool**: Vite 5.
+- **Routing**: Wouter.
+- **State/Data Fetching**: TanStack Query.
+- **Styling**: Tailwind CSS dengan `tailwind.config.ts`.
+- **UI Components**: Radix UI + shadcn-style components.
+- **Icons**: Lucide React.
+- **Charts**: Recharts.
 
-### Development
-- **Package Manager**: npm
-- **Type Checking**: TypeScript 5.6
-- **Dev Server**: Vite + @fastify/middie (HMR)
-- **Bundler**: esbuild (production), Vite (development)
+### Tooling
+
+- **Package Manager**: npm (`package-lock.json`).
+- **Type Checking**: TypeScript.
+- **Dev Server**: Vite middleware + Fastify.
+- **Build Frontend**: Vite.
+- **Build Backend**: esbuild.
+- **Test Runner**: Vitest.
+- **Container**: Docker multi-stage Node 20 Alpine image.
 
 ---
 
 ## Struktur Database
 
-### Entity Relationship Diagram
+Schema Drizzle utama ada di `shared/schema/*` dan diekspor dari `shared/schema.ts`.
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│    stops    │────<│   outlets   │     │   layouts   │
-└──────┬──────┘     └─────────────┘     └──────┬──────┘
-       │                                       │
-       │     ┌─────────────────┐               │
-       └────<│  pattern_stops  │               │
-             └────────┬────────┘               │
-                      │                        │
-┌─────────────┐       │     ┌─────────────┐    │
-│trip_patterns│───────┴────<│   vehicles  │<───┘
-└──────┬──────┘             └──────┬──────┘
-       │                           │
-       │     ┌─────────────┐       │
-       └────<│  trip_bases │       │
-             └──────┬──────┘       │
-                    │              │
-             ┌──────▼──────┐       │     ┌─────────────┐
-             │    trips    │<──────┘     │   drivers   │
-             └──────┬──────┘             └──────┬──────┘
-                    │                           │
-        ┌───────────┼───────────┐               │
-        │           │           │               │
-┌───────▼───────┐   │   ┌───────▼───────┐       │
-│trip_stop_times│   │   │   trip_legs   │       │
-└───────────────┘   │   └───────┬───────┘       │
-                    │           │               │
-             ┌──────▼──────┐    │        ┌──────▼──────┐
-             │seat_inventory│<──┘        │     spj     │
-             └──────┬──────┘             └──────┬──────┘
-                    │                           │
-             ┌──────▼──────┐             ┌──────▼──────┐
-             │  seat_holds │             │spj_cost_lines│
-             └─────────────┘             └─────────────┘
+Domain schema utama:
 
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  bookings   │────<│ passengers  │     │  payments   │
-└──────┬──────┘     └─────────────┘     └─────────────┘
-       │
-       ├──────────<┌─────────────┐
-       │           │booking_history│
-       │           └─────────────┘
-       │
-┌──────▼──────┐     ┌─────────────┐     ┌─────────────┐
-│ print_jobs  │     │ promotions  │────<│  vouchers   │
-└─────────────┘     └─────────────┘     └─────────────┘
-
-┌─────────────┐     ┌───────────────┐
-│    staff    │     │ feature_flags │
-└─────────────┘     └───────────────┘
-
-┌─────────────┐     ┌─────────────┐     ┌───────────────┐
-│ cargo_types │────<│ cargo_rates │     │cargo_shipments│
-└─────────────┘     └─────────────┘     └───────────────┘
+```text
+shared/schema/
+├── enums.ts
+├── users.ts
+├── fleet.ts
+├── network.ts
+├── scheduling.ts
+├── inventory.ts
+├── booking.ts
+├── cargo.ts
+├── app-users.ts
+├── promo.ts
+├── finance.ts
+├── spj.ts
+├── reviews.ts
+├── rbac.ts
+├── notifications.ts
+├── cashier.ts
+├── refunds.ts
+├── maintenance.ts
+├── customers.ts
+├── relations.ts
+└── settings.ts
 ```
 
-### Tabel Utama
+Migration SQL ada di `migrations/` dan saat ini disusun per domain:
 
-| Tabel | Deskripsi |
-|-------|-----------|
-| `stops` | Titik berhenti/terminal bus |
-| `outlets` | Lokasi penjualan tiket |
-| `layouts` | Konfigurasi layout kursi |
-| `vehicles` | Armada bus |
-| `drivers` | Data pengemudi |
-| `trip_patterns` | Pola rute (template) |
-| `pattern_stops` | Urutan stop dalam pola |
-| `trip_bases` | Template penjadwalan virtual |
-| `trips` | Instance perjalanan aktual |
-| `trip_stop_times` | Jadwal kedatangan/keberangkatan per stop |
-| `trip_legs` | Segmen perjalanan antar stop |
-| `seat_inventory` | Ketersediaan kursi per segmen |
-| `seat_holds` | Reservasi kursi sementara (TTL-based) |
-| `price_rules` | Aturan harga dinamis |
-| `bookings` | Data pemesanan |
-| `booking_groups` | Pengelompokan booking PP (round-trip) — menyimpan `groupCode`, `outboundBookingId`, `returnBookingId` |
-| `passengers` | Data penumpang |
-| `payments` | Data pembayaran |
-| `booking_history` | Audit trail (unseat/reassign/reschedule/cancel) |
-| `print_jobs` | Antrian cetak tiket |
-| `staff_members` | Staff users dengan role & outlet scope |
-| `feature_flags` | Feature flag toggles |
-| `spj` | Surat Perintah Jalan |
-| `spj_cost_lines` | Detail biaya SPJ |
-| `promotions` | Promo/diskon |
-| `vouchers` | Voucher individual |
-| `cargo_types` | Jenis kargo |
-| `cargo_rates` | Tarif kargo |
-| `cargo_shipments` | Data pengiriman kargo |
-| `refunds` | Permintaan refund (create → approve → process) |
-| `cashier_sessions` | Sesi kasir harian (open → closing → closed) |
-| `customers` | Profil pelanggan B2C dengan tag CRM |
-| `notifications` | Notifikasi in-app per staff member |
-| `operator_settings` | Pengaturan branding per operator (nama, logo, warna) |
+```text
+0001_extensions.sql
+0002_enums.sql
+0003_users.sql
+0004_geography.sql
+0005_fleet.sql
+0006_rbac.sql
+0007_promotions.sql
+0008_app_users.sql
+0009_scheduling_patterns.sql
+0010_scheduling_bases.sql
+0011_trips.sql
+0012_inventory_and_holds.sql
+0013_pricing.sql
+0014_bookings_core.sql
+0015_bookings_extras.sql
+0016_cargo.sql
+0017_spj.sql
+0018_cashier.sql
+0019_engine_integration.sql
+0020_settings_and_notifications.sql
+0021_views.sql
+```
+
+### Migration Runner
+
+- `server/migrator.ts` menjalankan migration SQL.
+- `server/migrate.ts` menjalankan safety-net migration untuk kompatibilitas user/staff table.
+- `scripts/db-migrate.ts` menjalankan kedua migration path sebagai deploy step.
+- `npm run db:push` tersedia untuk sync Drizzle saat development.
 
 ---
 
 ## Instalasi
 
-### Prasyarat
-- Node.js 20+
-- PostgreSQL 14+ (atau Neon Serverless)
-
-### Langkah Instalasi
+### 1. Clone repo
 
 ```bash
-# Clone repository
-git clone https://github.com/Rndynt/TransityTerminal.git
-cd TransityTerminal
+git clone <repo-url>
+cd transity-terminal
+```
 
-# Install dependencies
-npm install
+### 2. Install dependencies
 
-# Setup environment variables (lihat bagian Konfigurasi)
+```bash
+npm ci
+```
 
-# Push schema ke database
+### 3. Siapkan environment
+
+```bash
+cp .env.example .env
+```
+
+Minimal development lokal:
+
+```env
+NODE_ENV=development
+DATABASE_URL=postgresql://user:password@localhost:5432/transity_terminal
+JWT_SECRET=dev-secret-minimum-32-characters-long
+DEV_BYPASS_AUTH=true
+```
+
+### 4. Sync database
+
+```bash
 npm run db:push
+```
 
-# Jalankan development server
+Atau jalankan migration runner:
+
+```bash
+npx tsx scripts/db-migrate.ts
+```
+
+### 5. Seed data demo
+
+```bash
+npx tsx server/seeds/index.ts buskita
+```
+
+Dataset lain:
+
+```bash
+npx tsx server/seeds/index.ts nusa
+```
+
+### 6. Run development server
+
+```bash
 npm run dev
 ```
 
-Aplikasi berjalan di `http://localhost:5000`.
-
-### Build & Production
-
-```bash
-# Build untuk production
-npm run build
-
-# Jalankan production server
-npm start
-```
-
-### Deployment via Docker (VPS)
-
-Pada VPS, gunakan stack Docker + Nginx terstandar:
-
-```bash
-# 1. Setup network sekali (pertama kali di VPS)
-docker network create transity-terminals-net
-
-# 2. Copy template env dan isi nilai operator
-cp .env.example .env
-# edit OPERATOR_SLUG, HOST_PORT, DATABASE_URL, REALMIO_*, JWT_SECRET, TERMINAL_SERVICE_KEY,
-# CONSOLE_URL, CONSOLE_OPERATOR_SLUG, CONSOLE_WEBHOOK_SECRET, dll.
-
-# 3. Deploy (script standar)
-./deploy.sh
-```
-
-`deploy.sh` melakukan: validasi `.env`, `git pull`, `docker compose up -d --build --remove-orphans`, prune image >24 jam. Hook `scripts/post-merge.sh` otomatis menjalankan `npm install` + `npm run db:push` setelah `git merge`/`git pull`. Compose ter-parameter via `${OPERATOR_SLUG}` + `${HOST_PORT}` — file compose yang sama dipakai untuk semua operator. Panduan lengkap (Nginx, SSL, multi-operator) di `docs/DEPLOY_VPS_DOCKER.md`.
+Default port runtime adalah `5000`.
 
 ---
 
 ## Konfigurasi
 
-### Environment Variables
+Environment utama tersedia di `.env.example`.
 
-Lihat `.env.example` untuk template lengkap dengan keterangan per variabel. Ringkasan:
+### Core Runtime
 
-**Operator & Server**
-| Variable | Default | Deskripsi | Required |
-|----------|---------|-----------|----------|
-| `OPERATOR_SLUG` | — | Slug operator (lowercase) untuk container & subdomain | Ya (Docker) |
-| `HOST_PORT` | 5000 | Port host yang dipublish (bind ke 127.0.0.1) | Ya (Docker) |
-| `NODE_ENV` | development | `production` di VPS | Tidak |
-| `PORT` | 5000 | Port aplikasi internal | Tidak |
-| `OPERATOR_TZ` | Asia/Jakarta | Timezone operator untuk grace-period & cutoff | Tidak |
+| Variable | Keterangan |
+|----------|------------|
+| `NODE_ENV` | `development`, `test`, atau `production`. |
+| `PORT` | Port aplikasi. Default `5000`. |
+| `DATABASE_URL` | PostgreSQL connection string. |
+| `OPERATOR_SLUG` | Slug operator/container. |
+| `OPERATOR_TZ` | Timezone operator. Default `Asia/Jakarta`. |
+| `HOST_PORT` | Port host saat Docker compose. |
+| `RUN_MIGRATIONS_ON_BOOT` | Jalankan migration saat boot. Default aktif. |
 
-**Database & Auth**
-| Variable | Default | Deskripsi | Required |
-|----------|---------|-----------|----------|
-| `DATABASE_URL` | — | PostgreSQL connection string | Ya |
-| `REALMIO_BASE_URL` | — | URL Realmio auth server | Tidak (dev bypass tersedia) |
-| `REALMIO_TENANT_ID` | — | Realmio tenant ID | Tidak |
-| `JWT_SECRET` | — | Secret untuk JWT mobile auth (`openssl rand -hex 32`) | Ya (production) |
-| `DEV_BYPASS_AUTH` | — | Hanya aktif jika `NODE_ENV !== 'production'` | Tidak |
+### Auth & Security
 
-**Public API & CORS**
-| Variable | Default | Deskripsi | Required |
-|----------|---------|-----------|----------|
-| `TERMINAL_SERVICE_KEY` | — | Service key untuk header `X-Service-Key` | Ya (production) |
-| `PAYMENT_WEBHOOK_SECRET` | — | HMAC secret webhook pembayaran | Ya (jika pakai webhook) |
-| `APP_CORS_ORIGINS` | `*` | Allowed origins untuk endpoint `/api/app/*` | Tidak |
-| `CORS_ORIGINS` | (kosong) | Allowed origins untuk WebSocket (Socket.io) | Ya (production) |
+| Variable | Keterangan |
+|----------|------------|
+| `REALMIO_BASE_URL` | Base URL Realmio auth service. |
+| `REALMIO_TENANT_ID` | Tenant ID operator. |
+| `JWT_SECRET` | Secret JWT internal app/customer API. Wajib production. |
+| `TERMINAL_SERVICE_KEY` | Service key untuk Console/OTA/internal integration. |
+| `APP_CORS_ORIGINS` | Origin HTTP API yang diizinkan. |
+| `CORS_ORIGINS` | Origin WebSocket yang diizinkan. |
+| `DEV_BYPASS_AUTH` | Development-only auth bypass. Jangan aktif di production. |
 
-**TransityConsole Sync** (kosong = no-op)
-| Variable | Default | Deskripsi |
-|----------|---------|-----------|
-| `CONSOLE_URL` | — | Base URL TransityConsole |
-| `CONSOLE_OPERATOR_SLUG` | — | Slug operator di Console (umumnya = `OPERATOR_SLUG`) |
-| `CONSOLE_WEBHOOK_SECRET` | — | HMAC secret untuk signing payload schedule sync |
-| `CONSOLE_SNAPSHOT_INTERVAL_MS` | 600000 | Interval push snapshot rutin (10 menit) |
-| `CONSOLE_SNAPSHOT_DAYS_AHEAD` | 7 | Jumlah hari ke depan yang dipush |
-| `CONSOLE_SNAPSHOT_MAX_TRIPS` | 1000 | Maksimum trip per snapshot HTTP (guard 413) |
-| `SCHEDULE_SNAPSHOT_GRACE_MINUTES` | 60 | Trip yang berangkat >N menit lalu di-skip dari snapshot |
+### Console Sync
 
-**Hold TTL**
-| Variable | Default | Deskripsi |
-|----------|---------|-----------|
-| `OTA_HOLD_TTL_MINUTES` | 20 | Hold TTL untuk channel OTA |
-| `WEB_HOLD_TTL_MINUTES` | 20 | Hold TTL untuk channel WEB |
-| `APP_HOLD_TTL_MINUTES` | 15 | Hold TTL untuk channel APP |
-| `HOLD_TTL_SHORT_SECONDS` | 300 | TTL hold singkat CSO (5 menit) |
-| `HOLD_TTL_LONG_SECONDS` | 1800 | TTL hold panjang CSO (30 menit) |
-| `PENDING_BOOKING_AUTO_RELEASE` | true | Auto-cleanup booking pending non-OTA |
+| Variable | Keterangan |
+|----------|------------|
+| `CONSOLE_URL` | Base URL TransityConsole. |
+| `CONSOLE_OPERATOR_SLUG` | Slug operator di Console. |
+| `CONSOLE_WEBHOOK_SECRET` | Secret HMAC webhook schedule. |
+| `CONSOLE_SYNC_ENABLED` | Enable/disable sync scheduler. |
+| `CONSOLE_SNAPSHOT_INTERVAL_MS` | Interval push snapshot schedule. |
+| `CONSOLE_SNAPSHOT_DAYS_AHEAD` | Jumlah hari ke depan untuk snapshot. |
+| `CONSOLE_SNAPSHOT_MAX_TRIPS` | Guard maksimum trip per snapshot. |
+| `SCHEDULE_SNAPSHOT_GRACE_MINUTES` | Grace period trip lampau sebelum diskip. |
 
-**Redis (Multi-Instance Scaling)** — opsional
-| Variable | Default | Deskripsi | Required |
-|----------|---------|-----------|----------|
-| `REDIS_URL` | (kosong) | Native Redis URL (`redis://...` atau `rediss://...`). Wajib kalau deploy multi-instance. | Ya (multi-instance) |
-| `RATE_LIMIT_MAX` | 300 | Maks request per `RATE_LIMIT_WINDOW` per IP (global) | Tidak |
-| `RATE_LIMIT_WINDOW` | `1 minute` | Window untuk global rate limit | Tidak |
+### Reservation Engine
 
-> **Kapan butuh Redis:** kalau deploy >1 instance Node.js (Autoscale, multiple replicas, atau load-balanced cluster). Tanpa Redis: (a) Socket.io broadcast hanya nyampai ke client di instance yg sama → desync seat inventory antar outlet/CSO; (b) rate-limit counter per-instance → limit efektif jadi N × max.
->
-> **Format wajib:** native Redis TCP URL, **bukan** REST endpoint. Upstash: dashboard → tab Connect → pilih Node/ioredis (BUKAN tab `@upstash/redis`). Format `rediss://default:PASSWORD@host:6379`.
->
-> **Single-instance deploy:** biarkan kosong — app otomatis fallback ke in-memory adapter, semua fitur tetap jalan normal. Kalau `REDIS_URL` salah format (mis. `https://...`), app log warning + fallback in-memory tanpa crash.
+| Variable | Keterangan |
+|----------|------------|
+| `RESERVATION_ENGINE_ENABLED` | Enable adapter engine eksternal. Default `false`. |
+| `RESERVATION_ENGINE_URL` | URL reservation engine sidecar. |
+| `RESERVATION_ENGINE_HMAC_SECRET` | Secret HMAC untuk komunikasi Terminal ↔ Engine. |
+| `RESERVATION_ENGINE_TIMEOUT_MS` | Timeout request engine. |
+| `RESERVATION_ENGINE_MAX_RETRIES` | Retry request engine. |
 
-### Dev Mode
+### Optional Infra
 
-Jika `NODE_ENV !== 'production'` dan `REALMIO_BASE_URL` kosong, sistem akan auto-login sebagai owner dengan semua permission. `DEV_BYPASS_AUTH` di-hardcode ke `!IS_PRODUCTION` — tidak bisa aktif di production meskipun env var di-set.
-
-### Security Notes
-
-- **Rate Limiting**: Login 10 req/menit, Register 5 req/menit (`@fastify/rate-limit`)
-- **Webhook**: HMAC-SHA256 signature verification dengan timing-safe comparison
-- **Response Redaction**: Token, password, session data di-redact dari semua log
-- **Seed Protection**: `/api/seed` diblokir total di production + memerlukan `admin.flags.manage`
-- **CORS**: Mobile API dikonfigurasi via `APP_CORS_ORIGINS`, admin dashboard same-origin
+| Variable | Keterangan |
+|----------|------------|
+| `REDIS_URL` | Redis untuk Socket.IO adapter/rate-limit store. |
+| `SENTRY_DSN` | Sentry DSN jika observability external diaktifkan. |
+| `PAYMENT_WEBHOOK_SECRET` | Secret webhook pembayaran. |
 
 ---
 
 ## API Endpoints
 
-### Authentication
+### Health & Observability
 
 ```http
-POST   /api/auth/sign-in/email    # Sign in dengan email/password
-POST   /api/auth/sign-up/email    # Registrasi akun baru
-POST   /api/auth/sign-out         # Sign out
-GET    /api/auth/session           # Session saat ini
-GET    /api/auth/me                # Data user saat ini
+GET /api/health
+GET /api/health/deep
+GET /api/health/clock
+GET /api/metrics
 ```
 
-### Permissions & Admin
+### Auth & Setup
 
 ```http
-GET    /api/permissions/me         # Flags & role user saat ini
-
-GET    /api/admin/staff            # List semua staff
-POST   /api/admin/staff            # Buat staff baru
-PUT    /api/admin/staff/:id        # Update staff
-DELETE /api/admin/staff/:id        # Hapus staff
-
-GET    /api/admin/flags            # List feature flags
-POST   /api/admin/flags            # Buat feature flag
-PUT    /api/admin/flags/:id        # Update feature flag
-DELETE /api/admin/flags/:id        # Hapus feature flag
+POST /api/auth/sign-in/email
+POST /api/auth/sign-up/email
+POST /api/auth/sign-out
+GET  /api/auth/session
+GET  /api/auth/me
+GET  /api/setup/status
+POST /api/setup/init
 ```
 
-### Master Data
+### Terminal Internal API
+
+Protected API untuk staff terminal:
 
 ```http
-# Stops
-GET/POST       /api/stops
-GET/PUT/DELETE /api/stops/:id
-
-# Outlets
-GET/POST       /api/outlets
-GET/PUT/DELETE /api/outlets/:id
-
-# Vehicles
-GET/POST       /api/vehicles
-GET/PUT/DELETE /api/vehicles/:id
-
-# Drivers
-GET/POST       /api/drivers
-GET/PUT/DELETE /api/drivers/:id
-
-# Layouts
-GET/POST       /api/layouts
-GET/PUT/DELETE /api/layouts/:id
-
-# Trip Patterns
-GET/POST       /api/trip-patterns
-GET/PUT/DELETE /api/trip-patterns/:id
-
-# Pattern Stops
-GET    /api/trip-patterns/:patternId/stops
-POST   /api/pattern-stops
-PUT    /api/pattern-stops/:id
-DELETE /api/pattern-stops/:id
-POST   /api/trip-patterns/:patternId/stops/bulk-replace
-
-# Trip Bases
-GET/POST       /api/trip-bases
-GET/PUT/DELETE /api/trip-bases/:id
-
-# Price Rules
-GET/POST       /api/price-rules
-PUT/DELETE     /api/price-rules/:id
-
-# Promos & Vouchers
-GET/POST       /api/promos
-PUT/DELETE     /api/promos/:id
-POST           /api/promos/:id/vouchers          # Generate vouchers
-DELETE         /api/promos/:id/vouchers/:voucherId # Revoke voucher
+/api/stops/*
+/api/outlets/*
+/api/vehicles/*
+/api/layouts/*
+/api/drivers/*
+/api/trip-patterns/*
+/api/trip-bases/*
+/api/trips/*
+/api/bookings/*
+/api/payments/*
+/api/cargo/*
+/api/spj/*
+/api/reports/*
+/api/admin/*
+/api/scheduler/*
+/api/dashboard/*
+/api/notifications/*
+/api/cashier/*
+/api/refunds/*
+/api/maintenance/*
+/api/customers/*
+/api/settings/*
 ```
 
-### Trip Operations
+### Public App / OTA API
+
+Endpoint customer-facing / OTA / service client:
 
 ```http
-# Trips
-GET    /api/trips                             # List trips (?date=YYYY-MM-DD)
-GET    /api/trips/:id
-POST   /api/trips
-PUT    /api/trips/:id
-DELETE /api/trips/:id
-
-# CSO Available Trips (union real + virtual)
-GET    /api/cso/available-trips?serviceDate=YYYY-MM-DD&outletId=UUID
-
-# Trip Stop Times
-GET    /api/trips/:tripId/stop-times
-GET    /api/trips/:tripId/stop-times/effective
-POST   /api/trips/:tripId/stop-times/bulk-upsert
-POST   /api/trips/:tripId/derive-legs
-POST   /api/trips/:tripId/precompute-seat-inventory
-
-# Seat Map
-GET    /api/trips/:id/seatmap?originSeq=N&destinationSeq=M
-GET    /api/trips/:tripId/seats/:seatNo/passenger-details
-GET    /api/trips/:id/unseated-passengers
-
-# Virtual Scheduling
-POST   /api/cso/materialize-trip
-POST   /api/trips/:id/close
-POST   /api/trips/:id/close-with-reschedule    # Close + batch reschedule penumpang aktif
-GET    /api/trips/:id/active-passengers         # Daftar penumpang aktif di trip
-
-# Impact Check (Data Integrity)
-GET    /api/stops/:id/impact                    # Cek trip/booking terdampak jika stop diubah
-GET    /api/trip-patterns/:id/impact            # Cek trip terdampak jika pattern diubah
-
-# Manifest
-GET    /api/trips/:id/manifest
-POST   /api/trips/:id/manifest/print
+/api/app/auth/*
+/api/app/profile
+/api/app/operator-info
+/api/app/cities
+/api/app/service-lines
+/api/app/trips/search
+/api/app/trips/:id
+/api/app/trips/:id/seatmap
+/api/app/trips/:id/reviews
+/api/app/bookings/*
+/api/app/payments/*
+/api/app/vouchers/validate
+/api/app/cargo/*
+/api/app/reviews
 ```
 
-### Booking & Payment
+### Console API
 
 ```http
-# Holds
-POST   /api/holds                              # Buat hold kursi
-DELETE /api/holds/:holdRef                      # Release hold
-
-# Bookings
-GET    /api/bookings
-GET    /api/bookings/:id
-POST   /api/bookings                           # Booking sekali jalan
-POST   /api/bookings/round-trip                # Booking PP (pulang pergi) — atomik, 2 trip 1 transaksi
-GET    /api/bookings/:bookingId/history         # Audit trail
-GET    /api/bookings/search?q=CODE              # Pencarian booking code (untuk refund autocomplete)
-
-# Unseat / Reassign / Reschedule
-POST   /api/passengers/:passengerId/unseat
-POST   /api/passengers/:passengerId/reassign
-POST   /api/passengers/:passengerId/reschedule
-POST   /api/passengers/:passengerId/assign-seat
-PATCH  /api/passengers/:id/cancel
-POST   /api/bookings/:bookingId/unseat-all
-
-# Payments
-GET    /api/bookings/:bookingId/payments
-POST   /api/payments
-
-# Pricing
-GET    /api/pricing/quote-fare?tripId=X&originSeq=N&destinationSeq=M
+GET /api/console/schedules
 ```
 
-### Dashboard, Kasir, Refund, Pelanggan
-
-```http
-# Dashboard
-GET    /api/dashboard/summary                  # Ringkasan operasional harian
-
-# Kasir
-GET    /api/cashier/sessions                   # List sesi kasir
-POST   /api/cashier/open                       # Buka sesi kasir
-POST   /api/cashier/close                      # Ajukan penutupan sesi
-POST   /api/cashier/approve/:sessionId         # Approve penutupan sesi
-GET    /api/cashier/sessions/:id               # Detail sesi + transaksi
-
-# Refund
-GET    /api/refunds                            # List refund
-POST   /api/refunds                            # Buat permintaan refund
-POST   /api/refunds/:id/approve                # Approve refund
-POST   /api/refunds/:id/process                # Proses/bayar refund
-POST   /api/refunds/:id/reject                 # Tolak refund
-
-# Pelanggan
-GET    /api/customers                          # List pelanggan
-GET    /api/customers/:id                      # Detail + riwayat booking
-PATCH  /api/customers/:id/tag                  # Update tag pelanggan
-
-# Notifikasi
-GET    /api/notifications                      # List notifikasi
-PATCH  /api/notifications/:id/read             # Tandai dibaca
-POST   /api/notifications/read-all             # Tandai semua dibaca
-
-# Operator Settings
-GET    /api/settings                           # Baca pengaturan branding
-PUT    /api/settings                           # Update pengaturan branding
-```
-
-### SPJ (Surat Perintah Jalan)
-
-```http
-GET    /api/spj                                # List SPJ
-GET    /api/spj/:id                            # Detail SPJ
-POST   /api/spj                                # Buat SPJ
-POST   /api/spj/:id/issue                      # Terbitkan SPJ
-POST   /api/spj/:id/settle                     # Selesaikan SPJ
-GET    /api/spj/trip/:tripId                    # SPJ by trip
-GET    /api/spj/trip/:tripId/profit             # Profit calculation
-```
-
-### Kargo
-
-```http
-GET    /api/cargo                              # List shipments
-POST   /api/cargo                              # Buat shipment
-GET    /api/cargo/track/:waybillNumber          # Track by waybill
-GET    /api/cargo-types                         # List cargo types
-GET    /api/cargo-rates                         # List cargo rates
-```
-
-### Laporan
-
-```http
-GET    /api/reports/filter-options              # Filter options
-GET    /api/reports/revenue                     # Laporan pendapatan
-GET    /api/reports/sales                       # Laporan penjualan
-GET    /api/reports/trip-profitability           # Laporan profitabilitas trip
-GET    /api/reports/load-factor                 # Laporan load factor
-GET    /api/reports/cancellations               # Laporan pembatalan
-GET    /api/reports/cargo                       # Laporan kargo
-GET    /api/reports/payments                    # Laporan pembayaran
-GET    /api/reports/commercial-fee              # Laporan biaya komersial
-```
-
-Query parameter `dateMode` (`departure` | `paid` | `created`) menentukan kolom tanggal yang digunakan untuk filter:
-- `paid` — filter berdasarkan tanggal pembayaran (`payments.paid_at` / `cargo_shipments.paid_at`)
-- `created` — filter berdasarkan tanggal transaksi (`bookings.created_at` / `cargo_shipments.created_at`)
-- `departure` — filter berdasarkan tanggal keberangkatan (`trips.service_date`)
-
-Laba Rugi Trip dan Load Factor selalu menggunakan `departure` (tanpa toggle).
-
-### Public API (`/api/app/*`) — Service Key + Mobile JWT
-
-Endpoint untuk TransityConsole, OTA pihak ketiga, dan mobile App. Auth via header `X-Service-Key` (env `TERMINAL_SERVICE_KEY`); booking juga menerima `Authorization: Bearer <jwt>` untuk mobile user. Spec lengkap di `PUBLIC_API.md` dan `TRANSITY_CONSOLE_INTEGRATION.md`.
-
-```http
-# Mobile auth
-POST   /api/app/auth/register
-POST   /api/app/auth/login
-
-# Referensi
-GET    /api/app/operator-info                  # Brand operator (nama, logo, warna)
-GET    /api/app/cities                         # Kota dilayani
-GET    /api/app/service-lines                  # Rute aktif
-GET    /api/app/payments/methods               # Daftar metode pembayaran
-
-# Pencarian & detail trip
-GET    /api/app/trips/search                   # Cari trip (real + virtual)
-POST   /api/app/trips/materialize              # Materialize trip virtual → real
-GET    /api/app/trips/:id                      # Detail trip
-GET    /api/app/trips/:id/seatmap              # Seatmap trip
-GET    /api/app/trips/:tripId/reviews          # Ulasan penumpang
-
-# Booking
-POST   /api/app/bookings                       # Buat booking (held jika tanpa paymentMethod)
-GET    /api/app/bookings                       # List bookings (filter status, tanggal, pagination)
-GET    /api/app/bookings/:id                   # Detail booking (return bookingCode + holdExpiresAt)
-GET    /api/app/bookings/find-ota              # Recovery: cari booking OTA via tripId+seats (timeout)
-POST   /api/app/bookings/:id/pay               # Bayar held booking — mobile App channel only
-POST   /api/app/bookings/:id/confirm-paid      # OTA confirmation dari Console (paymentMethod diabaikan, dicatat 'online')
-POST   /api/app/bookings/:id/cancel            # Batalkan booking pending/confirmed
-
-# Voucher & webhook
-POST   /api/app/vouchers/validate              # Validasi voucher + hitung diskon
-POST   /api/app/payments/webhook               # Webhook payment gateway (HMAC-SHA256)
-
-# Kargo
-GET    /api/app/cargo/track/:waybillNumber     # Track kargo via waybill
-GET    /api/app/cargo/:waybillNumber           # Detail kargo
-```
+Endpoint Console memakai `X-Service-Key`, ETag/cache, filter service date, channel, route, limit, dan snapshot-size guard.
 
 ---
 
 ## Alur Booking
 
-### Sekali Jalan (One-Way)
-
-```
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  1. Outlet   │───>│  2. Trip     │───>│  3. Route    │
-│  Selection   │    │  Selection   │    │  Selection   │
-└──────────────┘    └──────────────┘    └──────┬───────┘
-                                               │
-                    ┌──────────────────────────┘
-                    ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  6. Payment  │<───│  5. Passengers│<───│  4. Seats    │
-│  & Confirm   │    │  Details     │    │  Selection   │
-└──────┬───────┘    └──────────────┘    └──────────────┘
-       │
-       ▼
-┌──────────────┐
-│  7. Print    │
-│  Ticket      │
-└──────────────┘
+```text
+Pilih route / tanggal / trip
+    ↓
+Materialisasi trip jika masih virtual
+    ↓
+Load seat map dan leg inventory
+    ↓
+Hold seat dengan TTL
+    ↓
+Isi passenger form
+    ↓
+Hitung harga + promo/voucher
+    ↓
+Create booking + payment
+    ↓
+Confirm seat inventory
+    ↓
+Print ticket / manifest / realtime broadcast
 ```
 
-1. **Outlet Selection** — Pilih lokasi penjualan
-2. **Trip Selection** — Pilih perjalanan dari daftar (real + virtual trips)
-3. **Route Selection** — Pilih asal (Naik) dan tujuan (Turun) dari RouteTimeline
-4. **Seat Selection** — Pilih kursi dari seat map interaktif (hold otomatis dengan TTL)
-5. **Passenger Details** — Isi data penumpang + promo code (opsional)
-6. **Payment** — Proses pembayaran (cash, QR, e-wallet, bank transfer)
-7. **Print** — Cetak tiket thermal
+### Prinsip Inventory
 
-### Pulang Pergi / PP (Round-Trip)
-
-```
-┌──────────────────────────────┐    ┌──────────────────────────────┐
-│  STEP 1: Pergi               │    │  STEP 2: Pulang              │
-│  Pilih trip + rute + kursi   │───>│  Pilih trip + rute + kursi   │
-│  (Outbound seat hold aktif)  │    │  (Return seat hold aktif)    │
-└──────────────────────────────┘    └──────────────┬───────────────┘
-                                                   │
-                    ┌──────────────────────────────┘
-                    ▼
-┌──────────────────────────────┐    ┌──────────────────────────────┐
-│  STEP 3: Penumpang + Payment │───>│  STEP 4: Selesai             │
-│  Isi nama per kursi, bayar   │    │  Print 2 tiket + groupCode   │
-└──────────────────────────────┘    └──────────────────────────────┘
-```
-
-- Kedua booking dibuat atomik dalam satu DB transaction via `POST /api/bookings/round-trip`
-- Hasil: `groupCode` (penghubung), `outboundBookingCode`, `returnBookingCode`
-- Jumlah penumpang outbound dan return harus sama
-- Boarding/alighting rules divalidasi untuk kedua trip
-
-### Seat Hold Mechanism
-
-```
-User klik kursi → Create Hold (Short TTL 300s)
-                         │
-                         ▼
-               User isi form penumpang
-                         │
-                         ▼
-               Convert ke Long TTL (1800s)
-                         │
-                         ▼
-                    Payment
-                         │
-                         ▼
-                 Booking Created → Hold Released
-```
-
-- Hold expired otomatis di-cleanup oleh scheduler (setiap 1 menit)
-- WebSocket broadcast saat seat di-hold atau di-release
+- Seat inventory dihitung per seat dan per leg.
+- Hold mencegah double booking selama TTL aktif.
+- Pending booking dan expired hold dibersihkan otomatis oleh scheduler.
+- Realtime event dipakai agar beberapa terminal CSO melihat perubahan kursi yang sama.
+- Adapter engine bisa mengambil alih operasi inventory saat `RESERVATION_ENGINE_ENABLED=true`.
 
 ---
 
 ## Virtual Scheduling
 
-TransityCore mendukung **Virtual Scheduling** — sistem penjadwalan yang memungkinkan pembuatan trip on-demand dari template (Trip Bases).
+TransityTerminal memisahkan jadwal template dan trip aktual:
 
-### Konsep
+```text
+trip_patterns
+    ↓
+trip_bases
+    ↓
+materialized trips
+    ↓
+trip stop times + trip legs
+    ↓
+seat inventory
+```
 
-```
-TRIP BASE (Template)
-  • Pattern: Jakarta → Purwakarta → Bandung
-  • Hari: Senin - Sabtu
-  • Waktu: 10:00 (departure dari Jakarta)
-  • Periode: 2025-01-01 s/d 2025-12-31
-  • Kapasitas: 40
-         │
-         │ CSO pilih tanggal eligible
-         ▼
-VIRTUAL TRIP (Computed on-the-fly)
-  • isVirtual = true
-  • Belum ada di database
-  • Departure: 10:00 (dari defaultStopTimes)
-         │
-         │ CSO mulai booking
-         ▼
-REAL TRIP (Materialized ke database)
-  • Status: scheduled
-  • Trip ID: UUID
-  • Stop Times: dari defaultStopTimes
-  • Legs: derived dari stop times
-  • Seat Inventory: precomputed
-```
+- `trip_patterns` menentukan rute dan stop sequence.
+- `trip_bases` menentukan jadwal template/operator schedule.
+- `trips` adalah instance aktual yang dipakai booking, manifest, SPJ, dan reports.
+- Trip dapat dimaterialisasi saat dibutuhkan agar database tidak penuh oleh jadwal kosong.
 
 ---
 
-## Otorisasi (RBAC + ABAC + Feature Flags)
+## Otorisasi RBAC + Feature Flags
 
-### Model
+Sistem akses memakai kombinasi:
 
-Sistem otorisasi 3 lapis:
+- Realmio / staff identity.
+- Role-based access control.
+- Feature flags.
+- Outlet scoping.
+- Backend middleware guard.
+- Frontend guard via permission provider dan `RequireFlag`.
 
-1. **RBAC (Role-Based Access Control)** — Role menentukan akses dasar
-2. **ABAC (Attribute-Based Access Control)** — Outlet scoping membatasi data per lokasi
-3. **Feature Flags** — Toggle granular per fitur
+Contoh role operasional:
 
-### Roles
-
-| Role | Deskripsi | Akses |
-|------|-----------|-------|
-| `owner` | Pemilik | Akses penuh ke semua fitur |
-| `manager` | Manajer | Operasional penuh + semua laporan |
-| `finance` | Keuangan | Laporan keuangan + lihat booking (read-only) |
-| `spv_operations` | SPV Operasional | Jadwal, SPJ, manifest, kargo |
-| `operations` | Staf Operasional | Operasional harian terbatas |
-| `spv_cso` | SPV CSO | CSO + unseat/reschedule |
-| `cso` | Customer Service Officer | Booking dan transaksi harian |
-
-### Feature Flags
-
-| Flag | Deskripsi |
-|------|-----------|
-| `page.cso` | Akses halaman CSO |
-| `page.cargo` | Akses halaman Kargo |
-| `page.manifest` | Akses halaman Manifest |
-| `action.booking.create` | Buat booking baru |
-| `action.booking.cancel` | Batalkan booking |
-| `action.passenger.assign_seat` | Assign kursi ke penumpang |
-| `action.payment.create` | Buat pembayaran |
-| `action.cargo.create` | Buat shipment kargo |
-| `action.trip.batch_reschedule` | Batch reschedule saat close trip |
-| `page.schedule.closed` | Lihat closed trips di halaman jadwal |
-| `page.cso.view_closed` | Lihat closed trips di halaman CSO |
-| `report.commercial_fee` | Akses laporan biaya komersial |
-| `master.stops` | CRUD master stops |
-| `master.vehicles` | CRUD master vehicles |
-
-### Middleware (Fastify preHandler)
-
-```typescript
-// Require specific flag
-app.post('/api/stops', { preHandler: [requireFlag('master.stops')] }, handler);
-
-// Require any of multiple flags
-app.get('/api/trips', { preHandler: [requireAnyFlag('page.cso', 'page.cargo')] }, handler);
-
-// Outlet scoping
-app.get('/api/bookings', { preHandler: [requireOutletScope] }, handler);
+```text
+owner
+manager
+finance
+spv_operations
+operations
+spv_cso
+cso
 ```
+
+RBAC seed berada di module/seeds RBAC dan disiapkan saat boot/deploy agar role dasar tersedia.
 
 ---
 
 ## Real-time Events
 
-### WebSocket Rooms
+Realtime memakai Socket.IO.
 
-| Room | Pattern | Deskripsi |
-|------|---------|-----------|
-| Trip | `trip:{tripId}` | Update trip spesifik |
-| Base | `base:{baseId}` | Update trip base |
-| CSO | `cso:{outletId}:{serviceDate}` | Update per outlet per tanggal |
+Fungsi utama:
 
-### Events
+- Seat map update.
+- Hold created/released/expired.
+- Booking confirmed/cancelled/rescheduled.
+- Trip/base schedule update.
+- Room per trip/base/CSO.
+- Optional Redis adapter untuk multi-instance.
 
-| Event | Payload | Deskripsi |
-|-------|---------|-----------|
-| `INVENTORY_UPDATED` | `{ tripId, seatNo? }` | Perubahan ketersediaan kursi (di-emit oleh CSO booking, hold/release, **dan OTA confirmation**) |
-| `TRIP_STATUS_CHANGED` | `{ tripId, status }` | Status trip berubah |
-| `HOLDS_RELEASED` | `{ tripId }` | Seat hold expired/released |
-| `TRIP_MATERIALIZED` | `{ tripId, baseId }` | Virtual trip dimaterialize |
-| `TRIP_CANCELED` | `{ tripId }` | Trip dibatalkan |
-| `STOP_EXCEPTION_CHANGED` | `{ tripId, stopId }` | Aturan boarding/alighting di stop berubah (exception ditambahkan/dihapus) |
+WebSocket auth mendukung staff/session, app user, service client, dan anonymous mode sesuai kebutuhan route/event.
+
+---
+
+## Reservation Engine Adapter
+
+Repo ini memiliki adapter untuk mengalihkan operasi seat inventory ke reservation engine eksternal.
+
+Default local mode:
+
+```env
+RESERVATION_ENGINE_ENABLED=false
+```
+
+Engine mode:
+
+```env
+RESERVATION_ENGINE_ENABLED=true
+RESERVATION_ENGINE_URL=http://engine:8000
+RESERVATION_ENGINE_HMAC_SECRET=replace-with-strong-secret
+```
+
+File penting:
+
+```text
+server/modules/holds/holdsAdapter.ts
+server/modules/holds/engineClient.ts
+server/modules/holds/engineClient.types.ts
+deploy/engine/docker-compose.engine.yml
+deploy/engine/README.md
+docs/RESERVATION_ENGINE_CONTRACT.md
+```
+
+Operasi yang dapat dirutekan ke engine:
+
+- hold.
+- release.
+- confirm.
+- hold for booking.
+- release for booking.
+- cancel seats.
+- reschedule helper.
+- compensation/rollback queue untuk partial failure.
 
 ---
 
 ## Struktur Project
 
-```
-shared/
-  schema/                    Drizzle table definitions, dipecah per domain
-    index.ts                 Re-exports semua domain schemas
-    enums.ts                 Semua pgEnum definitions
-    fleet.ts                 drivers, vehicles, layouts
-    network.ts               stops, outlets
-    scheduling.ts            tripPatterns, patternStops, tripBases, trips, tripStopTimes, tripLegs
-    inventory.ts             seatInventory, seatHolds, priceRules
-    booking.ts               bookings, passengers, payments, printJobs
-    cargo.ts                 cargoShipments, cargoTypes, cargoRates
-    finance.ts               tripCostTemplates, tripCostItems
-    promo.ts                 promotions, vouchers
-    spj.ts                   SPJ tables
-    rbac.ts                  roles, featureFlags, roleFlags, staffMembers
-    app-users.ts             appUsers (mobile B2C)
-    relations.ts             Drizzle relations definitions
-
-server/
-  index.ts                   Fastify app bootstrap (decorateRequest, logging, error handler)
-  routes.ts                  Route orchestrator — delegates ke registerXxxRoutes() per module
-  storage.interface.ts       IStorage interface + manifest types
-  storage.ts                 Thin facade — delegasi ke 6 domain repositories
-  db.ts                      Drizzle ORM instance + PostgreSQL pool
-  vite.ts                    Vite HMR (@fastify/middie) + static serving (@fastify/static)
-  scheduler.ts               Expired holds/bookings cleanup (1 menit interval)
-  types/
-    fastify.d.ts             Request type augmentations (user, rbac, appUser, scopedOutletId, rawBody)
-  realtime/
-    ws.ts                    Socket.io WebSocket server
-  repositories/              Domain-specific data access (SQL queries via Drizzle)
-    fleet.repository.ts      drivers, vehicles, layouts
-    network.repository.ts    stops, outlets
-    scheduling.repository.ts trips, patterns, bases, stopTimes, legs, inventory, priceRules, manifest
-    booking.repository.ts    bookings, passengers, payments, printJobs
-    cargo.repository.ts      cargoTypes, cargoRates, cargoShipments
-    finance.repository.ts    costTemplates, costItems, promotions, vouchers
-  modules/                   Business logic + API controllers (1 folder per domain)
-    auth/                    Realmio auth proxy (realmio.ts middleware, auth.routes.ts)
-    rbac/                    RBAC + Feature Flags (rbac.middleware.ts, rbac.service.ts, rbac.admin.routes.ts)
-    app/                     Mobile B2C API auth + controllers
-    bookings/                BookingsService + BookingsController + UnseatService
-                             roundTrip.controller.ts + roundTrip.service.ts (PP booking)
-    pricing/                 PricingService + PricingController
-    cargo/                   CargoService + CargoController
-    seatInventory/           SeatInventoryService
-    tripBases/               TripBasesService (materialisasi virtual → real)
-    tripLegs/                TripLegsService
-    spj/                     SpjService + SpjController (Surat Perintah Jalan)
-    reports/                 ReportsService + ReportsController (8 report types) + ReportsRepository
-    promos/                  PromosService + PromosController (promo & voucher)
-    payments/                PaymentsController
-    holds/                   HoldsAdapter (engine-routed) + HoldsService.releaseHoldsByOwner + compensationQueue
-    drivers/                 DriversController + DriversService + performance endpoint
-    vehicles/                VehiclesController + VehiclesService
-    stops/                   StopsController + StopsService
-    outlets/                 OutletsController
-    layouts/                 LayoutsController
-    trips/                   TripsController
-    tripPatterns/            TripPatternsController
-    patternStops/            PatternStopsController
-    tripStopTimes/           TripStopTimesController
-    priceRules/              PriceRulesController
-    printing/                PrintService (single & round-trip ticket payload generator)
-    dashboard/               DashboardController (ringkasan operasional harian)
-    cashier/                 CashierController + CashierService (sesi kasir, open/close/approve)
-    refunds/                 RefundsController + RefundsService (create/approve/process/reject)
-    customers/               CustomersController + CustomersService (CRM, tag pelanggan)
-    notifications/           NotificationsController (bell icon, mark read, delete)
-    maintenance/             MaintenanceController (rekam servis kendaraan, alert)
-    scheduler/               Background cleanup (expired holds + pending bookings, 1 menit interval)
-    settings/                OperatorSettingsController (branding: nama, logo, warna)
-
-client/src/
-  App.tsx                    Root router (wouter) + React.lazy page imports
-  pages/
-    cso/                     CsoPage — terminal reservasi CSO (mode: sekali jalan + PP/round-trip)
-    cargo/                   CargoListPage + CargoTerminalPage
-    bookings/                AllBookingsPage — daftar semua booking
-    schedule/                SchedulePage — jadwal harian + assign driver + buat SPJ
-    scheduler/               SchedulerPage — manajemen jadwal template
-    manifest/                ManifestPage
-    spj/                     SpjPage — manajemen Surat Perintah Jalan
-    masters/                 MastersPage — CRUD master data
-    reports/                 8 report pages (Revenue, Sales, Profitability, Commercial Fee, dll)
-    admin/                   AdminStaffPage + AdminFlagsPage + SettingsPage (branding)
-    auth/                    LoginPage + SetupPage (onboarding owner pertama)
-    dashboard/               DashboardPage
-    cashier/                 CashierPage — sesi kasir harian
-    refunds/                 RefundsPage — manajemen refund
-    customers/               CustomersPage — CRM pelanggan
-  components/
-    cso/                     Komponen terminal CSO
-      TripSelector.tsx       Pilih outlet + tanggal + trip
-      RouteTimeline.tsx      Timeline halte naik/turun
-      SeatMap.tsx            Peta kursi interaktif + real-time
-      PassengerForm.tsx      Form penumpang + pembayaran
-      PassengerDetailModal   Detail penumpang + unseat/reschedule/cancel
-      BatchRescheduleDialog  Dialog batch reschedule saat close trip
-      BookingStepper.tsx     Step indicator booking
-      CargoForm.tsx          Form kargo di CSO
-    masters/                 Komponen CRUD master data
-      StopsManager           CRUD halte
-      TripPatternsManager    CRUD pola trip
-      TripBasesManager       CRUD jadwal template (→ TripBaseFormDialog + TripBaseGroupList)
-      TripsManager           Manage trip instances (→ TripsFilterPanel)
-      DriversManager         CRUD driver
-      VehiclesManager        CRUD kendaraan
-      LayoutsManager         CRUD layout kursi
-      OutletsManager         CRUD outlet
-      PriceRulesManager      CRUD aturan harga
-      CargoTypesManager      CRUD tipe kargo
-      CargoRatesManager      CRUD tarif kargo
-      PromosManager          CRUD promo & voucher
-    manifest/                ManifestDialog + ThermalManifest (cetak 80mm)
-    reports/                 ReportFilters, SummaryCards, ReportPageLayout
-    shared/                  Reusable: DataTable, StatusBadges
-    layout/                  Sidebar, ProtectedRoute
-    rbac/                    RequireFlag + CanAccess permission components
-    ui/                      shadcn/ui components
-  hooks/
-    useBookingFlow.ts        State machine booking flow CSO (one-way, 7 step)
-    useRoundTripFlow.ts      State machine PP (round-trip, 4 step) — orchestrasi dua seat hold + submit atomik
-    useSeatHold.ts           Seat hold timer + auto-release
-    useWebSocket.ts          Socket.io connection management
-    use-toast.ts             Toast notifications
-  lib/
-    api.ts                   API client functions (grouped per domain)
-    auth.tsx                 AuthProvider + useAuth context
-    permissions.tsx          usePermissions().can(flagId) hook
-    constants.ts             Centralized constants (status maps, formatters)
-    queryClient.ts           React Query config + apiRequest helper
-
-apps/mobile/                 Expo React Native B2C app
-docs/                        Dokumentasi teknis (FEATURES, DEPLOY, fixes log, kontrak)
-```
-
-### Lapisan Arsitektur Backend
-
-```
-Request → Fastify Route → preHandler (auth, RBAC) → Controller → Service → Repository → Database
-                                                                        ↘ storage.ts facade (IStorage)
-```
-
-1. **Route** (`*.routes.ts`) — Definisi endpoint HTTP + middleware chain
-2. **Controller** (`*.controller.ts`) — Parse request, validasi input, panggil service, format response
-3. **Service** (`*.service.ts`) — Business logic, orchestrate repository calls, transaksi DB
-4. **Repository** (`server/repositories/*.repository.ts`) — Raw SQL/Drizzle queries per domain
-5. **Storage Facade** (`server/storage.ts`) — Thin facade delegasi ke repositories (IStorage interface)
-
-### Module File Convention
-
-Setiap module di `server/modules/` mengikuti pola:
-```
-server/modules/myFeature/
-  myFeature.routes.ts      → registerMyFeatureRoutes(app) — endpoint registration
-  myFeature.controller.ts  → Request/response handling
-  myFeature.service.ts     → Business logic
+```text
+.
+├── client/
+│   └── src/
+│       ├── App.tsx
+│       ├── pages/
+│       ├── components/
+│       ├── hooks/
+│       └── lib/
+│
+├── server/
+│   ├── index.ts
+│   ├── routes.ts
+│   ├── db.ts
+│   ├── migrator.ts
+│   ├── migrate.ts
+│   ├── scheduler.ts
+│   ├── vite.ts
+│   ├── realtime/
+│   ├── repositories/
+│   ├── modules/
+│   ├── observability/
+│   ├── seeds/
+│   └── lib/
+│
+├── shared/
+│   ├── schema.ts
+│   └── schema/
+│
+├── migrations/
+├── tests/
+├── docs/
+├── deploy/engine/
+├── scripts/
+├── Dockerfile
+├── docker-compose.yml
+├── deploy.sh
+├── package.json
+├── vite.config.ts
+├── drizzle.config.ts
+└── esbuild.config.js
 ```
 
 ---
 
-## Panduan Membuat Fitur Baru
+## Deployment
 
-Berikut langkah-langkah untuk menambahkan fitur baru ke TransityTerminal:
+### Build Lokal
 
-### 1. Schema — Definisikan tabel di `shared/schema/`
-
-Buat atau tambahkan di file domain yang sesuai (`shared/schema/<domain>.ts`):
-
-```typescript
-import { sql } from "drizzle-orm";
-import { pgTable, uuid, varchar, timestamp } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
-
-export const myNewTable = pgTable("my_new_table", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: varchar("name", { length: 255 }).notNull(),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
-
-export const insertMyNewTableSchema = createInsertSchema(myNewTable).omit({ id: true, deletedAt: true });
-export type InsertMyNewTable = z.infer<typeof insertMyNewTableSchema>;
-export type MyNewTable = typeof myNewTable.$inferSelect;
+```bash
+npm run build
 ```
 
-Re-export dari `shared/schema/index.ts`, lalu jalankan `npm run db:push`.
+Build menghasilkan:
 
-**Konvensi:**
-- UUID primary key (`uuid("id").primaryKey().default(sql\`gen_random_uuid()\`)`)
-- Soft delete: `deletedAt: timestamp("deleted_at", { withTimezone: true })`
-- Export: table definition, insert schema, insert type, select type
+- frontend static output di `dist/public`.
+- backend bundle di `dist/index.js`.
 
-### 2. Repository — Tambah data access di `server/repositories/`
+### Start Production
 
-Tambah methods di repository domain yang sesuai. Semua query gunakan `isNull(table.deletedAt)` untuk filter soft-deleted records.
-
-### 3. IStorage Interface — Update `server/storage.interface.ts`
-
-Tambahkan method signatures baru ke interface `IStorage`.
-
-### 4. Storage Facade — Update `server/storage.ts`
-
-Tambahkan delegasi ke repository (satu baris per method):
-```typescript
-async getMyItems() { return this.xxxRepo.getMyItems(); }
+```bash
+npm start
 ```
 
-### 5. Module — Buat folder `server/modules/myFeature/`
+### Docker
 
-Buat 3 file:
-- `myFeature.routes.ts` — `registerMyFeatureRoutes(app)` dengan endpoint definitions
-- `myFeature.controller.ts` — Request/response handling
-- `myFeature.service.ts` — Business logic
+```bash
+cp .env.example .env
+# isi .env sesuai operator
 
-### 6. Register Routes — Update `server/routes.ts`
-
-```typescript
-import { registerMyFeatureRoutes } from "./modules/myFeature/myFeature.routes";
-registerMyFeatureRoutes(app);
+docker network create transity-terminals-net || true
+./deploy.sh
 ```
 
-### 7. Frontend — Buat page + API functions
+`docker-compose.yml` menjalankan terminal di container port `5000` dan bind ke host `127.0.0.1:${HOST_PORT}:5000`. Untuk publik, biasanya dipasang reverse proxy/Nginx per subdomain operator.
 
-- Page di `client/src/pages/myFeature/MyFeaturePage.tsx`
-- Lazy import + route di `client/src/App.tsx`
-- API functions di `client/src/lib/api.ts`
-- React Query dengan proper `queryKey` dan cache invalidation
-- Sidebar menu item di `client/src/components/layout/Sidebar.tsx`
+### Engine Overlay
 
-### 8. RBAC (opsional) — Tambah feature flag
-
-```sql
-INSERT INTO feature_flags (id, name, category) VALUES ('master.myFeature', 'My Feature', 'master');
-INSERT INTO role_flags (role_id, flag_id, enabled) VALUES ('admin', 'master.myFeature', true);
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/engine/docker-compose.engine.yml \
+  up -d --build
 ```
-
-Gunakan `requireFlag("master.myFeature")` di route preHandler, dan `usePermissions().can("master.myFeature")` di frontend.
-
-### Checklist
-
-- [ ] Schema + `db:push`
-- [ ] Repository methods
-- [ ] IStorage interface
-- [ ] Storage facade
-- [ ] Module (routes + controller + service)
-- [ ] Register routes
-- [ ] Frontend page + API + React Query
-- [ ] Sidebar menu
-- [ ] RBAC flags (jika perlu)
-- [ ] `data-testid` pada elemen interaktif
 
 ---
 
-## Status Fitur
+## Testing & CI
 
-| Fitur | Status |
-|-------|--------|
-| Master Data (Stops, Outlets, Vehicles, Layouts, Patterns) | Done |
-| Trip Bases & Virtual Scheduling | Done |
-| CSO Booking Terminal — Sekali Jalan (SeatMap, PassengerForm, Payment, Print) | Done |
-| CSO Booking PP / Round-Trip (`useRoundTripFlow`, `RoundTripStepper`, `POST /api/bookings/round-trip`) | Done |
-| `booking_groups` Table (penghubung outbound+return via `groupCode`) | Done |
-| Seat Inventory & Hold System | Done |
-| Pricing Engine (per-leg, flat, scope-based) | Done |
-| Promo & Voucher | Done |
-| Kargo Terminal | Done |
-| Manifest & Thermal Print | Done |
-| SPJ (Surat Perintah Jalan) | Done |
-| Jadwal Harian | Done |
-| Unseat / Reassign / Reschedule | Done |
-| Booking History (Audit Trail) | Done |
-| Reports (8 jenis laporan termasuk Commercial Fee) | Done |
-| Authentication (Realmio) + Setup onboarding | Done |
-| RBAC + ABAC + Feature Flags (33+ flags) | Done |
-| Admin UI (Staff & Flag Management) | Done |
-| Hybrid Refactor (Schema split, Repository pattern, Route decentralization) | Done |
-| Data Integrity — Snapshot System | Done |
-| Batch Reschedule on Trip Close | Done |
-| Security Hardening (rate limit, CORS, webhook, redaction) | Done |
-| Dashboard (ringkasan operasional harian) | Done |
-| Kasir (sesi kasir open/close/approve, settlement breakdown) | Done |
-| Refund (create/approve/process/reject, RBAC per role) | Done |
-| Pelanggan / CRM (profil, tag, riwayat booking) | Done |
-| Notifikasi in-app (bell icon, mark read) | Done |
-| Operator Settings (branding: nama, logo, warna) | Done |
-| Logout fix (clear cookie domain mismatch) | Done |
-| Backend: Fastify 5 Migration | Done |
-| TransityConsole Public API Integration (`/api/app/*` + service key) | Done |
-| Console Schedule Sync (push webhook + manual snapshot endpoint + auto-recovery) | Done |
-| Console Connection Status di Settings page (live status + manual push button) | Done |
-| OTA Booking — race-condition fixes, WS emit on confirm, payment method='online', bookingCode in response | Done |
-| Whitelabel Docker Deployment (`OPERATOR_SLUG` + `HOST_PORT` parameterized compose, `deploy.sh`, `post-merge.sh`) | Done |
-| Mobile B2C (Expo React Native) | In Progress |
+Command utama:
+
+```bash
+npm run check
+npx vitest run
+npm audit --omit=dev --audit-level=high
+```
+
+CI berada di:
+
+```text
+.github/workflows/ci.yml
+```
+
+Catatan kondisi saat ini:
+
+- TypeScript check tersedia via `npm run check`.
+- Vitest test suite tersedia di `tests/`.
+- CI sudah menjalankan install, typecheck, db push, vitest, audit, dan lint placeholder.
+- Sebagian quality gate di workflow masih bersifat non-blocking (`continue-on-error`), jadi status CI perlu dibaca bersama output step-nya.
+
+---
+
+## Status Codebase Saat Ini
+
+Bagian ini sengaja dipisah agar README tetap rapi, tetapi engineer tidak salah asumsi dari dokumentasi historis.
+
+- Web terminal aktif berada di `client/src`.
+- Backend aktif berada di `server`.
+- Shared schema aktif berada di `shared/schema/*`.
+- Migration aktif berada di `migrations/0001` sampai `0021`.
+- Public/customer-facing capability tersedia sebagai API `/api/app/*`.
+- Source aplikasi mobile penuh tidak menjadi bagian utama repo ini saat ini; README tidak lagi mengklaim `/apps/mobile` sebagai source app aktif.
+- Reservation engine source tidak berada di repo ini; repo ini berisi adapter, contract docs, dan deployment overlay.
+- Docker compose masih perlu dicek bersama route health aktif sebelum mengandalkan container health status di environment production.
+- Beberapa dokumen di `docs/terminal-readiness` bersifat historis/readiness notes. Jika ada perbedaan dengan kode, gunakan kode aktif sebagai source of truth.
 
 ---
 
