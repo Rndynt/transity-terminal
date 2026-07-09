@@ -4,7 +4,7 @@ import { TripBase, TripWithDetails } from "@shared/schema";
 import { ensureDefaultTimezone } from "@server/utils/timezone";
 import { db } from "@server/db";
 import { sql, inArray, and, eq, gte, lte, isNull } from "drizzle-orm";
-import { scheduleExceptions, patternStops, scheduleStopExceptions } from "@shared/schema/scheduling";
+import { scheduleExceptions, scheduleExceptionGroups, patternStops, scheduleStopExceptions } from "@shared/schema/scheduling";
 import { stops } from "@shared/schema/network";
 import { fireAndForget } from "@server/lib/consoleWebhook";
 import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
@@ -203,6 +203,45 @@ export class SchedulerService {
     }).returning();
     // Fire-and-forget: notify Console that any materialized trip on this date is cancelled
     void this.emitExceptionWebhook(baseId, exceptionDate);
+    return inserted;
+  }
+
+  async addBulkExceptions(
+    items: { baseId: string; exceptionDate: string }[],
+    reason: string,
+    createdBy: string | undefined,
+    ctx: ServiceContext,
+  ) {
+    requirePermission(ctx, 'action.trip.close');
+
+    const inserted = await db.transaction(async (tx) => {
+      const [group] = await tx.insert(scheduleExceptionGroups).values({
+        reason,
+        createdBy: createdBy || null,
+      }).returning();
+
+      const rows: (typeof scheduleExceptions.$inferSelect)[] = [];
+      for (const item of items) {
+        const [row] = await tx.insert(scheduleExceptions).values({
+          baseId: item.baseId,
+          exceptionDate: item.exceptionDate,
+          reason,
+          createdBy: createdBy || null,
+          groupId: group.id,
+        }).onConflictDoNothing({
+          target: [scheduleExceptions.baseId, scheduleExceptions.exceptionDate],
+        }).returning();
+        if (row) rows.push(row);
+      }
+
+      return { group, rows };
+    });
+
+    // Fire-and-forget: notify Console for each item actually inserted.
+    for (const row of inserted.rows) {
+      void this.emitExceptionWebhook(row.baseId, row.exceptionDate);
+    }
+
     return inserted;
   }
 

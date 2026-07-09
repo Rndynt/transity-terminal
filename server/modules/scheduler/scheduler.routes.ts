@@ -60,6 +60,35 @@ export function registerSchedulerRoutes(app: FastifyInstance, storage: IStorage)
     reply.send({ success: true });
   });
 
+  app.post('/api/scheduler/exceptions/bulk', { preHandler: [requireFlag('action.trip.close')] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const schema = z.object({
+      items: z.array(z.object({
+        baseId: z.string().uuid(),
+        exceptionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      })).min(1),
+      reason: z.string().trim().min(1),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ message: 'Invalid request', errors: parsed.error.flatten() });
+    }
+
+    const user = req.user;
+    const result = await schedulerService.addBulkExceptions(
+      parsed.data.items,
+      parsed.data.reason,
+      user?.id || undefined,
+      buildServiceContext(req),
+    );
+    reply.code(201).send({
+      groupId: result.group.id,
+      requested: parsed.data.items.length,
+      applied: result.rows.length,
+      exceptions: result.rows,
+    });
+  });
+
   app.get('/api/scheduler/stop-exceptions', async (req: FastifyRequest, reply: FastifyReply) => {
     const schema = z.object({
       baseId: z.string().uuid(),

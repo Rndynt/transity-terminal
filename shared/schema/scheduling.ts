@@ -162,6 +162,17 @@ export type CargoAvailableTrip = {
   legCount: number;
 };
 
+export const scheduleExceptionGroups = pgTable("schedule_exception_groups", {
+  id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  reason:    text("reason").notNull(),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertScheduleExceptionGroupSchema = createInsertSchema(scheduleExceptionGroups).omit({ id: true, createdAt: true });
+export type ScheduleExceptionGroup = typeof scheduleExceptionGroups.$inferSelect;
+export type InsertScheduleExceptionGroup = z.infer<typeof insertScheduleExceptionGroupSchema>;
+
 export const scheduleExceptions = pgTable("schedule_exceptions", {
   id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   baseId:      uuid("base_id").notNull().references(() => tripBases.id),
@@ -169,9 +180,11 @@ export const scheduleExceptions = pgTable("schedule_exceptions", {
   reason:      text("reason"),
   createdBy:   text("created_by"),
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
+  groupId:     uuid("group_id").references(() => scheduleExceptionGroups.id),
 }, (table) => ({
   uniqBaseDate: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_schedule_exception_base_date ON ${table} (base_id, exception_date)`,
   idxExceptionDate: sql`CREATE INDEX IF NOT EXISTS idx_schedule_exception_date ON ${table} (exception_date)`,
+  idxGroupId: sql`CREATE INDEX IF NOT EXISTS idx_schedule_exceptions_group_id ON ${table} (group_id)`,
 }));
 
 export const insertScheduleExceptionSchema = createInsertSchema(scheduleExceptions).omit({ id: true, createdAt: true });

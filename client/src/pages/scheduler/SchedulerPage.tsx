@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   CalendarRange, ChevronLeft, ChevronRight, Plus, Bus, Truck,
   Clock, Users, Ban, MapPin, User, AlertTriangle,
-  CheckCircle, X, ExternalLink, Loader2, Building2, Pencil, Check
+  CheckCircle, X, ExternalLink, Loader2, Building2, Pencil, Check, MousePointerSquareDashed
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -87,15 +87,33 @@ function stripTimeFromCode(code: string): string {
   return code.replace(/\/\d{2}:\d{2}(:\d{2})?$/, '');
 }
 
-function ScheduleChip({ item, onSelect }: { item: CalendarItem; onSelect?: (item: CalendarItem) => void }) {
+function ScheduleChip({ item, onSelect, selectMode, isSelected, onToggleSelect }: {
+  item: CalendarItem;
+  onSelect?: (item: CalendarItem) => void;
+  selectMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (item: CalendarItem) => void;
+}) {
+  const canSelect = selectMode && (item.type === 'trip' || item.type === 'virtual') && !!item.baseId;
+  const handleClick = () => {
+    if (selectMode) {
+      if (canSelect) onToggleSelect?.(item);
+      return;
+    }
+    onSelect?.(item);
+  };
+
   if (item.type === 'exception') {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className="px-1.5 py-1 rounded text-[10px] leading-tight cursor-pointer border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center gap-1 line-through opacity-70 hover:opacity-100 transition-opacity"
+            className={cn(
+              "px-1.5 py-1 rounded text-[10px] leading-tight border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center gap-1 line-through opacity-70 transition-opacity",
+              selectMode ? "cursor-not-allowed" : "cursor-pointer hover:opacity-100"
+            )}
             data-testid={`chip-exception-${item.id}`}
-            onClick={() => onSelect?.(item)}
+            onClick={selectMode ? undefined : () => onSelect?.(item)}
           >
             <Ban className="w-2.5 h-2.5 shrink-0" />
             <span className="font-mono opacity-60">{item.departureTime}</span>
@@ -116,9 +134,12 @@ function ScheduleChip({ item, onSelect }: { item: CalendarItem; onSelect?: (item
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className="px-1.5 py-1 rounded text-[10px] leading-tight cursor-pointer border border-dashed border-muted-foreground/30 bg-muted/30 text-muted-foreground flex items-center gap-1 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+            className={cn(
+              "px-1.5 py-1 rounded text-[10px] leading-tight cursor-pointer border border-dashed border-muted-foreground/30 bg-muted/30 text-muted-foreground flex items-center gap-1 transition-colors",
+              isSelected ? "ring-2 ring-primary border-primary/50" : "hover:border-primary/40 hover:bg-primary/5"
+            )}
             data-testid={`chip-virtual-${item.id}`}
-            onClick={() => onSelect?.(item)}
+            onClick={handleClick}
           >
             <span className="font-mono opacity-60">{item.departureTime}</span>
             <span className="truncate">{stripTimeFromCode(item.routeCode)}</span>
@@ -146,9 +167,13 @@ function ScheduleChip({ item, onSelect }: { item: CalendarItem; onSelect?: (item
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className={cn("px-1.5 py-1 rounded text-[10px] leading-tight cursor-pointer border transition-shadow hover:shadow-sm", colorClass)}
+          className={cn(
+            "px-1.5 py-1 rounded text-[10px] leading-tight cursor-pointer border transition-shadow hover:shadow-sm",
+            colorClass,
+            isSelected && "ring-2 ring-primary"
+          )}
           data-testid={`chip-trip-${item.id}`}
-          onClick={() => onSelect?.(item)}
+          onClick={handleClick}
         >
           <div className="flex items-center gap-1">
             <span className="font-mono opacity-70">{item.departureTime}</span>
@@ -972,6 +997,60 @@ function EmptyCellDialog({ cell, open, onClose }: { cell: EmptyCellInfo | null; 
   );
 }
 
+function BulkExceptionDialog({ open, count, onClose, onConfirm, isSubmitting }: {
+  open: boolean;
+  count: number;
+  onClose: () => void;
+  onConfirm: (reason: string) => void;
+  isSubmitting: boolean;
+}) {
+  const [reason, setReason] = useState('');
+
+  useEffect(() => {
+    if (open) setReason('');
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Ban className="w-5 h-5 text-red-500" />
+            Set Pengecualian Massal
+          </DialogTitle>
+          <DialogDescription>{count} jadwal akan dikecualikan.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 pt-1">
+          <label className="text-xs font-semibold">Alasan</label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Contoh: Libur Nasional 17 Agustus"
+            className="w-full h-20 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-700 resize-none focus:outline-none focus:ring-2 focus:ring-red-300 dark:focus:ring-red-700"
+            data-testid="input-bulk-exception-reason"
+            autoFocus
+          />
+        </div>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting} data-testid="btn-cancel-bulk-exception">
+            Batal
+          </Button>
+          <Button
+            variant="destructive"
+            className="gap-1.5"
+            onClick={() => onConfirm(reason.trim())}
+            disabled={isSubmitting || !reason.trim()}
+            data-testid="btn-confirm-bulk-exception"
+          >
+            {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
+            Set Pengecualian
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function SchedulerPage() {
   usePageTitle("Penjadwalan", "Atur jadwal trip bulanan");
   const today = new Date();
@@ -980,6 +1059,9 @@ export default function SchedulerPage() {
   const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null);
   const [emptyCell, setEmptyCell] = useState<EmptyCellInfo | null>(null);
   const [selectedOutletId, setSelectedOutletId] = useState<string>('all');
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -1038,6 +1120,78 @@ export default function SchedulerPage() {
   const getItemsForCell = useCallback((dateStr: string, hour: number): CalendarItem[] => {
     return itemsByDateHour.get(`${dateStr}-${hour}`) || [];
   }, [itemsByDateHour]);
+
+  const itemKey = useCallback((item: CalendarItem) => `${item.baseId}-${item.serviceDate}`, []);
+
+  const itemsByDate = useMemo(() => {
+    const map = new Map<string, CalendarItem[]>();
+    for (const item of filteredItems) {
+      if ((item.type !== 'trip' && item.type !== 'virtual') || !item.baseId) continue;
+      if (!map.has(item.serviceDate)) map.set(item.serviceDate, []);
+      map.get(item.serviceDate)!.push(item);
+    }
+    return map;
+  }, [filteredItems]);
+
+  const toggleSelectMode = () => {
+    setSelectMode(prev => {
+      if (prev) setSelectedKeys(new Set());
+      return !prev;
+    });
+  };
+
+  const toggleItemSelection = useCallback((item: CalendarItem) => {
+    const key = itemKey(item);
+    setSelectedKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, [itemKey]);
+
+  const toggleColumnSelection = (dateStr: string) => {
+    const columnItems = itemsByDate.get(dateStr) || [];
+    if (columnItems.length === 0) return;
+    const columnKeys = columnItems.map(itemKey);
+    const allSelected = columnKeys.every(k => selectedKeys.has(k));
+    setSelectedKeys(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        columnKeys.forEach(k => next.delete(k));
+      } else {
+        columnKeys.forEach(k => next.add(k));
+      }
+      return next;
+    });
+  };
+
+  const selectedItemsList = useMemo(() => {
+    if (selectedKeys.size === 0) return [];
+    return filteredItems.filter(item => (item.type === 'trip' || item.type === 'virtual') && !!item.baseId && selectedKeys.has(itemKey(item)));
+  }, [filteredItems, selectedKeys, itemKey]);
+
+  const bulkExceptionMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      const items = selectedItemsList.map(item => ({ baseId: item.baseId as string, exceptionDate: item.serviceDate }));
+      const res = await apiRequest('POST', '/api/scheduler/exceptions/bulk', { items, reason });
+      return res.json();
+    },
+    onSuccess: (data: { requested: number; applied: number }) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/scheduler/calendar'] });
+      setBulkDialogOpen(false);
+      setSelectMode(false);
+      setSelectedKeys(new Set());
+      if (data.applied < data.requested) {
+        toast({ title: `${data.applied} dari ${data.requested} jadwal dikecualikan`, description: `${data.requested - data.applied} sudah dikecualikan sebelumnya.` });
+      } else {
+        toast({ title: `${data.applied} jadwal dikecualikan` });
+      }
+    },
+    onError: (err: any) => {
+      toast({ title: 'Gagal menambah pengecualian massal', description: err.message, variant: 'destructive' });
+    },
+  });
 
   const materializeMutation = useMutation({
     mutationFn: async (item: CalendarItem) => {
@@ -1166,6 +1320,16 @@ export default function SchedulerPage() {
               <Loader2 className="w-3 h-3 animate-spin" />
             </div>
           )}
+          <Button
+            variant={selectMode ? "default" : "outline"}
+            size="sm"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={toggleSelectMode}
+            data-testid="btn-toggle-select-mode"
+          >
+            <MousePointerSquareDashed className="w-3.5 h-3.5" />
+            Pilih Jadwal
+          </Button>
         </div>
         <div className="hidden lg:flex items-center gap-4">
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -1193,6 +1357,34 @@ export default function SchedulerPage() {
         </div>
       </div>
 
+      {selectMode && selectedKeys.size > 0 && (
+        <div
+          className="px-3 md:px-6 py-2 border-b bg-primary/5 shrink-0 flex items-center gap-3 sticky top-0 z-30"
+          data-testid="bulk-action-bar"
+        >
+          <span className="text-xs font-medium">{selectedKeys.size} dipilih</span>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="h-7 gap-1.5 text-xs"
+            onClick={() => setBulkDialogOpen(true)}
+            data-testid="btn-set-bulk-exception"
+          >
+            <Ban className="w-3.5 h-3.5" />
+            Set Pengecualian
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            onClick={() => { setSelectMode(false); setSelectedKeys(new Set()); }}
+            data-testid="btn-cancel-bulk-select"
+          >
+            Batal
+          </Button>
+        </div>
+      )}
+
       <div className="flex-1 overflow-auto relative" ref={scrollRef}>
         <div style={{ width: gridWidth }} className="relative pb-40">
 
@@ -1214,10 +1406,12 @@ export default function SchedulerPage() {
                   className={cn(
                     "border-r border-b flex flex-col items-center justify-center shrink-0",
                     info.isToday && "bg-blue-50 dark:bg-blue-950/30",
-                    !info.isToday && "bg-white dark:bg-gray-950"
+                    !info.isToday && "bg-white dark:bg-gray-950",
+                    selectMode && "cursor-pointer hover:bg-primary/10"
                   )}
                   style={{ width: CELL_W, minWidth: CELL_W, height: 48 }}
                   data-testid={`header-${dateStr}`}
+                  onClick={selectMode ? () => toggleColumnSelection(dateStr) : undefined}
                 >
                   <div className={cn(
                     "text-[10px] font-medium uppercase",
@@ -1266,7 +1460,7 @@ export default function SchedulerPage() {
                     style={{ width: CELL_W, minWidth: CELL_W }}
                     data-testid={`cell-${dateStr}-${hour}`}
                     onClick={() => {
-                      if (items.length === 0) {
+                      if (items.length === 0 && !selectMode) {
                         setEmptyCell({ dateStr, hour, dateLabel: formatDateLabel(dateStr) });
                       }
                     }}
@@ -1274,12 +1468,19 @@ export default function SchedulerPage() {
                     {items.length > 0 ? (
                       <div className="p-0.5 space-y-0.5">
                         {items.map(item => (
-                          <ScheduleChip key={item.id} item={item} onSelect={setSelectedItem} />
+                          <ScheduleChip
+                            key={item.id}
+                            item={item}
+                            onSelect={setSelectedItem}
+                            selectMode={selectMode}
+                            isSelected={selectedKeys.has(itemKey(item))}
+                            onToggleSelect={toggleItemSelection}
+                          />
                         ))}
                       </div>
                     ) : (
                       <div className="h-full min-h-[56px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+                        {!selectMode && <Plus className="w-3.5 h-3.5 text-muted-foreground" />}
                       </div>
                     )}
                   </div>
@@ -1308,6 +1509,14 @@ export default function SchedulerPage() {
         cell={emptyCell}
         open={!!emptyCell}
         onClose={() => setEmptyCell(null)}
+      />
+
+      <BulkExceptionDialog
+        open={bulkDialogOpen}
+        count={selectedKeys.size}
+        onClose={() => setBulkDialogOpen(false)}
+        onConfirm={(reason) => bulkExceptionMutation.mutate(reason)}
+        isSubmitting={bulkExceptionMutation.isPending}
       />
     </div>
   );
