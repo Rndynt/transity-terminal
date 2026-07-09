@@ -1,1 +1,2 @@
 - [Blank preview but backend OK](blank-preview-compress.md) — check `@fastify/compress`/global response compression before assuming a frontend bug; it can silently empty the body through Replit's preview proxy.
+- [db:push vs app migrator conflict](drizzle-push-vs-app-migrator-conflict.md) — this project's own SQL migrator owns schema creation; running `drizzle-kit push` first causes "already exists" boot errors.
