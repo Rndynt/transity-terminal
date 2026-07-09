@@ -15,7 +15,7 @@
     "@fastify/compress": "^8.3.1",
     "@fastify/cors": "^11.2.0",
     "@fastify/helmet": "^13.0.2",
-    "@fastify/middie": "^9.3.1",
+    "@fastify/middie": "^9.3.3",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/static": "^9.0.0",
     "@neondatabase/serverless": "^0.10.4",
@@ -63,7 +63,6 @@
     "tailwind-merge": "^2.6.1",
     "tailwindcss-animate": "^1.0.7",
     "vite": "^5.4.21",
-    "vitest": "^3.2.4",
     "wouter": "^3.9.0",
     "zod": "^3.25.76",
     "autoprefixer": "^10.4.27",
@@ -84,7 +83,8 @@
   "devDependencies": {
     "@types/node": "^20.16.11",
     "@types/react": "^18.3.28",
-    "@types/react-dom": "^18.3.7"
+    "@types/react-dom": "^18.3.7",
+    "vitest": "^1.6.1"
   },
   "optionalDependencies": {
     "bufferutil": "^4.1.0"
