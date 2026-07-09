@@ -341,8 +341,13 @@ function assertProductionEnv() {
 
   if (process.env.NODE_ENV === "development" || !process.env.NODE_ENV) {
     await setupVite(app, app.server);
-  } else {
+  } else if (process.env.SERVE_STATIC !== "false") {
     await serveStatic(app);
+  } else {
+    // API-only mode: frontend served elsewhere (e.g. Cloudflare Pages).
+    // Health check wildcard so non-/api routes don't 404.
+    app.get("/", async (_req, reply) => reply.send({ ok: true, mode: "api-only" }));
+    log("running in API-only mode (SERVE_STATIC=false)");
   }
 
   const port = parseInt(process.env.PORT || '5000', 10);
