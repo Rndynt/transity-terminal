@@ -34,9 +34,9 @@ execSync(`cd "${root}" && zip -r transity-api.zip ${includes} -x "deploy/make-zi
 console.log(`\n✅  Selesai: transity-api.zip`);
 console.log(`\nCara kirim ke VM:`);
 console.log(`  gcloud compute scp transity-api.zip NAMA_INSTANCE:/opt/ --zone=ZONE`);
-console.log(`\nDi VM:`);
-console.log(`  cd /opt && unzip transity-api.zip -d transity-api`);
+console.log(`\nDi VM (tidak perlu npm ci — semua deps sudah terbundle):`);
+console.log(`  cd /opt && sudo unzip -o transity-api.zip -d transity-api`);
+console.log(`  sudo chown -R $USER:$USER /opt/transity-api`);
 console.log(`  cd transity-api`);
-console.log(`  npm ci --omit=dev`);
 console.log(`  cp deploy/env.production.example .env && nano .env`);
 console.log(`  pm2 start deploy/pm2.config.js`);
