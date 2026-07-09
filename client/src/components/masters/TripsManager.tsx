@@ -6,20 +6,16 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
-import { DataTable } from '@/components/shared/DataTable';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { RowActionsMenu } from './RowActionsMenu';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, tripPatternsApi, vehiclesApi, layoutsApi, driversApi, spjApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import {
-  Plus, Pencil, Trash2, Clock, Route, Grid3X3, CalendarDays, FileText,
-  Bus, MapPin, LayoutGrid, User, ClipboardList
-} from 'lucide-react';
+import { Plus, CalendarDays } from 'lucide-react';
 import { useLocation } from 'wouter';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterFormDialog from './MasterFormDialog';
 import TripsFilterPanel from './TripsFilterPanel';
+import TripsGroupList from './TripsGroupList';
 import type { Trip, TripPattern, Vehicle, Layout, Driver } from '@/types';
 import { todayStr } from '@/lib/date';
 import { TripStatusBadge } from '@/components/shared/StatusBadges';
@@ -69,6 +65,16 @@ export default function TripsManager() {
   const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [datePreset, setDatePreset] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (patternId: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(patternId)) next.delete(patternId);
+      else next.add(patternId);
+      return next;
+    });
+  };
 
   const { toast } = useToast();
 
@@ -224,7 +230,6 @@ export default function TripsManager() {
 
   const getPattern = (patternId: string) => patterns.find(p => p.id === patternId);
   const getVehicle = (vehicleId: string) => vehicles.find(v => v.id === vehicleId);
-  const getLayout = (layoutId: string | null) => layoutId ? layouts.find(l => l.id === layoutId) : null;
 
   const getDepartureTime = (trip: any): string | null => {
     if (trip.originDepartHHMM) return trip.originDepartHHMM;
@@ -390,243 +395,27 @@ export default function TripsManager() {
               )}
             </div>
           ) : (
-            <>
-              {/* ── Mobile card list (< md) ── */}
-              <div className="md:hidden divide-y" data-testid="trips-cards">
-                {filteredTrips.map(trip => {
-                  const pattern    = getPattern(trip.patternId);
-                  const vehicle    = getVehicle(trip.vehicleId);
-                  const layout     = getLayout(trip.layoutId || null);
-                  const vehicleLayout = vehicle ? getLayout(vehicle.layoutId || null) : null;
-                  const resolvedLayout = layout || vehicleLayout;
-                  const departTime = getDepartureTime(trip);
-
-                  return (
-                    <div key={trip.id} className="p-4 space-y-3" data-testid={`trip-card-${trip.id}`}>
-                      {/* Top row: route + actions */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                            <MapPin className="w-4 h-4 text-primary" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-semibold text-base text-foreground leading-snug">
-                              {pattern?.name || <span className="text-muted-foreground italic text-sm">Rute tidak ditemukan</span>}
-                            </div>
-                            {pattern?.code && (
-                              <span className="text-xs font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded mt-1 inline-block">
-                                {pattern.code}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <RowActionsMenu
-                          actions={[
-                            { label: 'Lihat Manifest', icon: <FileText className="h-3.5 w-3.5" />, onClick: () => setManifestTripId(trip.id) },
-                            { label: 'Buat SPJ', icon: <ClipboardList className="h-3.5 w-3.5" />, onClick: () => handleCreateSpj(trip.id), disabled: createSpjMutation.isPending },
-                            { label: 'Atur Jadwal', icon: <Clock className="h-3.5 w-3.5" />, onClick: () => handleScheduling(trip) },
-                            { label: 'Turunkan Leg', icon: <Route className="h-3.5 w-3.5" />, onClick: () => handleDeriveLegs(trip.id), disabled: deriveLegsMutation.isPending },
-                            { label: 'Hitung Inventori', icon: <Grid3X3 className="h-3.5 w-3.5" />, onClick: () => handlePrecomputeInventory(trip.id), disabled: precomputeSeatInventoryMutation.isPending },
-                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(trip) },
-                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(trip.id), variant: 'destructive', disabled: deleteMutation.isPending },
-                          ]}
-                          data-testid={`actions-trip-${trip.id}`}
-                        />
-                      </div>
-
-                      {/* Info grid */}
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 pl-12">
-                        {/* Tanggal */}
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-0.5">Tanggal</p>
-                          <p className="text-sm font-medium">{formatServiceDate(trip.serviceDate)}</p>
-                        </div>
-
-                        {/* Jam Berangkat */}
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-0.5">Jam Berangkat</p>
-                          {departTime ? (
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                              <span className="text-sm font-bold tabular-nums">{departTime}</span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                              Belum diatur
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Kendaraan */}
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-0.5">Kendaraan</p>
-                          {vehicle ? (
-                            <div className="flex items-center gap-1.5">
-                              <Bus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                              <div>
-                                <span className="text-sm font-medium">{vehicle.code}</span>
-                                <span className="text-xs text-muted-foreground font-mono ml-1.5">{vehicle.plate}</span>
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">—</span>
-                          )}
-                        </div>
-
-                        {/* Driver */}
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-0.5">Driver</p>
-                          {(trip as any).driverName ? (
-                            <div className="flex items-center gap-1.5">
-                              <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                              <span className="text-sm font-medium">{(trip as any).driverName}</span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                              Belum ditugaskan
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Layout */}
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-0.5">Layout</p>
-                          <div className="flex items-center gap-1.5">
-                            <LayoutGrid className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            <div>
-                              <span className="text-sm font-medium">
-                                {resolvedLayout?.name || <span className="text-muted-foreground italic">—</span>}
-                              </span>
-                              {layout && vehicle && layout.id !== vehicle.layoutId && (
-                                <span className="text-xs text-indigo-600 ml-1">override</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Kapasitas */}
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-0.5">Kapasitas</p>
-                          <p className="text-sm font-medium">{trip.capacity} <span className="text-muted-foreground font-normal">kursi</span></p>
-                        </div>
-
-                        {/* Status */}
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-0.5">Status</p>
-                          <TripStatusBadge status={trip.status || 'scheduled'} />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* ── Desktop table (≥ md) ── */}
-              <div className="hidden md:block">
-                <DataTable
-                  data-testid="trips-table"
-                  data={filteredTrips}
-                  keyExtractor={(t) => t.id}
-                  rowTestId={(t) => `trip-row-${t.id}`}
-                  columns={[
-                    {
-                      key: 'route', header: 'Rute Perjalanan',
-                      render: (trip) => {
-                        const pattern = getPattern(trip.patternId);
-                        return (
-                          <div className="flex items-start gap-2">
-                            <div className="mt-0.5 w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                              <MapPin className="w-3 h-3 text-primary" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="font-medium leading-tight">
-                                {pattern?.name || <span className="text-muted-foreground italic text-[12px]">Rute tidak ditemukan</span>}
-                              </div>
-                              {pattern?.code && (
-                                <span className="text-[11px] font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded mt-0.5 inline-block">
-                                  {pattern.code}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      },
-                    },
-                    {
-                      key: 'date', header: 'Tanggal',
-                      className: 'font-medium whitespace-nowrap',
-                      render: (trip) => formatServiceDate(trip.serviceDate),
-                    },
-                    {
-                      key: 'depart', header: 'Berangkat',
-                      render: (trip) => {
-                        const departTime = getDepartureTime(trip);
-                        return departTime ? (
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-muted-foreground" />
-                            <span className="font-semibold tabular-nums">{departTime}</span>
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800">
-                            Belum diatur
-                          </span>
-                        );
-                      },
-                    },
-                    {
-                      key: 'vehicle', header: 'Kendaraan',
-                      render: (trip) => {
-                        const vehicle = getVehicle(trip.vehicleId);
-                        return vehicle ? (
-                          <div>
-                            <div className="font-medium">{vehicle.code}</div>
-                            <div className="text-[11px] text-muted-foreground font-mono">{vehicle.plate}</div>
-                          </div>
-                        ) : <span className="text-muted-foreground">—</span>;
-                      },
-                    },
-                    {
-                      key: 'driver', header: 'Driver', hideOnMobile: true,
-                      render: (trip) => (trip as any).driverName ? (
-                        <span className="font-medium">{(trip as any).driverName}</span>
-                      ) : (
-                        <span className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800">
-                          Belum
-                        </span>
-                      ),
-                    },
-                    {
-                      key: 'capacity', header: 'Kursi',
-                      className: 'tabular-nums text-center',
-                      headerClassName: 'text-center',
-                      render: (trip) => <><span className="font-medium">{trip.capacity}</span></>,
-                    },
-                    {
-                      key: 'status', header: 'Status',
-                      render: (trip) => <TripStatusBadge status={trip.status || 'scheduled'} />,
-                    },
-                    {
-                      key: 'actions', header: '',
-                      className: 'w-10',
-                      render: (trip) => (
-                        <RowActionsMenu
-                          actions={[
-                            { label: 'Lihat Manifest', icon: <FileText className="h-3.5 w-3.5" />, onClick: () => setManifestTripId(trip.id) },
-                            { label: 'Buat SPJ', icon: <ClipboardList className="h-3.5 w-3.5" />, onClick: () => handleCreateSpj(trip.id), disabled: createSpjMutation.isPending },
-                            { label: 'Atur Jadwal', icon: <Clock className="h-3.5 w-3.5" />, onClick: () => handleScheduling(trip) },
-                            { label: 'Turunkan Leg', icon: <Route className="h-3.5 w-3.5" />, onClick: () => handleDeriveLegs(trip.id), disabled: deriveLegsMutation.isPending },
-                            { label: 'Hitung Inventori', icon: <Grid3X3 className="h-3.5 w-3.5" />, onClick: () => handlePrecomputeInventory(trip.id), disabled: precomputeSeatInventoryMutation.isPending },
-                            { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(trip) },
-                            { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(trip.id), variant: 'destructive', disabled: deleteMutation.isPending },
-                          ]}
-                          data-testid={`actions-trip-${trip.id}`}
-                        />
-                      ),
-                    },
-                  ]}
-                />
-              </div>
-            </>
+            <TripsGroupList
+              trips={filteredTrips}
+              patterns={patterns}
+              getVehicle={getVehicle}
+              getDepartureTime={getDepartureTime}
+              formatServiceDate={formatServiceDate}
+              expandedGroups={expandedGroups}
+              onToggleGroup={toggleGroup}
+              onToggleAll={(expanded, ids) => setExpandedGroups(expanded ? new Set(ids) : new Set())}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onScheduling={handleScheduling}
+              onManifest={(id) => setManifestTripId(id)}
+              onCreateSpj={handleCreateSpj}
+              onDeriveLegs={handleDeriveLegs}
+              onPrecomputeInventory={handlePrecomputeInventory}
+              isDeleting={deleteMutation.isPending}
+              isCreatingSpj={createSpjMutation.isPending}
+              isDerivingLegs={deriveLegsMutation.isPending}
+              isPrecomputingInventory={precomputeSeatInventoryMutation.isPending}
+            />
           )}
         </CardContent>
       </Card>
