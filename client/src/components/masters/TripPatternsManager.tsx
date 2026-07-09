@@ -645,66 +645,94 @@ export default function TripPatternsManager() {
         rowTestId={(p) => `pattern-row-${p.code}`}
         columns={[
           {
-            key: 'code', header: 'Kode',
-            className: 'font-mono font-medium text-primary/80 whitespace-nowrap',
-            render: (p) => p.code,
-          },
-          {
-            key: 'name', header: 'Nama Rute',
+            key: 'route', header: 'Rute',
+            className: 'min-w-[220px] max-w-[280px]',
             render: (p) => (
-              <div>
-                <span className="font-medium leading-tight">{p.name}</span>
-                {p.note && <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{p.note}</p>}
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="font-mono text-[11px] font-semibold text-primary bg-primary/10 rounded px-1.5 py-0.5 whitespace-nowrap">
+                    {p.code}
+                  </span>
+                  {p.active ? (
+                    <Badge variant="secondary" className="text-[10px] py-0 px-1.5">Aktif</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-muted-foreground">Nonaktif</Badge>
+                  )}
+                </div>
+                <p className="font-medium leading-tight text-[13px]">{p.name}</p>
+                {p.note && <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2">{p.note}</p>}
               </div>
             ),
           },
           {
             key: 'stops', header: 'Titik Halte',
+            className: 'min-w-[200px] max-w-[260px]',
             render: (p) => {
               const ps = (p as any).patternStops as Array<{ stopSequence: number; stop: { name: string; code: string; city: string } | null; boardingAllowed: boolean; alightingAllowed: boolean }> | undefined;
               if (!ps || ps.length === 0) return <span className="text-muted-foreground text-xs italic">Belum diatur</span>;
               const sorted = [...ps].sort((a, b) => a.stopSequence - b.stopSequence);
               return (
-                <div className="flex flex-wrap items-center gap-1">
-                  {sorted.map((s, i) => (
-                    <span key={i} className="flex items-center gap-0.5">
-                      {i > 0 && <span className="text-muted-foreground mx-0.5">→</span>}
-                      <span className="text-xs font-medium" title={`${s.stop?.name || '?'} (${s.stop?.city || ''})`}>
-                        {s.stop?.name || '?'}
-                      </span>
-                    </span>
-                  ))}
+                <div className="space-y-0.5">
+                  {sorted.map((s, i) => {
+                    const isFirst = i === 0;
+                    const isLast = i === sorted.length - 1;
+                    return (
+                      <div key={i} className="flex items-center gap-1.5 min-w-0">
+                        <span
+                          className={cn(
+                            'h-1.5 w-1.5 rounded-full flex-shrink-0',
+                            isFirst ? 'bg-primary' : isLast ? 'bg-orange-500' : 'bg-muted-foreground/40'
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            'text-[12px] truncate',
+                            isFirst || isLast ? 'font-medium text-foreground' : 'text-muted-foreground'
+                          )}
+                          title={`${s.stop?.name || '?'}${s.stop?.city ? ` · ${s.stop.city}` : ''}`}
+                        >
+                          {s.stop?.name || '?'}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             },
           },
           {
-            key: 'class', header: 'Kelas', hideOnMobile: true,
-            className: 'text-muted-foreground',
-            render: (p) => p.vehicleClass || '—',
-          },
-          {
-            key: 'layout', header: 'Layout', hideOnMobile: true,
-            className: 'text-muted-foreground',
-            render: (p) => getLayoutName(p.defaultLayoutId || ''),
-          },
-          {
-            key: 'status', header: 'Status',
-            render: (p) => p.active ? (
-              <Badge variant="secondary" className="text-[11px] py-0">Aktif</Badge>
-            ) : (
-              <Badge variant="outline" className="text-[11px] py-0 text-muted-foreground">Nonaktif</Badge>
+            key: 'armada', header: 'Armada', hideOnMobile: true,
+            className: 'whitespace-nowrap',
+            render: (p) => (
+              <div className="space-y-0.5">
+                <p className="text-[12px] font-medium leading-tight">{getLayoutName(p.defaultLayoutId || '')}</p>
+                {p.vehicleClass && (
+                  <p className="text-[11px] text-muted-foreground leading-tight">{p.vehicleClass}</p>
+                )}
+              </div>
             ),
           },
           {
             key: 'tags', header: 'Tag', hideOnMobile: true,
-            render: (p) => (
-              <div className="flex flex-wrap gap-0.5">
-                {p.tags?.map(tag => (
-                  <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0">{tag}</Badge>
-                ))}
-              </div>
-            ),
+            className: 'max-w-[160px]',
+            render: (p) => {
+              const tags = p.tags || [];
+              const visible = tags.slice(0, 2);
+              const rest = tags.length - visible.length;
+              if (tags.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+              return (
+                <div className="flex flex-wrap gap-1">
+                  {visible.map(tag => (
+                    <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap">{tag}</Badge>
+                  ))}
+                  {rest > 0 && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground" title={tags.slice(2).join(', ')}>
+                      +{rest}
+                    </Badge>
+                  )}
+                </div>
+              );
+            },
           },
           {
             key: 'actions', header: 'Aksi',
