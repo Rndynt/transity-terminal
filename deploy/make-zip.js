@@ -9,8 +9,8 @@ const root = resolve(import.meta.dirname, "..");
 const outFile = resolve(root, "transity-api.zip");
 
 // Pastikan dist/ ada (hasil build:api)
-if (!existsSync(resolve(root, "dist/index.js"))) {
-  console.error("❌  dist/index.js tidak ditemukan. Jalankan npm run build:api dulu.");
+if (!existsSync(resolve(root, "dist/index.cjs"))) {
+  console.error("❌  dist/index.cjs tidak ditemukan. Jalankan npm run build:api dulu.");
   process.exit(1);
 }
 

@@ -7,7 +7,7 @@ export default {
   apps: [
     {
       name: "transity-api",
-      script: "dist/index.js",
+      script: "dist/index.cjs",
       cwd: "/opt/transity-api",
 
       // e2-micro punya 1 vCPU shared — 1 instance sudah cukup

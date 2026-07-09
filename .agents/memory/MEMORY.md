@@ -1,2 +1,3 @@
 - [Blank preview but backend OK](blank-preview-compress.md) — check `@fastify/compress`/global response compression before assuming a frontend bug; it can silently empty the body through Replit's preview proxy.
 - [db:push vs app migrator conflict](drizzle-push-vs-app-migrator-conflict.md) — this project's own SQL migrator owns schema creation; running `drizzle-kit push` first causes "already exists" boot errors.
+- [esbuild ESM + dynamic require crash](esbuild-esm-dynamic-require-otel.md) — fully-bundling @sentry/node (pulls in @opentelemetry/instrumentation) with esbuild `format:"esm"` crashes on boot; use `format:"cjs"` (.cjs) for single-file API bundles instead.
