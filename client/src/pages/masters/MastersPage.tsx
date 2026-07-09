@@ -108,8 +108,6 @@ export default function MastersPage() {
     );
   }
 
-  const activeTabDef = tabs.find(t => t.id === activeTab);
-
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="masters-page">
       <PageHeader icon={LayoutGrid} title="Master Data" subtitle="Konfigurasi halte, kendaraan, rute & harga" />
@@ -136,18 +134,39 @@ export default function MastersPage() {
           })}
         </TabsList>
 
-        <div className="flex-1 overflow-y-auto pt-14 md:pt-0">
-          <div className="p-3 md:p-5">
-            {tabs.map((tab) => (
-              <TabsContent
-                key={tab.id}
-                value={tab.id}
-                className="mt-0 focus-visible:outline-none focus-visible:ring-0"
-                data-testid={`content-${tab.id}`}
-              >
-                <tab.component />
-              </TabsContent>
-            ))}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Mobile/tablet-portrait: dropdown selector instead of the sub-sidebar */}
+          <div className="md:hidden flex-shrink-0 bg-white border-b border-gray-100 px-3 py-2">
+            <Select value={activeTab} onValueChange={handleTabChange}>
+              <SelectTrigger className="w-full h-9 text-sm" data-testid="masters-mobile-select">
+                <SelectValue placeholder="Pilih modul..." />
+              </SelectTrigger>
+              <SelectContent>
+                {tabs.map((tab) => (
+                  <SelectItem key={tab.id} value={tab.id}>
+                    <div className="flex items-center gap-2">
+                      <tab.icon className="h-3.5 w-3.5" />
+                      <span>{tab.label}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-3 md:p-5">
+              {tabs.map((tab) => (
+                <TabsContent
+                  key={tab.id}
+                  value={tab.id}
+                  className="mt-0 focus-visible:outline-none focus-visible:ring-0"
+                  data-testid={`content-${tab.id}`}
+                >
+                  <tab.component />
+                </TabsContent>
+              ))}
+            </div>
           </div>
         </div>
       </Tabs>
