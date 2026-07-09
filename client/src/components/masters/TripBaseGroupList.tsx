@@ -158,13 +158,13 @@ export default function TripBaseGroupList({
             <button
               type="button"
               onClick={() => onToggleGroup(patternId)}
-              className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left"
+              className="sticky top-0 z-20 h-16 w-full flex items-center justify-between gap-3 px-4 bg-card hover:bg-muted/40 transition-colors text-left border-b"
               data-testid={`group-toggle-${patternId}`}
             >
               <div className="flex items-center gap-3 min-w-0">
                 <ChevronRight className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-nowrap min-w-0">
                     <span className="text-sm font-semibold text-foreground truncate">
                       {pattern?.name || 'Unknown'}
                     </span>
@@ -176,8 +176,8 @@ export default function TripBaseGroupList({
                   </div>
                   {firstTime && (
                     <div className="flex items-center gap-1 mt-0.5">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <span className="text-xs text-muted-foreground truncate">
                         {firstTime}{lastTime && lastTime !== firstTime ? ` — ${lastTime}` : ''}
                       </span>
                     </div>
@@ -194,8 +194,8 @@ export default function TripBaseGroupList({
             {isExpanded && (
               <div className="border-t bg-muted/10">
                 <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30 text-muted-foreground text-xs">
+                  <thead className="sticky top-16 z-10 bg-muted">
+                    <tr className="border-b text-muted-foreground text-xs">
                       <th className="text-left px-4 py-2 font-medium">Nama</th>
                       <th className="text-left px-3 py-2 font-medium hidden md:table-cell">Kode</th>
                       <th className="text-left px-3 py-2 font-medium hidden sm:table-cell">Berangkat</th>
