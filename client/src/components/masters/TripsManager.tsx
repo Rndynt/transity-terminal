@@ -414,7 +414,7 @@ export default function TripsManager() {
                               {pattern?.name || <span className="text-muted-foreground italic text-sm">Rute tidak ditemukan</span>}
                             </div>
                             {pattern?.code && (
-                              <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded mt-1 inline-block">
+                              <span className="text-xs font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded mt-1 inline-block">
                                 {pattern.code}
                               </span>
                             )}
@@ -543,7 +543,7 @@ export default function TripsManager() {
                                 {pattern?.name || <span className="text-muted-foreground italic text-[12px]">Rute tidak ditemukan</span>}
                               </div>
                               {pattern?.code && (
-                                <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1 py-0.5 rounded mt-0.5 inline-block">
+                                <span className="text-[11px] font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded mt-0.5 inline-block">
                                   {pattern.code}
                                 </span>
                               )}

@@ -169,7 +169,7 @@ export default function TripBaseGroupList({
                       {pattern?.name || 'Unknown'}
                     </span>
                     {pattern?.code && (
-                      <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
+                      <span className="text-[11px] font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded shrink-0">
                         {pattern.code}
                       </span>
                     )}
