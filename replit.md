@@ -1,5 +1,30 @@
 # TransityTerminal — Multi-Stop Travel Management System
 
+## Running on Replit
+
+**Start the app:** Click the Run button (or use the "Start application" workflow). The app runs on port 5000.
+
+**Development mode:** Auth bypass is enabled via `DEV_BYPASS_AUTH=true` — all requests run as the dev owner user without needing Realmio credentials.
+
+**Required secrets / env vars (already configured):**
+- `JWT_SECRET` — set as a Replit Secret
+- `DATABASE_URL` — provided automatically by Replit's managed PostgreSQL
+- `DEV_BYPASS_AUTH=true` — set in the development environment
+- `TERMINAL_SERVICE_KEY=sk_dev_test_key_12345` — set in the development environment
+
+**Optional (not required for dev):**
+- `REDIS_URL` — for multi-instance Socket.io / rate-limit coordination (in-memory fallback used when absent)
+- `REALMIO_BASE_URL` / `REALMIO_API_KEY` — external auth provider (bypassed in dev)
+- `CONSOLE_URL` / `CONSOLE_WEBHOOK_SECRET` — TransityConsole integration (push schedule sync)
+
+**Run commands:**
+- `npm run dev` — start in development mode (Vite HMR + tsx)
+- `npm run build && npm start` — production build and serve
+- `npm run check` — TypeScript type check
+- `npm run db:push` — push Drizzle schema to database
+
+**Package notes:** `vitest` is in devDependencies (moved from dependencies). Install with `npm install` for full dev setup including tests, or `npm install --omit=dev` for runtime-only.
+
 ## Overview
 TransityTerminal is a multi-stop travel management system designed for Indonesian bus/travel operators. It provides a comprehensive suite of features including a CSO reservation terminal, trip scheduling, cargo management, dynamic pricing rules, real-time seat management via WebSockets, trip manifest (SPJ) generation, various reporting functionalities, and a robust Role-Based Access Control (RBAC) system. The project aims to streamline operations, enhance customer experience, and provide critical business insights for travel operators in Indonesia.
 
