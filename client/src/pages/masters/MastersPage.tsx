@@ -114,47 +114,29 @@ export default function MastersPage() {
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="masters-page">
       <PageHeader icon={LayoutGrid} title="Master Data" subtitle="Konfigurasi halte, kendaraan, rute & harga" />
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1 flex flex-col overflow-hidden">
-        <div className="bg-white border-b border-gray-100 flex-shrink-0">
-          <div className="sm:hidden px-3 py-2">
-            <Select value={activeTab} onValueChange={handleTabChange}>
-              <SelectTrigger className="w-full h-9 text-sm">
-                <SelectValue placeholder="Pilih modul..." />
-              </SelectTrigger>
-              <SelectContent>
-                {tabs.map((tab) => (
-                  <SelectItem key={tab.id} value={tab.id}>
-                    <div className="flex items-center gap-2">
-                      <tab.icon className="h-3.5 w-3.5" />
-                      <span>{tab.label}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1 flex overflow-hidden">
+        {/* Desktop: vertical sub-sidebar */}
+        <TabsList
+          className="hidden md:flex flex-col h-auto w-56 lg:w-64 flex-shrink-0 p-2 bg-white border-r border-gray-100 overflow-y-auto justify-start items-stretch gap-0.5 rounded-none"
+          data-testid="masters-sub-sidebar"
+        >
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                className="w-full flex items-center justify-start gap-2.5 h-auto py-2.5 px-3 rounded-lg data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-none text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                data-testid={`tab-${tab.id}`}
+              >
+                <Icon className="h-4 w-4 flex-shrink-0" />
+                <span className="text-sm font-medium truncate">{tab.label}</span>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
 
-          <div className="hidden sm:block overflow-x-auto">
-            <TabsList className="inline-flex h-auto p-0 bg-transparent w-max min-w-full px-3 md:px-5">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <TabsTrigger
-                    key={tab.id}
-                    value={tab.id}
-                    className="flex items-center gap-1.5 h-auto py-2.5 px-3 flex-shrink-0 data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-blue-600 data-[state=active]:text-blue-700 rounded-none data-[state=active]:shadow-none text-gray-500 hover:text-gray-700 transition-colors"
-                    data-testid={`tab-${tab.id}`}
-                  >
-                    <Icon className="h-3.5 w-3.5 flex-shrink-0" />
-                    <span className="text-xs font-medium whitespace-nowrap">{tab.label}</span>
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto pt-14 md:pt-0">
           <div className="p-3 md:p-5">
             {tabs.map((tab) => (
               <TabsContent
