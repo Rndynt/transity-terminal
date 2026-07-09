@@ -1136,12 +1136,12 @@ export default function SchedulerPage() {
   return (
     <div className="flex flex-col h-full bg-background" data-testid="scheduler-page">
       <PageHeader icon={CalendarRange} title="Penjadwalan" subtitle="Atur jadwal trip bulanan" />
-      <div className="px-4 md:px-6 py-2 border-b bg-muted/20 shrink-0 hidden lg:flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="px-3 md:px-6 py-2 border-b bg-muted/20 shrink-0 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-2 flex-wrap">
           <Select value={selectedOutletId} onValueChange={setSelectedOutletId}>
-            <SelectTrigger className="h-8 w-[180px] text-xs" data-testid="select-outlet-filter">
+            <SelectTrigger className="h-8 w-[110px] xs:w-[140px] sm:w-[180px] text-xs shrink min-w-0" data-testid="select-outlet-filter">
               <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground shrink-0" />
-              <SelectValue placeholder="Semua Outlet" />
+              <SelectValue placeholder="Semua Outlet" className="truncate" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Semua Outlet</SelectItem>
@@ -1150,19 +1150,24 @@ export default function SchedulerPage() {
               ))}
             </SelectContent>
           </Select>
-          <div className="flex items-center border rounded-lg overflow-hidden">
+          <div className="flex items-center border rounded-lg overflow-hidden shrink-0">
             <Button variant="ghost" size="sm" className="rounded-none h-8 px-2" onClick={prevMonth} data-testid="btn-prev-month">
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="sm" className="rounded-none h-8 px-3 text-xs font-medium min-w-[140px]" onClick={goToday} data-testid="btn-today">
+            <Button variant="ghost" size="sm" className="rounded-none h-8 px-2 sm:px-3 text-xs font-medium min-w-[90px] sm:min-w-[140px] whitespace-nowrap" onClick={goToday} data-testid="btn-today">
               {formatMonthTitle(year, month)}
             </Button>
             <Button variant="ghost" size="sm" className="rounded-none h-8 px-2" onClick={nextMonth} data-testid="btn-next-month">
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
+          {isLoading && (
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground lg:hidden">
+              <Loader2 className="w-3 h-3 animate-spin" />
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="hidden lg:flex items-center gap-4">
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <div className="w-3 h-3 rounded border border-blue-300 bg-blue-50 dark:bg-blue-950/50" />
             <span>Trip Aktif</span>
