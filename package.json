@@ -7,6 +7,7 @@
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "vite build && node esbuild.config.js",
     "build:api": "node esbuild.config.js",
+    "deploy:zip": "node esbuild.config.js && node deploy/make-zip.js",
     "start": "NODE_ENV=production node dist/index.js",
     "start:dev": "NODE_ENV=production DEV_BYPASS_AUTH=true node dist/index.js",
     "check": "tsc",
