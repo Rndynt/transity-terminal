@@ -23,7 +23,9 @@
 - `npm run check` — TypeScript type check
 - `npm run db:push` — push Drizzle schema to database
 
-**Package notes:** `vitest` is in devDependencies (moved from dependencies). Install with `npm install` for full dev setup including tests, or `npm install --omit=dev` for runtime-only.
+**Package notes:** `vitest` is in devDependencies (moved from dependencies). Install with `npm install` for full dev setup including tests, or `npm install --omit=dev` for runtime-only. `vitest` is pinned to `^3.2.4` (bumped from `1.6.1`, which was blocked by Replit's package security policy as a CVE-flagged version).
+
+**Known fix — blank preview:** `@fastify/compress` (global) compresses Vite dev responses, and the compressed body arrives empty through Replit's preview proxy (200 status, 0 bytes) even though it works fine over direct localhost curl — this looks like "backend works, frontend blank". Compression is now only enabled in production (`server/index.ts`); keep it that way for dev.
 
 ## Overview
 TransityTerminal is a multi-stop travel management system designed for Indonesian bus/travel operators. It provides a comprehensive suite of features including a CSO reservation terminal, trip scheduling, cargo management, dynamic pricing rules, real-time seat management via WebSockets, trip manifest (SPJ) generation, various reporting functionalities, and a robust Role-Based Access Control (RBAC) system. The project aims to streamline operations, enhance customer experience, and provide critical business insights for travel operators in Indonesia.

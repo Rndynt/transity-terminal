@@ -1,0 +1,1 @@
+- [Blank preview but backend OK](blank-preview-compress.md) — check `@fastify/compress`/global response compression before assuming a frontend bug; it can silently empty the body through Replit's preview proxy.

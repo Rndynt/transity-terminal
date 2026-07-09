@@ -84,7 +84,7 @@
     "@types/node": "^20.16.11",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
-    "vitest": "^1.6.1"
+    "vitest": "^3.2.4"
   },
   "optionalDependencies": {
     "bufferutil": "^4.1.0"

@@ -95,6 +95,9 @@ app.register(helmet, {
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: { policy: 'cross-origin' },
+  // Replit's preview pane embeds the app in an iframe from a different origin.
+  // frameguard (X-Frame-Options) would block that entirely in dev, causing a blank preview.
+  frameguard: process.env.NODE_ENV === 'production' ? undefined : false,
 });
 
 // Unified CORS. Origin yang tidak ada di whitelist ditolak (kecuali same-origin / no Origin header).
@@ -239,8 +242,11 @@ app.addHook('onSend', async (request, reply, payload) => {
 // payload jadi Stream sebelum logging hook melihatnya, dan
 // `typeof payload === 'string'` di line ~228 jadi false → response body
 // logging silently skipped untuk semua response > threshold (1KB).
+// Disabled in development: compressing Vite's dev-server HTML/module responses
+// breaks through Replit's preview proxy (body arrives empty), causing a blank
+// preview even though curl to localhost looks fine. Only compress in production.
 app.register(compress, {
-  global: true,
+  global: process.env.NODE_ENV === 'production',
   threshold: 1024,
   encodings: ['br', 'gzip', 'deflate'],
 });
