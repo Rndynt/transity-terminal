@@ -1,0 +1,41 @@
+# ─────────────────────────────────────────────
+# Backend-only image — untuk deploy ke GCP e2-micro
+# Frontend di-serve dari Cloudflare Pages (SERVE_STATIC=false)
+# ─────────────────────────────────────────────
+
+# Stage 1: Builder
+FROM node:20-alpine AS builder
+
+RUN apk add --no-cache openssl
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+
+# Hanya bundle server, skip vite build frontend
+RUN npm run build:api
+
+# ─────────────────────────────────────────────
+# Stage 2: Production image — ringan, runtime only
+# ─────────────────────────────────────────────
+FROM node:20-alpine AS production
+
+RUN apk add --no-cache openssl
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV SERVE_STATIC=false
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/migrations ./migrations
+
+EXPOSE 5000
+
+CMD ["node", "dist/index.js"]
