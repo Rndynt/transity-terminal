@@ -134,6 +134,7 @@ export type CsoAvailableTrip = {
   patternCode: string;
   patternPath: string;
   vehicle: { code?: string; plate?: string } | null;
+  driver: { name?: string } | null;
   capacity: number | null;
   status: "scheduled" | "cancelled" | "closed" | "draft" | "unknown";
   departAtAtOutlet: string | null;

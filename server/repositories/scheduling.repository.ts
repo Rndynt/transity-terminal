@@ -49,6 +49,7 @@ type CsoRealTripRow = {
   pattern_code: string;
   vehicle_code: string | null;
   vehicle_plate: string | null;
+  driver_name: string | null;
   capacity: number | null;
   status: string | null;
   depart_at_outlet: string | null;
@@ -397,7 +398,7 @@ export class SchedulingRepository {
   private async getRealTripsForCso(serviceDate: string, outletStopId: string): Promise<CsoAvailableTrip[]> {
     const result = await db.execute(sql`
       WITH eligible_trips AS (
-        SELECT t.id, t.base_id, t.pattern_id, t.vehicle_id, t.capacity, t.status
+        SELECT t.id, t.base_id, t.pattern_id, t.vehicle_id, t.driver_id, t.capacity, t.status
         FROM trips t
         WHERE t.service_date = ${serviceDate}
           AND t.deleted_at IS NULL
@@ -489,6 +490,7 @@ export class SchedulingRepository {
         tp.code AS pattern_code,
         v.code AS vehicle_code,
         v.plate AS vehicle_plate,
+        d.name AS driver_name,
         et.capacity,
         et.status,
         osi.depart_at_outlet,
@@ -501,6 +503,7 @@ export class SchedulingRepository {
       FROM eligible_trips et
       INNER JOIN trip_patterns tp ON tp.id = et.pattern_id
       LEFT JOIN vehicles v ON v.id = et.vehicle_id
+      LEFT JOIN drivers d ON d.id = et.driver_id
       INNER JOIN outlet_stop_info osi ON osi.trip_id = et.id
       INNER JOIN trip_bounds tb ON tb.trip_id = et.id
       INNER JOIN boarding_check bc_check ON bc_check.trip_id = et.id
@@ -516,10 +519,11 @@ export class SchedulingRepository {
       isVirtual: false,
       patternCode: row.pattern_code,
       patternPath: row.pattern_stops || 'Unknown Route',
-      vehicle: row.vehicle_code && row.vehicle_plate ? {
-        code: row.vehicle_code,
-        plate: row.vehicle_plate
+      vehicle: row.vehicle_code || row.vehicle_plate ? {
+        code: row.vehicle_code || undefined,
+        plate: row.vehicle_plate || undefined
       } : null,
+      driver: row.driver_name ? { name: row.driver_name } : null,
       capacity: row.capacity,
       status: (row.status || 'scheduled') as CsoAvailableTrip['status'],
       departAtAtOutlet: row.depart_at_outlet,
@@ -617,6 +621,7 @@ export class SchedulingRepository {
           patternCode: pattern.code,
           patternPath,
           vehicle: null,
+          driver: null,
           capacity: base.capacity,
           status: 'scheduled',
           departAtAtOutlet: departAtOutlet,

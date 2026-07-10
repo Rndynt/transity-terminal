@@ -3,7 +3,7 @@ import { useQuery, useMutation, keepPreviousData } from '@tanstack/react-query';
 import {
   Store, Calendar, Bus, Loader2, Search, ChevronDown,
   ArrowRight, Armchair, Route, X, Check, ChevronLeft, ChevronRight as ChevronRightIcon,
-  MapPin, Hash, AlertTriangle, Lock
+  MapPin, Hash, AlertTriangle, Lock, UserRound, CreditCard
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, outletsApi, stopsApi } from '@/lib/api';
@@ -839,7 +839,7 @@ export default function TripSelector({
                           }`}
                         >
                           <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
                               {isMaterializing ? (
                                 <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
                               ) : (
@@ -847,8 +847,8 @@ export default function TripSelector({
                                   <span className={`text-lg font-bold font-mono tracking-tight ${isPast ? 'text-gray-400' : 'text-gray-900'}`}>
                                     {formatDepartTime(trip.departAtAtOutlet)}
                                   </span>
-                                  <ArrowRight className="w-3.5 h-3.5 text-gray-400" />
-                                  <span className="text-sm text-gray-500 font-mono">
+                                  <ArrowRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                  <span className={`text-lg font-bold font-mono tracking-tight ${isPast ? 'text-gray-400' : 'text-gray-900'}`}>
                                     {formatArriveTime(trip)}
                                   </span>
                                 </>
@@ -880,21 +880,35 @@ export default function TripSelector({
                           </div>
 
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3 text-[11px] text-gray-400">
-                              <span className="flex items-center gap-1"><Bus className="w-3 h-3" />{trip.vehicle?.code || 'TBD'}</span>
-                              <span className={`flex items-center gap-1 font-medium ${
+                            <div className="flex items-center gap-3 text-[11px] text-gray-400 min-w-0">
+                              <span className="flex items-center gap-1 w-[52px] flex-shrink-0" title={trip.vehicle?.code || 'Kendaraan belum ditentukan'}>
+                                <Bus className="w-3 h-3 flex-shrink-0" />
+                                <span className="truncate">{trip.vehicle?.code || 'TBD'}</span>
+                              </span>
+                              <span className={`flex items-center gap-1 font-medium flex-shrink-0 ${
                                 seatCount > 10 ? 'text-emerald-600' : seatCount > 0 ? 'text-amber-600' : 'text-red-600'
                               }`}>
                                 <Armchair className="w-3 h-3" />{seatCount}/{totalSeats}
                               </span>
-                              {(() => { const dur = formatDuration(trip); return dur ? <span className="flex items-center gap-0.5 text-gray-400">⏱ {dur}</span> : null; })()}
+                              {(() => { const dur = formatDuration(trip); return dur ? <span className="flex items-center gap-0.5 text-gray-400 flex-shrink-0">⏱ {dur}</span> : null; })()}
                               {trip.outletStopSequence > 1 && trip.outletStopSequence < trip.stopCount && (
-                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-semibold">Transit</span>
+                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-semibold flex-shrink-0">Transit</span>
                               )}
                             </div>
                             {(trip as any).pricePerSeat != null && (
-                              <span className="text-xs font-bold text-gray-700 font-mono">{fmtCurrency((trip as any).pricePerSeat)}</span>
+                              <span className="text-xs font-bold text-gray-700 font-mono flex-shrink-0">{fmtCurrency((trip as any).pricePerSeat)}</span>
                             )}
+                          </div>
+
+                          <div className="flex items-center gap-3 text-[11px] mt-1">
+                            <span className={`flex items-center gap-1 w-[52px] flex-shrink-0 ${trip.vehicle?.plate ? 'text-gray-400' : 'text-gray-400 italic'}`} title={trip.vehicle?.plate || 'Plat belum ditentukan'}>
+                              <CreditCard className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{trip.vehicle?.plate || '-'}</span>
+                            </span>
+                            <span className={`flex items-center gap-1 min-w-0 ${trip.driver?.name ? 'text-gray-500' : 'text-gray-400 italic'}`} title={trip.driver?.name || 'Driver belum ditugaskan'}>
+                              <UserRound className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{trip.driver?.name || 'Belum ada driver'}</span>
+                            </span>
                           </div>
 
                           <div className="mt-2 h-1 bg-gray-100 rounded-full overflow-hidden">
