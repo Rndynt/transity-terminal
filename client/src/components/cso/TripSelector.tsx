@@ -879,36 +879,44 @@ export default function TripSelector({
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3 text-[11px] text-gray-400 min-w-0">
-                              <span className="flex items-center gap-1 w-[52px] flex-shrink-0" title={trip.vehicle?.code || 'Kendaraan belum ditentukan'}>
-                                <Bus className="w-3 h-3 flex-shrink-0" />
-                                <span className="truncate">{trip.vehicle?.code || 'TBD'}</span>
-                              </span>
-                              <span className={`flex items-center gap-1 font-medium flex-shrink-0 ${
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0 space-y-1 text-[11px] text-gray-400">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="flex items-center gap-1" title={trip.vehicle?.code ? undefined : 'Kendaraan belum ditentukan'}>
+                                  <Bus className="w-3 h-3 flex-shrink-0" />
+                                  <span className={trip.vehicle?.code ? '' : 'italic text-gray-400'}>{trip.vehicle?.code || 'Belum ada kendaraan'}</span>
+                                </span>
+                                {trip.vehicle?.code && (
+                                  <>
+                                    <span className="text-gray-300">•</span>
+                                    <span className="flex items-center gap-1 font-mono" title={trip.vehicle?.plate ? undefined : 'Plat belum ditentukan'}>
+                                      <CreditCard className="w-3 h-3 flex-shrink-0" />
+                                      <span className={trip.vehicle?.plate ? '' : 'italic text-gray-400'}>{trip.vehicle?.plate || 'Belum ada plat'}</span>
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1" title={trip.driver?.name ? undefined : 'Driver belum ditugaskan'}>
+                                <UserRound className="w-3 h-3 flex-shrink-0" />
+                                <span className={trip.driver?.name ? 'text-gray-500' : 'italic text-gray-400'}>{trip.driver?.name || 'Belum ada driver'}</span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-1 flex-shrink-0 text-[11px]">
+                              {(trip as any).pricePerSeat != null && (
+                                <span className="text-xs font-bold text-gray-700 font-mono">{fmtCurrency((trip as any).pricePerSeat)}</span>
+                              )}
+                              <span className={`flex items-center gap-1 font-medium ${
                                 seatCount > 10 ? 'text-emerald-600' : seatCount > 0 ? 'text-amber-600' : 'text-red-600'
                               }`}>
                                 <Armchair className="w-3 h-3" />{seatCount}/{totalSeats}
                               </span>
-                              {(() => { const dur = formatDuration(trip); return dur ? <span className="flex items-center gap-0.5 text-gray-400 flex-shrink-0">⏱ {dur}</span> : null; })()}
-                              {trip.outletStopSequence > 1 && trip.outletStopSequence < trip.stopCount && (
-                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-semibold flex-shrink-0">Transit</span>
-                              )}
+                              <div className="flex items-center gap-1">
+                                {(() => { const dur = formatDuration(trip); return dur ? <span className="flex items-center gap-0.5 text-gray-400">⏱ {dur}</span> : null; })()}
+                                {trip.outletStopSequence > 1 && trip.outletStopSequence < trip.stopCount && (
+                                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-semibold">Transit</span>
+                                )}
+                              </div>
                             </div>
-                            {(trip as any).pricePerSeat != null && (
-                              <span className="text-xs font-bold text-gray-700 font-mono flex-shrink-0">{fmtCurrency((trip as any).pricePerSeat)}</span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-3 text-[11px] mt-1">
-                            <span className={`flex items-center gap-1 w-[52px] flex-shrink-0 ${trip.vehicle?.plate ? 'text-gray-400' : 'text-gray-400 italic'}`} title={trip.vehicle?.plate || 'Plat belum ditentukan'}>
-                              <CreditCard className="w-3 h-3 flex-shrink-0" />
-                              <span className="truncate">{trip.vehicle?.plate || '-'}</span>
-                            </span>
-                            <span className={`flex items-center gap-1 min-w-0 ${trip.driver?.name ? 'text-gray-500' : 'text-gray-400 italic'}`} title={trip.driver?.name || 'Driver belum ditugaskan'}>
-                              <UserRound className="w-3 h-3 flex-shrink-0" />
-                              <span className="truncate">{trip.driver?.name || 'Belum ada driver'}</span>
-                            </span>
                           </div>
 
                           <div className="mt-2 h-1 bg-gray-100 rounded-full overflow-hidden">
