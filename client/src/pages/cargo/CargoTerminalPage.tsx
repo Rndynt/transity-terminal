@@ -426,6 +426,22 @@ export default function CargoTerminalPage() {
     [outlets, destinationStopIdsForTrip.join(',')]
   );
 
+  // `destinationStop` di atas SELALU stop pertama/default trip (mis. "MT
+  // Haryono Tebet") — nilai itu benar dipakai untuk validasi/fallback, tapi
+  // TIDAK BOLEH dipakai untuk teks yang dilihat CSO (header, ringkasan,
+  // footer), karena CSO bisa memilih outlet tujuan lain (mis. "Atrium
+  // Senen") lewat dropdown "Titik/Outlet Tujuan". Sebelumnya semua tempat
+  // itu tetap merender `destinationStop.name`, jadi UI selalu menampilkan
+  // "MT Haryono Tebet" di header/footer walau CSO sudah memilih outlet
+  // lain — inilah yang membuat tampak seperti hardcode. `displayDestinationStop`
+  // ini yang harus dipakai di semua teks yang dilihat user; ia mengikuti
+  // outlet yang benar-benar dipilih, dan baru fallback ke stop default
+  // selama outlet belum dipilih.
+  const chosenDestinationOutlet = destinationOutletOptions.find(o => o.id === destinationOutletId);
+  const displayDestinationStop = chosenDestinationOutlet
+    ? (allStops.find((s: Stop) => s.id === chosenDestinationOutlet.stopId) ?? destinationStop)
+    : destinationStop;
+
   useEffect(() => {
     if (destinationOutletOptions.length === 1) {
       setDestinationOutletId(destinationOutletOptions[0].id);
@@ -665,12 +681,12 @@ export default function CargoTerminalPage() {
         </div>
       </div>
 
-      {step <= 3 && originStop && (destinationStop || destinationCity) && (
+      {step <= 3 && originStop && (displayDestinationStop || destinationCity) && (
         <div className="bg-amber-50 border-b border-amber-100 px-3 md:px-4 py-1.5 flex items-center gap-3 text-xs flex-shrink-0">
           <div className="flex items-center gap-1.5">
             <span className="font-semibold text-emerald-700">{originStop.name}</span>
             <ArrowRight className="w-3 h-3 text-gray-400" />
-            <span className="font-semibold text-rose-700">{destinationStop ? destinationStop.name : destinationCity}</span>
+            <span className="font-semibold text-rose-700">{displayDestinationStop ? displayDestinationStop.name : destinationCity}</span>
           </div>
           {selectedTrip && (
             <>
@@ -1128,7 +1144,7 @@ export default function CargoTerminalPage() {
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-emerald-600">{originStop?.name}</span>
                         <ArrowRight className="w-3 h-3 text-gray-400" />
-                        <span className="font-semibold text-rose-600">{destinationStop?.name}</span>
+                        <span className="font-semibold text-rose-600">{displayDestinationStop?.name}</span>
                       </div>
                       {destinationOutletOptions.find((o: Outlet) => o.id === destinationOutletId) && (
                         <div className="text-[10px] text-gray-400 mt-0.5">
@@ -1295,7 +1311,7 @@ export default function CargoTerminalPage() {
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-emerald-600">{originStop?.name}</span>
                         <ArrowRight className="w-3 h-3 text-gray-400" />
-                        <span className="font-semibold text-rose-600">{destinationStop?.name}</span>
+                        <span className="font-semibold text-rose-600">{displayDestinationStop?.name}</span>
                       </div>
                     </div>
                     <div>
@@ -1344,11 +1360,11 @@ export default function CargoTerminalPage() {
 
       <div className="border-t border-gray-200 bg-gray-50 px-3 md:px-4 py-1.5 flex items-center justify-between text-[10px] text-gray-400 flex-shrink-0">
         <span>Cargo Terminal v2.0</span>
-        {originStop && destinationStop && (
+        {originStop && displayDestinationStop && (
           <div className="flex items-center gap-1.5">
             <span className="font-medium text-gray-600">{originStop.name}</span>
             <ArrowRight className="w-3 h-3" />
-            <span className="font-medium text-gray-600">{destinationStop.name}</span>
+            <span className="font-medium text-gray-600">{displayDestinationStop.name}</span>
             {tariffAmount > 0 && (
               <>
                 <span className="mx-1">|</span>
