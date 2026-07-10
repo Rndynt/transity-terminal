@@ -1,3 +1,5 @@
 - [Blank preview but backend OK](blank-preview-compress.md) — check `@fastify/compress`/global response compression before assuming a frontend bug; it can silently empty the body through Replit's preview proxy.
 - [db:push vs app migrator conflict](drizzle-push-vs-app-migrator-conflict.md) — this project's own SQL migrator owns schema creation; running `drizzle-kit push` first causes "already exists" boot errors.
 - [esbuild ESM + dynamic require crash](esbuild-esm-dynamic-require-otel.md) — fully-bundling @sentry/node (pulls in @opentelemetry/instrumentation) with esbuild `format:"esm"` crashes on boot; use `format:"cjs"` (.cjs) for single-file API bundles instead.
+- [dev server has no hot-reload](tsx-no-watch-dev.md) — `npm run dev` runs plain `tsx server/index.ts` (no `--watch`); backend edits need an explicit workflow restart before curl/API testing shows them.
+- [Cargo vs reservation: real trips only, multi-stop destinations](cargo-real-trips-multistop.md) — cargo must never use virtual/unmaterialized trips or a single hardcoded destination stop; contrast with passenger reservation's more permissive model.

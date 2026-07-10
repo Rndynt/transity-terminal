@@ -404,22 +404,32 @@ export default function CargoTerminalPage() {
     return null;
   }, [selectedTripKey, selectedTripDate, groupedTrips, tariffCache]);
 
-  // Stop tujuan AKTUAL — baru diketahui setelah CSO memilih trip spesifik,
-  // karena tiap trip bisa berhenti di stop yang berbeda dalam kota yang sama.
+  // Stop tujuan default (dipakai untuk tarif/waktu tiba) — baru diketahui
+  // setelah CSO memilih trip spesifik.
   const destinationStopId = selectedTrip?.destinationStopId;
   const destinationStop = allStops.find((s: Stop) => s.id === destinationStopId);
 
-  // Outlet-outlet yang berlokasi di stop tujuan trip terpilih — ini yang
-  // dipilih CSO sebagai outlet tujuan pengiriman.
+  // Trip bisa lewat BANYAK stop di kota tujuan (mis. Tebet, Cempaka Putih,
+  // Atrium Senen). Outlet tujuan yang bisa dipilih CSO/kasir cargo adalah
+  // semua outlet yang berlokasi di stop MANAPUN yang dilewati trip terpilih
+  // setelah origin — sama seperti reservasi penumpang yang membolehkan
+  // pilih titik naik/turun di stop manapun sepanjang rute, bukan cuma satu
+  // titik yang otomatis ditentukan sistem.
+  const destinationStopIdsForTrip = selectedTrip?.destinationStopIds?.length
+    ? selectedTrip.destinationStopIds
+    : (destinationStopId ? [destinationStopId] : []);
+
   const destinationOutletOptions = useMemo(() =>
-    destinationStopId ? (outlets as Outlet[]).filter(o => o.stopId === destinationStopId) : [],
-    [outlets, destinationStopId]
+    destinationStopIdsForTrip.length
+      ? (outlets as Outlet[]).filter(o => destinationStopIdsForTrip.includes(o.stopId))
+      : [],
+    [outlets, destinationStopIdsForTrip.join(',')]
   );
 
   useEffect(() => {
     if (destinationOutletOptions.length === 1) {
       setDestinationOutletId(destinationOutletOptions[0].id);
-    } else if (destinationOutletOptions.length === 0) {
+    } else if (!destinationOutletOptions.some(o => o.id === destinationOutletId)) {
       setDestinationOutletId('');
     }
   }, [destinationOutletOptions]);
@@ -476,10 +486,17 @@ export default function CargoTerminalPage() {
     const tripId = selectedTrip.tripId;
     if (!tripId) return;
 
+    // Kirim stop yang benar-benar sesuai outlet tujuan yang dipilih CSO —
+    // trip bisa lewat beberapa stop di kota tujuan (destinationStopIds), jadi
+    // jangan selalu pakai stop pertama (destinationStopId) kalau CSO memilih
+    // outlet di stop lain yang juga dilewati trip ini.
+    const chosenOutlet = destinationOutletOptions.find(o => o.id === destinationOutletId);
+    const effectiveDestinationStopId = chosenOutlet?.stopId || destinationStopId;
+
     createMutation.mutate({
       tripId,
       originStopId,
-      destinationStopId,
+      destinationStopId: effectiveDestinationStopId,
       outletId: selectedOutletId,
       destinationOutletId,
       cargoTypeId,

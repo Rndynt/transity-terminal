@@ -1116,19 +1116,11 @@ export class SchedulingRepository {
   }
 
   async getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopIds: string[]): Promise<CargoAvailableTrip[]> {
-    const [realTrips, virtualTrips] = await Promise.all([
-      this.getRealTripsForCargo(serviceDate, originStopId, destinationStopIds),
-      this.getVirtualTripsForCargo(serviceDate, originStopId, destinationStopIds)
-    ]);
-
-    const baseIdsWithRealTrips = new Set(
-      realTrips.filter(t => t.baseId).map(t => t.baseId!)
-    );
-    const filteredVirtualTrips = virtualTrips.filter(
-      t => !baseIdsWithRealTrips.has(t.baseId!)
-    );
-
-    const allTrips = [...realTrips, ...filteredVirtualTrips];
+    // Cargo hanya boleh mengirim lewat trip REAL/materialized yang sudah
+    // punya kendaraan fisik — beda dengan reservasi penumpang yang boleh
+    // menampilkan jadwal virtual (baru dimaterialisasi saat ada booking).
+    // Jadwal virtual sengaja TIDAK diikutsertakan di sini.
+    const allTrips = await this.getRealTripsForCargo(serviceDate, originStopId, destinationStopIds);
 
     let filtered = allTrips;
     const baseIds = [...new Set(allTrips.filter(t => t.baseId).map(t => t.baseId!))];
@@ -1226,9 +1218,11 @@ export class SchedulingRepository {
     for (const row of tripRows) {
       const psForPattern = patternStopsByPattern.get(row.pattern_id) || [];
       const originPs = psForPattern.find(ps => ps.stopId === originStopId);
-      // Kota tujuan bisa punya beberapa stop; ambil stop tujuan pertama
-      // (sequence terkecil setelah origin) yang match salah satu stop kota
-      // tsb — itu jadi destinationStopId aktual untuk trip ini.
+      // Kota tujuan bisa punya beberapa stop; kumpulkan SEMUA stop kota
+      // tujuan yang dilewati trip ini setelah origin. Stop pertama (sequence
+      // terkecil) tetap dipakai untuk hitung tarif/waktu tiba, tapi seluruh
+      // daftar dikirim ke frontend supaya titik drop bisa dipilih bebas
+      // sepanjang rute — sama seperti mekanisme reservasi penumpang.
       const destCandidates = psForPattern
         .filter(ps => destinationStopIds.includes(ps.stopId) && originPs && ps.stopSequence > originPs.stopSequence)
         .sort((a, b) => a.stopSequence - b.stopSequence);
@@ -1283,6 +1277,7 @@ export class SchedulingRepository {
         departAtOrigin,
         arriveAtDestination,
         destinationStopId: destPs.stopId,
+        destinationStopIds: destCandidates.map(ps => ps.stopId),
         originStopSequence: originPs.stopSequence,
         destinationStopSequence: destPs.stopSequence,
         legCount: destPs.stopSequence - originPs.stopSequence,
@@ -1292,106 +1287,8 @@ export class SchedulingRepository {
     return trips;
   }
 
-  private async getVirtualTripsForCargo(serviceDate: string, originStopId: string, destinationStopIds: string[]): Promise<CargoAvailableTrip[]> {
-    const eligibleBases = await this.getEligibleTripBases(serviceDate);
-    if (eligibleBases.length === 0) return [];
-
-    const exceptions = await db.select({ baseId: scheduleExceptions.baseId })
-      .from(scheduleExceptions)
-      .where(eq(scheduleExceptions.exceptionDate, serviceDate));
-    const exceptedBaseIds = new Set(exceptions.map(e => e.baseId));
-    const filteredBases = eligibleBases.filter(b => !exceptedBaseIds.has(b.id));
-    if (filteredBases.length === 0) return [];
-
-    const uniquePatternIds = [...new Set(filteredBases.map(b => b.patternId))];
-
-    const [allPatterns, allPatternStopsRows, patternPathRows] = await Promise.all([
-      db.select().from(tripPatterns).where(inArray(tripPatterns.id, uniquePatternIds)),
-      db.query.patternStops.findMany({
-        where: and(inArray(patternStops.patternId, uniquePatternIds), isNull(patternStops.deletedAt)),
-        orderBy: patternStops.stopSequence,
-        with: { stop: true }
-      }),
-      db.execute(sql`
-        SELECT ps.pattern_id, STRING_AGG(s.name, ' → ' ORDER BY ps.stop_sequence) as pattern_path
-        FROM ${patternStops} ps
-        JOIN ${stops} s ON ps.stop_id = s.id
-        WHERE ps.pattern_id IN ${sql`(${sql.join(uniquePatternIds.map(id => sql`${id}`), sql`, `)})`}
-          AND ps.deleted_at IS NULL
-        GROUP BY ps.pattern_id
-      `)
-    ]);
-
-    const patternsMap = new Map(allPatterns.map(p => [p.id, p]));
-    const patternStopsMap = new Map<string, typeof allPatternStopsRows>();
-    for (const ps of allPatternStopsRows) {
-      const list = patternStopsMap.get(ps.patternId) || [];
-      list.push(ps);
-      patternStopsMap.set(ps.patternId, list);
-    }
-    const patternPathMap = new Map<string, string>();
-    for (const row of patternPathRows.rows as PatternPathRow[]) {
-      patternPathMap.set(row.pattern_id, row.pattern_path || '');
-    }
-
-    const virtualTrips: CargoAvailableTrip[] = [];
-
-    for (const base of filteredBases) {
-      try {
-        const pattern = patternsMap.get(base.patternId);
-        if (!pattern) continue;
-
-        const stopsForBase = patternStopsMap.get(base.patternId) || [];
-        const originPs = stopsForBase.find(ps => ps.stopId === originStopId);
-        const destCandidates = stopsForBase
-          .filter(ps => destinationStopIds.includes(ps.stopId) && originPs && ps.stopSequence > originPs.stopSequence)
-          .sort((a, b) => a.stopSequence - b.stopSequence);
-        const destPs = destCandidates[0];
-
-        if (!originPs || !destPs) continue;
-
-        const defaultStopTimes = base.defaultStopTimes as DefaultStopTime[];
-        const originTime = defaultStopTimes?.find(st => st.stopSequence === originPs.stopSequence);
-        const destTime = defaultStopTimes?.find(st => st.stopSequence === destPs.stopSequence);
-
-        let departAtOrigin: string | null = null;
-        let arriveAtDestination: string | null = null;
-
-        if (originTime?.departAt) {
-          const utc = fromZonedHHMMToUtc(serviceDate, originTime.departAt, "Asia/Jakarta");
-          departAtOrigin = utc?.toISOString() ?? null;
-        }
-        if (destTime?.arriveAt) {
-          const utc = fromZonedHHMMToUtc(serviceDate, destTime.arriveAt, "Asia/Jakarta");
-          if (utc && departAtOrigin) {
-            if (utc.getTime() <= new Date(departAtOrigin).getTime()) {
-              utc.setDate(utc.getDate() + 1);
-            }
-          }
-          arriveAtDestination = utc?.toISOString() ?? null;
-        }
-
-        virtualTrips.push({
-          baseId: base.id,
-          patternId: base.patternId,
-          isVirtual: true,
-          patternCode: pattern.code,
-          patternPath: patternPathMap.get(base.patternId) || '',
-          vehicle: null,
-          status: 'scheduled',
-          departAtOrigin,
-          arriveAtDestination,
-          destinationStopId: destPs.stopId,
-          originStopSequence: originPs.stopSequence,
-          destinationStopSequence: destPs.stopSequence,
-          legCount: destPs.stopSequence - originPs.stopSequence,
-        });
-      } catch (error) {
-        log.warn({ baseId: base.id, err: error }, "skipping virtual cargo trip");
-        continue;
-      }
-    }
-
-    return virtualTrips;
-  }
+  // NOTE: virtual (belum-materialized) trip TIDAK boleh dipakai cargo — hanya
+  // trip real dengan kendaraan fisik yang boleh menerima pengiriman paket.
+  // Fungsi ini sengaja dihapus (dulu getVirtualTripsForCargo); lihat
+  // getCargoAvailableTrips() yang sekarang hanya memanggil getRealTripsForCargo.
 }
