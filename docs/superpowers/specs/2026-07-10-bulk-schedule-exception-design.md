@@ -1,148 +1,162 @@
-# Bulk Schedule Exception — Design
+# Bulk Close Trip — Design
+
+> **Revision note (2026-07-10):** the original version of this doc modeled
+> bulk actions around a new `schedule_exception_groups`/`schedule_exceptions`
+> pair. That was wrong: the calendar's bulk select targets whole trip
+> cards (not stops), and the app already has a mechanism for "this whole
+> trip does not run" — `trips.status = 'closed'`, via the existing "Tutup
+> Trip" flow. This revision replaces the exception-group design with a
+> bulk-close design that reuses that mechanism instead of introducing a new
+> exception concept. `schedule_exception_groups` and `schedule_exceptions.group_id`
+> were reverted from the schema/DB.
 
 ## Problem
 
-In Penjadwalan (scheduler calendar), operators can only mark a single trip
-occurrence as an exception (e.g. "libur") one at a time via the trip detail
-dialog. When a national holiday or blanket schedule change affects many
-trips across many routes/dates, the operator has to repeat this one by one,
-which is slow and error-prone.
+In Penjadwalan (scheduler calendar), operators can only close a single trip
+occurrence at a time via the trip detail dialog's "Tutup Trip" button. When a
+national holiday or blanket schedule change affects many trips across many
+routes/dates, the operator has to repeat this one by one, which is slow and
+error-prone.
 
 ## Goals
 
 - Let an operator select many schedule cells across the calendar grid and
-  apply one exception (with one shared reason) to all of them in a single
-  action.
-- Preserve the existing single-exception flow (trip detail dialog) unchanged.
-- Keep a record of which exceptions were created together as a batch, for
-  future auditing, without building a dedicated management UI yet.
+  close all of them (set `status = 'closed'`) in a single action, with one
+  shared reason recorded for audit purposes.
+- Preserve the existing single-trip "Tutup Trip" flow unchanged.
+- Keep a record of why/when/by whom each trip was closed, without building a
+  dedicated management UI yet.
 
 ## Non-goals (this iteration)
 
-- Bulk "remove exception" / undo-a-whole-batch UI.
+- Bulk re-open / undo-a-whole-batch UI.
 - Bulk driver/vehicle reassignment.
-- A dedicated screen to browse past exception groups.
+- A dedicated screen to browse past closures.
+- Per-stop pickup/dropoff bulk closure (that's the separate, existing
+  `schedule_stop_exceptions` mechanism and is out of scope here).
 
 ## Data model
 
-Add a new table `schedule_exception_groups`:
+Add a lightweight audit table `trip_closures` (not an "exception" concept —
+this is a log of closures, closures themselves live on `trips.status`):
 
-| column      | type      | notes                                   |
-|-------------|-----------|------------------------------------------|
-| id          | uuid pk   | default gen_random_uuid()                |
-| reason      | text      | required — shown as the group's label     |
-| createdBy   | text      | nullable, same convention as other tables |
-| createdAt   | timestamptz | default now()                           |
+| column    | type        | notes                                      |
+|-----------|-------------|---------------------------------------------|
+| id        | uuid pk     | default gen_random_uuid()                    |
+| tripId    | uuid, FK → trips.id | required                              |
+| reason    | text        | nullable — single-close still has no reason UI |
+| closedBy  | text        | nullable, same convention as other tables    |
+| closedAt  | timestamptz | default now()                                |
 
-Add a nullable `groupId` column (FK → `schedule_exception_groups.id`) to the
-existing `schedule_exceptions` table.
-
-- Exceptions created through the existing single-item flow keep
-  `groupId = null` (unchanged behavior).
-- Exceptions created through the new bulk flow all reference the same,
-  newly-created group row.
-- Deleting an individual exception (existing `DELETE
-  /api/scheduler/exceptions/:id`) is unaffected — it just removes that row.
-  The group row is left in place even if all its members are eventually
-  deleted; no cleanup job needed for this iteration (it's small, historical
-  metadata, not a foreign-key-cascading concern).
+- Both the existing single "Tutup Trip" action and the new bulk action write
+  through the same `TripBasesService.closeTrip(tripId, reason?, closedBy?)`,
+  so every closure — solo or bulk — gets one `trip_closures` row.
+- The audit insert is best-effort: if it fails, the trip is still considered
+  closed (status update + hold release already happened) rather than the
+  whole operation being reported as failed.
 
 ## UX flow
 
 ### Entering select mode
 
-- New "Pilih Jadwal" toggle button placed in the scheduler's existing
-  toolbar row (the one already made responsive for mobile/tablet).
+- "Pilih Jadwal" toggle button in the scheduler's toolbar row.
 - Toggling it on enters `selectMode`; toggling off exits and clears any
   current selection.
 
 ### Selecting cells
 
-- While `selectMode` is active, clicking a trip card (status
-  `scheduled` or `virtual`) toggles it in/out of the selection set. Selected
-  cards get a visible `ring-2 ring-primary` style — no checkbox.
-- Clicking a card that is already an exception is a no-op (not selectable —
-  no point re-excepting something already excepted).
-- Clicking a trip card while in select mode does **not** open the trip
-  detail dialog. To inspect a trip's detail, the operator must exit select
-  mode first.
-- Clicking a date column header toggles selection for every selectable
-  (`scheduled`/`virtual`) card in that column — this is the fast path for
-  "exclude this whole day everywhere" (e.g. national holiday).
+- While `selectMode` is active, clicking a trip card (status `scheduled` or
+  `virtual`) toggles it in/out of the selection set. Selected cards get a
+  `ring-2 ring-primary` style — no checkbox.
+- Clicking a card that is already an exception is a no-op.
+- Clicking a trip card in select mode does **not** open the trip detail
+  dialog.
+- Clicking a date column header toggles selection for every selectable card
+  in that column.
 
 ### Bulk action bar
 
-- While `selectMode` is active and at least one item is selected, a second
-  sticky bar appears (directly below the existing filter toolbar, following
-  the same sticky pattern used elsewhere on this page) showing:
+- While `selectMode` is active and at least one item is selected, a sticky
+  bar appears showing:
   - "N dipilih"
-  - "Set Pengecualian" button
+  - "Tutup Trip" button
   - "Batal" button (exits select mode, clears selection)
 
-### Bulk exception dialog
+### Bulk close dialog
 
-- Clicking "Set Pengecualian" opens a dialog with:
-  - A required reason text field (this becomes the group's `reason`).
-  - A summary line, e.g. "43 jadwal akan dikecualikan."
+- Clicking "Tutup Trip" opens a dialog with:
+  - A required reason text field.
+  - A summary line, e.g. "43 jadwal akan ditutup (virtual akan diaktifkan
+    lalu ditutup)."
   - Confirm / Cancel actions.
-- On confirm: one request is sent to the new bulk endpoint. On success, the
-  calendar query is invalidated (same cache key as today), select mode
-  exits, and a success toast shows the count that was applied.
+- On confirm: one request is sent to the bulk endpoint. On success, the
+  calendar query is invalidated, select mode exits, and a toast shows the
+  closed/failed counts.
 
 ## API
 
-### `POST /api/scheduler/exceptions/bulk`
+### `POST /api/trips/close-bulk`
 
-Guarded by the same permission flag as the existing exception endpoints
+Guarded by the same permission flag as the existing close endpoint
 (`action.trip.close`).
 
 Request body:
 
 ```json
 {
-  "items": [{ "baseId": "uuid", "exceptionDate": "YYYY-MM-DD" }, ...],
+  "items": [
+    { "tripId": "uuid" },
+    { "baseId": "uuid", "serviceDate": "YYYY-MM-DD" }
+  ],
   "reason": "Libur Nasional 17 Agustus"
 }
 ```
 
+Each item identifies a calendar slot either by an already-materialized
+`tripId`, or by `baseId` + `serviceDate` for a virtual slot (materialized
+on the fly before closing).
+
 Behavior:
 
-1. Validate body (non-empty `items`, valid date format per item, non-empty
-   `reason`) using zod, same style as the existing single-exception route.
-2. In a single DB transaction:
-   - Insert one row into `schedule_exception_groups` with the given reason
-     and `createdBy` from the request context.
-   - Insert one row per item into `schedule_exceptions` with that
-     `groupId`, using the same upsert-on-conflict behavior as the existing
-     single-add path (`onConflictDoNothing` keyed on `(baseId,
-     exceptionDate)`), so re-submitting or racing with another exception
-     creation for the same base+date is a safe no-op for that item rather
-     than an error.
-3. Emit the same webhook/websocket notifications the single-exception path
-   emits today, once per item that was actually inserted (skip items that
-   hit the conflict no-op).
-4. Respond `201` with the created group id and the exception rows that were
-   actually inserted (so the frontend can report how many were newly
-   applied vs. already-excepted).
+1. Validate body (non-empty `items`, each item has `tripId` XOR
+   `baseId`+`serviceDate`, non-empty `reason`) using zod.
+2. Process items sequentially: materialize virtual items via the existing
+   `ensureMaterializedTrip`, then close via the existing
+   `TripBasesService.closeTrip` (status update, hold release, audit log,
+   websocket/webhook notification — all unchanged from the single-close
+   path).
+3. Each item succeeds or fails independently; one item's failure (e.g.
+   trip base not eligible, already closed) does not abort the batch.
+4. Respond `200` with per-item results:
+
+```json
+{
+  "ok": true,
+  "requested": 2,
+  "closed": 1,
+  "failed": 1,
+  "succeeded": [{ "item": { "tripId": "..." }, "tripId": "...", "status": "closed" }],
+  "errors": [{ "item": { "baseId": "...", "serviceDate": "..." }, "error": "..." }]
+}
+```
 
 ## Error handling
 
-- Empty selection: "Set Pengecualian" button is disabled until at least one
-  item is selected.
-- Empty reason on submit: client-side validation blocks submit (same
-  pattern as other forms in this codebase).
-- Partial conflicts (some items already excepted by the time the request
-  lands): not an error — those items are silently skipped server-side, and
-  the success toast reflects the actual applied count vs. requested count
-  when they differ (e.g. "40 dari 43 jadwal dikecualikan, 3 sudah
-  dikecualikan sebelumnya").
+- Empty selection: "Tutup Trip" button is disabled until at least one item
+  is selected.
+- Empty reason on submit: client-side validation blocks submit.
+- Per-item failures (e.g. base not eligible for that date, trip already
+  closed) are reported back in `errors` with the original item attached, so
+  the client/operator can tell exactly which selection failed and why — the
+  batch as a whole still returns `200`.
 - Network/permission failure: existing toast-based error pattern used
   elsewhere in `SchedulerPage.tsx`.
 
 ## Testing
 
-- Backend: unit/integration test for the bulk endpoint covering successful
-  bulk insert, partial-conflict skip behavior, and permission gate.
+- Backend: integration test for the bulk endpoint covering successful bulk
+  close (mix of already-materialized and virtual items), partial-failure
+  reporting, and the permission gate.
 - Frontend: manual verification of select mode toggle, cell/column
   selection, bulk dialog submit, and cache invalidation refreshing the
   calendar — consistent with how this page has been manually verified so

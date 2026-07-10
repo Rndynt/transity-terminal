@@ -20,6 +20,7 @@ export function registerTripBasesRoutes(app: FastifyInstance, storage: IStorage)
 
   app.post('/api/cso/materialize-trip', { preHandler: [requireFlag('action.trip.materialize')] }, async (req, reply) => controller.materializeTrip(req, reply));
   app.post('/api/trips/:id/close', { preHandler: [requireFlag('action.trip.close')] }, async (req, reply) => controller.closeTrip(req, reply));
+  app.post('/api/trips/close-bulk', { preHandler: [requireFlag('action.trip.close')] }, async (req, reply) => controller.bulkCloseTrips(req, reply));
 
   app.get('/api/trips/:id/active-passengers', { preHandler: [requireAnyFlag('action.trip.close', 'action.trip.batch_reschedule')] }, async (req, reply) => {
     try {

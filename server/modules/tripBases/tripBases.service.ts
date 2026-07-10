@@ -1,5 +1,5 @@
 import { IStorage } from "@server/storage.interface";
-import { InsertTripBase, TripBase, Trip, InsertTrip, scheduleExceptions } from "@shared/schema";
+import { InsertTripBase, TripBase, Trip, InsertTrip, scheduleExceptions, tripClosures } from "@shared/schema";
 import { TripLegsService } from "@modules/tripLegs/tripLegs.service";
 import { SeatInventoryService } from "@modules/seatInventory/seatInventory.service";
 import { format, parseISO } from "date-fns";
@@ -438,7 +438,7 @@ export class TripBasesService {
   /**
    * Close a trip (operational close)
    */
-  async closeTrip(tripId: string): Promise<Trip> {
+  async closeTrip(tripId: string, reason?: string, closedBy?: string): Promise<Trip> {
     const trip = await this.storage.getTripById(tripId);
     if (!trip) {
       throw new Error(`Trip with id ${tripId} not found`);
@@ -446,6 +446,18 @@ export class TripBasesService {
 
     const updatedTrip = await this.storage.updateTrip(tripId, { status: 'closed' });
     await this.storage.releaseHoldsForTrip(tripId);
+    try {
+      await db.insert(tripClosures).values({
+        tripId,
+        reason: reason || null,
+        closedBy: closedBy || null,
+      });
+    } catch (err) {
+      // The trip is already closed and holds already released at this point —
+      // the audit row is best-effort context, not a precondition for the
+      // close itself. Log but don't fail the close over a logging write.
+      log.warn({ err, tripId }, "failed to write trip_closures audit row");
+    }
 
     webSocketService.emitTripStatusChanged(tripId, 'closed', {
       baseId: trip.baseId || undefined,
@@ -454,6 +466,43 @@ export class TripBasesService {
     void emitTripWebhook(this.storage, "schedule.updated", tripId);
 
     return updatedTrip;
+  }
+
+  /**
+   * Close many trips at once (bulk "Tutup Trip"). Each item identifies a
+   * calendar slot either by an already-materialized `tripId`, or by
+   * `baseId`+`serviceDate` for a virtual slot that gets materialized first.
+   * Reason is recorded per-trip in `trip_closures` (a log table, not a new
+   * exception mechanism) so both single and bulk close share one audit trail.
+   */
+  async bulkCloseTrips(
+    items: { tripId?: string; baseId?: string; serviceDate?: string }[],
+    reason: string | undefined,
+    closedBy: string | undefined,
+  ): Promise<{
+    succeeded: { item: typeof items[number]; trip: Trip }[];
+    failed: { item: typeof items[number]; error: string }[];
+  }> {
+    const succeeded: { item: typeof items[number]; trip: Trip }[] = [];
+    const failed: { item: typeof items[number]; error: string }[] = [];
+
+    for (const item of items) {
+      try {
+        let tripId = item.tripId;
+        if (!tripId) {
+          if (!item.baseId || !item.serviceDate) {
+            throw new Error('item requires either tripId or baseId+serviceDate');
+          }
+          tripId = await this.ensureMaterializedTrip(item.baseId, item.serviceDate);
+        }
+        const trip = await this.closeTrip(tripId, reason, closedBy);
+        succeeded.push({ item, trip });
+      } catch (error) {
+        failed.push({ item, error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    }
+
+    return { succeeded, failed };
   }
 
   /**

@@ -162,17 +162,6 @@ export type CargoAvailableTrip = {
   legCount: number;
 };
 
-export const scheduleExceptionGroups = pgTable("schedule_exception_groups", {
-  id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  reason:    text("reason").notNull(),
-  createdBy: text("created_by"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
-
-export const insertScheduleExceptionGroupSchema = createInsertSchema(scheduleExceptionGroups).omit({ id: true, createdAt: true });
-export type ScheduleExceptionGroup = typeof scheduleExceptionGroups.$inferSelect;
-export type InsertScheduleExceptionGroup = z.infer<typeof insertScheduleExceptionGroupSchema>;
-
 export const scheduleExceptions = pgTable("schedule_exceptions", {
   id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   baseId:      uuid("base_id").notNull().references(() => tripBases.id),
@@ -180,11 +169,9 @@ export const scheduleExceptions = pgTable("schedule_exceptions", {
   reason:      text("reason"),
   createdBy:   text("created_by"),
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
-  groupId:     uuid("group_id").references(() => scheduleExceptionGroups.id),
 }, (table) => ({
   uniqBaseDate: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_schedule_exception_base_date ON ${table} (base_id, exception_date)`,
   idxExceptionDate: sql`CREATE INDEX IF NOT EXISTS idx_schedule_exception_date ON ${table} (exception_date)`,
-  idxGroupId: sql`CREATE INDEX IF NOT EXISTS idx_schedule_exceptions_group_id ON ${table} (group_id)`,
 }));
 
 export const insertScheduleExceptionSchema = createInsertSchema(scheduleExceptions).omit({ id: true, createdAt: true });
@@ -209,6 +196,20 @@ export const scheduleStopExceptions = pgTable("schedule_stop_exceptions", {
 export const insertScheduleStopExceptionSchema = createInsertSchema(scheduleStopExceptions).omit({ id: true, createdAt: true });
 export type ScheduleStopException = typeof scheduleStopExceptions.$inferSelect;
 export type InsertScheduleStopException = z.infer<typeof insertScheduleStopExceptionSchema>;
+
+export const tripClosures = pgTable("trip_closures", {
+  id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tripId:    uuid("trip_id").notNull().references(() => trips.id),
+  reason:    text("reason"),
+  closedBy:  text("closed_by"),
+  closedAt:  timestamp("closed_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  idxTripClosuresTripId: sql`CREATE INDEX IF NOT EXISTS idx_trip_closures_trip_id ON ${table} (trip_id)`,
+}));
+
+export const insertTripClosureSchema = createInsertSchema(tripClosures).omit({ id: true, closedAt: true });
+export type TripClosure = typeof tripClosures.$inferSelect;
+export type InsertTripClosure = z.infer<typeof insertTripClosureSchema>;
 
 export const tripStopTimes = pgTable("trip_stop_times", {
   id:               uuid("id").primaryKey().default(sql`gen_random_uuid()`),

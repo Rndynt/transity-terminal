@@ -109,4 +109,38 @@ export class TripBasesController {
       }
     }
   }
+
+  async bulkCloseTrips(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+    try {
+      const schema = z.object({
+        items: z.array(z.object({
+          tripId: z.string().uuid().optional(),
+          baseId: z.string().uuid().optional(),
+          serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        }).refine(v => !!v.tripId || (!!v.baseId && !!v.serviceDate), {
+          message: 'each item requires tripId or baseId+serviceDate',
+        })).min(1),
+        reason: z.string().trim().min(1),
+      });
+
+      const parsed = schema.parse(req.body);
+      const closedBy = req.user?.id;
+      const result = await this.tripBasesService.bulkCloseTrips(parsed.items, parsed.reason, closedBy);
+
+      reply.send({
+        ok: true,
+        requested: parsed.items.length,
+        closed: result.succeeded.length,
+        failed: result.failed.length,
+        succeeded: result.succeeded.map(s => ({ item: s.item, tripId: s.trip.id, status: s.trip.status })),
+        errors: result.failed.map(f => ({ item: f.item, error: f.error })),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        reply.code(400).send({ message: 'Validation error', errors: error.errors });
+      } else {
+        reply.code(500).send({ message: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    }
+  }
 }

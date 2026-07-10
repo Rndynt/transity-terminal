@@ -997,7 +997,7 @@ function EmptyCellDialog({ cell, open, onClose }: { cell: EmptyCellInfo | null; 
   );
 }
 
-function BulkExceptionDialog({ open, count, onClose, onConfirm, isSubmitting }: {
+function BulkCloseTripDialog({ open, count, onClose, onConfirm, isSubmitting }: {
   open: boolean;
   count: number;
   onClose: () => void;
@@ -1015,10 +1015,10 @@ function BulkExceptionDialog({ open, count, onClose, onConfirm, isSubmitting }: 
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Ban className="w-5 h-5 text-red-500" />
-            Set Pengecualian Massal
+            <X className="w-5 h-5 text-red-500" />
+            Tutup Trip Massal
           </DialogTitle>
-          <DialogDescription>{count} jadwal akan dikecualikan.</DialogDescription>
+          <DialogDescription>{count} jadwal akan ditutup (virtual akan diaktifkan lalu ditutup).</DialogDescription>
         </DialogHeader>
         <div className="space-y-2 pt-1">
           <label className="text-xs font-semibold">Alasan</label>
@@ -1027,12 +1027,12 @@ function BulkExceptionDialog({ open, count, onClose, onConfirm, isSubmitting }: 
             onChange={(e) => setReason(e.target.value)}
             placeholder="Contoh: Libur Nasional 17 Agustus"
             className="w-full h-20 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-900 dark:border-gray-700 resize-none focus:outline-none focus:ring-2 focus:ring-red-300 dark:focus:ring-red-700"
-            data-testid="input-bulk-exception-reason"
+            data-testid="input-bulk-close-reason"
             autoFocus
           />
         </div>
         <DialogFooter className="flex-col sm:flex-row gap-2">
-          <Button variant="outline" onClick={onClose} disabled={isSubmitting} data-testid="btn-cancel-bulk-exception">
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting} data-testid="btn-cancel-bulk-close">
             Batal
           </Button>
           <Button
@@ -1040,10 +1040,10 @@ function BulkExceptionDialog({ open, count, onClose, onConfirm, isSubmitting }: 
             className="gap-1.5"
             onClick={() => onConfirm(reason.trim())}
             disabled={isSubmitting || !reason.trim()}
-            data-testid="btn-confirm-bulk-exception"
+            data-testid="btn-confirm-bulk-close"
           >
-            {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
-            Set Pengecualian
+            {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+            Tutup Trip
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1171,25 +1171,27 @@ export default function SchedulerPage() {
     return filteredItems.filter(item => (item.type === 'trip' || item.type === 'virtual') && !!item.baseId && selectedKeys.has(itemKey(item)));
   }, [filteredItems, selectedKeys, itemKey]);
 
-  const bulkExceptionMutation = useMutation({
+  const bulkCloseMutation = useMutation({
     mutationFn: async (reason: string) => {
-      const items = selectedItemsList.map(item => ({ baseId: item.baseId as string, exceptionDate: item.serviceDate }));
-      const res = await apiRequest('POST', '/api/scheduler/exceptions/bulk', { items, reason });
+      const items = selectedItemsList.map(item =>
+        item.tripId ? { tripId: item.tripId } : { baseId: item.baseId as string, serviceDate: item.serviceDate }
+      );
+      const res = await apiRequest('POST', '/api/trips/close-bulk', { items, reason });
       return res.json();
     },
-    onSuccess: (data: { requested: number; applied: number }) => {
+    onSuccess: (data: { requested: number; closed: number; failed: number }) => {
       queryClient.invalidateQueries({ queryKey: ['/api/scheduler/calendar'] });
       setBulkDialogOpen(false);
       setSelectMode(false);
       setSelectedKeys(new Set());
-      if (data.applied < data.requested) {
-        toast({ title: `${data.applied} dari ${data.requested} jadwal dikecualikan`, description: `${data.requested - data.applied} sudah dikecualikan sebelumnya.` });
+      if (data.failed > 0) {
+        toast({ title: `${data.closed} dari ${data.requested} trip ditutup`, description: `${data.failed} gagal ditutup.` });
       } else {
-        toast({ title: `${data.applied} jadwal dikecualikan` });
+        toast({ title: `${data.closed} trip ditutup` });
       }
     },
     onError: (err: any) => {
-      toast({ title: 'Gagal menambah pengecualian massal', description: err.message, variant: 'destructive' });
+      toast({ title: 'Gagal menutup trip massal', description: err.message, variant: 'destructive' });
     },
   });
 
@@ -1368,10 +1370,10 @@ export default function SchedulerPage() {
             variant="destructive"
             className="h-7 gap-1.5 text-xs"
             onClick={() => setBulkDialogOpen(true)}
-            data-testid="btn-set-bulk-exception"
+            data-testid="btn-set-bulk-close"
           >
-            <Ban className="w-3.5 h-3.5" />
-            Set Pengecualian
+            <X className="w-3.5 h-3.5" />
+            Tutup Trip
           </Button>
           <Button
             size="sm"
@@ -1511,12 +1513,12 @@ export default function SchedulerPage() {
         onClose={() => setEmptyCell(null)}
       />
 
-      <BulkExceptionDialog
+      <BulkCloseTripDialog
         open={bulkDialogOpen}
         count={selectedKeys.size}
         onClose={() => setBulkDialogOpen(false)}
-        onConfirm={(reason) => bulkExceptionMutation.mutate(reason)}
-        isSubmitting={bulkExceptionMutation.isPending}
+        onConfirm={(reason) => bulkCloseMutation.mutate(reason)}
+        isSubmitting={bulkCloseMutation.isPending}
       />
     </div>
   );
