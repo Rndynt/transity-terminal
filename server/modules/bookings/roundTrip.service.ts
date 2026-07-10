@@ -18,6 +18,7 @@ import { PrintService } from "@modules/printing/print.service";
 import { IStorage } from "@server/storage.interface";
 import { Booking, BookingGroup } from "@shared/schema";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { assertTripBookable } from "./booking.helpers";
 
 interface OutboundPassengerInput {
   name: string;
@@ -77,6 +78,15 @@ export class RoundTripService {
     await Promise.all([
       this.validateBoardingAlightingRules(outbound.tripId, outbound.originSeq, outbound.destinationSeq),
       this.validateBoardingAlightingRules(returnData.tripId, returnData.originSeq, returnData.destinationSeq)
+    ]);
+
+    // 2b. Kedua trip harus masih berstatus 'scheduled' — hold di step 3
+    // hanya membuktikan kursi PERNAH tersedia saat di-hold, bukan bahwa
+    // trip-nya belum keburu ditutup/dibatalkan operator di antara hold
+    // dan konfirmasi ini.
+    await Promise.all([
+      assertTripBookable(this.storage, outbound.tripId),
+      assertTripBookable(this.storage, returnData.tripId),
     ]);
 
     // 3. Validasi kedua hold masih aktif

@@ -21,6 +21,7 @@ import {
   checkSeatsAvailable,
   createSeatHoldsForBooking,
   generateBookingCode,
+  assertTripBookable,
 } from "@modules/bookings/booking.helpers";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
 import { AtomicHoldService } from "@modules/bookings/atomicHold.service";
@@ -466,10 +467,20 @@ export class AppService {
       this.searchVirtualTrips(params, originStopIds, destStopIds),
     ]);
 
-    const realBaseIds = new Set(
-      realTrips.map(t => t._baseId).filter(Boolean)
+    // Dedup must consider ALL materialized trips for this date, not just
+    // the 'scheduled' ones searchRealTrips() returns. Otherwise a trip
+    // that's been closed/cancelled drops out of `realTrips` (correctly —
+    // it shouldn't be bookable) but its base then wrongly re-appears as a
+    // "virtual" (still-bookable-looking) slot, since nothing marks that
+    // base+date as already materialized. See scheduling review: Bug C.
+    const allMaterializedBaseIdRows = await db
+      .select({ baseId: trips.baseId })
+      .from(trips)
+      .where(and(eq(trips.serviceDate, params.date), isNull(trips.deletedAt)));
+    const materializedBaseIds = new Set(
+      allMaterializedBaseIdRows.map(r => r.baseId).filter(Boolean)
     );
-    const filteredVirtual = virtualTrips.filter(v => !realBaseIds.has(v._baseId));
+    const filteredVirtual = virtualTrips.filter(v => !materializedBaseIds.has(v._baseId));
 
     const now = new Date();
     const all = [...realTrips, ...filteredVirtual]
@@ -1098,6 +1109,11 @@ export class AppService {
   }): Promise<BookingDetailResponse> {
     const resolvedTripId = await this.resolveTripId(params.tripId, params.serviceDate);
 
+    // Front-door guard: block booking on a closed/cancelled trip. Both the
+    // engine and non-engine hold paths below have their own guard too, but
+    // this catches it before any fare/promo computation runs.
+    await assertTripBookable(this.storage, resolvedTripId);
+
     await validateBoardingAlighting(this.storage, resolvedTripId, params.originSeq, params.destinationSeq);
 
     const { fareQuote, total: totalAmount, promo: promoResult } = await calculateBookingTotal(
@@ -1501,6 +1517,12 @@ export class AppService {
     } else if (booking.status !== 'pending') {
       throw new Error(`Booking cannot be confirmed. Current status: ${booking.status}`);
     }
+
+    // Trip may have been closed/cancelled by ops between pending-booking
+    // creation and this payment confirmation (payment gateways can take
+    // minutes). Don't let a payment silently confirm a seat on a trip
+    // that's no longer running — surface it so ops can route to refund.
+    await assertTripBookable(this.storage, booking.tripId);
 
     const pax = await this.storage.getPassengers(booking.id);
     const legIndexes: number[] = [];

@@ -24,6 +24,7 @@ import {
   type SeatHoldRequest,
   type AtomicHoldResult,
 } from "@modules/bookings/atomicHold.service";
+import { assertTripBookable } from "@modules/bookings/booking.helpers";
 import { engineClient, EngineError } from "./engineClient";
 import { db } from "@server/db";
 import { seatInventory, seatHolds } from "@shared/schema";
@@ -31,6 +32,7 @@ import { and, eq, gt, inArray } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
 import { randomUUID } from "node:crypto";
 import { createComponentLogger } from "@server/lib/logger";
+import type { IStorage } from "@server/storage.interface";
 
 const log = createComponentLogger("holdsAdapter");
 
@@ -75,6 +77,20 @@ export class HoldsAdapter {
   // HOLD — drop-in replacement for AtomicHoldService.atomicHold()
   // ────────────────────────────────────────────────────────────
   async hold(req: SeatHoldRequest): Promise<AtomicHoldResult> {
+    // Guard applies to BOTH branches. The Node branch's own atomicHold()
+    // re-checks this too (defense-in-depth for direct callers), but the
+    // engine branch has no other Node-side gate before dispatching to the
+    // Rust sidecar, so this is the only place that can stop it.
+    try {
+      await assertTripBookable(this.nodeService.storage, req.tripId);
+    } catch (e) {
+      return {
+        success: false,
+        reason: e instanceof Error && (e as { code?: string }).code === 'trip-closed' ? 'TRIP_CLOSED' : 'TRIP_NOT_BOOKABLE',
+        conflictSeats: [req.seatNo],
+      };
+    }
+
     if (!isEngineEnabled()) {
       return this.nodeService.atomicHold(req);
     }
@@ -323,6 +339,8 @@ export class HoldsAdapter {
       );
     }
 
+    await assertTripBookable(this.nodeService.storage, opts.tripId);
+
     const holdRes = await engineClient.hold(
       {
         trip_id: opts.tripId,
@@ -393,6 +411,8 @@ export class HoldsAdapter {
           "Use createSeatHoldsForBooking() directly instead.",
       );
     }
+
+    await assertTripBookable(this.nodeService.storage, opts.tripId);
 
     const created: Array<{ seatNo: string; holdRef: string; expiresAt: Date }> = [];
     try {

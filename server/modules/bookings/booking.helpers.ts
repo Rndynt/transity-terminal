@@ -18,6 +18,44 @@ export function computeLegIndexes(originSeq: number, destinationSeq: number): nu
   return legs;
 }
 
+/**
+ * Single source of truth for "is this trip allowed to receive a NEW
+ * reservation/hold right now". Historically no code path checked
+ * `trips.status` before creating a hold or confirming a booking — the only
+ * status check anywhere was in `AppService.cancelBooking()` (a back-door
+ * check, not a front-door one). That gap meant a `closed` or `cancelled`
+ * trip could still be booked from any channel as long as its
+ * `seat_inventory` rows were still intact.
+ *
+ * Call this at the top of every booking/hold-creation entry point (App,
+ * OTA, WEB, CSO, reschedule, round-trip). It intentionally does NOT touch
+ * seat_inventory/seat_holds — that stays the job of checkSeatsAvailable /
+ * atomicHold / confirmSeatsBooked.
+ */
+export async function assertTripBookable(
+  storage: IStorage,
+  tripId: string,
+): Promise<void> {
+  const trip = await storage.getTripById(tripId);
+  if (!trip) {
+    throw new Error(`Trip ${tripId} not found`);
+  }
+  if (trip.status === 'closed') {
+    const err: Error & { code?: string } = new Error(
+      'Trip ini sudah ditutup (closed) dan tidak lagi menerima reservasi baru.',
+    );
+    err.code = 'trip-closed';
+    throw err;
+  }
+  if (trip.status === 'cancelled') {
+    const err: Error & { code?: string } = new Error(
+      'Trip ini sudah dibatalkan oleh operator dan tidak bisa menerima reservasi baru.',
+    );
+    err.code = 'trip-cancelled';
+    throw err;
+  }
+}
+
 export async function quoteFareForBooking(
   storage: IStorage,
   tripId: string,

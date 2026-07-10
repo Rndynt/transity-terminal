@@ -54,10 +54,26 @@ export interface AtomicHoldResult {
 }
 
 export class AtomicHoldService {
-  constructor(private storage: IStorage) {}
+  // public readonly (bukan private) supaya HoldsAdapter yang selalu
+  // membungkus instance ini bisa reuse storage yang sama untuk
+  // pre-flight check (assertTripBookable) tanpa perlu ubah semua call site.
+  constructor(public readonly storage: IStorage) {}
 
   async atomicHold(request: SeatHoldRequest): Promise<AtomicHoldResult> {
     const { tripId, seatNo, legIndexes, operatorId, ttlClass } = request;
+
+    // Guard: never place a hold on a trip that's been closed (departed) or
+    // cancelled (operator/exception). Previously nothing in this codepath
+    // checked trip.status at all — only seat_inventory conflicts — so a
+    // closed/cancelled trip with intact inventory could still be booked.
+    const trip = await this.storage.getTripById(tripId);
+    if (!trip) {
+      return { success: false, reason: 'TRIP_NOT_FOUND', conflictSeats: [seatNo] };
+    }
+    if (trip.status !== 'scheduled') {
+      return { success: false, reason: 'TRIP_NOT_BOOKABLE', conflictSeats: [seatNo] };
+    }
+
     const holdRef = randomUUID();
     const ttlSeconds = ttlClass === 'short' ? 300 : 1800;
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000);

@@ -6,6 +6,7 @@ import { IStorage, type ActivePassengerForTrip } from "@server/storage.interface
 import { generateBookingCode } from "@server/utils/codeGenerator";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
 import { AtomicHoldService } from "./atomicHold.service";
+import { assertTripBookable } from "./booking.helpers";
 import { enqueueCancelSeats } from "@modules/holds/compensationQueue";
 import { randomUUID } from "node:crypto";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
@@ -55,6 +56,11 @@ export class RescheduleService {
     const oldSeatNo = passenger.seatNo;
     const oldLegIndexes = getLegIndexes(booking.originSeq, booking.destinationSeq);
     const newLegIndexes = getLegIndexes(newOriginSeq, newDestinationSeq);
+
+    // Target trip must actually be open for reservations — otherwise a
+    // passenger could be "rescheduled into" a trip that's already been
+    // closed or cancelled.
+    await assertTripBookable(this.storage, newTripId);
 
     const newSeatAvailability = await db.select().from(seatInventory)
       .where(and(
@@ -278,6 +284,11 @@ export class RescheduleService {
     if (activePassengers.length === 0) {
       return { succeeded: [], failed: [] };
     }
+
+    // Destination trip must be open — don't let a batch-reschedule (as
+    // part of closing the old trip) dump passengers onto another trip
+    // that's itself already closed/cancelled.
+    await assertTripBookable(this.storage, newTripId);
 
     const newLegIndexes = getLegIndexes(newOriginSeq, newDestinationSeq);
 

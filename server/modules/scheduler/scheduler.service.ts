@@ -8,6 +8,7 @@ import { scheduleExceptions, patternStops, scheduleStopExceptions } from "@share
 import { stops } from "@shared/schema/network";
 import { fireAndForget } from "@server/lib/consoleWebhook";
 import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
+import { webSocketService } from "@server/realtime/ws";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 import { createComponentLogger } from "@server/lib/logger";
 
@@ -201,24 +202,56 @@ export class SchedulerService {
       target: [scheduleExceptions.baseId, scheduleExceptions.exceptionDate],
       set: { reason: reason || null, createdBy: createdBy || null },
     }).returning();
-    // Fire-and-forget: notify Console that any materialized trip on this date is cancelled
-    void this.emitExceptionWebhook(baseId, exceptionDate);
+
+    // If a trip has ALREADY been materialized for this base+date (e.g. a
+    // booking came in moments before this exception was added — a real
+    // race, since any channel can auto-materialize a virtual slot), the
+    // exception row alone does nothing: it only blocks FUTURE virtual
+    // generation/materialization, it never touches an existing `trips`
+    // row. Without this sync, CSO/App/OTA would keep treating the trip as
+    // live (status stays 'scheduled') while Console was told it's
+    // cancelled — two systems disagreeing about the same trip.
+    await this.syncMaterializedTripForException(baseId, exceptionDate);
+
     return inserted;
   }
 
-  private async emitExceptionWebhook(baseId: string, exceptionDate: string) {
+  private async syncMaterializedTripForException(baseId: string, exceptionDate: string) {
     try {
       const trip = await this.storage.getTripByBaseAndDate(baseId, exceptionDate);
+      if (!trip) return; // nothing materialized yet — exception row alone is sufficient
+      if (trip.status !== 'scheduled') return; // already closed/cancelled, nothing to sync
+
+      await this.storage.updateTrip(trip.id, { status: 'cancelled' });
+      await this.storage.releaseHoldsForTrip(trip.id);
+
+      webSocketService.emitTripStatusChanged(trip.id, 'cancelled', {
+        baseId,
+        serviceDate: exceptionDate,
+      });
+
+      void this.emitTripCancelledWebhook(trip.id);
+    } catch (err) {
+      log.warn({ err, baseId, exceptionDate, op: "addException.sync" }, "failed to sync materialized trip to exception");
+    }
+  }
+
+  private async emitTripCancelledWebhook(tripId: string) {
+    try {
+      const trip = await this.storage.getTripById(tripId);
       if (!trip) return;
       const payload = await buildScheduleTripPayload(this.storage, trip);
       if (!payload) return;
+      // No status override needed here — trip.status is now genuinely
+      // 'cancelled' in the DB, so buildScheduleTripPayload's own
+      // mapTripStatus() already renders it correctly.
       fireAndForget({
         event: "schedule.updated",
-        trip: { ...payload, status: "cancelled", availableSeats: 0 },
+        trip: payload,
         emittedAt: new Date().toISOString(),
       });
     } catch (err) {
-      log.warn({ err, op: "addException" }, "webhook emit failed");
+      log.warn({ err, tripId, op: "addException" }, "webhook emit failed");
     }
   }
 
