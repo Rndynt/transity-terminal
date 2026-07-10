@@ -1065,7 +1065,7 @@ export default function CargoTerminalPage() {
                   {destinationOutletOptions.length > 0 && (
                     <div>
                       <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">
-                        Titik / Outlet Tujuan di {destinationStop?.name} *
+                        Titik / Outlet Tujuan{destinationCity ? ` di ${destinationCity}` : ''} *
                       </label>
                       <SearchableSelect
                         value={destinationOutletId}
@@ -1076,13 +1076,13 @@ export default function CargoTerminalPage() {
                         data-testid="select-cargo-destination-outlet"
                       />
                       <p className="text-[10px] text-gray-400 mt-1">
-                        Pastikan titik yang dipilih sesuai area pengantaran paket penerima. Jika area penerima tidak tercakup oleh titik manapun di {destinationStop?.name}, pilih trip lain atau hubungi admin untuk menambahkan outlet.
+                        Pastikan titik yang dipilih sesuai area pengantaran paket penerima. Jika area penerima tidak tercakup oleh titik manapun pada daftar ini, pilih trip lain atau hubungi admin untuk menambahkan outlet.
                       </p>
                     </div>
                   )}
                   {destinationOutletOptions.length === 0 && (
                     <div className="text-[11px] text-red-500 font-medium">
-                      Tidak ada titik/outlet terdaftar di {destinationStop?.name}. Hubungi admin untuk menambahkan outlet sebelum melanjutkan.
+                      Tidak ada titik/outlet terdaftar{destinationCity ? ` di ${destinationCity}` : ''} untuk trip ini. Hubungi admin untuk menambahkan outlet sebelum melanjutkan.
                     </div>
                   )}
                   <div className="flex items-center justify-between">
