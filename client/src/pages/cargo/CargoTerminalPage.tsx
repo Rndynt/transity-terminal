@@ -434,16 +434,46 @@ export default function CargoTerminalPage() {
     }
   }, [destinationOutletOptions]);
 
+  // Kunci tariff yang sudah pernah diminta (sukses ATAU sedang jalan) — dipakai
+  // supaya efek di bawah tidak menembak ulang fetch yang sama setiap kali
+  // tariffCache berubah. Sebelumnya efek ini bergantung pada `tariffCache`
+  // sebagai dependency sekaligus sebagai penanda "sudah di-fetch atau belum",
+  // jadi setiap satu tarif selesai di-fetch, efek jalan ulang dan menembak
+  // ulang SEMUA trip lain yang masih pending — menghasilkan badai request
+  // duplikat (sampai ratusan panggilan /api/cargo/quote-tariff per detik)
+  // yang bikin UI macet/tidak responsif di step "Pilih Jadwal".
+  const requestedTariffKeysRef = useRef<Set<string>>(new Set());
+  // Nomor "generasi" permintaan tarif — dinaikkan setiap kali cargoTypeId/
+  // originStopId/weightKg berubah. Fetch tarif yang masih berjalan dari
+  // generasi lama (misalnya CSO buru-buru ganti berat sebelum quote lama
+  // selesai) akan dibuang saat resolve, bukan ditulis ke cache, supaya tidak
+  // menimpa hasil tarif terbaru dengan nilai basi.
+  const tariffRequestGenerationRef = useRef(0);
+  const isMountedRef = useRef(true);
+  useEffect(() => () => { isMountedRef.current = false; }, []);
+
   const fetchTariffForTrip = useCallback(async (trip: CargoAvailableTrip, date: string) => {
     if (!cargoTypeId || !originStopId || !trip.destinationStopId) return;
+    const generation = tariffRequestGenerationRef.current;
     const w = parseFloat(weightKg) || 1;
     const tripId = trip.tripId;
     const result = await cargoApi.quoteTariff(cargoTypeId, originStopId, trip.destinationStopId, w, tripId);
+    if (!isMountedRef.current || generation !== tariffRequestGenerationRef.current) return;
     const key = `${trip.tripId || trip.baseId}-${date}`;
     setTariffCache(prev => ({ ...prev, [key]: result }));
   }, [cargoTypeId, originStopId, weightKg]);
 
   const showTripsPanel = tripsSearched;
+
+  // Reset penanda "sudah diminta" setiap kali parameter tarif (jenis kargo /
+  // berat) berubah, supaya tarif lama yang mungkin sudah tidak valid dihitung
+  // ulang. Menaikkan generation juga membuang hasil fetch lama yang masih
+  // in-flight begitu ia selesai (lihat guard di fetchTariffForTrip).
+  useEffect(() => {
+    tariffRequestGenerationRef.current += 1;
+    requestedTariffKeysRef.current = new Set();
+    setTariffCache({});
+  }, [cargoTypeId, originStopId, weightKg]);
 
   useEffect(() => {
     if (!tripsSearched) return;
@@ -452,11 +482,12 @@ export default function CargoTerminalPage() {
     for (const t of allTrips) {
       const dateForTrip = tripsDay0.includes(t) ? dates3[0] : tripsDay1.includes(t) ? dates3[1] : dates3[2];
       const key = `${t.tripId || t.baseId}-${dateForTrip}`;
-      if (!tariffCache[key]) {
+      if (!requestedTariffKeysRef.current.has(key)) {
+        requestedTariffKeysRef.current.add(key);
         fetchTariffForTrip(t, dateForTrip);
       }
     }
-  }, [step, showTripsPanel, tripsDay0, tripsDay1, tripsDay2, cargoTypeId, originStopId, fetchTariffForTrip, dates3, tariffCache]);
+  }, [step, showTripsPanel, tripsDay0, tripsDay1, tripsDay2, cargoTypeId, originStopId, fetchTariffForTrip, dates3]);
 
   const createMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => cargoApi.create(data),
@@ -558,7 +589,7 @@ export default function CargoTerminalPage() {
   const stepLabels = ['Data Kiriman', 'Pilih Jadwal', 'Pembayaran'];
 
   return (
-    <div className="flex flex-col h-full overflow-hidden" data-testid="cargo-terminal-page">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden" data-testid="cargo-terminal-page">
       <div className="bg-white border-b border-gray-200 flex-shrink-0">
         <div className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -659,7 +690,7 @@ export default function CargoTerminalPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         {(step === 1 || step === 2) && (
           <>
           <div className="md:hidden flex-shrink-0 bg-white border-b border-gray-200">
@@ -688,9 +719,9 @@ export default function CargoTerminalPage() {
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-            <div className={`${mobilePanel === 'left' ? 'flex' : 'hidden'} md:flex flex-1 md:border-r md:border-gray-200 flex-col`}>
-              <div className="p-3 md:p-5 space-y-4 overflow-y-auto flex-1">
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col md:flex-row">
+            <div className={`${mobilePanel === 'left' ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 md:border-r md:border-gray-200 flex-col`}>
+              <div className="p-3 md:p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
               <div className="border border-gray-200 rounded-xl p-3 bg-white">
                 <div className="flex items-center gap-1.5 mb-2">
                   <MapPin className="w-3.5 h-3.5 text-amber-600" />
@@ -929,8 +960,8 @@ export default function CargoTerminalPage() {
               </div>
             </div>
 
-            <div className={`${mobilePanel === 'right' ? 'flex' : 'hidden'} md:flex flex-1 flex-col bg-gray-50/50`}>
-              <div className="p-3 md:p-5 space-y-4 flex-1 overflow-y-auto">
+            <div className={`${mobilePanel === 'right' ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 flex-col bg-gray-50/50`}>
+              <div className="p-3 md:p-5 space-y-4 flex-1 min-h-0 overflow-y-auto">
                 {!showTripsPanel && (
                   <div className="h-full flex flex-col items-center justify-center text-gray-300 py-12 md:py-0">
                     <Package className="w-8 h-8 text-gray-300 mb-1.5" />
