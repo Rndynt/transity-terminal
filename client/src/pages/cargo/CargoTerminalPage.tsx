@@ -174,7 +174,8 @@ export default function CargoTerminalPage() {
   const { openSidebar, isMobile } = useLayout();
   const [step, setStep] = useState(1);
   const [selectedOutletId, setSelectedOutletId] = useState('');
-  const [destinationStopId, setDestinationStopId] = useState('');
+  const [destinationCity, setDestinationCity] = useState('');
+  const [destinationOutletId, setDestinationOutletId] = useState('');
   const [cargoTypeId, setCargoTypeId] = useState('');
   const [weightKg, setWeightKg] = useState('');
   const [itemDescription, setItemDescription] = useState('');
@@ -221,44 +222,50 @@ export default function CargoTerminalPage() {
 
   const selectedOutlet = outlets.find((o: Outlet) => o.id === selectedOutletId);
   const originStop = allStops.find((s: Stop) => s.id === selectedOutlet?.stopId);
-  const destinationStop = allStops.find((s: Stop) => s.id === destinationStopId);
 
-  const destinationOptions = useMemo(() => {
-    const stps = originStop
-      ? allStops.filter((s: Stop) => s.id !== originStop.id)
-      : allStops;
-    return stps
-      .sort((a: Stop, b: Stop) => (a.city || '').localeCompare(b.city || '') || a.name.localeCompare(b.name))
-      .map((s: Stop) => ({
-        value: s.id,
-        label: s.name,
-        badge: s.code,
-        group: s.city || 'Lainnya'
-      }));
+  // Field "Tujuan Pengiriman" hanya memilih KOTA. Stop/outlet tujuan yang
+  // sebenarnya baru ditentukan setelah CSO memilih trip spesifik (karena
+  // satu kota bisa punya beberapa stop/outlet, dan trip mana yang lewat
+  // stop mana bisa berbeda-beda).
+  const destinationCityOptions = useMemo(() => {
+    const cities = new Map<string, number>();
+    for (const s of allStops as Stop[]) {
+      if (!s.city) continue;
+      if (originStop && s.city === originStop.city) continue;
+      cities.set(s.city, (cities.get(s.city) || 0) + 1);
+    }
+    return Array.from(cities.keys())
+      .sort((a, b) => a.localeCompare(b))
+      .map(city => ({ value: city, label: city }));
   }, [allStops, originStop]);
+
+  const destinationCityStopIds = useMemo(() =>
+    (allStops as Stop[]).filter(s => s.city === destinationCity).map(s => s.id),
+    [allStops, destinationCity]
+  );
 
   const dates3 = useMemo(() => [getDateStr(0), getDateStr(1), getDateStr(2)], []);
 
   const originStopId = originStop?.id;
   const [tripsSearched, setTripsSearched] = useState(false);
   const { data: rawTripsDay0 = [], isLoading: loadingDay0, refetch: refetchDay0 } = useQuery<CargoAvailableTrip[]>({
-    queryKey: ['/api/cargo/available-trips', dates3[0], originStopId, destinationStopId],
-    queryFn: () => cargoApi.getAvailableTrips(dates3[0], originStopId!, destinationStopId),
-    enabled: tripsSearched && !!originStopId && !!destinationStopId,
+    queryKey: ['/api/cargo/available-trips', dates3[0], originStopId, destinationCityStopIds],
+    queryFn: () => cargoApi.getAvailableTrips(dates3[0], originStopId!, destinationCityStopIds),
+    enabled: tripsSearched && !!originStopId && destinationCityStopIds.length > 0,
     staleTime: 0,
     refetchOnMount: 'always',
   });
   const { data: rawTripsDay1 = [], isLoading: loadingDay1, refetch: refetchDay1 } = useQuery<CargoAvailableTrip[]>({
-    queryKey: ['/api/cargo/available-trips', dates3[1], originStopId, destinationStopId],
-    queryFn: () => cargoApi.getAvailableTrips(dates3[1], originStopId!, destinationStopId),
-    enabled: tripsSearched && !!originStopId && !!destinationStopId,
+    queryKey: ['/api/cargo/available-trips', dates3[1], originStopId, destinationCityStopIds],
+    queryFn: () => cargoApi.getAvailableTrips(dates3[1], originStopId!, destinationCityStopIds),
+    enabled: tripsSearched && !!originStopId && destinationCityStopIds.length > 0,
     staleTime: 0,
     refetchOnMount: 'always',
   });
   const { data: rawTripsDay2 = [], isLoading: loadingDay2, refetch: refetchDay2 } = useQuery<CargoAvailableTrip[]>({
-    queryKey: ['/api/cargo/available-trips', dates3[2], originStopId, destinationStopId],
-    queryFn: () => cargoApi.getAvailableTrips(dates3[2], originStopId!, destinationStopId),
-    enabled: tripsSearched && !!originStopId && !!destinationStopId,
+    queryKey: ['/api/cargo/available-trips', dates3[2], originStopId, destinationCityStopIds],
+    queryFn: () => cargoApi.getAvailableTrips(dates3[2], originStopId!, destinationCityStopIds),
+    enabled: tripsSearched && !!originStopId && destinationCityStopIds.length > 0,
     staleTime: 0,
     refetchOnMount: 'always',
   });
@@ -397,20 +404,40 @@ export default function CargoTerminalPage() {
     return null;
   }, [selectedTripKey, selectedTripDate, groupedTrips, tariffCache]);
 
+  // Stop tujuan AKTUAL — baru diketahui setelah CSO memilih trip spesifik,
+  // karena tiap trip bisa berhenti di stop yang berbeda dalam kota yang sama.
+  const destinationStopId = selectedTrip?.destinationStopId;
+  const destinationStop = allStops.find((s: Stop) => s.id === destinationStopId);
+
+  // Outlet-outlet yang berlokasi di stop tujuan trip terpilih — ini yang
+  // dipilih CSO sebagai outlet tujuan pengiriman.
+  const destinationOutletOptions = useMemo(() =>
+    destinationStopId ? (outlets as Outlet[]).filter(o => o.stopId === destinationStopId) : [],
+    [outlets, destinationStopId]
+  );
+
+  useEffect(() => {
+    if (destinationOutletOptions.length === 1) {
+      setDestinationOutletId(destinationOutletOptions[0].id);
+    } else if (destinationOutletOptions.length === 0) {
+      setDestinationOutletId('');
+    }
+  }, [destinationOutletOptions]);
+
   const fetchTariffForTrip = useCallback(async (trip: CargoAvailableTrip, date: string) => {
-    if (!cargoTypeId || !originStopId || !destinationStopId) return;
+    if (!cargoTypeId || !originStopId || !trip.destinationStopId) return;
     const w = parseFloat(weightKg) || 1;
     const tripId = trip.tripId;
-    const result = await cargoApi.quoteTariff(cargoTypeId, originStopId, destinationStopId, w, tripId);
+    const result = await cargoApi.quoteTariff(cargoTypeId, originStopId, trip.destinationStopId, w, tripId);
     const key = `${trip.tripId || trip.baseId}-${date}`;
     setTariffCache(prev => ({ ...prev, [key]: result }));
-  }, [cargoTypeId, originStopId, destinationStopId, weightKg]);
+  }, [cargoTypeId, originStopId, weightKg]);
 
   const showTripsPanel = tripsSearched;
 
   useEffect(() => {
     if (!tripsSearched) return;
-    if (!cargoTypeId || !originStopId || !destinationStopId) return;
+    if (!cargoTypeId || !originStopId) return;
     const allTrips = [...tripsDay0, ...tripsDay1, ...tripsDay2];
     for (const t of allTrips) {
       const dateForTrip = tripsDay0.includes(t) ? dates3[0] : tripsDay1.includes(t) ? dates3[1] : dates3[2];
@@ -419,7 +446,7 @@ export default function CargoTerminalPage() {
         fetchTariffForTrip(t, dateForTrip);
       }
     }
-  }, [step, showTripsPanel, tripsDay0, tripsDay1, tripsDay2, cargoTypeId, originStopId, destinationStopId, fetchTariffForTrip, dates3, tariffCache]);
+  }, [step, showTripsPanel, tripsDay0, tripsDay1, tripsDay2, cargoTypeId, originStopId, fetchTariffForTrip, dates3, tariffCache]);
 
   const createMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => cargoApi.create(data),
@@ -430,12 +457,12 @@ export default function CargoTerminalPage() {
     }
   });
 
-  const canProceedStep1 = selectedOutletId && destinationStopId && cargoTypeId &&
+  const canProceedStep1 = selectedOutletId && destinationCity && cargoTypeId &&
     itemDescription.trim().length >= 2 && parseInt(quantity) > 0 &&
     senderName.trim().length >= 2 && senderPhone.trim().length >= 8 &&
     recipientName.trim().length >= 2 && recipientPhone.trim().length >= 8;
 
-  const canProceedStep2 = !!selectedTrip;
+  const canProceedStep2 = !!selectedTrip && !!destinationOutletId;
 
   const tariffAmount = selectedTrip?.tariff?.found
     ? selectedTrip.tariff.calculatedAmount
@@ -444,7 +471,7 @@ export default function CargoTerminalPage() {
   const canSubmit = canProceedStep2 && paymentMethod && tariffAmount > 0;
 
   const handleSubmit = () => {
-    if (!canSubmit || !selectedTrip || !originStopId) return;
+    if (!canSubmit || !selectedTrip || !originStopId || !destinationStopId || !destinationOutletId) return;
 
     const tripId = selectedTrip.tripId;
     if (!tripId) return;
@@ -454,6 +481,7 @@ export default function CargoTerminalPage() {
       originStopId,
       destinationStopId,
       outletId: selectedOutletId,
+      destinationOutletId,
       cargoTypeId,
       senderName: senderName.trim(),
       senderPhone: senderPhone.trim(),
@@ -476,7 +504,8 @@ export default function CargoTerminalPage() {
 
   const resetForm = () => {
     setStep(1);
-    setDestinationStopId('');
+    setDestinationCity('');
+    setDestinationOutletId('');
     setCargoTypeId('');
     setWeightKg('');
     setItemDescription('');
@@ -588,12 +617,12 @@ export default function CargoTerminalPage() {
         </div>
       </div>
 
-      {step <= 3 && originStop && destinationStop && (
+      {step <= 3 && originStop && (destinationStop || destinationCity) && (
         <div className="bg-amber-50 border-b border-amber-100 px-3 md:px-4 py-1.5 flex items-center gap-3 text-xs flex-shrink-0">
           <div className="flex items-center gap-1.5">
             <span className="font-semibold text-emerald-700">{originStop.name}</span>
             <ArrowRight className="w-3 h-3 text-gray-400" />
-            <span className="font-semibold text-rose-700">{destinationStop.name}</span>
+            <span className="font-semibold text-rose-700">{destinationStop ? destinationStop.name : destinationCity}</span>
           </div>
           {selectedTrip && (
             <>
@@ -659,7 +688,8 @@ export default function CargoTerminalPage() {
                       stops={allStops}
                       onChange={(id) => {
                         setSelectedOutletId(id);
-                        setDestinationStopId('');
+                        setDestinationCity('');
+                        setDestinationOutletId('');
                         setTripsSearched(false);
                         setSelectedTripKey('');
                         setSelectedTripDate('');
@@ -672,25 +702,24 @@ export default function CargoTerminalPage() {
                     )}
                   </div>
                   <div>
-                    <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Tujuan Pengiriman *</label>
+                    <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Kota Tujuan *</label>
                     <SearchableSelect
-                      value={destinationStopId}
-                      options={destinationOptions}
+                      value={destinationCity}
+                      options={destinationCityOptions}
                       placeholder="Pilih kota tujuan..."
-                      searchPlaceholder="Cari kota/halte..."
-                      onChange={(id) => {
-                        setDestinationStopId(id);
+                      searchPlaceholder="Cari kota..."
+                      onChange={(city) => {
+                        setDestinationCity(city);
+                        setDestinationOutletId('');
                         setTripsSearched(false);
                         setSelectedTripKey('');
                         setSelectedTripDate('');
                       }}
                       data-testid="select-cargo-destination"
                     />
-                    {destinationStop && (
-                      <div className="mt-1 text-[10px] text-gray-400 truncate">
-                        {destinationStop.city}
-                      </div>
-                    )}
+                    <div className="mt-1 text-[10px] text-gray-400 truncate">
+                      Outlet tujuan dipilih setelah jadwal ditemukan
+                    </div>
                   </div>
                 </div>
               </div>
@@ -984,26 +1013,49 @@ export default function CargoTerminalPage() {
               </div>
 
               {showTripsPanel && selectedTrip && (
-                <div className="border-t border-gray-200 bg-white px-3 md:px-4 py-2.5 flex items-center justify-between flex-shrink-0">
-                  <div className="flex items-center gap-3 text-xs min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-3 h-3 text-amber-500" />
-                      <span className="font-bold text-gray-800">{formatTime(selectedTrip.departAtOrigin)}</span>
-                      <ArrowRight className="w-3 h-3 text-gray-300" />
-                      <span className="font-bold text-gray-800">{formatTime(selectedTrip.arriveAtDestination)}</span>
+                <div className="border-t border-gray-200 bg-white px-3 md:px-4 py-2.5 flex flex-col gap-2 flex-shrink-0">
+                  {destinationOutletOptions.length > 1 && (
+                    <div>
+                      <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">
+                        Outlet Tujuan di {destinationStop?.name} *
+                      </label>
+                      <SearchableSelect
+                        value={destinationOutletId}
+                        options={destinationOutletOptions.map((o: Outlet) => ({ value: o.id, label: o.name }))}
+                        placeholder="Pilih outlet tujuan..."
+                        searchPlaceholder="Cari outlet..."
+                        onChange={setDestinationOutletId}
+                        data-testid="select-cargo-destination-outlet"
+                      />
                     </div>
-                    {selectedTrip.tariff?.found && (
-                      <span className="font-black text-amber-700 font-mono">{fmtCurrency(selectedTrip.tariff.calculatedAmount)}</span>
-                    )}
+                  )}
+                  {destinationOutletOptions.length === 0 && (
+                    <div className="text-[11px] text-red-500 font-medium">
+                      Tidak ada outlet terdaftar di {destinationStop?.name}. Hubungi admin untuk menambahkan outlet.
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 text-xs min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3 h-3 text-amber-500" />
+                        <span className="font-bold text-gray-800">{formatTime(selectedTrip.departAtOrigin)}</span>
+                        <ArrowRight className="w-3 h-3 text-gray-300" />
+                        <span className="font-bold text-gray-800">{formatTime(selectedTrip.arriveAtDestination)}</span>
+                      </div>
+                      {selectedTrip.tariff?.found && (
+                        <span className="font-black text-amber-700 font-mono">{fmtCurrency(selectedTrip.tariff.calculatedAmount)}</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => canProceedStep2 && setStep(3)}
+                      disabled={!canProceedStep2}
+                      className="h-9 px-5 bg-amber-600 hover:bg-amber-500 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+                      data-testid="btn-proceed-payment"
+                    >
+                      Lanjut Pembayaran
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setStep(3)}
-                    className="h-9 px-5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
-                    data-testid="btn-proceed-payment"
-                  >
-                    Lanjut Pembayaran
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
                 </div>
               )}
             </div>
@@ -1027,6 +1079,11 @@ export default function CargoTerminalPage() {
                         <ArrowRight className="w-3 h-3 text-gray-400" />
                         <span className="font-semibold text-rose-600">{destinationStop?.name}</span>
                       </div>
+                      {destinationOutletOptions.find((o: Outlet) => o.id === destinationOutletId) && (
+                        <div className="text-[10px] text-gray-400 mt-0.5">
+                          Outlet tujuan: {destinationOutletOptions.find((o: Outlet) => o.id === destinationOutletId)?.name}
+                        </div>
+                      )}
                     </div>
                     {selectedTrip && (
                       <div>

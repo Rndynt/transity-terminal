@@ -59,6 +59,10 @@ export const cargoShipments = pgTable("cargo_shipments", {
   originStopId:       uuid("origin_stop_id").notNull().references(() => stops.id),
   destinationStopId:  uuid("destination_stop_id").notNull().references(() => stops.id),
   outletId:           uuid("outlet_id").references(() => outlets.id),
+  // Outlet tujuan tempat kargo akan diambil/dikirim, dipilih CSO setelah
+  // trip dipilih (bisa ada >1 outlet per stop tujuan). Nullable untuk
+  // kompatibilitas data lama sebelum kolom ini ada.
+  destinationOutletId: uuid("destination_outlet_id").references(() => outlets.id),
   channel:            channelEnum("channel").default('CSO'),
   cargoTypeId:        uuid("cargo_type_id").references(() => cargoTypes.id),
   senderName:         text("sender_name").notNull(),
@@ -102,6 +106,7 @@ export const cargoShipmentsRelations = relations(cargoShipments, ({ one }) => ({
   originStop: one(stops, { fields: [cargoShipments.originStopId], references: [stops.id], relationName: "cargoOriginStop" }),
   destinationStop: one(stops, { fields: [cargoShipments.destinationStopId], references: [stops.id], relationName: "cargoDestinationStop" }),
   outlet: one(outlets, { fields: [cargoShipments.outletId], references: [outlets.id] }),
+  destinationOutlet: one(outlets, { fields: [cargoShipments.destinationOutletId], references: [outlets.id], relationName: "cargoDestinationOutlet" }),
   cargoType: one(cargoTypes, { fields: [cargoShipments.cargoTypeId], references: [cargoTypes.id] })
 }));
 

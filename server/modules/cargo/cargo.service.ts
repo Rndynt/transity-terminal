@@ -95,8 +95,8 @@ export class CargoService {
     return { pricePerKg, pricePerLeg, minCharge, legCount, calculatedAmount };
   }
 
-  async getAvailableTrips(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]> {
-    return this.storage.getCargoAvailableTrips(serviceDate, originStopId, destinationStopId);
+  async getAvailableTrips(serviceDate: string, originStopId: string, destinationStopIds: string[]): Promise<CargoAvailableTrip[]> {
+    return this.storage.getCargoAvailableTrips(serviceDate, originStopId, destinationStopIds);
   }
 
   async getAllShipments(

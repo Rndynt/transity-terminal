@@ -340,8 +340,8 @@ export const cargoApi = {
     if (tripId) params.set('tripId', tripId);
     return fetch(`/api/cargo/quote-tariff?${params}`).then(r => assertOk<any>(r));
   },
-  getAvailableTrips: (date: string, originStopId: string, destinationStopId: string) => {
-    const params = new URLSearchParams({ date, originStopId, destinationStopId });
+  getAvailableTrips: (date: string, originStopId: string, destinationStopIds: string[]) => {
+    const params = new URLSearchParams({ date, originStopId, destinationStopIds: destinationStopIds.join(',') });
     return fetch(`/api/cargo/available-trips?${params}`).then(r => assertOk<any[]>(r));
   }
 };

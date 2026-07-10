@@ -212,7 +212,7 @@ export interface IStorage {
   getTrips(serviceDate?: string, opts?: { limit?: number }): Promise<TripWithDetails[]>;
   getTripsForDateRange(fromDate: string, toDate: string, opts?: { limit?: number }): Promise<TripWithDetails[]>;
   getCsoAvailableTrips(serviceDate: string, outletId: string): Promise<CsoAvailableTrip[]>;
-  getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]>;
+  getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopIds: string[]): Promise<CargoAvailableTrip[]>;
   getTripById(id: string): Promise<Trip | undefined>;
   createTrip(data: InsertTrip): Promise<Trip>;
   updateTrip(id: string, data: Partial<InsertTrip>): Promise<Trip>;

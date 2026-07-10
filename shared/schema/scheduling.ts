@@ -158,6 +158,10 @@ export type CargoAvailableTrip = {
   status: "scheduled" | "cancelled" | "closed" | "draft" | "unknown";
   departAtOrigin: string | null;
   arriveAtDestination: string | null;
+  // Kota tujuan bisa punya beberapa stop; field ini menandai stop tujuan
+  // AKTUAL yang match untuk trip ini (dipakai frontend untuk narrow ke
+  // outlet-outlet yang berlokasi di stop tsb setelah CSO pilih trip).
+  destinationStopId: string;
   originStopSequence: number;
   destinationStopSequence: number;
   legCount: number;

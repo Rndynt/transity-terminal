@@ -1115,10 +1115,10 @@ export class SchedulingRepository {
     return result?.count || 0;
   }
 
-  async getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]> {
+  async getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopIds: string[]): Promise<CargoAvailableTrip[]> {
     const [realTrips, virtualTrips] = await Promise.all([
-      this.getRealTripsForCargo(serviceDate, originStopId, destinationStopId),
-      this.getVirtualTripsForCargo(serviceDate, originStopId, destinationStopId)
+      this.getRealTripsForCargo(serviceDate, originStopId, destinationStopIds),
+      this.getVirtualTripsForCargo(serviceDate, originStopId, destinationStopIds)
     ]);
 
     const baseIdsWithRealTrips = new Set(
@@ -1151,7 +1151,7 @@ export class SchedulingRepository {
     });
   }
 
-  private async getRealTripsForCargo(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]> {
+  private async getRealTripsForCargo(serviceDate: string, originStopId: string, destinationStopIds: string[]): Promise<CargoAvailableTrip[]> {
     const result = await db.execute(sql`
       SELECT
         t.id AS trip_id,
@@ -1226,9 +1226,14 @@ export class SchedulingRepository {
     for (const row of tripRows) {
       const psForPattern = patternStopsByPattern.get(row.pattern_id) || [];
       const originPs = psForPattern.find(ps => ps.stopId === originStopId);
-      const destPs = psForPattern.find(ps => ps.stopId === destinationStopId);
+      // Kota tujuan bisa punya beberapa stop; ambil stop tujuan pertama
+      // (sequence terkecil setelah origin) yang match salah satu stop kota
+      // tsb — itu jadi destinationStopId aktual untuk trip ini.
+      const destCandidates = psForPattern
+        .filter(ps => destinationStopIds.includes(ps.stopId) && originPs && ps.stopSequence > originPs.stopSequence)
+        .sort((a, b) => a.stopSequence - b.stopSequence);
+      const destPs = destCandidates[0];
       if (!originPs || !destPs) continue;
-      if (originPs.stopSequence >= destPs.stopSequence) continue;
 
       let departAtOrigin: string | null = null;
       let arriveAtDestination: string | null = null;
@@ -1236,7 +1241,7 @@ export class SchedulingRepository {
       const tripStops = tstByTrip.get(row.trip_id);
       if (tripStops && tripStops.length > 0) {
         const originTst = tripStops.find(ts => ts.stop_id === originStopId);
-        const destTst = tripStops.find(ts => ts.stop_id === destinationStopId);
+        const destTst = tripStops.find(ts => ts.stop_id === destPs.stopId);
         if (originTst) departAtOrigin = originTst.depart_at || originTst.arrive_at || null;
         if (destTst) arriveAtDestination = destTst.arrive_at || destTst.depart_at || null;
       }
@@ -1277,6 +1282,7 @@ export class SchedulingRepository {
         status: (row.status || 'scheduled') as CargoAvailableTrip['status'],
         departAtOrigin,
         arriveAtDestination,
+        destinationStopId: destPs.stopId,
         originStopSequence: originPs.stopSequence,
         destinationStopSequence: destPs.stopSequence,
         legCount: destPs.stopSequence - originPs.stopSequence,
@@ -1286,7 +1292,7 @@ export class SchedulingRepository {
     return trips;
   }
 
-  private async getVirtualTripsForCargo(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]> {
+  private async getVirtualTripsForCargo(serviceDate: string, originStopId: string, destinationStopIds: string[]): Promise<CargoAvailableTrip[]> {
     const eligibleBases = await this.getEligibleTripBases(serviceDate);
     if (eligibleBases.length === 0) return [];
 
@@ -1337,10 +1343,12 @@ export class SchedulingRepository {
 
         const stopsForBase = patternStopsMap.get(base.patternId) || [];
         const originPs = stopsForBase.find(ps => ps.stopId === originStopId);
-        const destPs = stopsForBase.find(ps => ps.stopId === destinationStopId);
+        const destCandidates = stopsForBase
+          .filter(ps => destinationStopIds.includes(ps.stopId) && originPs && ps.stopSequence > originPs.stopSequence)
+          .sort((a, b) => a.stopSequence - b.stopSequence);
+        const destPs = destCandidates[0];
 
         if (!originPs || !destPs) continue;
-        if (originPs.stopSequence >= destPs.stopSequence) continue;
 
         const defaultStopTimes = base.defaultStopTimes as DefaultStopTime[];
         const originTime = defaultStopTimes?.find(st => st.stopSequence === originPs.stopSequence);
@@ -1373,6 +1381,7 @@ export class SchedulingRepository {
           status: 'scheduled',
           departAtOrigin,
           arriveAtDestination,
+          destinationStopId: destPs.stopId,
           originStopSequence: originPs.stopSequence,
           destinationStopSequence: destPs.stopSequence,
           legCount: destPs.stopSequence - originPs.stopSequence,

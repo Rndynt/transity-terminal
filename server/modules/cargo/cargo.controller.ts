@@ -62,6 +62,12 @@ export class CargoController {
     if (scopedOutlet) {
       validated.outletId = scopedOutlet;
     }
+    if (validated.destinationOutletId) {
+      const destOutlet = await this.storage.getOutletById(validated.destinationOutletId);
+      if (!destOutlet || destOutlet.stopId !== validated.destinationStopId) {
+        return reply.code(400).send({ error: 'destinationOutletId tidak berada di destinationStopId yang dikirim' });
+      }
+    }
     const shipment = await this.cargoService.createShipment(validated, buildServiceContext(req));
     reply.code(201).send(shipment);
   }
@@ -92,11 +98,18 @@ export class CargoController {
   }
 
   async getAvailableTrips(req: FastifyRequest, reply: FastifyReply) {
-    const { date, originStopId, destinationStopId } = (req.query as { date?: string; originStopId?: string; destinationStopId?: string } | undefined) || {};
-    if (!date || !originStopId || !destinationStopId) {
-      return reply.code(400).send({ error: 'date, originStopId, destinationStopId are required' });
+    const { date, originStopId, destinationStopId, destinationStopIds } = (req.query as {
+      date?: string; originStopId?: string; destinationStopId?: string; destinationStopIds?: string;
+    } | undefined) || {};
+    // destinationStopIds (CSV) mendukung pencarian per-kota (banyak stop
+    // sekaligus); destinationStopId (single) dipertahankan untuk kompatibilitas.
+    const stopIds = destinationStopIds
+      ? destinationStopIds.split(',').map(s => s.trim()).filter(Boolean)
+      : (destinationStopId ? [destinationStopId] : []);
+    if (!date || !originStopId || stopIds.length === 0) {
+      return reply.code(400).send({ error: 'date, originStopId, and destinationStopId(s) are required' });
     }
-    const trips = await this.cargoService.getAvailableTrips(date, originStopId, destinationStopId);
+    const trips = await this.cargoService.getAvailableTrips(date, originStopId, stopIds);
     reply.send(trips);
   }
 

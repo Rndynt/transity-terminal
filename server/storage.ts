@@ -161,8 +161,8 @@ export class DatabaseStorage implements IStorage {
   getCsoAvailableTrips(serviceDate: string, outletId: string): Promise<CsoAvailableTrip[]> {
     return this.scheduling.getCsoAvailableTrips(serviceDate, outletId, (id) => this.network.getOutletById(id));
   }
-  getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopId: string): Promise<CargoAvailableTrip[]> {
-    return this.scheduling.getCargoAvailableTrips(serviceDate, originStopId, destinationStopId);
+  getCargoAvailableTrips(serviceDate: string, originStopId: string, destinationStopIds: string[]): Promise<CargoAvailableTrip[]> {
+    return this.scheduling.getCargoAvailableTrips(serviceDate, originStopId, destinationStopIds);
   }
   getTripById(id: string): Promise<Trip | undefined> {
     const ctx = getRequestContext();
