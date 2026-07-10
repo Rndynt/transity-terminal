@@ -151,6 +151,7 @@ export class CargoRepository {
         originStopId: cargoShipments.originStopId,
         destinationStopId: cargoShipments.destinationStopId,
         outletId: cargoShipments.outletId,
+        destinationOutletId: cargoShipments.destinationOutletId,
         cargoTypeId: cargoShipments.cargoTypeId,
         senderName: cargoShipments.senderName,
         senderPhone: cargoShipments.senderPhone,
