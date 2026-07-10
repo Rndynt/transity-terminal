@@ -61,7 +61,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <LayoutContext.Provider value={ctxValue}>
-      <div className="flex h-screen bg-gray-50 font-['Inter',sans-serif]">
+      <div className="flex h-dvh bg-gray-50 font-['Inter',sans-serif]">
         {isMobile && sidebarOpen && (
           <div
             className="fixed inset-0 z-40 bg-black/50 lg:hidden"

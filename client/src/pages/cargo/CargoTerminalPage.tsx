@@ -1014,24 +1014,27 @@ export default function CargoTerminalPage() {
 
               {showTripsPanel && selectedTrip && (
                 <div className="border-t border-gray-200 bg-white px-3 md:px-4 py-2.5 flex flex-col gap-2 flex-shrink-0">
-                  {destinationOutletOptions.length > 1 && (
+                  {destinationOutletOptions.length > 0 && (
                     <div>
                       <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">
-                        Outlet Tujuan di {destinationStop?.name} *
+                        Titik / Outlet Tujuan di {destinationStop?.name} *
                       </label>
                       <SearchableSelect
                         value={destinationOutletId}
                         options={destinationOutletOptions.map((o: Outlet) => ({ value: o.id, label: o.name }))}
-                        placeholder="Pilih outlet tujuan..."
+                        placeholder="Pilih titik tujuan..."
                         searchPlaceholder="Cari outlet..."
                         onChange={setDestinationOutletId}
                         data-testid="select-cargo-destination-outlet"
                       />
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        Pastikan titik yang dipilih sesuai area pengantaran paket penerima. Jika area penerima tidak tercakup oleh titik manapun di {destinationStop?.name}, pilih trip lain atau hubungi admin untuk menambahkan outlet.
+                      </p>
                     </div>
                   )}
                   {destinationOutletOptions.length === 0 && (
                     <div className="text-[11px] text-red-500 font-medium">
-                      Tidak ada outlet terdaftar di {destinationStop?.name}. Hubungi admin untuk menambahkan outlet.
+                      Tidak ada titik/outlet terdaftar di {destinationStop?.name}. Hubungi admin untuk menambahkan outlet sebelum melanjutkan.
                     </div>
                   )}
                   <div className="flex items-center justify-between">
