@@ -4,6 +4,7 @@ export * from "./fleet";
 export * from "./network";
 export * from "./scheduling";
 export * from "./inventory";
+export * from "./pricing";
 export * from "./booking";
 export * from "./cargo";
 export * from "./app-users";

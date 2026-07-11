@@ -2,6 +2,7 @@ import { db } from "@server/db";
 import { eq, and, or, desc, sql, inArray, isNull, gte, lte } from "drizzle-orm";
 import { fromZonedHHMMToUtc } from "@server/utils/timezone";
 import { createComponentLogger } from "@server/lib/logger";
+import { hasAnyPricedDestinationFromOrigin } from "@modules/pricing/priceMatrix.resolver";
 import { ManifestEntry, ManifestFull, ManifestCargoEntry } from "@server/storage.interface";
 import {
   tripPatterns, patternStops, tripBases, trips, tripStopTimes, tripLegs,
@@ -367,6 +368,40 @@ export class SchedulingRepository {
     );
     
     const allTrips = [...realTrips, ...filteredVirtualTrips];
+
+    // OD-aware hasPriceRule (§6): legacy `hasPriceRule` above is a coarse
+    // "does ANY price_rule exist for this trip/pattern" boolean. On top of
+    // that, also check the OD-matrix: does at least one destination AFTER
+    // this outlet resolve to a price>0? A trip stays selectable if EITHER
+    // check passes — legacy keeps working pre-migration, matrix takes over
+    // once configured. Only the SPECIFIC destination a CSO ultimately
+    // picks gets blocked later (RouteTimeline "Turun" guard); this is just
+    // the coarse trip-card-level gate.
+    const uniquePatternIdsForPricing = [...new Set(allTrips.filter(t => t.patternId).map(t => t.patternId!))];
+    if (uniquePatternIdsForPricing.length > 0) {
+      const matrixHasPricedByPattern = new Map<string, boolean>();
+      await Promise.all(uniquePatternIdsForPricing.map(async (patternId) => {
+        try {
+          const patternStopsForPattern = await this.getPatternStops(patternId);
+          const outletStop = patternStopsForPattern.find(ps => ps.stopId === outlet.stopId);
+          if (!outletStop) { matrixHasPricedByPattern.set(patternId, false); return; }
+          const destinationStopIds = patternStopsForPattern
+            .filter(ps => ps.stopSequence > outletStop.stopSequence)
+            .map(ps => ps.stopId);
+          const hasPriced = await hasAnyPricedDestinationFromOrigin({
+            patternId, originStopId: outlet.stopId, destinationStopIds, serviceDate,
+          });
+          matrixHasPricedByPattern.set(patternId, hasPriced);
+        } catch {
+          matrixHasPricedByPattern.set(patternId, false);
+        }
+      }));
+      for (const trip of allTrips) {
+        if (trip.patternId && matrixHasPricedByPattern.get(trip.patternId)) {
+          trip.hasPriceRule = true;
+        }
+      }
+    }
 
     const baseIds = [...new Set(allTrips.filter(t => t.baseId).map(t => t.baseId!))];
     if (baseIds.length > 0) {

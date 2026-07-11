@@ -1,6 +1,8 @@
 import { and, eq, isNull, or, desc, inArray, type SQL } from "drizzle-orm";
 import { db } from "@server/db";
 import { priceRules } from "@shared/schema/inventory";
+import { tripStopTimes } from "@shared/schema/scheduling";
+import { resolvePassengerCell, matrixSystemHasAnyData } from "@modules/pricing/priceMatrix.resolver";
 import type { IStorage } from "@server/storage.interface";
 import type {
   Trip,
@@ -76,27 +78,51 @@ function extractFareFromRule(rule: unknown): number {
   return Math.round(n * (Number.isFinite(mult) && mult > 0 ? mult : 1));
 }
 
-async function resolveFarePerPerson(trip: Trip): Promise<number> {
+async function legacyFarePerPerson(trip: Trip, patternId?: string): Promise<number> {
+  if (!patternId) return 0;
   try {
-    const conds: SQL[] = [];
-    conds.push(eq(priceRules.tripId, trip.id));
-    if (trip.patternId) conds.push(eq(priceRules.patternId, trip.patternId));
-    const orCond = conds.length === 1 ? conds[0] : or(...conds);
-
+    const conds: SQL[] = [eq(priceRules.tripId, trip.id), eq(priceRules.patternId, patternId)];
+    const orCond = or(...conds);
     const rows = await db
-      .select({
-        scope: priceRules.scope,
-        priority: priceRules.priority,
-        rule: priceRules.rule,
-        tripId: priceRules.tripId,
-      })
+      .select({ scope: priceRules.scope, priority: priceRules.priority, rule: priceRules.rule, tripId: priceRules.tripId })
       .from(priceRules)
       .where(and(orCond, isNull(priceRules.deletedAt)))
       .orderBy(desc(priceRules.priority));
-
     const tripScoped = rows.find((r) => r.tripId === trip.id);
     const chosen = tripScoped ?? rows[0];
     return chosen ? extractFareFromRule(chosen.rule) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * "Per person, primary OD" fare for a whole-trip webhook snapshot (no
+ * specific booking OD is known here — Console just wants a representative
+ * headline fare). Primary OD = the trip's own first stop -> last stop
+ * (full journey extent). Sourced from the shared OD-matrix resolver, with
+ * the legacy price_rules flat/per_leg reader kept ONLY as a pre-migration
+ * fallback (§5) when this pattern has no matrix data configured yet.
+ */
+async function resolveFarePerPerson(trip: Trip, stopTimes?: Array<{ stopId: string; stopSequence: number }>): Promise<number> {
+  try {
+    if (trip.patternId && stopTimes && stopTimes.length >= 2) {
+      const sorted = [...stopTimes].sort((a, b) => a.stopSequence - b.stopSequence);
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      const resolved = await resolvePassengerCell({
+        patternId: trip.patternId,
+        tripId: trip.id,
+        originStopId: first.stopId,
+        destinationStopId: last.stopId,
+        serviceDate: dateStr(trip.serviceDate),
+      });
+      if (resolved.price > 0) return resolved.price;
+
+      const hasMatrixData = await matrixSystemHasAnyData(trip.patternId);
+      if (hasMatrixData) return 0; // genuinely not priced yet — don't mask with legacy guess
+    }
+    return await legacyFarePerPerson(trip, trip.patternId ?? undefined);
   } catch {
     return 0;
   }
@@ -111,41 +137,89 @@ export async function resolveFaresForTrips(
   const patternIds = Array.from(
     new Set(trips.map((t) => t.patternId).filter((x): x is string => !!x))
   );
+
+  // First/last stopId per trip, for the OD-matrix "primary OD" lookup.
+  const firstLastByTrip = new Map<string, { first: string; last: string }>();
+  try {
+    const stopTimeRows = await db
+      .select({ tripId: tripStopTimes.tripId, stopId: tripStopTimes.stopId, stopSequence: tripStopTimes.stopSequence })
+      .from(tripStopTimes)
+      .where(inArray(tripStopTimes.tripId, tripIds));
+    const byTripStops = new Map<string, Array<{ stopId: string; stopSequence: number }>>();
+    for (const r of stopTimeRows) {
+      const list = byTripStops.get(r.tripId) || [];
+      list.push({ stopId: r.stopId, stopSequence: r.stopSequence });
+      byTripStops.set(r.tripId, list);
+    }
+    for (const [tripId, list] of byTripStops) {
+      const sorted = list.sort((a, b) => a.stopSequence - b.stopSequence);
+      if (sorted.length >= 2) {
+        firstLastByTrip.set(tripId, { first: sorted[0].stopId, last: sorted[sorted.length - 1].stopId });
+      }
+    }
+  } catch {
+    // best-effort — falls through to legacy path per trip below
+  }
+
+  // Legacy price_rules maps, kept only as pre-migration fallback (§5).
+  const byTripLegacy = new Map<string, number>();
+  const byPatternLegacy = new Map<string, number>();
   try {
     const conds: SQL[] = [];
     if (tripIds.length) conds.push(inArray(priceRules.tripId, tripIds));
     if (patternIds.length) conds.push(inArray(priceRules.patternId, patternIds));
-    if (conds.length === 0) return out;
-    const orCond = conds.length === 1 ? conds[0] : or(...conds);
-    const rows = await db
-      .select({
-        priority: priceRules.priority,
-        rule: priceRules.rule,
-        tripId: priceRules.tripId,
-        patternId: priceRules.patternId,
-      })
-      .from(priceRules)
-      .where(and(orCond, isNull(priceRules.deletedAt)))
-      .orderBy(desc(priceRules.priority));
-
-    const byTrip = new Map<string, number>();
-    const byPattern = new Map<string, number>();
-    for (const r of rows) {
-      const v = extractFareFromRule(r.rule);
-      if (r.tripId && !byTrip.has(r.tripId)) byTrip.set(r.tripId, v);
-      else if (r.patternId && !byPattern.has(r.patternId))
-        byPattern.set(r.patternId, v);
-    }
-    for (const t of trips) {
-      const v =
-        byTrip.get(t.id) ??
-        (t.patternId ? byPattern.get(t.patternId) : undefined) ??
-        0;
-      out.set(t.id, v);
+    if (conds.length > 0) {
+      const orCond = conds.length === 1 ? conds[0] : or(...conds);
+      const rows = await db
+        .select({ priority: priceRules.priority, rule: priceRules.rule, tripId: priceRules.tripId, patternId: priceRules.patternId })
+        .from(priceRules)
+        .where(and(orCond, isNull(priceRules.deletedAt)))
+        .orderBy(desc(priceRules.priority));
+      for (const r of rows) {
+        const v = extractFareFromRule(r.rule);
+        if (r.tripId && !byTripLegacy.has(r.tripId)) byTripLegacy.set(r.tripId, v);
+        else if (r.patternId && !byPatternLegacy.has(r.patternId)) byPatternLegacy.set(r.patternId, v);
+      }
     }
   } catch {
-    // best-effort: leave map empty -> 0
+    // best-effort
   }
+
+  const matrixDataCache = new Map<string, boolean>();
+
+  for (const t of trips) {
+    let fare = 0;
+    const fl = firstLastByTrip.get(t.id);
+    if (t.patternId && fl) {
+      try {
+        const resolved = await resolvePassengerCell({
+          patternId: t.patternId,
+          tripId: t.id,
+          originStopId: fl.first,
+          destinationStopId: fl.last,
+          serviceDate: dateStr(t.serviceDate),
+        });
+        if (resolved.price > 0) {
+          fare = resolved.price;
+        } else {
+          let hasMatrixData = matrixDataCache.get(t.patternId);
+          if (hasMatrixData === undefined) {
+            hasMatrixData = await matrixSystemHasAnyData(t.patternId);
+            matrixDataCache.set(t.patternId, hasMatrixData);
+          }
+          if (!hasMatrixData) {
+            fare = byTripLegacy.get(t.id) ?? (t.patternId ? byPatternLegacy.get(t.patternId) : undefined) ?? 0;
+          }
+        }
+      } catch {
+        fare = byTripLegacy.get(t.id) ?? (t.patternId ? byPatternLegacy.get(t.patternId) : undefined) ?? 0;
+      }
+    } else {
+      fare = byTripLegacy.get(t.id) ?? (t.patternId ? byPatternLegacy.get(t.patternId) : undefined) ?? 0;
+    }
+    out.set(t.id, fare);
+  }
+
   return out;
 }
 
@@ -243,7 +317,7 @@ export async function buildScheduleTripPayload(
   storage: IStorage,
   trip: Trip
 ): Promise<SchedulePayloadTrip | null> {
-  const [patternStops, stopTimes, pattern, bookings, fare] = await Promise.all([
+  const [patternStops, stopTimes, pattern, bookings] = await Promise.all([
     trip.patternId
       ? storage.getPatternStops(trip.patternId).catch(() => [])
       : Promise.resolve([] as Array<PatternStop & { stop: Stop | null }>),
@@ -253,8 +327,8 @@ export async function buildScheduleTripPayload(
          Promise.resolve(null))
       : Promise.resolve(null),
     storage.getActiveBookingsForTrip(trip.id).catch(() => [] as Booking[]),
-    resolveFarePerPerson(trip),
   ]);
+  const fare = await resolveFarePerPerson(trip, stopTimes);
 
   const passengers = bookings.length
     ? await storage

@@ -25,6 +25,7 @@ import {
 } from "@modules/bookings/booking.helpers";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
 import { AtomicHoldService } from "@modules/bookings/atomicHold.service";
+import { resolvePassengerCell, matrixSystemHasAnyData } from "@modules/pricing/priceMatrix.resolver";
 import { createComponentLogger } from "@server/lib/logger";
 
 const log = createComponentLogger("app.service");
@@ -478,9 +479,9 @@ export class AppService {
       .from(trips)
       .where(and(eq(trips.serviceDate, params.date), isNull(trips.deletedAt)));
     const materializedBaseIds = new Set(
-      allMaterializedBaseIdRows.map(r => r.baseId).filter(Boolean)
+      allMaterializedBaseIdRows.map(r => r.baseId).filter((id): id is string => !!id)
     );
-    const filteredVirtual = virtualTrips.filter(v => !materializedBaseIds.has(v._baseId));
+    const filteredVirtual = virtualTrips.filter(v => !v._baseId || !materializedBaseIds.has(v._baseId));
 
     const now = new Date();
     const all = [...realTrips, ...filteredVirtual]
@@ -785,6 +786,7 @@ export class AppService {
     }
 
     const results: (TripSearchResult & { _baseId?: string })[] = [];
+    const matrixDataCache = new Map<string, boolean>();
 
     for (const base of bases) {
       const pattern = patternsMap.get(base.patternId);
@@ -817,17 +819,39 @@ export class AppService {
       }
 
       let fareQuote = 0;
-      const cachedRule = priceRulesByPattern.get(base.patternId);
-      if (cachedRule) {
-        const ruleData = cachedRule as PriceRuleData | null;
-        const basePricePerLeg: number = ruleData?.basePricePerLeg ?? 0;
-        const multiplier: number = ruleData?.multiplier ?? 1;
-        const pricingMode: string = ruleData?.pricingMode ?? 'per_leg';
-        if (pricingMode === 'flat') {
-          fareQuote = Math.round(basePricePerLeg * multiplier);
-        } else {
-          const legCount = Math.max(destPS.stopSequence - originPS.stopSequence, 1);
-          fareQuote = Math.round(legCount * basePricePerLeg * multiplier);
+      const resolved = await resolvePassengerCell({
+        patternId: base.patternId,
+        originStopId: originPS.stopId,
+        destinationStopId: destPS.stopId,
+        serviceDate: params.date,
+      });
+      if (resolved.price > 0) {
+        fareQuote = resolved.price;
+      } else {
+        // Backward-compat: only fall back to legacy flat/per_leg when this
+        // pattern has no OD-matrix data configured at all yet (see
+        // matrixSystemHasAnyData in priceMatrix.resolver.ts). Once a
+        // matrix exists, 0 genuinely means "not priced" and we must not
+        // silently substitute a linear guess for 3+-city patterns.
+        let hasMatrixData = matrixDataCache.get(base.patternId);
+        if (hasMatrixData === undefined) {
+          hasMatrixData = await matrixSystemHasAnyData(base.patternId);
+          matrixDataCache.set(base.patternId, hasMatrixData);
+        }
+        if (!hasMatrixData) {
+          const cachedRule = priceRulesByPattern.get(base.patternId);
+          if (cachedRule) {
+            const ruleData = cachedRule as PriceRuleData | null;
+            const basePricePerLeg: number = ruleData?.basePricePerLeg ?? 0;
+            const multiplier: number = ruleData?.multiplier ?? 1;
+            const pricingMode: string = ruleData?.pricingMode ?? 'per_leg';
+            if (pricingMode === 'flat') {
+              fareQuote = Math.round(basePricePerLeg * multiplier);
+            } else {
+              const legCount = Math.max(destPS.stopSequence - originPS.stopSequence, 1);
+              fareQuote = Math.round(legCount * basePricePerLeg * multiplier);
+            }
+          }
         }
       }
 
