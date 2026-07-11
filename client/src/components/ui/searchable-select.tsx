@@ -39,7 +39,8 @@ export function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [openUpward, setOpenUpward] = useState(false);
-  const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [dropdownRect, setDropdownRect] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -56,9 +57,26 @@ export function SearchableSelect({
       const spaceAbove = rect.top;
       const upward = spaceBelow < 300 && spaceAbove > spaceBelow;
       setOpenUpward(upward);
+
+      // Radix Dialog/AlertDialog calls aria-hidden's hideOthers() on its own
+      // Content node, marking every OTHER document.body child inert. A dropdown
+      // portaled straight to document.body would land in one of those inert
+      // siblings and become unresponsive to touch/click/scroll (looks "frozen").
+      // Fix: reparent into the enclosing dialog's Content node (role="dialog"/
+      // "alertdialog") — it lives inside the kept-visible subtree. That node
+      // also carries the transform Radix uses for centering, which becomes the
+      // containing block for `position: fixed` descendants, so we compute the
+      // dropdown's offset relative to it instead of the viewport.
+      const dialogAncestor = containerRef.current.closest('[role="dialog"], [role="alertdialog"]') as HTMLElement | null;
+      setPortalTarget(dialogAncestor ?? document.body);
+      const containerBox = dialogAncestor
+        ? dialogAncestor.getBoundingClientRect()
+        : { top: 0, left: 0, bottom: window.innerHeight, right: window.innerWidth };
+
       setDropdownRect({
-        top: upward ? rect.top : rect.bottom,
-        left: rect.left,
+        top: upward ? undefined : rect.bottom - containerBox.top + 4,
+        bottom: upward ? containerBox.bottom - rect.top + 4 : undefined,
+        left: rect.left - containerBox.left,
         width: rect.width
       });
     };
@@ -156,13 +174,13 @@ export function SearchableSelect({
         <ChevronDown className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform flex-shrink-0', open && 'rotate-180')} />
       </button>
 
-      {open && dropdownRect && createPortal(
+      {open && dropdownRect && portalTarget && createPortal(
         <div
           ref={dropdownRef}
           className="fixed z-[100] bg-background border border-border rounded-xl shadow-lg flex flex-col overflow-hidden"
           style={{
-            top: openUpward ? undefined : dropdownRect.top + 4,
-            bottom: openUpward ? window.innerHeight - dropdownRect.top + 4 : undefined,
+            top: dropdownRect.top,
+            bottom: dropdownRect.bottom,
             left: dropdownRect.left,
             width: dropdownRect.width,
             maxHeight: '280px'
@@ -228,7 +246,7 @@ export function SearchableSelect({
             )}
           </div>
         </div>,
-        document.body
+        portalTarget
       )}
     </div>
   );
