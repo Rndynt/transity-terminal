@@ -589,65 +589,57 @@ export default function TripPatternsManager() {
                       </button>
                     </div>
 
-                    {/* Row 2: dwell/role note (fixed-width column) + relevant boarding/alighting pills, aligned across all rows */}
-                    <div className="flex items-center gap-2 pl-1">
-                      <div className="flex items-center gap-1.5 w-[152px] flex-shrink-0">
-                        {isTransit ? (
-                          <div className="flex items-center gap-1.5" title="Waktu singgah minimum di halte ini (antara tiba dan berangkat)">
-                            <Clock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                            <input
-                              type="number"
-                              value={stop.dwellSeconds}
-                              onChange={(e) => updatePatternStop(index, 'dwellSeconds', parseInt(e.target.value, 10) || 0)}
-                              min="0"
-                              className="w-14 h-6 text-xs text-center rounded-md border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary/40"
-                              data-testid={`input-dwell-${index}`}
-                            />
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">dtk singgah</span>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground italic whitespace-nowrap">
-                            {isFirst ? 'Titik awal' : 'Titik akhir'}
-                          </span>
-                        )}
-                      </div>
-                      <div className="w-px h-3.5 bg-border flex-shrink-0" />
-                      <div className="flex items-center gap-2">
-                        {/* Naik hanya relevan di titik awal & transit — bukan di titik akhir */}
-                        {(isFirst || isTransit) && (
-                          <button
-                            type="button"
-                            onClick={() => updatePatternStop(index, 'boardingAllowed', stop.boardingAllowed === false ? true : false)}
-                            data-testid={`switch-boarding-${index}`}
-                            className={cn(
-                              'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all select-none',
-                              stop.boardingAllowed !== false
-                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                : 'bg-muted text-muted-foreground'
-                            )}
-                          >
-                            <ArrowUp className="h-3 w-3" />
-                            Naik
-                          </button>
-                        )}
-                        {/* Turun hanya relevan di titik akhir & transit — bukan di titik awal */}
-                        {(isLast || isTransit) && (
-                          <button
-                            type="button"
-                            onClick={() => updatePatternStop(index, 'alightingAllowed', stop.alightingAllowed === false ? true : false)}
-                            data-testid={`switch-alighting-${index}`}
-                            className={cn(
-                              'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all select-none',
-                              stop.alightingAllowed !== false
-                                ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
-                                : 'bg-muted text-muted-foreground'
-                            )}
-                          >
-                            <ArrowDown className="h-3 w-3" />
-                            Turun
-                          </button>
-                        )}
-                      </div>
+                    {/* Row 2: Naik/Turun dulu (selalu di posisi sama, kiri), dwell menyusul di belakang hanya untuk transit */}
+                    <div className="flex items-center gap-2 pl-1 flex-wrap">
+                      {/* Naik hanya relevan di titik awal & transit — bukan di titik akhir */}
+                      {(isFirst || isTransit) && (
+                        <button
+                          type="button"
+                          onClick={() => updatePatternStop(index, 'boardingAllowed', stop.boardingAllowed === false ? true : false)}
+                          data-testid={`switch-boarding-${index}`}
+                          className={cn(
+                            'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all select-none',
+                            stop.boardingAllowed !== false
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                              : 'bg-muted text-muted-foreground'
+                          )}
+                        >
+                          <ArrowUp className="h-3 w-3" />
+                          Naik
+                        </button>
+                      )}
+                      {/* Turun hanya relevan di titik akhir & transit — bukan di titik awal */}
+                      {(isLast || isTransit) && (
+                        <button
+                          type="button"
+                          onClick={() => updatePatternStop(index, 'alightingAllowed', stop.alightingAllowed === false ? true : false)}
+                          data-testid={`switch-alighting-${index}`}
+                          className={cn(
+                            'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all select-none',
+                            stop.alightingAllowed !== false
+                              ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
+                              : 'bg-muted text-muted-foreground'
+                          )}
+                        >
+                          <ArrowDown className="h-3 w-3" />
+                          Turun
+                        </button>
+                      )}
+                      {/* Dwell time hanya untuk halte transit, menyusul di belakang badge — bukan mendahului */}
+                      {isTransit && (
+                        <div className="flex items-center gap-1.5 ml-auto" title="Waktu singgah minimum di halte ini (antara tiba dan berangkat)">
+                          <Clock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                          <input
+                            type="number"
+                            value={stop.dwellSeconds}
+                            onChange={(e) => updatePatternStop(index, 'dwellSeconds', parseInt(e.target.value, 10) || 0)}
+                            min="0"
+                            className="w-14 h-6 text-xs text-center rounded-md border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-testid={`input-dwell-${index}`}
+                          />
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">dtk singgah</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
