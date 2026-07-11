@@ -817,7 +817,8 @@ export class SchedulingRepository {
       .leftJoin(trips, eq(tripStopTimes.tripId, trips.id))
       .leftJoin(patternStops, and(
         eq(patternStops.patternId, trips.patternId),
-        eq(patternStops.stopId, tripStopTimes.stopId)
+        eq(patternStops.stopId, tripStopTimes.stopId),
+        isNull(patternStops.deletedAt)
       ))
       .where(and(eq(tripStopTimes.tripId, tripId), isNull(tripStopTimes.deletedAt)))
       .orderBy(tripStopTimes.stopSequence);
