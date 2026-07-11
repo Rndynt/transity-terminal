@@ -8,7 +8,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { outletsApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Store } from 'lucide-react';
+import { Plus, Pencil, Trash2, Store, MapPin } from 'lucide-react';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterPageHeader from './MasterPageHeader';
 import MasterFormDialog from './MasterFormDialog';
@@ -60,8 +60,12 @@ export default function OutletsManager() {
     value: s.id,
     label: s.name,
     badge: s.code,
-    subtitle: s.city || undefined
-  }));
+    group: s.city || 'Lainnya'
+  })).sort((a, b) => {
+    if (a.group === 'Lainnya') return 1;
+    if (b.group === 'Lainnya') return -1;
+    return a.group.localeCompare(b.group);
+  });
 
   const getStopName = (stopId: string) => {
     const stop = stops.find(s => s.id === stopId);
@@ -182,6 +186,7 @@ export default function OutletsManager() {
             searchPlaceholder="Cari halte atau kota..."
             emptyLabel="Tidak ada halte dengan status outlet"
             onChange={(v) => setFormData(prev => ({ ...prev, stopId: v }))}
+            icon={<MapPin className="w-3.5 h-3.5" />}
             data-testid="select-stop"
           />
           <p className="text-xs text-muted-foreground">Hanya halte yang bertanda outlet yang ditampilkan</p>

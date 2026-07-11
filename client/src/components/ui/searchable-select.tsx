@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Search, Check, X } from 'lucide-react';
+import { ChevronDown, Search, Check, X, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface SearchableSelectOption {
@@ -21,6 +21,12 @@ interface SearchableSelectProps {
   disabled?: boolean;
   className?: string;
   clearValue?: string;
+  /** Leading icon shown inside the trigger button (e.g. <Store className="w-3.5 h-3.5" />). */
+  icon?: React.ReactNode;
+  /** Icon shown next to each group header when options are grouped. Defaults to a map pin. Pass `null` to hide it. */
+  groupIcon?: React.ReactNode | null;
+  /** Show a count of items next to each group header. Default true. */
+  showGroupCount?: boolean;
   'data-testid'?: string;
 }
 
@@ -34,6 +40,9 @@ export function SearchableSelect({
   disabled = false,
   className,
   clearValue = '',
+  icon,
+  groupIcon,
+  showGroupCount = true,
   ...props
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
@@ -140,23 +149,34 @@ export function SearchableSelect({
 
   return (
     <div ref={containerRef} className={cn('relative', className)}>
-      <button
-        type="button"
-        disabled={disabled}
+      <div
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-disabled={disabled}
+        aria-expanded={open}
         onClick={() => !disabled && setOpen(v => !v)}
+        onKeyDown={(e) => {
+          if (disabled) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setOpen(v => !v);
+          }
+        }}
         data-testid={props['data-testid']}
         className={cn(
-          'w-full h-10 bg-white border rounded-xl px-3 flex items-center gap-2 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed',
+          'w-full h-10 bg-white border rounded-xl px-3 flex items-center gap-2 text-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed',
+          disabled && 'opacity-50 pointer-events-none',
           open
-            ? 'border-blue-400 ring-2 ring-blue-100 shadow-sm'
+            ? 'border-primary/60 ring-2 ring-primary/15 shadow-sm'
             : 'border-gray-200 hover:border-gray-300'
         )}
       >
-        <span className={cn('flex-1 text-left truncate', selected ? 'text-foreground' : 'text-muted-foreground')}>
+        {icon && <span className="flex-shrink-0 text-primary/70">{icon}</span>}
+        <span className={cn('flex-1 text-left truncate', selected ? 'text-foreground font-medium' : 'text-muted-foreground')}>
           {selected ? selected.label : placeholder}
         </span>
         {selected && selected.badge && (
-          <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
+          <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
             {selected.badge}
           </span>
         )}
@@ -170,7 +190,7 @@ export function SearchableSelect({
           </button>
         )}
         <ChevronDown className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform flex-shrink-0', open && 'rotate-180')} />
-      </button>
+      </div>
 
       {open && dropdownRect && portalTarget && createPortal(
         <div
@@ -192,8 +212,17 @@ export function SearchableSelect({
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full h-8 pl-8 pr-3 bg-muted/50 border border-input rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/50"
+                className="w-full h-8 pl-8 pr-7 bg-muted/50 border border-input rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/50"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -206,8 +235,12 @@ export function SearchableSelect({
               grouped.map(({ group, items }, gi) => (
                 <div key={gi}>
                   {group && (
-                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-background border-b border-border/50 sticky top-0 z-10">
-                      {group}
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 sticky top-0 z-10 bg-muted/40 border-b border-border/50">
+                      {groupIcon !== null && (groupIcon ?? <MapPin className="w-3 h-3 text-primary/60 flex-shrink-0" />)}
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{group}</span>
+                      {showGroupCount && (
+                        <span className="text-[10px] text-muted-foreground/70 ml-auto">{items.length}</span>
+                      )}
                     </div>
                   )}
                   {items.map(opt => {
