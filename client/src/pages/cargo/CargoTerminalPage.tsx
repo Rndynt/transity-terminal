@@ -76,8 +76,7 @@ function OutletSelector({ value, outlets, stops: stopsList, onChange }: {
     };
     if (open) {
       document.addEventListener('mousedown', handler);
-      const t = setTimeout(() => inputRef.current?.focus(), 50);
-      return () => { document.removeEventListener('mousedown', handler); clearTimeout(t); };
+      return () => document.removeEventListener('mousedown', handler);
     }
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);

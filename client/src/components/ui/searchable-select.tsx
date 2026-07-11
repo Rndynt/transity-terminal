@@ -96,12 +96,10 @@ export function SearchableSelect({
     document.addEventListener('mousedown', handler);
     window.addEventListener('scroll', updatePosition, true);
     window.addEventListener('resize', updatePosition);
-    const t = setTimeout(() => inputRef.current?.focus(), 50);
     return () => {
       document.removeEventListener('mousedown', handler);
       window.removeEventListener('scroll', updatePosition, true);
       window.removeEventListener('resize', updatePosition);
-      clearTimeout(t);
     };
   }, [open]);
 

@@ -124,7 +124,6 @@ function MultiSearchSelect({ label, options, selected, onToggle, placeholder = '
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder={placeholder}
                   className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                  autoFocus
                   data-testid={`${testId}-search`}
                 />
               </div>
