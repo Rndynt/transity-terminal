@@ -23,7 +23,25 @@ export default function PassengerPriceMatrixManager() {
 
   const { data: patterns = [] } = useQuery({ queryKey: ['/api/trip-patterns'], queryFn: tripPatternsApi.getAll });
 
-  const patternOptions = patterns.map((p: TripPattern) => ({ value: p.id, label: `${p.name} (${p.code})` }));
+  // Nama pola konsisten berformat "KotaAsal → KotaTujuan · via ..." atau
+  // "KotaAsal - KotaTujuan - ...". Ambil token pertama sebagai kota asal
+  // untuk mengelompokkan dropdown supaya tidak jadi daftar panjang datar
+  // yang susah dibaca saat pola-nya banyak (mis. beberapa varian rute
+  // Bandung<->Jakarta dengan "via" yang berbeda-beda).
+  const getOriginCity = (name: string): string => {
+    const firstSegment = name.split(/→|->|-|–|·/)[0]?.trim();
+    return firstSegment || 'Lainnya';
+  };
+
+  const patternOptions = patterns
+    .map((p: TripPattern) => ({
+      value: p.id,
+      label: p.name,
+      badge: p.code,
+      subtitle: p.note || undefined,
+      group: getOriginCity(p.name),
+    }))
+    .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
 
   return (
     <div className="space-y-4">
