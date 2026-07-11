@@ -567,7 +567,7 @@ export default function TripPatternsManager() {
                   <div key={index} className="rounded-xl border bg-card p-3 space-y-2">
                     {/* Row 1: role pill + stop selector + delete */}
                     <div className="flex items-center gap-2">
-                      <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0', rolePillClass)}>
+                      <span className={cn('text-[10px] font-bold px-1 py-0.5 rounded flex-shrink-0 w-[46px] text-center', rolePillClass)}>
                         {roleLabel}
                       </span>
                       <div className="flex-1 min-w-0">
