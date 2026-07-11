@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -108,6 +108,15 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
   const [validationErrors, setValidationErrors] = useState<Record<number, string[]>>({});
   const [backendErrors, setBackendErrors] = useState<Array<{ stopSequence: number; field: string; message: string }>>([]);
   const { toast } = useToast();
+
+  // Minimum datetime for all inputs = trip's service date at 00:00.
+  // This prevents picking dates before the trip date and anchors the
+  // mobile drum-roll picker to open on the correct date when empty.
+  const tripDateMin = useMemo(() => {
+    if (!trip.serviceDate) return '';
+    const d = String(trip.serviceDate).slice(0, 10); // "YYYY-MM-DD"
+    return `${d}T00:00`;
+  }, [trip.serviceDate]);
 
   const { data: stopTimesData = [], isLoading } = useQuery({
     queryKey: ['/api/trips', trip.id, 'stop-times', 'effective'],
@@ -387,7 +396,11 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
                       <Input
                         type="datetime-local"
                         value={st.arriveAt}
+                        min={tripDateMin}
                         onChange={e => updateStop(index, 'arriveAt', e.target.value)}
+                        onFocus={() => {
+                          if (!st.arriveAt && tripDateMin) updateStop(index, 'arriveAt', tripDateMin);
+                        }}
                         className="h-8 text-xs w-44 px-2"
                         data-testid={`arrive-time-${index}`}
                       />
@@ -410,7 +423,11 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
                       <Input
                         type="datetime-local"
                         value={st.departAt}
+                        min={tripDateMin}
                         onChange={e => updateStop(index, 'departAt', e.target.value)}
+                        onFocus={() => {
+                          if (!st.departAt && tripDateMin) updateStop(index, 'departAt', tripDateMin);
+                        }}
                         className={cn(
                           'h-8 text-xs w-44 px-2',
                           isFirst && !st.departAt && 'border-amber-400'
