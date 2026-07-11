@@ -3,3 +3,4 @@
 - [esbuild ESM + dynamic require crash](esbuild-esm-dynamic-require-otel.md) — fully-bundling @sentry/node (pulls in @opentelemetry/instrumentation) with esbuild `format:"esm"` crashes on boot; use `format:"cjs"` (.cjs) for single-file API bundles instead.
 - [dev server has no hot-reload](tsx-no-watch-dev.md) — `npm run dev` runs plain `tsx server/index.ts` (no `--watch`); backend edits need an explicit workflow restart before curl/API testing shows them.
 - [Cargo vs reservation: real trips only, multi-stop destinations](cargo-real-trips-multistop.md) — cargo must never use virtual/unmaterialized trips or a single hardcoded destination stop; contrast with passenger reservation's more permissive model.
+- [Drizzle migration journal drift](drizzle-journal-drift.md) — a migrations/*.sql file missing from meta/_journal.json is silently skipped by the app's migrate(); `npm run db:push` applies the delta.
