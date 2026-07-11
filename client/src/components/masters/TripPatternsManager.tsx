@@ -71,6 +71,7 @@ export default function TripPatternsManager() {
   const codeInputRef = useRef<HTMLDivElement>(null);
   const [patternStops, setPatternStops] = useState<StopSequenceItem[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [showLayoutError, setShowLayoutError] = useState(false);
   const { toast } = useToast();
 
   const { data: patterns = [], isLoading } = useQuery({
@@ -145,6 +146,7 @@ export default function TripPatternsManager() {
 
   const resetForm = () => {
     setFormData({ code: '', name: '', note: '', vehicleClass: '', defaultLayoutId: '', active: true, tags: '', allowIntraCityBooking: false });
+    setShowLayoutError(false);
   };
 
   const handleCreate = () => {
@@ -165,12 +167,18 @@ export default function TripPatternsManager() {
       tags: pattern.tags ? pattern.tags.join(', ') : '',
       allowIntraCityBooking: pattern.allowIntraCityBooking === true
     });
+    setShowLayoutError(false);
     setIsDialogOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isDuplicateCode) return;
+    if (!formData.defaultLayoutId) {
+      setShowLayoutError(true);
+      toast({ title: 'Layout Default wajib dipilih', description: 'Pilih layout kursi default sebelum menyimpan pola perjalanan.', variant: 'destructive' });
+      return;
+    }
     const submitData = { ...formData, tags: formData.tags.split(',').map(t => t.trim()).filter(t => t) };
     if (editingPattern) {
       updateMutation.mutate({ id: editingPattern.id, data: submitData });
@@ -464,15 +472,24 @@ export default function TripPatternsManager() {
         </div>
 
         <div className="space-y-1.5">
-          <Label>Layout Default</Label>
+          <Label>Layout Default <span className="text-destructive">*</span></Label>
           <SearchableSelect
             value={formData.defaultLayoutId}
             options={layoutOptions}
             placeholder="Pilih layout kursi default..."
             searchPlaceholder="Cari layout..."
-            onChange={(v) => setFormData(prev => ({ ...prev, defaultLayoutId: v }))}
+            onChange={(v) => {
+              setFormData(prev => ({ ...prev, defaultLayoutId: v }));
+              if (v) setShowLayoutError(false);
+            }}
+            className={showLayoutError ? 'ring-1 ring-destructive rounded-xl' : undefined}
             data-testid="select-layout"
           />
+          {showLayoutError && (
+            <p className="text-xs text-destructive flex items-center gap-1" data-testid="error-layout-required">
+              <span>⚠</span> Layout default wajib dipilih.
+            </p>
+          )}
         </div>
 
         <SectionDivider label="Tambahan" />
@@ -520,7 +537,7 @@ export default function TripPatternsManager() {
 
       {/* Stops Management Dialog */}
       <Dialog open={isStopsDialogOpen} onOpenChange={setIsStopsDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col p-0 gap-0" data-testid="stops-dialog">
+        <DialogContent className="sm:max-w-2xl w-[calc(100vw-2rem)] h-[85vh] max-h-[720px] flex flex-col p-0 gap-0" data-testid="stops-dialog">
           <DialogHeader className="px-4 pt-4 pb-3 border-b shrink-0">
             <DialogTitle className="text-base">Kelola Halte</DialogTitle>
             <DialogDescription className="text-xs">{selectedPatternForStops?.name}</DialogDescription>

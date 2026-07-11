@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Search, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -38,7 +39,9 @@ export function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [openUpward, setOpenUpward] = useState(false);
+  const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selected = options.find(o => o.value === value);
@@ -46,23 +49,40 @@ export function SearchableSelect({
   useEffect(() => {
     if (!open) return;
 
-    if (containerRef.current) {
+    const updatePosition = () => {
+      if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
       const spaceAbove = rect.top;
-      setOpenUpward(spaceBelow < 300 && spaceAbove > spaceBelow);
-    }
+      const upward = spaceBelow < 300 && spaceAbove > spaceBelow;
+      setOpenUpward(upward);
+      setDropdownRect({
+        top: upward ? rect.top : rect.bottom,
+        left: rect.left,
+        width: rect.width
+      });
+    };
+
+    updatePosition();
 
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current && !containerRef.current.contains(target) &&
+        dropdownRef.current && !dropdownRef.current.contains(target)
+      ) {
         setOpen(false);
         setSearch('');
       }
     };
     document.addEventListener('mousedown', handler);
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
     const t = setTimeout(() => inputRef.current?.focus(), 50);
     return () => {
       document.removeEventListener('mousedown', handler);
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
       clearTimeout(t);
     };
   }, [open]);
@@ -136,13 +156,17 @@ export function SearchableSelect({
         <ChevronDown className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform flex-shrink-0', open && 'rotate-180')} />
       </button>
 
-      {open && (
+      {open && dropdownRect && createPortal(
         <div
-          className={cn(
-            'absolute z-50 left-0 right-0 bg-background border border-border rounded-xl shadow-lg flex flex-col overflow-hidden',
-            openUpward ? 'bottom-full mb-1' : 'top-full mt-1'
-          )}
-          style={{ maxHeight: '280px' }}
+          ref={dropdownRef}
+          className="fixed z-[100] bg-background border border-border rounded-xl shadow-lg flex flex-col overflow-hidden"
+          style={{
+            top: openUpward ? undefined : dropdownRect.top + 4,
+            bottom: openUpward ? window.innerHeight - dropdownRect.top + 4 : undefined,
+            left: dropdownRect.left,
+            width: dropdownRect.width,
+            maxHeight: '280px'
+          }}
         >
           <div className="p-2 border-b border-border flex-shrink-0">
             <div className="relative">
@@ -203,7 +227,8 @@ export function SearchableSelect({
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
