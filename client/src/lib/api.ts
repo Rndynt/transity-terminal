@@ -66,7 +66,7 @@ export const tripPatternsApi = {
   create: (data: any) => apiRequest('POST', '/api/trip-patterns', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PUT', `/api/trip-patterns/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/trip-patterns/${id}`),
-  getStops: (patternId: string) => fetch(`/api/trip-patterns/${patternId}/stops`).then(r => assertOk<PatternStop[]>(r))
+  getStops: (patternId: string) => fetch(`/api/trip-patterns/${patternId}/stops`).then(r => assertOk<Array<PatternStop & { stop: Stop | null }>>(r))
 };
 
 // Trip Bases API

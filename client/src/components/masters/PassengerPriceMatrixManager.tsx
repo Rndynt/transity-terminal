@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useQueries, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,12 +9,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useToast } from '@/hooks/use-toast';
-import { passengerPriceMatrixApi, tripPatternsApi, tripsApi, stopsApi } from '@/lib/api';
+import { passengerPriceMatrixApi, tripPatternsApi, tripsApi, stopsApi, outletsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { AlertTriangle, RefreshCw, Plus, Trash2, DollarSign } from 'lucide-react';
 import { PriceMatrixGrid, type MatrixGridRow } from './PriceMatrixGrid';
 import { format } from 'date-fns';
-import type { TripPattern, TripWithDetails, Stop } from '@/types';
+import type { TripPattern, TripWithDetails, Stop, Outlet, PatternStop } from '@/types';
 
 export default function PassengerPriceMatrixManager() {
   const [patternId, setPatternId] = useState<string>('');
@@ -22,6 +22,7 @@ export default function PassengerPriceMatrixManager() {
   const [selectedSeasonalId, setSelectedSeasonalId] = useState<string>('');
 
   const { data: patterns = [] } = useQuery({ queryKey: ['/api/trip-patterns'], queryFn: tripPatternsApi.getAll });
+  const { data: outlets = [] } = useQuery({ queryKey: ['/api/outlets'], queryFn: outletsApi.getAll });
 
   // Nama pola konsisten berformat "KotaAsal → KotaTujuan · via ..." atau
   // "KotaAsal - KotaTujuan - ...". Ambil token pertama sebagai kota asal
@@ -33,10 +34,41 @@ export default function PassengerPriceMatrixManager() {
     return firstSegment || 'Lainnya';
   };
 
+  // Judul dropdown butuh outlet asal & tujuan (bukan nama pola yang panjang
+  // dan penuh "via ..."), jadi ambil stop pertama & terakhir tiap pola lewat
+  // pattern-stops, lalu mapping ke outlet by stopId untuk nama+kode outlet.
+  const patternStopsQueries = useQueries({
+    queries: patterns.map((p: TripPattern) => ({
+      queryKey: ['/api/trip-patterns', p.id, 'stops'],
+      queryFn: () => tripPatternsApi.getStops(p.id),
+    })),
+  });
+
+  const outletByStopId = useMemo(() => {
+    const map = new Map<string, Outlet>();
+    outlets.forEach((o: Outlet) => map.set(o.stopId, o));
+    return map;
+  }, [outlets]);
+
+  const formatOdLabel = (
+    stops: Array<PatternStop & { stop: Stop | null }> | undefined,
+    fallbackName: string,
+  ): string => {
+    if (!stops || stops.length < 2) return fallbackName;
+    const origin = stops[0].stop;
+    const destination = stops[stops.length - 1].stop;
+    if (!origin || !destination) return fallbackName;
+    const originOutlet = outletByStopId.get(origin.id);
+    const destinationOutlet = outletByStopId.get(destination.id);
+    const originLabel = `${originOutlet?.name ?? origin.name} (${origin.code})`;
+    const destinationLabel = `${destinationOutlet?.name ?? destination.name} (${destination.code})`;
+    return `${originLabel} - ${destinationLabel}`;
+  };
+
   const patternOptions = patterns
-    .map((p: TripPattern) => ({
+    .map((p: TripPattern, idx: number) => ({
       value: p.id,
-      label: p.name,
+      label: formatOdLabel(patternStopsQueries[idx]?.data, p.name),
       badge: p.code,
       subtitle: p.note || undefined,
       group: getOriginCity(p.name),
