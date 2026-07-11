@@ -164,19 +164,19 @@ export function SearchableSelect({
         }}
         data-testid={props['data-testid']}
         className={cn(
-          'w-full h-10 bg-white border rounded-xl px-3 flex items-center gap-2 text-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed',
+          'w-full h-9 bg-white border rounded-xl px-3 flex items-center gap-2 text-sm transition-all cursor-pointer',
           disabled && 'opacity-50 pointer-events-none',
           open
-            ? 'border-primary/60 ring-2 ring-primary/15 shadow-sm'
+            ? 'border-blue-400 ring-2 ring-blue-100 shadow-sm'
             : 'border-gray-200 hover:border-gray-300'
         )}
       >
-        {icon && <span className="flex-shrink-0 text-primary/70">{icon}</span>}
-        <span className={cn('flex-1 text-left truncate', selected ? 'text-foreground font-medium' : 'text-muted-foreground')}>
+        {icon && <span className="flex-shrink-0 text-blue-500">{icon}</span>}
+        <span className={cn('flex-1 text-left truncate text-xs', selected ? 'text-gray-800 font-medium' : 'text-gray-400')}>
           {selected ? selected.label : placeholder}
         </span>
         {selected && selected.badge && (
-          <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
+          <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
             {selected.badge}
           </span>
         )}
@@ -184,18 +184,18 @@ export function SearchableSelect({
           <button
             type="button"
             onClick={handleClear}
-            className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground flex-shrink-0"
+            className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 flex-shrink-0"
           >
             <X className="w-3 h-3" />
           </button>
         )}
-        <ChevronDown className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform flex-shrink-0', open && 'rotate-180')} />
+        <ChevronDown className={cn('w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0', open && 'rotate-180')} />
       </div>
 
       {open && dropdownRect && portalTarget && createPortal(
         <div
           ref={dropdownRef}
-          className="fixed z-[100] bg-background border border-border rounded-xl shadow-lg flex flex-col overflow-hidden"
+          className="fixed z-[100] bg-white border border-gray-200 rounded-xl shadow-lg flex flex-col overflow-hidden"
           style={{
             top: dropdownRect.top,
             bottom: dropdownRect.bottom,
@@ -204,21 +204,21 @@ export function SearchableSelect({
             maxHeight: '280px'
           }}
         >
-          <div className="p-2 border-b border-border flex-shrink-0">
+          <div className="p-2 border-b border-gray-100 flex-shrink-0">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 ref={inputRef}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full h-8 pl-8 pr-7 bg-muted/50 border border-input rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/50"
+                className="w-full h-8 pl-8 pr-7 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-400"
               />
               {search && (
                 <button
                   type="button"
                   onClick={() => setSearch('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -226,20 +226,20 @@ export function SearchableSelect({
             </div>
           </div>
 
-          <div className="overflow-y-auto flex-1">
+          <div className="overflow-y-auto flex-1 py-1">
             {filtered.length === 0 ? (
-              <div className="text-center py-6 text-xs text-muted-foreground">
+              <div className="px-3 py-4 text-center text-xs text-gray-400">
                 {emptyLabel ?? 'Tidak ada hasil'}
               </div>
             ) : (
               grouped.map(({ group, items }, gi) => (
                 <div key={gi}>
                   {group && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 sticky top-0 z-10 bg-muted/40 border-b border-border/50">
-                      {groupIcon !== null && (groupIcon ?? <MapPin className="w-3 h-3 text-primary/60 flex-shrink-0" />)}
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{group}</span>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 sticky top-0 bg-gray-50 border-b border-gray-100">
+                      {groupIcon !== null && (groupIcon ?? <MapPin className="w-3 h-3 text-blue-400 flex-shrink-0" />)}
+                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{group}</span>
                       {showGroupCount && (
-                        <span className="text-[10px] text-muted-foreground/70 ml-auto">{items.length}</span>
+                        <span className="text-[10px] text-gray-400 ml-auto">{items.length}</span>
                       )}
                     </div>
                   )}
@@ -251,24 +251,22 @@ export function SearchableSelect({
                         type="button"
                         onClick={() => handleSelect(opt.value)}
                         className={cn(
-                          'w-full px-3 py-2.5 flex items-center gap-2 text-left hover:bg-muted/60 transition-colors',
-                          isSelected && 'bg-primary/8'
+                          'w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors',
+                          isSelected ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-50'
                         )}
                       >
                         <div className="flex-1 min-w-0">
-                          <div className={cn('text-sm truncate', isSelected ? 'text-primary font-medium' : 'text-foreground')}>
-                            {opt.label}
-                          </div>
+                          <div className="truncate text-xs">{opt.label}</div>
                           {opt.subtitle && (
-                            <div className="text-xs text-muted-foreground truncate mt-0.5">{opt.subtitle}</div>
+                            <div className="text-[11px] text-gray-400 truncate mt-0.5">{opt.subtitle}</div>
                           )}
                         </div>
                         {opt.badge && (
-                          <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
+                          <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
                             {opt.badge}
                           </span>
                         )}
-                        {isSelected && <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />}
+                        {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />}
                       </button>
                     );
                   })}

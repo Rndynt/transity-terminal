@@ -9,7 +9,6 @@ import { useToast } from '@/hooks/use-toast';
 import { tripsApi, outletsApi, stopsApi } from '@/lib/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { fmtCurrency } from '@/lib/constants';
-import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { Outlet, CsoAvailableTrip, Stop } from '@/types';
 
 interface TripSelectorProps {
@@ -37,35 +36,137 @@ function OutletSearchSelect({ value, outlets, stops, placeholder, onChange, test
   onChange: (value: string) => void;
   testId: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch('');
+      }
+    };
+    if (open) {
+      document.addEventListener('mousedown', handler);
+      return () => document.removeEventListener('mousedown', handler);
+    }
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
   const stopMap = useMemo(() => {
     const map: Record<string, Stop> = {};
     for (const s of stops) map[s.id] = s;
     return map;
   }, [stops]);
 
-  const getCity = (outlet: Outlet): string => stopMap[outlet.stopId]?.city || 'Lainnya';
+  const getCity = (outlet: Outlet): string => {
+    return stopMap[outlet.stopId]?.city || 'Lainnya';
+  };
 
-  const options = useMemo(() => {
-    return outlets
-      .map(o => ({ value: o.id, label: o.name, badge: getCity(o), group: getCity(o) }))
-      .sort((a, b) => {
-        if (a.group === 'Lainnya') return 1;
-        if (b.group === 'Lainnya') return -1;
-        return a.group.localeCompare(b.group);
-      });
-  }, [outlets, stopMap]);
+  const selectedOutlet = outlets.find(o => o.id === value);
+
+  const filteredOutlets = useMemo(() => {
+    if (!search.trim()) return outlets;
+    const q = search.toLowerCase();
+    return outlets.filter(o =>
+      o.name.toLowerCase().includes(q) ||
+      getCity(o).toLowerCase().includes(q)
+    );
+  }, [outlets, search, stopMap]);
+
+  const groupedByCity = useMemo(() => {
+    const groups: Record<string, Outlet[]> = {};
+    for (const o of filteredOutlets) {
+      const city = getCity(o);
+      (groups[city] ??= []).push(o);
+    }
+    return Object.entries(groups).sort(([a], [b]) => {
+      if (a === 'Lainnya') return 1;
+      if (b === 'Lainnya') return -1;
+      return a.localeCompare(b);
+    });
+  }, [filteredOutlets, stopMap]);
 
   return (
-    <SearchableSelect
-      value={value}
-      options={options}
-      placeholder={placeholder}
-      searchPlaceholder="Cari outlet atau kota..."
-      emptyLabel="Tidak ada outlet ditemukan"
-      onChange={onChange}
-      icon={<Store className="w-3.5 h-3.5" />}
-      data-testid={testId}
-    />
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`w-full h-9 bg-white border rounded-xl px-3 flex items-center gap-2 text-sm transition-all ${
+          open ? 'border-blue-400 ring-2 ring-blue-100 shadow-sm' : 'border-gray-200 hover:border-gray-300'
+        }`}
+        data-testid={testId}
+      >
+        <Store className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+        <span className={`flex-1 text-left truncate text-xs ${selectedOutlet ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>
+          {selectedOutlet ? selectedOutlet.name : placeholder}
+        </span>
+        {selectedOutlet && (
+          <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
+            {getCity(selectedOutlet)}
+          </span>
+        )}
+        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg flex flex-col"
+          style={{ maxHeight: '280px' }}>
+          <div className="p-2 border-b border-gray-100 flex-shrink-0">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                ref={inputRef}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Cari outlet atau kota..."
+                className="w-full h-8 pl-8 pr-7 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-400"
+                data-testid="input-outlet-search"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="overflow-y-auto flex-1 py-1">
+            {groupedByCity.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">Tidak ada outlet ditemukan</div>
+            ) : (
+              groupedByCity.map(([city, cityOutlets]) => (
+                <div key={city}>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 sticky top-0 bg-gray-50 border-b border-gray-100">
+                    <MapPin className="w-3 h-3 text-blue-400 flex-shrink-0" />
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{city}</span>
+                    <span className="text-[10px] text-gray-400 ml-auto">{cityOutlets.length}</span>
+                  </div>
+                  {cityOutlets.map(outlet => (
+                    <button
+                      key={outlet.id}
+                      type="button"
+                      onClick={() => { onChange(outlet.id); setOpen(false); setSearch(''); }}
+                      className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors ${
+                        outlet.id === value
+                          ? 'bg-blue-50 text-blue-700 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                      data-testid={`option-${outlet.id}`}
+                    >
+                      <span className="flex-1 truncate text-xs">{outlet.name}</span>
+                      {outlet.id === value && <Check className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
