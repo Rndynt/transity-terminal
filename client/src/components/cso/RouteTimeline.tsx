@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { tripsApi, stopsApi } from '@/lib/api';
+import { tripsApi, stopsApi, tripPatternsApi } from '@/lib/api';
 import {
   Clock, ArrowDown, MapPin, ArrowRight, Check, ChevronRight, Loader2, AlertTriangle
 } from 'lucide-react';
@@ -101,9 +101,30 @@ export default function RouteTimeline({
     staleTime: 30_000,
   });
 
+  // Dipakai untuk guard rute pendek dalam-kota (lihat isSameCityBlocked di
+  // bawah) — pattern yang belum mengaktifkan allowIntraCityBooking tidak
+  // boleh menawarkan kombinasi naik+turun yang sama-sama di kota yang sama
+  // (mis. Pasteur -> Dipatiukur pada pola Jakarta-Bandung-Karangayu).
+  const { data: patterns = [] } = useQuery({
+    queryKey: ['/api/trip-patterns'],
+    queryFn: tripPatternsApi.getAll,
+  });
+  const currentPattern = patterns.find(p => p.id === trip.patternId);
+  const allowIntraCityBooking = currentPattern?.allowIntraCityBooking ?? false;
+
   const getStopException = (stopId: string) => stopExceptions.find(e => e.stopId === stopId);
 
   const getStopById = (stopId: string) => stops.find(s => s.id === stopId);
+
+  // true kalau memilih `stop` sebagai lawan dari `otherSelected` (naik
+  // atau turun, urutan pemilihan bebas) menghasilkan pasangan "sama kota"
+  // yang diblokir pattern ini.
+  const isSameCityBlocked = (stop: Stop, otherSelected?: Stop) => {
+    if (allowIntraCityBooking || !otherSelected) return false;
+    if (!stop.city || !otherSelected.city) return false;
+    return stop.city === otherSelected.city;
+  };
+
   const sortedStopTimes = [...stopTimes].sort((a, b) => a.stopSequence - b.stopSequence);
 
   useEffect(() => {
@@ -173,6 +194,11 @@ export default function RouteTimeline({
           const alightingClosed = stopEx?.disableAlighting === true;
           const canBoard = stopTime.effectiveBoardingAllowed !== false && !boardingClosed;
           const canAlight = stopTime.effectiveAlightingAllowed !== false && !alightingClosed;
+          // Stop ini tidak boleh jadi titik NAIK kalau kotanya sama dengan
+          // titik turun yang sudah dipilih (dan sebaliknya untuk turun) —
+          // guard rute pendek dalam-kota (lihat isSameCityBlocked).
+          const blockedByCityAsOrigin = !isDest && isSameCityBlocked(stop, selectedDestination);
+          const blockedByCityAsDest = !isOrigin && isSameCityBlocked(stop, selectedOrigin);
           const inRange = isInSelectedRange(index);
 
           const nextStopTime = sortedStopTimes[index + 1];
@@ -265,6 +291,13 @@ export default function RouteTimeline({
                       >
                         Naik
                       </span>
+                    ) : blockedByCityAsOrigin ? (
+                      <span
+                        title={`Rute dalam kota ${stop.city} tidak dijual untuk pola ini`}
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
+                      >
+                        Naik
+                      </span>
                     ) : (
                       <button
                         onClick={() => onOriginSelect(stop, stopTime.stopSequence)}
@@ -287,6 +320,13 @@ export default function RouteTimeline({
                     isOrigin && !isDest ? (
                       <span
                         title="Stop ini sudah dipilih sebagai titik naik"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
+                      >
+                        Turun
+                      </span>
+                    ) : blockedByCityAsDest ? (
+                      <span
+                        title={`Rute dalam kota ${stop.city} tidak dijual untuk pola ini`}
                         className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
                       >
                         Turun

@@ -186,6 +186,35 @@ export async function validateBoardingAlighting(
       }
     }
   }
+
+  // Guard rute pendek dalam-kota: pattern boarding/alightingAllowed hanya
+  // bisa melarang per-stop tunggal (mis. Jatiwaringin tidak bisa turun
+  // untuk SIAPAPUN), tapi tidak bisa melarang KOMBINASI tertentu saat
+  // kedua stop-nya sah secara individual — kasus nyata: pola long-haul
+  // Jakarta-Bandung-Karangayu, Pasteur (boarding OK, untuk penumpang dari
+  // Jakarta) dan Dipatiukur (alighting OK, untuk penumpang ke Karangayu)
+  // masing-masing valid, tapi "Pasteur -> Dipatiukur" adalah rute pendek
+  // dalam kota Bandung yang tidak masuk akal untuk shuttle antar-kota.
+  // Defaultnya (allowIntraCityBooking = false) kombinasi semacam ini
+  // ditolak; operator yang memang menjual rute pendek dalam kota (banyak
+  // stop di 1 kota) bisa mengaktifkannya per pattern.
+  if (trip?.patternId) {
+    const [originStopDetail, destinationStopDetail, pattern] = await Promise.all([
+      storage.getStopById(originStop.stopId),
+      storage.getStopById(destinationStop.stopId),
+      storage.getTripPatternById(trip.patternId),
+    ]);
+    const sameCity = !!originStopDetail?.city
+      && !!destinationStopDetail?.city
+      && originStopDetail.city === destinationStopDetail.city;
+    if (sameCity && !pattern?.allowIntraCityBooking) {
+      const error: Error & { code?: string } = new Error(
+        `Rute ${originStopDetail!.name} -> ${destinationStopDetail!.name} adalah perjalanan dalam kota yang sama (${originStopDetail!.city}) dan tidak dijual untuk pola rute ini.`,
+      );
+      error.code = 'intra-city-not-allowed';
+      throw error;
+    }
+  }
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];

@@ -29,6 +29,7 @@ interface TripPatternFormData {
   defaultLayoutId: string;
   active: boolean;
   tags: string;
+  allowIntraCityBooking: boolean;
 }
 
 interface StopSequenceItem {
@@ -61,7 +62,8 @@ export default function TripPatternsManager() {
     vehicleClass: '',
     defaultLayoutId: '',
     active: true,
-    tags: ''
+    tags: '',
+    allowIntraCityBooking: false
   });
   const [filterCity, setFilterCity] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -142,7 +144,7 @@ export default function TripPatternsManager() {
   });
 
   const resetForm = () => {
-    setFormData({ code: '', name: '', note: '', vehicleClass: '', defaultLayoutId: '', active: true, tags: '' });
+    setFormData({ code: '', name: '', note: '', vehicleClass: '', defaultLayoutId: '', active: true, tags: '', allowIntraCityBooking: false });
   };
 
   const handleCreate = () => {
@@ -160,7 +162,8 @@ export default function TripPatternsManager() {
       vehicleClass: pattern.vehicleClass || '',
       defaultLayoutId: pattern.defaultLayoutId || '',
       active: pattern.active !== false,
-      tags: pattern.tags ? pattern.tags.join(', ') : ''
+      tags: pattern.tags ? pattern.tags.join(', ') : '',
+      allowIntraCityBooking: pattern.allowIntraCityBooking === true
     });
     setIsDialogOpen(true);
   };
@@ -494,6 +497,23 @@ export default function TripPatternsManager() {
             checked={formData.active}
             onCheckedChange={(checked) => setFormData(prev => ({ ...prev, active: checked }))}
             data-testid="switch-active"
+          />
+        </div>
+
+        <div className="flex items-center justify-between rounded-xl border px-4 py-3 bg-muted/30">
+          <div>
+            <p className="text-sm font-medium">Izinkan Rute Pendek Dalam Kota</p>
+            <p className="text-xs text-muted-foreground">
+              Default nonaktif: naik dan turun yang sama-sama di kota yang sama (mis. Pasteur → Dipatiukur
+              pada pola Jakarta-Bandung-Karangayu) tidak ditawarkan/tidak bisa dipesan. Aktifkan hanya untuk
+              pola yang memang shuttle dalam-kota dengan banyak titik.
+            </p>
+          </div>
+          <Switch
+            id="allowIntraCityBooking"
+            checked={formData.allowIntraCityBooking}
+            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, allowIntraCityBooking: checked }))}
+            data-testid="switch-allow-intra-city-booking"
           />
         </div>
       </MasterFormDialog>

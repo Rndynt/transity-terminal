@@ -15,6 +15,16 @@ export const tripPatterns = pgTable("trip_patterns", {
   vehicleClass:    text("vehicle_class"),
   defaultLayoutId: uuid("default_layout_id").references(() => layouts.id),
   tags:            text("tags").array().default(sql`'{}'`),
+  // Default false: kombinasi naik+turun yang SAMA-SAMA berada di kota
+  // (stops.city) yang sama diblokir dari penawaran/booking, kecuali
+  // pattern ini memang operator dalam-kota (banyak stop di 1 kota) yang
+  // sengaja mengaktifkan ini. Lihat validateBoardingAlighting() di
+  // booking.helpers.ts untuk penegakan sisi server, dan RouteTimeline.tsx
+  // untuk penyaringan sisi UI. Tanpa ini, pola multi-kota long-haul
+  // (mis. Jakarta-Bandung-Karangayu untuk mudik) bisa disalahgunakan jadi
+  // rute pendek dalam-kota (mis. Pasteur -> Dipatiukur) yang tidak masuk
+  // akal untuk layanan shuttle antar-kota.
+  allowIntraCityBooking: boolean("allow_intra_city_booking").notNull().default(false),
   createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow(),
   deletedAt:       timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
