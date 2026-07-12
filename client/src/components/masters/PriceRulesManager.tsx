@@ -299,8 +299,8 @@ function PatternPriceEditor({
         <>
           {!allowIntraCityBooking && (
             <p className="text-[11px] text-muted-foreground -mt-1">
-              Sel bertanda "dalam kota" dimatikan karena pola ini belum mengizinkan rute pendek dalam kota
-              (lihat toggle di Pola Perjalanan).
+              Halte yang tidak punya pasangan lintas-kota disembunyikan dari tabel ini karena pola belum
+              mengizinkan rute pendek dalam kota (lihat toggle di Pola Perjalanan).
             </p>
           )}
           <PriceGrid

@@ -24,11 +24,15 @@ interface PriceGridProps<T = number> {
   renderCell?: (value: T, onChange: (next: T) => void, ctx: { originStopId: string; destinationStopId: string }) => React.ReactNode;
   disabled?: boolean;
   emptyLabel?: string;
-  /** When true, cells where origin.city === destination.city are rendered
-   * as non-editable/greyed instead of a normal input — those OD pairs can
-   * never actually be booked (see trip_patterns.allow_intra_city_booking),
-   * so offering an editable price for them is just confusing clutter.
-   * Pass `false` (or omit) for patterns that DO sell intra-city hops. */
+  /** When true (pattern has NOT enabled allow_intra_city_booking):
+   * - a stop is dropped from the ROW axis entirely if EVERY later stop is
+   *   the same city as it (there is then no different-city destination it
+   *   could ever reach — the whole row would be dead cells).
+   * - a stop is dropped from the COLUMN axis entirely if EVERY earlier
+   *   stop is the same city as it (nothing could ever validly arrive there).
+   * Any same-city pair that still survives both filters (e.g. two stops in
+   * the same middle city-cluster of a 3+-cluster pattern) is rendered as a
+   * small non-editable "dalam kota" cell rather than a numeric input. */
   disableSameCityCells?: boolean;
 }
 
@@ -45,6 +49,18 @@ function defaultNumericCell(value: number, onChange: (v: number) => void, disabl
       data-testid="input-matrix-cell"
     />
   );
+}
+
+/** A stop can never be a useful ORIGIN if every stop after it shares its
+ * city — there is no different-city destination left for it to reach. */
+function hasLaterDifferentCity(stop: MatrixGridRow, sorted: MatrixGridRow[]): boolean {
+  return sorted.some(other => other.sequence > stop.sequence && other.city && stop.city && other.city !== stop.city);
+}
+
+/** A stop can never be a useful DESTINATION if every stop before it shares
+ * its city — nothing could validly have come from elsewhere to reach it. */
+function hasEarlierDifferentCity(stop: MatrixGridRow, sorted: MatrixGridRow[]): boolean {
+  return sorted.some(other => other.sequence < stop.sequence && other.city && stop.city && other.city !== stop.city);
 }
 
 /**
@@ -67,9 +83,32 @@ export function PriceGrid<T = number>({
     return <div className="text-xs text-muted-foreground p-4 text-center border rounded-lg bg-muted/20">{emptyLabel}</div>;
   }
 
+  const sorted = [...rows].sort((a, b) => a.sequence - b.sequence);
   const cellMap = new Map(cells.map(c => [`${c.originStopId}|${c.destinationStopId}`, c.value]));
-  const originRows = rows.slice(0, -1);
-  const destCols = rows.slice(1);
+
+  // Full candidate axes (unfiltered): every stop but the last can be an
+  // origin row, every stop but the first can be a destination column.
+  let originRows = sorted.slice(0, -1);
+  let destCols = sorted.slice(1);
+
+  if (disableSameCityCells) {
+    // Drop rows/columns that would be 100% dead weight: every cell in
+    // them would be either same-city (blocked) or backward/self (never
+    // rendered anyway). Keeping them just clutters the grid with empty
+    // boxes for combinations that can never be booked or even exist in
+    // the forward direction.
+    originRows = originRows.filter(r => hasLaterDifferentCity(r, sorted));
+    destCols = destCols.filter(r => hasEarlierDifferentCity(r, sorted));
+  }
+
+  if (originRows.length === 0 || destCols.length === 0) {
+    return (
+      <div className="text-xs text-muted-foreground p-4 text-center border rounded-lg bg-muted/20">
+        Semua halte di pola ini berada di kota yang sama, jadi tidak ada pasangan asal-tujuan lintas kota untuk diberi
+        harga selama "Izinkan Rute Pendek Dalam Kota" belum diaktifkan.
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-x-auto border rounded-lg">
@@ -102,11 +141,17 @@ export function PriceGrid<T = number>({
                   && originRow.city === destRow.city;
 
                 if (sameCity) {
+                  // Only reachable here for a middle city-cluster on a
+                  // 3+-cluster pattern (e.g. two stops in the same
+                  // mid-route city) — both survived the row/column filter
+                  // above because each individually has SOME valid
+                  // cross-city cell elsewhere, but this specific pair
+                  // between them is still same-city and stays blocked.
                   return (
                     <td key={destRow.stopId} className="p-1 border-b bg-muted/40">
                       <div
                         className="h-8 flex items-center justify-center text-muted-foreground/60 text-[11px] rounded border border-dashed"
-                        title={`${originRow.stopName} dan ${destRow.stopName} sama-sama di kota ${originRow.city} — rute pendek dalam kota nonaktif untuk pola ini (lihat toggle "Izinkan Rute Pendek Dalam Kota" di Pola Perjalanan)`}
+                        title={`${originRow.stopName} dan ${destRow.stopName} sama-sama di kota ${originRow.city} — rute pendek dalam kota nonaktif untuk pola ini`}
                         data-testid="cell-intra-city-disabled"
                       >
                         dalam kota
