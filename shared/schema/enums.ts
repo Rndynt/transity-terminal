@@ -6,9 +6,8 @@ export const channelEnum = pgEnum('channel', ['CSO', 'WEB', 'APP', 'OTA']);
 export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'qr', 'ewallet', 'bank', 'online']);
 export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'success', 'failed']);
 export const printStatusEnum = pgEnum('print_status', ['queued', 'sent', 'failed']);
-export const priceRuleScopeEnum = pgEnum('price_rule_scope', ['pattern', 'trip', 'leg', 'time']);
-export const passengerMatrixScopeEnum = pgEnum('passenger_matrix_scope', ['global', 'pattern']);
-export const passengerMatrixKindEnum = pgEnum('passenger_matrix_kind', ['regular', 'seasonal']);
+export const priceRuleScopeEnum = pgEnum('price_rule_scope', ['global', 'pattern']);
+export const priceRuleKindEnum = pgEnum('price_rule_kind', ['regular', 'seasonal']);
 export const ticketStatusEnum = pgEnum('ticket_status', ['active', 'cancelled', 'refunded', 'checked_in', 'no_show', 'unseated']);
 export const promoTypeEnum = pgEnum('promo_type', ['percentage', 'fixed']);
 /**

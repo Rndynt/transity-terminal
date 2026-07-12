@@ -1,12 +1,12 @@
 import type {
   Stop, Outlet, Vehicle, Layout, TripPattern,
   PatternStop, TripBase, Trip, TripWithDetails, TripStopTime, TripLeg,
-  SeatInventory, PriceRule, Booking, Passenger,
+  SeatInventory, Booking, Passenger,
   Payment, PrintJob, CargoShipment, CargoShipmentListItem, CargoType, CargoRate,
   Driver, InsertDriver,
   InsertStop, InsertOutlet, InsertVehicle, InsertLayout,
   InsertTripPattern, InsertPatternStop, InsertTripBase, InsertTrip,
-  InsertTripStopTime, InsertPriceRule, InsertBooking,
+  InsertTripStopTime, InsertBooking,
   InsertPassenger, InsertPayment, InsertPrintJob, InsertCargoShipment,
   InsertCargoType, InsertCargoRate,
   InsertTripLeg, InsertSeatInventory,
@@ -234,12 +234,6 @@ export interface IStorage {
   createSeatInventory(data: InsertSeatInventory[]): Promise<SeatInventory[]>;
   updateSeatInventory(tripId: string, seatNo: string, legIndexes: number[], updates: Partial<InsertSeatInventory>): Promise<void>;
   deleteSeatInventory(tripId: string): Promise<void>;
-
-  getPriceRules(): Promise<PriceRule[]>;
-  getPriceRulesForTrip(tripId: string, patternId: string): Promise<PriceRule[]>;
-  createPriceRule(data: InsertPriceRule): Promise<PriceRule>;
-  updatePriceRule(id: string, data: Partial<InsertPriceRule>): Promise<PriceRule>;
-  deletePriceRule(id: string): Promise<void>;
 
   getBookings(tripId?: string): Promise<Booking[]>;
   getActiveBookingsForTrip(tripId: string): Promise<Booking[]>;

@@ -1,8 +1,7 @@
-import { and, eq, isNull, or, desc, inArray, type SQL } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { db } from "@server/db";
-import { priceRules } from "@shared/schema/inventory";
 import { tripStopTimes } from "@shared/schema/scheduling";
-import { resolvePassengerCell, matrixSystemHasAnyData } from "@modules/pricing/priceMatrix.resolver";
+import { resolvePassengerCell } from "@modules/priceRules/priceRules.resolver";
 import type { IStorage } from "@server/storage.interface";
 import type {
   Trip,
@@ -63,66 +62,27 @@ export function isTripDeparturePastGrace(
   return departUtc.getTime() < now.getTime() - graceMinutes * 60_000;
 }
 
-function extractFareFromRule(rule: unknown): number {
-  if (!rule || typeof rule !== "object") return 0;
-  const r = rule as Record<string, unknown>;
-  const raw =
-    r["basePricePerLeg"] ??
-    r["basePrice"] ??
-    r["price"] ??
-    r["amount"] ??
-    r["fare"];
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return 0;
-  const mult = Number(r["multiplier"]);
-  return Math.round(n * (Number.isFinite(mult) && mult > 0 ? mult : 1));
-}
-
-async function legacyFarePerPerson(trip: Trip, patternId?: string): Promise<number> {
-  if (!patternId) return 0;
-  try {
-    const conds: SQL[] = [eq(priceRules.tripId, trip.id), eq(priceRules.patternId, patternId)];
-    const orCond = or(...conds);
-    const rows = await db
-      .select({ scope: priceRules.scope, priority: priceRules.priority, rule: priceRules.rule, tripId: priceRules.tripId })
-      .from(priceRules)
-      .where(and(orCond, isNull(priceRules.deletedAt)))
-      .orderBy(desc(priceRules.priority));
-    const tripScoped = rows.find((r) => r.tripId === trip.id);
-    const chosen = tripScoped ?? rows[0];
-    return chosen ? extractFareFromRule(chosen.rule) : 0;
-  } catch {
-    return 0;
-  }
-}
-
 /**
  * "Per person, primary OD" fare for a whole-trip webhook snapshot (no
  * specific booking OD is known here — Console just wants a representative
  * headline fare). Primary OD = the trip's own first stop -> last stop
- * (full journey extent). Sourced from the shared OD-matrix resolver, with
- * the legacy price_rules flat/per_leg reader kept ONLY as a pre-migration
- * fallback (§5) when this pattern has no matrix data configured yet.
+ * (full journey extent). Sourced solely from the shared OD-matrix
+ * resolver; 0 means "harga belum diset" for this trip's full journey.
  */
 async function resolveFarePerPerson(trip: Trip, stopTimes?: Array<{ stopId: string; stopSequence: number }>): Promise<number> {
   try {
-    if (trip.patternId && stopTimes && stopTimes.length >= 2) {
-      const sorted = [...stopTimes].sort((a, b) => a.stopSequence - b.stopSequence);
-      const first = sorted[0];
-      const last = sorted[sorted.length - 1];
-      const resolved = await resolvePassengerCell({
-        patternId: trip.patternId,
-        tripId: trip.id,
-        originStopId: first.stopId,
-        destinationStopId: last.stopId,
-        serviceDate: dateStr(trip.serviceDate),
-      });
-      if (resolved.price > 0) return resolved.price;
-
-      const hasMatrixData = await matrixSystemHasAnyData(trip.patternId);
-      if (hasMatrixData) return 0; // genuinely not priced yet — don't mask with legacy guess
-    }
-    return await legacyFarePerPerson(trip, trip.patternId ?? undefined);
+    if (!trip.patternId || !stopTimes || stopTimes.length < 2) return 0;
+    const sorted = [...stopTimes].sort((a, b) => a.stopSequence - b.stopSequence);
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    const resolved = await resolvePassengerCell({
+      patternId: trip.patternId,
+      tripId: trip.id,
+      originStopId: first.stopId,
+      destinationStopId: last.stopId,
+      serviceDate: dateStr(trip.serviceDate),
+    });
+    return resolved.price;
   } catch {
     return 0;
   }
@@ -134,9 +94,6 @@ export async function resolveFaresForTrips(
   const out = new Map<string, number>();
   if (trips.length === 0) return out;
   const tripIds = trips.map((t) => t.id);
-  const patternIds = Array.from(
-    new Set(trips.map((t) => t.patternId).filter((x): x is string => !!x))
-  );
 
   // First/last stopId per trip, for the OD-matrix "primary OD" lookup.
   const firstLastByTrip = new Map<string, { first: string; last: string }>();
@@ -158,34 +115,8 @@ export async function resolveFaresForTrips(
       }
     }
   } catch {
-    // best-effort — falls through to legacy path per trip below
+    // best-effort — trips without resolvable stop times just get fare 0 below
   }
-
-  // Legacy price_rules maps, kept only as pre-migration fallback (§5).
-  const byTripLegacy = new Map<string, number>();
-  const byPatternLegacy = new Map<string, number>();
-  try {
-    const conds: SQL[] = [];
-    if (tripIds.length) conds.push(inArray(priceRules.tripId, tripIds));
-    if (patternIds.length) conds.push(inArray(priceRules.patternId, patternIds));
-    if (conds.length > 0) {
-      const orCond = conds.length === 1 ? conds[0] : or(...conds);
-      const rows = await db
-        .select({ priority: priceRules.priority, rule: priceRules.rule, tripId: priceRules.tripId, patternId: priceRules.patternId })
-        .from(priceRules)
-        .where(and(orCond, isNull(priceRules.deletedAt)))
-        .orderBy(desc(priceRules.priority));
-      for (const r of rows) {
-        const v = extractFareFromRule(r.rule);
-        if (r.tripId && !byTripLegacy.has(r.tripId)) byTripLegacy.set(r.tripId, v);
-        else if (r.patternId && !byPatternLegacy.has(r.patternId)) byPatternLegacy.set(r.patternId, v);
-      }
-    }
-  } catch {
-    // best-effort
-  }
-
-  const matrixDataCache = new Map<string, boolean>();
 
   for (const t of trips) {
     let fare = 0;
@@ -199,23 +130,10 @@ export async function resolveFaresForTrips(
           destinationStopId: fl.last,
           serviceDate: dateStr(t.serviceDate),
         });
-        if (resolved.price > 0) {
-          fare = resolved.price;
-        } else {
-          let hasMatrixData = matrixDataCache.get(t.patternId);
-          if (hasMatrixData === undefined) {
-            hasMatrixData = await matrixSystemHasAnyData(t.patternId);
-            matrixDataCache.set(t.patternId, hasMatrixData);
-          }
-          if (!hasMatrixData) {
-            fare = byTripLegacy.get(t.id) ?? (t.patternId ? byPatternLegacy.get(t.patternId) : undefined) ?? 0;
-          }
-        }
+        fare = resolved.price;
       } catch {
-        fare = byTripLegacy.get(t.id) ?? (t.patternId ? byPatternLegacy.get(t.patternId) : undefined) ?? 0;
+        fare = 0;
       }
-    } else {
-      fare = byTripLegacy.get(t.id) ?? (t.patternId ? byPatternLegacy.get(t.patternId) : undefined) ?? 0;
     }
     out.set(t.id, fare);
   }

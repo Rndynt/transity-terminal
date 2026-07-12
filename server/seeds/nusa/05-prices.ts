@@ -1,4 +1,6 @@
+import { db } from "@server/db";
 import { storage } from "@server/storage";
+import { priceRules } from "@shared/schema/pricing";
 import type { SeedContext } from "./context";
 
 export async function seedPrices(ctx: SeedContext) {
@@ -7,26 +9,37 @@ export async function seedPrices(ctx: SeedContext) {
   const p = ctx.patterns;
 
   const priceRuleDefs = [
-    { patternId: p.pJktBdg01.id, price: 95000, currency: "IDR" },
-    { patternId: p.pBdgJkt01.id, price: 95000, currency: "IDR" },
-    { patternId: p.pJktBdg02.id, price: 80000, currency: "IDR" },
-    { patternId: p.pBdgJkt02.id, price: 80000, currency: "IDR" },
-    { patternId: p.pJktSmg01.id, price: 160000, currency: "IDR" },
-    { patternId: p.pSmgJkt01.id, price: 160000, currency: "IDR" },
-    { patternId: p.pSmgYgy01.id, price: 80000, currency: "IDR" },
-    { patternId: p.pYgySmg01.id, price: 80000, currency: "IDR" },
+    { patternId: p.pJktBdg01.id, price: 95000 },
+    { patternId: p.pBdgJkt01.id, price: 95000 },
+    { patternId: p.pJktBdg02.id, price: 80000 },
+    { patternId: p.pBdgJkt02.id, price: 80000 },
+    { patternId: p.pJktSmg01.id, price: 160000 },
+    { patternId: p.pSmgJkt01.id, price: 160000 },
+    { patternId: p.pSmgYgy01.id, price: 80000 },
+    { patternId: p.pYgySmg01.id, price: 80000 },
   ];
 
+  // OD-matrix pricing: each seed pattern here is a simple 2-endpoint route
+  // (origin = first stop, destination = last stop by sequence), so one
+  // matrix cell covering the full journey is the equivalent of the old
+  // flat/per_leg "one price for the whole pattern" rule.
   for (const pr of priceRuleDefs) {
-    await storage.createPriceRule({
-      scope: "pattern", patternId: pr.patternId,
-      tripId: null, legIndex: null,
-      rule: { basePricePerLeg: pr.price, currency: pr.currency, multiplier: 1.0, pricingMode: "flat" },
-      validFrom: null, validTo: null, priority: 1,
+    const patternStops = await storage.getPatternStops(pr.patternId);
+    if (patternStops.length < 2) continue;
+    const sorted = [...patternStops].sort((a, b) => a.stopSequence - b.stopSequence);
+    const originStopId = sorted[0].stopId;
+    const destinationStopId = sorted[sorted.length - 1].stopId;
+
+    await db.insert(priceRules).values({
+      scope: "pattern",
+      patternId: pr.patternId,
+      kind: "regular",
+      matrix: { version: 1, cells: { [`${originStopId}|${destinationStopId}`]: { price: pr.price } } },
+      isActive: true,
     });
   }
 
   console.log("  ✓ 8 price rules");
-  console.log("    JKT↔BDG-01 Rp 95.000 flat (Premio) | JKT↔BDG-02 Rp 80.000 flat (Commuter)");
-  console.log("    JKT↔SMG    Rp 160.000 flat          | SMG↔YGY    Rp 80.000 flat");
+  console.log("    JKT↔BDG-01 Rp 95.000 (Premio) | JKT↔BDG-02 Rp 80.000 (Commuter)");
+  console.log("    JKT↔SMG    Rp 160.000         | SMG↔YGY    Rp 80.000");
 }

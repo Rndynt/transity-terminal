@@ -1,690 +1,452 @@
-import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { useState, useMemo } from 'react';
+import { useQuery, useQueries, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import MasterFormDialog from './MasterFormDialog';
 import { Badge } from '@/components/ui/badge';
-import { DataTable } from '@/components/shared/DataTable';
-import { DatePicker } from '@/components/ui/date-picker';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { RowActionsMenu } from './RowActionsMenu';
+import { DatePicker } from '@/components/ui/date-picker';
 import { useToast } from '@/hooks/use-toast';
-import { priceRulesApi, tripPatternsApi, tripsApi } from '@/lib/api';
+import { priceRulesApi, tripPatternsApi, tripsApi, stopsApi, outletsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, DollarSign, Tag, ArrowUpDown, X, Filter } from 'lucide-react';
-import DeleteConfirmDialog from './DeleteConfirmDialog';
-import MasterPageHeader from './MasterPageHeader';
-import type { PriceRule, TripPattern, Trip, TripWithDetails } from '@/types';
+import { AlertTriangle, RefreshCw, Plus, Trash2, DollarSign } from 'lucide-react';
+import { PriceGrid, type MatrixGridRow } from './PriceGrid';
+import { format } from 'date-fns';
+import type { TripPattern, TripWithDetails, Stop, Outlet, PatternStop } from '@/types';
 
-type PriceRuleConfig = {
-  pricingMode?: 'per_leg' | 'flat';
-  basePricePerLeg?: number;
-  multiplier?: number;
-};
-const ruleCfg = (r: PriceRule): PriceRuleConfig => (r.rule ?? {}) as PriceRuleConfig;
+export default function PriceRulesManager() {
+  const [patternId, setPatternId] = useState<string>('');
+  const [kind, setKind] = useState<'regular' | 'seasonal'>('regular');
+  const [selectedSeasonalId, setSelectedSeasonalId] = useState<string>('');
 
-interface PriceRuleFormData {
-  scope: 'pattern' | 'trip' | 'leg' | 'time';
-  patternId: string;
-  tripId: string;
-  legIndex: string;
-  pricingMode: 'per_leg' | 'flat';
-  basePricePerLeg: string;
-  currency: string;
-  multiplier: string;
-  validFrom: Date | undefined;
-  validTo: Date | undefined;
-  priority: string;
-}
+  const { data: patterns = [] } = useQuery({ queryKey: ['/api/trip-patterns'], queryFn: tripPatternsApi.getAll });
+  const { data: outlets = [] } = useQuery({ queryKey: ['/api/outlets'], queryFn: outletsApi.getAll });
 
-function SectionDivider({ label }: { label: string }) {
+  // Nama pola konsisten berformat "KotaAsal → KotaTujuan · via ..." atau
+  // "KotaAsal - KotaTujuan - ...". Ambil token pertama sebagai kota asal
+  // untuk mengelompokkan dropdown supaya tidak jadi daftar panjang datar
+  // yang susah dibaca saat pola-nya banyak (mis. beberapa varian rute
+  // Bandung<->Jakarta dengan "via" yang berbeda-beda).
+  const getOriginCity = (name: string): string => {
+    const firstSegment = name.split(/→|->|-|–|·/)[0]?.trim();
+    return firstSegment || 'Lainnya';
+  };
+
+  // Judul dropdown butuh outlet asal & tujuan (bukan nama pola yang panjang
+  // dan penuh "via ..."), jadi ambil stop pertama & terakhir tiap pola lewat
+  // pattern-stops, lalu mapping ke outlet by stopId untuk nama+kode outlet.
+  const patternStopsQueries = useQueries({
+    queries: patterns.map((p: TripPattern) => ({
+      queryKey: ['/api/trip-patterns', p.id, 'stops'],
+      queryFn: () => tripPatternsApi.getStops(p.id),
+    })),
+  });
+
+  const outletByStopId = useMemo(() => {
+    const map = new Map<string, Outlet>();
+    outlets.forEach((o: Outlet) => map.set(o.stopId, o));
+    return map;
+  }, [outlets]);
+
+  const formatOdLabel = (
+    stops: Array<PatternStop & { stop: Stop | null }> | undefined,
+    fallbackName: string,
+  ): string => {
+    if (!stops || stops.length < 2) return fallbackName;
+    const origin = stops[0].stop;
+    const destination = stops[stops.length - 1].stop;
+    if (!origin || !destination) return fallbackName;
+    const originOutlet = outletByStopId.get(origin.id);
+    const destinationOutlet = outletByStopId.get(destination.id);
+    const originLabel = `${originOutlet?.name ?? origin.name} (${origin.code})`;
+    const destinationLabel = `${destinationOutlet?.name ?? destination.name} (${destination.code})`;
+    return `${originLabel} - ${destinationLabel}`;
+  };
+
+  const patternOptions = patterns
+    .map((p: TripPattern, idx: number) => ({
+      value: p.id,
+      label: formatOdLabel(patternStopsQueries[idx]?.data, p.name),
+      badge: p.code,
+      subtitle: p.note || undefined,
+      group: getOriginCity(p.name),
+    }))
+    .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
+
   return (
-    <div className="flex items-center gap-2 pt-1">
-      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
-      <div className="flex-1 h-px bg-border" />
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <DollarSign className="w-5 h-5 text-primary" />
+        <div>
+          <h2 className="text-base font-semibold">Harga Penumpang (OD)</h2>
+          <p className="text-xs text-muted-foreground">Atur harga per pasangan asal-tujuan untuk pola dengan 3+ kota</p>
+        </div>
+      </div>
+
+      <Tabs defaultValue="pattern">
+        <TabsList>
+          <TabsTrigger value="pattern" data-testid="tab-price-pattern">Per Pola</TabsTrigger>
+          <TabsTrigger value="global" data-testid="tab-price-global">Fallback Global</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="pattern" className="space-y-4 pt-3">
+          <div className="max-w-md">
+            <Label className="text-xs mb-1 block">Pola Perjalanan</Label>
+            <SearchableSelect
+              value={patternId}
+              options={patternOptions}
+              placeholder="Pilih pola perjalanan..."
+              onChange={(v) => { setPatternId(v); setKind('regular'); setSelectedSeasonalId(''); }}
+              data-testid="select-matrix-pattern"
+            />
+          </div>
+
+          {patternId && (
+            <PatternPriceEditor
+              patternId={patternId}
+              kind={kind}
+              setKind={setKind}
+              selectedSeasonalId={selectedSeasonalId}
+              setSelectedSeasonalId={setSelectedSeasonalId}
+            />
+          )}
+
+          {patternId && <TripExceptionEditor patternId={patternId} />}
+        </TabsContent>
+
+        <TabsContent value="global" className="space-y-4 pt-3">
+          <GlobalPriceEditor />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
 
-const SCOPE_LABELS: Record<string, string> = {
-  pattern: 'Pola',
-  trip: 'Trip',
-  leg: 'Segmen',
-  time: 'Waktu'
-};
-
-const SCOPE_VARIANTS: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
-  pattern: 'secondary',
-  trip: 'default',
-  leg: 'outline',
-  time: 'destructive',
-};
-
-const formatRupiah = (value: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
-
-const PRICING_MODE_LABELS: Record<string, string> = {
-  per_leg: 'Legs',
-  flat: 'Flat',
-};
-
-const DEFAULT_FORM: PriceRuleFormData = {
-  scope: 'pattern',
-  patternId: '',
-  tripId: '',
-  legIndex: '',
-  pricingMode: 'per_leg',
-  basePricePerLeg: '',
-  currency: 'IDR',
-  multiplier: '1',
-  validFrom: undefined,
-  validTo: undefined,
-  priority: '1',
-};
-
-export default function PriceRulesManager() {
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingRule, setEditingRule] = useState<PriceRule | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [formData, setFormData] = useState<PriceRuleFormData>(DEFAULT_FORM);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterScope, setFilterScope] = useState('');
-  const [filterMode, setFilterMode] = useState('');
-  const [filterPatternId, setFilterPatternId] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
+function PatternPriceEditor({
+  patternId, kind, setKind, selectedSeasonalId, setSelectedSeasonalId,
+}: {
+  patternId: string;
+  kind: 'regular' | 'seasonal';
+  setKind: (k: 'regular' | 'seasonal') => void;
+  selectedSeasonalId: string;
+  setSelectedSeasonalId: (id: string) => void;
+}) {
   const { toast } = useToast();
+  const [localCells, setLocalCells] = useState<Map<string, number> | null>(null);
+  const [showSeasonalForm, setShowSeasonalForm] = useState(false);
+  const [seasonalName, setSeasonalName] = useState('');
+  const [seasonalFrom, setSeasonalFrom] = useState<Date>();
+  const [seasonalTo, setSeasonalTo] = useState<Date>();
 
-  const { data: priceRules = [], isLoading } = useQuery({
-    queryKey: ['/api/price-rules'],
-    queryFn: priceRulesApi.getAll
+  const gridQuery = useQuery({
+    queryKey: ['/api/pricing/matrix/pattern', patternId, kind, selectedSeasonalId],
+    queryFn: () => priceRulesApi.getPatternGrid(patternId, kind, selectedSeasonalId || undefined),
   });
 
-  const { data: patterns = [] } = useQuery({
-    queryKey: ['/api/trip-patterns'],
-    queryFn: tripPatternsApi.getAll
+  const syncStatusQuery = useQuery({
+    queryKey: ['/api/pricing/matrix/pattern', patternId, 'sync-status'],
+    queryFn: () => priceRulesApi.getSyncStatus(patternId),
+    enabled: kind === 'regular',
   });
 
-  const { data: trips = [] } = useQuery({
-    queryKey: ['/api/trips'],
-    queryFn: () => tripsApi.getAll()
+  const seasonalListQuery = useQuery({
+    queryKey: ['/api/pricing/matrix/pattern', patternId, 'seasonal-list'],
+    queryFn: () => priceRulesApi.listSeasonalTemplates(patternId),
   });
 
-  const patternOptions = patterns.map(p => ({
-    value: p.id,
-    label: p.name,
-    badge: p.code,
-    subtitle: p.note || undefined,
+  const rows: MatrixGridRow[] = gridQuery.data?.rows ?? [];
+  const serverCells: Array<{ originStopId: string; destinationStopId: string; price: number }> = gridQuery.data?.cells ?? [];
+  const cellMap = localCells ?? new Map(serverCells.map(c => [`${c.originStopId}|${c.destinationStopId}`, c.price]));
+
+  const handleChange = (originStopId: string, destinationStopId: string, value: number) => {
+    const next = new Map(cellMap);
+    next.set(`${originStopId}|${destinationStopId}`, value);
+    setLocalCells(next);
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: () => priceRulesApi.savePriceRule({
+      scope: 'pattern',
+      patternId,
+      kind,
+      matrixId: gridQuery.data?.matrixId || undefined,
+      cells: [...cellMap.entries()].map(([key, price]) => {
+        const [originStopId, destinationStopId] = key.split('|');
+        return { originStopId, destinationStopId, price };
+      }),
+      expectedUpdatedAt: gridQuery.data?.updatedAt ?? null,
+    }),
+    onSuccess: () => {
+      toast({ title: 'Harga disimpan' });
+      setLocalCells(null);
+      queryClient.invalidateQueries({ queryKey: ['/api/pricing/matrix/pattern', patternId] });
+    },
+    onError: (error: any) => {
+      if (error?.responseData?.code === 'STALE_MATRIX' || error?.message?.includes('409')) {
+        toast({ title: 'Data sudah berubah', description: 'Muat ulang halaman lalu coba simpan lagi.', variant: 'destructive' });
+        queryClient.invalidateQueries({ queryKey: ['/api/pricing/matrix/pattern', patternId] });
+      } else {
+        toast({ title: 'Gagal menyimpan', description: error.message, variant: 'destructive' });
+      }
+    },
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: () => priceRulesApi.sync(patternId),
+    onSuccess: () => {
+      toast({ title: 'Berhasil sinkron', description: 'Pasangan OD yang belum diisi ditambahkan dengan harga 0.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/pricing/matrix/pattern', patternId] });
+    },
+    onError: (error: any) => toast({ title: 'Gagal sync', description: error.message, variant: 'destructive' }),
+  });
+
+  const createSeasonalMutation = useMutation({
+    mutationFn: () => priceRulesApi.createSeasonalTemplate(patternId, {
+      name: seasonalName,
+      validFrom: seasonalFrom?.toISOString(),
+      validTo: seasonalTo?.toISOString(),
+      duplicateFromRegular: true,
+    }),
+    onSuccess: (created) => {
+      toast({ title: 'Template musiman dibuat' });
+      setShowSeasonalForm(false);
+      setSeasonalName(''); setSeasonalFrom(undefined); setSeasonalTo(undefined);
+      queryClient.invalidateQueries({ queryKey: ['/api/pricing/matrix/pattern', patternId, 'seasonal-list'] });
+      setKind('seasonal');
+      setSelectedSeasonalId(created.id);
+    },
+    onError: (error: any) => toast({ title: 'Gagal membuat template', description: error.message, variant: 'destructive' }),
+  });
+
+  const missingCount = syncStatusQuery.data?.missingPairs?.length ?? 0;
+  const seasonalTemplates = seasonalListQuery.data ?? [];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button size="sm" variant={kind === 'regular' ? 'default' : 'outline'} onClick={() => { setKind('regular'); setSelectedSeasonalId(''); setLocalCells(null); }}>
+          Tarif Reguler
+        </Button>
+        {seasonalTemplates.map((t: any) => (
+          <Button
+            key={t.id}
+            size="sm"
+            variant={kind === 'seasonal' && selectedSeasonalId === t.id ? 'default' : 'outline'}
+            onClick={() => { setKind('seasonal'); setSelectedSeasonalId(t.id); setLocalCells(null); }}
+          >
+            {t.name} {!t.isActive && <Badge variant="secondary" className="ml-1 text-[9px]">nonaktif</Badge>}
+          </Button>
+        ))}
+        <Button size="sm" variant="ghost" onClick={() => setShowSeasonalForm(v => !v)}>
+          <Plus className="w-3.5 h-3.5 mr-1" /> Template Musiman
+        </Button>
+      </div>
+
+      {showSeasonalForm && (
+        <div className="border rounded-lg p-3 space-y-2 bg-muted/20">
+          <Label className="text-xs">Nama Template</Label>
+          <Input value={seasonalName} onChange={e => setSeasonalName(e.target.value)} placeholder="Tarif Lebaran 2026" data-testid="input-seasonal-name" />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs mb-1 block">Berlaku Dari</Label>
+              <DatePicker date={seasonalFrom} onDateChange={setSeasonalFrom} />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Berlaku Sampai</Label>
+              <DatePicker date={seasonalTo} onDateChange={setSeasonalTo} />
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground">Harga akan disalin dari tarif reguler saat ini, lalu bisa diubah bebas.</p>
+          <Button size="sm" onClick={() => createSeasonalMutation.mutate()} disabled={!seasonalName || !seasonalFrom || !seasonalTo || createSeasonalMutation.isPending}>
+            Buat Template
+          </Button>
+        </div>
+      )}
+
+      {kind === 'regular' && missingCount > 0 && (
+        <Alert variant="default" className="border-amber-300 bg-amber-50">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="flex items-center justify-between gap-2 text-amber-800">
+            <span>Pricing belum sinkron: ada {missingCount} pasangan OD belum diisi.</span>
+            <Button size="sm" variant="outline" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
+              <RefreshCw className={`w-3.5 h-3.5 mr-1 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+              Sync
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {gridQuery.isLoading ? (
+        <div className="text-xs text-muted-foreground p-4">Memuat matrix...</div>
+      ) : (
+        <PriceGrid
+          rows={rows}
+          cells={[...cellMap.entries()].map(([key, price]) => {
+            const [originStopId, destinationStopId] = key.split('|');
+            return { originStopId, destinationStopId, value: price };
+          })}
+          onChange={handleChange}
+        />
+      )}
+
+      <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !localCells} data-testid="button-save-matrix">
+        {saveMutation.isPending ? 'Menyimpan...' : 'Simpan Harga'}
+      </Button>
+    </div>
+  );
+}
+
+function GlobalPriceEditor() {
+  const { toast } = useToast();
+  const [localRows, setLocalRows] = useState<Array<{ originStopId: string; destinationStopId: string; price: number }> | null>(null);
+
+  const { data: stops = [] } = useQuery({ queryKey: ['/api/stops'], queryFn: stopsApi.getAll });
+  const globalQuery = useQuery({ queryKey: ['/api/pricing/matrix/global'], queryFn: priceRulesApi.getGlobalList });
+
+  const stopOptions = stops.map((s: Stop) => ({ value: s.id, label: `${s.name} (${s.code})` }));
+
+  const rows: Array<{ originStopId: string; destinationStopId: string; price: number }> = localRows ?? globalQuery.data?.cells ?? [];
+
+  const saveMutation = useMutation({
+    mutationFn: () => priceRulesApi.savePriceRule({
+      scope: 'global',
+      kind: 'regular',
+      matrixId: globalQuery.data?.matrixId || undefined,
+      cells: rows,
+      expectedUpdatedAt: globalQuery.data?.updatedAt ?? null,
+    }),
+    onSuccess: () => {
+      toast({ title: 'Fallback global disimpan' });
+      setLocalRows(null);
+      queryClient.invalidateQueries({ queryKey: ['/api/pricing/matrix/global'] });
+    },
+    onError: (error: any) => toast({ title: 'Gagal menyimpan', description: error.message, variant: 'destructive' }),
+  });
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Fallback terakhir kalau pola tidak punya matrix sendiri untuk pasangan OD tertentu. Biasanya jarang dipakai — isi hanya jika benar-benar perlu default lintas-pola.
+      </p>
+      <div className="space-y-2">
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="flex-1"><SearchableSelect value={r.originStopId} options={stopOptions} placeholder="Asal" onChange={(v) => {
+              const next = [...rows]; next[i] = { ...next[i], originStopId: v }; setLocalRows(next);
+            }} /></div>
+            <div className="flex-1"><SearchableSelect value={r.destinationStopId} options={stopOptions} placeholder="Tujuan" onChange={(v) => {
+              const next = [...rows]; next[i] = { ...next[i], destinationStopId: v }; setLocalRows(next);
+            }} /></div>
+            <Input type="number" className="w-28" value={r.price || ''} placeholder="0" onChange={(e) => {
+              const next = [...rows]; next[i] = { ...next[i], price: Number(e.target.value) || 0 }; setLocalRows(next);
+            }} />
+            <Button size="icon" variant="ghost" onClick={() => setLocalRows(rows.filter((_, idx) => idx !== i))}>
+              <Trash2 className="w-4 h-4 text-destructive" />
+            </Button>
+          </div>
+        ))}
+        <Button size="sm" variant="outline" onClick={() => setLocalRows([...rows, { originStopId: '', destinationStopId: '', price: 0 }])}>
+          <Plus className="w-3.5 h-3.5 mr-1" /> Tambah Pasangan
+        </Button>
+      </div>
+      <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !localRows}>
+        {saveMutation.isPending ? 'Menyimpan...' : 'Simpan Fallback Global'}
+      </Button>
+    </div>
+  );
+}
+
+function TripExceptionEditor({ patternId }: { patternId: string }) {
+  const { toast } = useToast();
+  const [tripId, setTripId] = useState('');
+  const [originStopId, setOriginStopId] = useState('');
+  const [destinationStopId, setDestinationStopId] = useState('');
+  const [price, setPrice] = useState('');
+
+  const { data: allTrips = [] } = useQuery({ queryKey: ['/api/trips'], queryFn: () => tripsApi.getAll() });
+  const patternTrips = useMemo(() => allTrips.filter((t: TripWithDetails) => t.patternId === patternId), [allTrips, patternId]);
+  const tripOptions = patternTrips.map((t: TripWithDetails) => ({
+    value: t.id,
+    label: `${format(new Date(t.serviceDate as unknown as string), 'dd/MM/yyyy')} — ${(t as any).vehicleCode || t.id.slice(0, 8)}`,
   }));
 
-  const tripOptions = trips.map((t: TripWithDetails) => {
-    const patternLabel = t.patternCode || t.patternName || '';
-    const dateLabel = t.serviceDate
-      ? new Date(t.serviceDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-      : '';
-    return {
-      value: t.id,
-      label: `${dateLabel}${t.vehiclePlate ? ` · ${t.vehiclePlate}` : ''}`,
-      badge: t.status || 'scheduled',
-      subtitle: patternLabel ? `${patternLabel}${t.patternName && t.patternCode ? ` — ${t.patternName}` : ''}` : undefined,
-      group: patternLabel || 'Tanpa Pola',
-    };
+  const { data: patternStopsForPattern = [] } = useQuery({
+    queryKey: ['/api/trip-patterns', patternId, 'stops'],
+    queryFn: async () => (await fetch(`/api/trip-patterns/${patternId}/stops`)).json(),
+    enabled: !!patternId,
+  });
+  const stopOptions = (patternStopsForPattern as Array<{ stopId: string; stopSequence: number; stop?: { name?: string } | null }>)
+    .sort((a, b) => a.stopSequence - b.stopSequence)
+    .map(ps => ({ value: ps.stopId, label: ps.stop?.name ?? ps.stopId }));
+
+  const exceptionsQuery = useQuery({
+    queryKey: ['/api/pricing/trip-exceptions', tripId],
+    queryFn: () => priceRulesApi.listTripExceptions(tripId),
+    enabled: !!tripId,
   });
 
-  const buildRule = (data: PriceRuleFormData) => ({
-    pricingMode: data.pricingMode || 'per_leg',
-    basePricePerLeg: parseFloat(data.basePricePerLeg) || 0,
-    currency: data.currency || 'IDR',
-    multiplier: parseFloat(data.multiplier) || 1,
-  });
-
-  const parseRule = (rule: any): Partial<PriceRuleFormData> => ({
-    pricingMode: rule?.pricingMode || 'per_leg',
-    basePricePerLeg: rule?.basePricePerLeg?.toString() || '',
-    currency: rule?.currency || 'IDR',
-    multiplier: rule?.multiplier?.toString() || '1',
-  });
-
-  const createMutation = useMutation({
-    mutationFn: priceRulesApi.create,
+  const upsertMutation = useMutation({
+    mutationFn: () => priceRulesApi.upsertTripException({ tripId, originStopId, destinationStopId, price: Number(price) }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/price-rules'] });
-      setIsDialogOpen(false);
-      setFormData(DEFAULT_FORM);
-      toast({ title: 'Berhasil', description: 'Aturan harga berhasil dibuat' });
+      toast({ title: 'Pengecualian harga trip disimpan' });
+      setOriginStopId(''); setDestinationStopId(''); setPrice('');
+      queryClient.invalidateQueries({ queryKey: ['/api/pricing/trip-exceptions', tripId] });
     },
-    onError: (error) => {
-      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal membuat aturan harga', variant: 'destructive' });
-    }
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => priceRulesApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/price-rules'] });
-      setIsDialogOpen(false);
-      setFormData(DEFAULT_FORM);
-      setEditingRule(null);
-      toast({ title: 'Berhasil', description: 'Aturan harga berhasil diperbarui' });
-    },
-    onError: (error) => {
-      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal memperbarui aturan harga', variant: 'destructive' });
-    }
+    onError: (error: any) => toast({ title: 'Gagal menyimpan', description: error.message, variant: 'destructive' }),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: priceRulesApi.delete,
+    mutationFn: (id: string) => priceRulesApi.deleteTripException(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/price-rules'] });
-      setDeleteTarget(null);
-      toast({ title: 'Berhasil', description: 'Aturan harga berhasil dihapus' });
+      toast({ title: 'Pengecualian dihapus' });
+      queryClient.invalidateQueries({ queryKey: ['/api/pricing/trip-exceptions', tripId] });
     },
-    onError: (error) => {
-      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menghapus aturan harga', variant: 'destructive' });
-    }
   });
-
-  const handleCreate = () => {
-    setEditingRule(null);
-    setFormData(DEFAULT_FORM);
-    setIsDialogOpen(true);
-  };
-
-  const handleEdit = (rule: PriceRule) => {
-    setEditingRule(rule);
-    setFormData({
-      scope: rule.scope,
-      patternId: rule.patternId || '',
-      tripId: rule.tripId || '',
-      legIndex: rule.legIndex?.toString() || '',
-      ...parseRule(rule.rule),
-      validFrom: rule.validFrom ? new Date(rule.validFrom) : undefined,
-      validTo: rule.validTo ? new Date(rule.validTo) : undefined,
-      priority: (rule.priority || 0).toString(),
-    } as PriceRuleFormData);
-    setIsDialogOpen(true);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.basePricePerLeg || isNaN(parseFloat(formData.basePricePerLeg))) {
-      toast({ title: 'Harga tidak valid', description: 'Masukkan harga dasar yang valid', variant: 'destructive' });
-      return;
-    }
-    const submitData = {
-      scope: formData.scope,
-      patternId: formData.patternId || null,
-      tripId: formData.tripId || null,
-      legIndex: formData.legIndex ? parseInt(formData.legIndex, 10) : null,
-      rule: buildRule(formData),
-      validFrom: formData.validFrom ? formData.validFrom.toISOString() : null,
-      validTo: formData.validTo ? formData.validTo.toISOString() : null,
-      priority: parseInt(formData.priority, 10) || 1,
-    };
-    if (editingRule) {
-      updateMutation.mutate({ id: editingRule.id, data: submitData });
-    } else {
-      createMutation.mutate(submitData);
-    }
-  };
-
-  const handleDelete = (id: string) => setDeleteTarget(id);
-  const confirmDelete = () => { if (deleteTarget) deleteMutation.mutate(deleteTarget); };
-
-  const handleScopeChange = (scope: 'pattern' | 'trip' | 'leg' | 'time') => {
-    setFormData(prev => ({ ...prev, scope, patternId: '', tripId: '', legIndex: '' }));
-  };
-
-  const getPatternName = (patternId: string) => {
-    const p = patterns.find(p => p.id === patternId);
-    return p ? `${p.code} — ${p.name}` : '-';
-  };
-
-  const getTripLabel = (tripId: string) => {
-    const t = trips.find((tr: TripWithDetails) => tr.id === tripId);
-    if (!t) return tripId.slice(0, 8);
-    const dateStr = t.serviceDate
-      ? new Date(t.serviceDate + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-      : '';
-    const parts = [t.patternCode || t.patternName, dateStr, t.vehiclePlate].filter(Boolean);
-    return parts.join(' · ') || tripId.slice(0, 8);
-  };
-
-  const activeFilterCount = [filterScope, filterMode, filterPatternId].filter(Boolean).length;
-
-  const filteredPriceRules = priceRules.filter(rule => {
-    if (filterScope && rule.scope !== filterScope) return false;
-    const ruleMode = ruleCfg(rule).pricingMode || 'per_leg';
-    if (filterMode && ruleMode !== filterMode) return false;
-    if (filterPatternId && rule.patternId !== filterPatternId) return false;
-
-    const q = searchQuery.toLowerCase();
-    if (!q) return true;
-    const scope = rule.scope.toLowerCase();
-    const target = (
-      rule.scope === 'pattern' && rule.patternId ? getPatternName(rule.patternId) :
-      rule.scope === 'trip' && rule.tripId ? getTripLabel(rule.tripId) :
-      rule.scope === 'leg' && rule.tripId ? getTripLabel(rule.tripId) : ''
-    ).toLowerCase();
-    return scope.includes(q) || target.includes(q);
-  });
-
-  const clearAllFilters = () => {
-    setFilterScope('');
-    setFilterMode('');
-    setFilterPatternId('');
-    setSearchQuery('');
-  };
-
-  const scopeFilterOptions = [
-    { value: 'pattern', label: 'Pola' },
-    { value: 'trip', label: 'Trip' },
-    { value: 'leg', label: 'Segmen' },
-    { value: 'time', label: 'Waktu' },
-  ];
-
-  const modeFilterOptions = [
-    { value: 'per_leg', label: 'Legs' },
-    { value: 'flat', label: 'Flat' },
-  ];
 
   return (
-    <div className="space-y-6" data-testid="price-rules-manager">
-      <MasterPageHeader
-        title="Aturan Harga"
-        description="Kelola aturan penetapan harga untuk pola perjalanan dan trip"
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder="Cari scope atau rute..."
-        count={filteredPriceRules.length}
-        action={
-          <Button onClick={handleCreate} data-testid="add-price-rule-button">
-            <Plus className="h-4 w-4 mr-2" />
-            Tambah Aturan
+    <div className="border rounded-lg p-3 space-y-3">
+      <h3 className="text-sm font-semibold">Pengecualian Harga per Trip</h3>
+      <p className="text-xs text-muted-foreground">Override harga untuk SATU trip spesifik (mis. promo satu hari), tanpa mengubah matrix pola.</p>
+
+      <div>
+        <Label className="text-xs mb-1 block">Trip</Label>
+        <SearchableSelect value={tripId} options={tripOptions} placeholder="Pilih trip..." onChange={setTripId} />
+      </div>
+
+      {tripId && (
+        <>
+          <div className="grid grid-cols-3 gap-2 items-end">
+            <div>
+              <Label className="text-xs mb-1 block">Asal</Label>
+              <SearchableSelect value={originStopId} options={stopOptions} placeholder="Asal" onChange={setOriginStopId} />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Tujuan</Label>
+              <SearchableSelect value={destinationStopId} options={stopOptions} placeholder="Tujuan" onChange={setDestinationStopId} />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Harga</Label>
+              <Input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="0" />
+            </div>
+          </div>
+          <Button size="sm" onClick={() => upsertMutation.mutate()} disabled={!originStopId || !destinationStopId || !price || upsertMutation.isPending}>
+            Simpan Pengecualian
           </Button>
-        }
-        filterButton={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-              data-testid="toggle-price-rule-filters"
-              className={showFilters || activeFilterCount > 0 ? 'border-primary text-primary bg-primary/5' : ''}
-            >
-              <Filter className="h-4 w-4 mr-1.5" />
-              Filter
-              {activeFilterCount > 0 && (
-                <span className="ml-1.5 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                  {activeFilterCount}
-                </span>
-              )}
-            </Button>
-            {activeFilterCount > 0 && (
-              <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-muted-foreground hover:text-foreground">
-                <X className="h-3.5 w-3.5 mr-1" />
-                Hapus Filter
-              </Button>
-            )}
-          </div>
-        }
-      />
 
-      {showFilters && (
-        <Card className="border-dashed">
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Cakupan</Label>
-                <SearchableSelect
-                  value={filterScope || 'all'}
-                  options={[
-                    { value: 'all', label: 'Semua' },
-                    ...scopeFilterOptions,
-                  ]}
-                  placeholder="Semua"
-                  searchPlaceholder="Cari..."
-                  onChange={v => setFilterScope(v === 'all' ? '' : v)}
-                  clearValue="all"
-                  data-testid="filter-scope"
-                />
+          <div className="space-y-1 pt-2">
+            {(exceptionsQuery.data ?? []).map((ex: any) => (
+              <div key={ex.id} className="flex items-center justify-between text-xs border rounded px-2 py-1.5">
+                <span>{stopOptions.find(s => s.value === ex.originStopId)?.label} → {stopOptions.find(s => s.value === ex.destinationStopId)?.label}: <strong>Rp {Number(ex.price).toLocaleString('id-ID')}</strong></span>
+                <Button size="icon" variant="ghost" onClick={() => deleteMutation.mutate(ex.id)}>
+                  <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                </Button>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Mode</Label>
-                <SearchableSelect
-                  value={filterMode || 'all'}
-                  options={[
-                    { value: 'all', label: 'Semua' },
-                    ...modeFilterOptions,
-                  ]}
-                  placeholder="Semua"
-                  searchPlaceholder="Cari..."
-                  onChange={v => setFilterMode(v === 'all' ? '' : v)}
-                  clearValue="all"
-                  data-testid="filter-mode"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Pola Rute</Label>
-                <SearchableSelect
-                  value={filterPatternId || 'all'}
-                  options={[
-                    { value: 'all', label: 'Semua pola' },
-                    ...patternOptions,
-                  ]}
-                  placeholder="Semua pola"
-                  searchPlaceholder="Cari pola..."
-                  onChange={v => setFilterPatternId(v === 'all' ? '' : v)}
-                  clearValue="all"
-                  data-testid="filter-pattern"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            ))}
+          </div>
+        </>
       )}
-
-      {/* ── Form Dialog ── */}
-      <MasterFormDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        title={editingRule ? 'Edit Aturan Harga' : 'Tambah Aturan Harga'}
-        description={editingRule ? 'Perbarui aturan penetapan harga.' : 'Buat aturan harga baru untuk pola atau trip tertentu.'}
-        onSubmit={handleSubmit}
-        isPending={createMutation.isPending || updateMutation.isPending}
-        size="lg"
-        data-testid="price-rule-dialog"
-      >
-        {/* ── Scope ── */}
-        <SectionDivider label="Cakupan" />
-        <div className="space-y-1.5">
-          <Label>Tipe Scope <span className="text-destructive">*</span></Label>
-          <Select value={formData.scope} onValueChange={handleScopeChange}>
-            <SelectTrigger data-testid="select-scope">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pattern">Pattern — berlaku untuk semua trip di pola ini</SelectItem>
-              <SelectItem value="trip">Trip — berlaku untuk trip spesifik</SelectItem>
-              <SelectItem value="leg">Leg — berlaku untuk leg tertentu di sebuah trip</SelectItem>
-              <SelectItem value="time">Time-based — berlaku berdasarkan waktu</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {formData.scope === 'pattern' && (
-          <div className="space-y-1.5">
-            <Label>Pola Perjalanan <span className="text-destructive">*</span></Label>
-            <SearchableSelect
-              value={formData.patternId}
-              options={patternOptions}
-              placeholder="Pilih pola perjalanan..."
-              searchPlaceholder="Cari pola..."
-              onChange={(v) => setFormData(prev => ({ ...prev, patternId: v }))}
-              data-testid="select-pattern"
-            />
-          </div>
-        )}
-
-        {(formData.scope === 'trip' || formData.scope === 'leg') && (
-          <div className={formData.scope === 'leg' ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : ''}>
-            <div className="space-y-1.5">
-              <Label>Trip <span className="text-destructive">*</span></Label>
-              <SearchableSelect
-                value={formData.tripId}
-                options={tripOptions}
-                placeholder="Pilih trip..."
-                searchPlaceholder="Cari ID atau tanggal trip..."
-                onChange={(v) => setFormData(prev => ({ ...prev, tripId: v }))}
-                data-testid="select-trip"
-              />
-            </div>
-            {formData.scope === 'leg' && (
-              <div className="space-y-1.5">
-                <Label htmlFor="legIndex">Nomor Leg <span className="text-destructive">*</span></Label>
-                <Input
-                  id="legIndex"
-                  type="number"
-                  value={formData.legIndex}
-                  onChange={(e) => setFormData(prev => ({ ...prev, legIndex: e.target.value }))}
-                  placeholder="Contoh: 1"
-                  min="1"
-                  data-testid="input-leg-index"
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Tarif ── */}
-        <SectionDivider label="Tarif" />
-        <div className="space-y-1.5">
-          <Label>Mode Harga <span className="text-destructive">*</span></Label>
-          <Select
-            value={formData.pricingMode}
-            onValueChange={(v: 'per_leg' | 'flat') => setFormData(prev => ({ ...prev, pricingMode: v }))}
-          >
-            <SelectTrigger data-testid="select-pricing-mode">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="per_leg">Legs — harga × jumlah segmen</SelectItem>
-              <SelectItem value="flat">Flat — harga tetap</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-2 space-y-1.5">
-            <Label htmlFor="basePricePerLeg">
-              {formData.pricingMode === 'flat' ? 'Harga Tarif Tetap' : 'Harga Dasar per Leg'} <span className="text-destructive">*</span>
-            </Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">Rp</span>
-              <Input
-                id="basePricePerLeg"
-                type="number"
-                min="0"
-                step="1000"
-                value={formData.basePricePerLeg}
-                onChange={(e) => setFormData(prev => ({ ...prev, basePricePerLeg: e.target.value }))}
-                placeholder="65000"
-                className="pl-9"
-                required
-                data-testid="input-base-price"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {formData.pricingMode === 'flat'
-                ? 'Harga tetap untuk seluruh perjalanan, berapa pun jumlah halte yang dilewati'
-                : 'Harga yang dikenakan per segmen perjalanan (leg)'}
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="multiplier">Multiplier</Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">×</span>
-              <Input
-                id="multiplier"
-                type="number"
-                min="0"
-                step="0.1"
-                value={formData.multiplier}
-                onChange={(e) => setFormData(prev => ({ ...prev, multiplier: e.target.value }))}
-                placeholder="1.0"
-                className="pl-7"
-                data-testid="input-multiplier"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Preview */}
-        {formData.basePricePerLeg && !isNaN(parseFloat(formData.basePricePerLeg)) && (
-          <div className="rounded-lg bg-muted/40 border px-4 py-3 flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              {formData.pricingMode === 'flat' ? 'Harga tetap per penumpang' : 'Harga efektif per leg'}
-            </span>
-            <span className="font-semibold text-base">
-              {formatRupiah(parseFloat(formData.basePricePerLeg) * (parseFloat(formData.multiplier) || 1))}
-            </span>
-          </div>
-        )}
-
-        {/* ── Periode & Prioritas ── */}
-        <SectionDivider label="Periode & Prioritas" />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="space-y-1.5">
-            <Label>Berlaku Dari</Label>
-            <DatePicker
-              id="validFrom"
-              date={formData.validFrom}
-              onDateChange={(date) => setFormData(prev => ({ ...prev, validFrom: date }))}
-              placeholder="Pilih tanggal mulai"
-              data-testid="input-valid-from"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Berlaku Sampai</Label>
-            <DatePicker
-              id="validTo"
-              date={formData.validTo}
-              onDateChange={(date) => setFormData(prev => ({ ...prev, validTo: date }))}
-              placeholder="Pilih tanggal akhir"
-              data-testid="input-valid-to"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="priority">Prioritas</Label>
-            <Input
-              id="priority"
-              type="number"
-              value={formData.priority}
-              onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
-              placeholder="1"
-              min="0"
-              data-testid="input-priority"
-            />
-            <p className="text-xs text-muted-foreground">Lebih tinggi = lebih diprioritaskan</p>
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground -mt-1">Kosongkan periode jika aturan berlaku tanpa batas waktu</p>
-      </MasterFormDialog>
-
-      <DeleteConfirmDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
-        onConfirm={confirmDelete}
-        title="Hapus Aturan Harga"
-        description="Apakah Anda yakin ingin menghapus aturan harga ini? Tindakan ini tidak dapat dibatalkan."
-        isPending={deleteMutation.isPending}
-      />
-
-      {/* ── Table ── */}
-      <DataTable
-        data-testid="price-rules-table"
-        data={filteredPriceRules}
-        keyExtractor={(r) => r.id}
-        isLoading={isLoading}
-        emptyIcon={<DollarSign className="w-7 h-7" />}
-        emptyMessage="Belum ada aturan harga"
-        searchQuery={searchQuery}
-        rowTestId={(r) => `price-rule-${r.id}`}
-        columns={[
-          {
-            key: 'scope', header: 'Cakupan',
-            render: (r) => (
-              <Badge variant={SCOPE_VARIANTS[r.scope] ?? 'outline'} className="text-[11px] font-mono px-1.5 py-0">
-                {SCOPE_LABELS[r.scope] ?? r.scope}
-              </Badge>
-            ),
-          },
-          {
-            key: 'target', header: 'Target',
-            render: (r) => (
-              <span>
-                {r.scope === 'pattern' && r.patternId
-                  ? getPatternName(r.patternId)
-                  : r.scope === 'trip' && r.tripId
-                    ? getTripLabel(r.tripId)
-                    : r.scope === 'leg' && r.tripId
-                      ? <>{getTripLabel(r.tripId)} <span className="text-muted-foreground text-[11px]">Leg {r.legIndex}</span></>
-                      : r.scope === 'time'
-                        ? 'Time-based'
-                        : <span className="text-muted-foreground">—</span>}
-              </span>
-            ),
-          },
-          {
-            key: 'mode', header: 'Mode', hideOnMobile: true,
-            render: (r) => {
-              const pricingMode = ruleCfg(r).pricingMode || 'per_leg';
-              return (
-                <Badge variant={pricingMode === 'flat' ? 'default' : 'secondary'} className="text-[11px] px-1.5 py-0">
-                  {PRICING_MODE_LABELS[pricingMode] || 'Per Segmen'}
-                </Badge>
-              );
-            },
-          },
-          {
-            key: 'price', header: 'Harga',
-            className: 'tabular-nums',
-            render: (r) => {
-              const basePrice = ruleCfg(r).basePricePerLeg;
-              const multiplier = ruleCfg(r).multiplier ?? 1;
-              const effectivePrice = basePrice != null ? basePrice * multiplier : null;
-              if (effectivePrice == null) return <span className="text-muted-foreground">—</span>;
-              return (
-                <div className="flex flex-col">
-                  <span className="font-semibold">{formatRupiah(effectivePrice)}</span>
-                  {multiplier !== 1 && basePrice != null && (
-                    <span className="text-[11px] text-muted-foreground">base {formatRupiah(basePrice)}</span>
-                  )}
-                </div>
-              );
-            },
-          },
-          {
-            key: 'mult', header: 'Mult.', hideOnMobile: true,
-            className: 'font-mono tabular-nums',
-            render: (r) => {
-              const m = ruleCfg(r).multiplier ?? 1;
-              return <span className={m !== 1 ? 'text-amber-600 font-semibold' : 'text-muted-foreground'}>×{m}</span>;
-            },
-          },
-          {
-            key: 'priority', header: 'Prior.', hideOnMobile: true,
-            className: 'font-mono tabular-nums text-muted-foreground',
-            render: (r) => r.priority ?? 0,
-          },
-          {
-            key: 'period', header: 'Periode', hideOnMobile: true,
-            className: 'tabular-nums text-[12px] text-muted-foreground whitespace-nowrap',
-            render: (r) => (
-              <>
-                {r.validFrom ? format(new Date(r.validFrom), 'dd MMM yy') : <span className="opacity-40">∞</span>}
-                {' – '}
-                {r.validTo ? format(new Date(r.validTo), 'dd MMM yy') : <span className="opacity-40">∞</span>}
-              </>
-            ),
-          },
-          {
-            key: 'actions', header: '',
-            className: 'w-10',
-            render: (r) => (
-              <RowActionsMenu
-                actions={[
-                  { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => handleEdit(r) },
-                  { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => handleDelete(r.id), variant: 'destructive', disabled: deleteMutation.isPending },
-                ]}
-                data-testid={`actions-price-rule-${r.id}`}
-              />
-            ),
-          },
-        ]}
-      />
     </div>
   );
 }

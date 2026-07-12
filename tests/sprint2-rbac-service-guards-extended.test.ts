@@ -165,35 +165,36 @@ describe("OutletsService — service-layer guard (Task #6)", () => {
 });
 
 // =====================================================================
-// PriceRulesService
+// PriceRulesService (OD-matrix pricing — identity swap dari flat/per_leg)
 // =====================================================================
 describe("PriceRulesService — service-layer guard (Task #6)", () => {
   function makeStorage() {
     return {
-      getPriceRules: vi.fn(async () => []),
-      createPriceRule: vi.fn(async (d: any) => ({ id: "pr-new", ...d })),
-      updatePriceRule: vi.fn(async (id: string, d: any) => ({ id, ...d })),
-      deletePriceRule: vi.fn(async () => {}),
+      getPatternStops: vi.fn(async () => []),
     };
   }
 
-  it("create / update / delete tanpa flag master.price_rules → 403", async () => {
+  const saveParams = {
+    scope: "global" as const,
+    kind: "regular" as const,
+    cells: [] as Array<{ originStopId: string; destinationStopId: string; price: number }>,
+    expectedUpdatedAt: null,
+  };
+
+  it("savePriceRule / deletePriceRule tanpa flag master.price_rules → 403", async () => {
     const { PriceRulesService } = await import("@modules/priceRules/priceRules.service");
     const svc = new PriceRulesService(makeStorage() as any);
-    await expect(svc.createPriceRule({} as any, undefined as any)).rejects.toBeInstanceOf(PermissionDeniedError);
-    await expect(svc.updatePriceRule("p1", {} as any, ctxWith("master.outlets"))).rejects.toMatchObject({
+    await expect(svc.savePriceRule(saveParams, undefined as any)).rejects.toBeInstanceOf(PermissionDeniedError);
+    await expect(svc.deletePriceRule("p1", ctxWith("master.outlets"))).rejects.toMatchObject({
       requiredFlags: ["master.price_rules"],
     });
     await expect(svc.deletePriceRule("p1", EMPTY_CTX)).rejects.toBeInstanceOf(PermissionDeniedError);
   });
 
-  it("createPriceRule dgn flag master.price_rules → lolos", async () => {
+  it("deletePriceRule dgn flag master.price_rules → lolos", async () => {
     const { PriceRulesService } = await import("@modules/priceRules/priceRules.service");
-    const storage = makeStorage();
-    const svc = new PriceRulesService(storage as any);
-    const r = await svc.createPriceRule({ name: "PR Test" } as any, ctxWith("master.price_rules"));
-    expect(r).toMatchObject({ id: "pr-new" });
-    expect(storage.createPriceRule).toHaveBeenCalledOnce();
+    const svc = new PriceRulesService(makeStorage() as any);
+    await expect(svc.deletePriceRule("p1", ctxWith("master.price_rules"))).resolves.toBeUndefined();
   });
 });
 

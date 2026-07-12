@@ -1,7 +1,7 @@
 import { apiRequest } from "./queryClient";
 import type { 
   Stop, Outlet, Vehicle, Layout, TripPattern, PatternStop,
-  Trip, TripWithDetails, TripStopTime, PriceRule, Booking,
+  Trip, TripWithDetails, TripStopTime, Booking,
   SeatmapResponse, HoldResponse, CreateBookingRequest, CreateHoldRequest,
   CsoAvailableTrip, Driver
 } from "@/types";
@@ -132,28 +132,20 @@ export const tripStopTimesApi = {
   delete: (id: string) => apiRequest('DELETE', `/api/trip-stop-times/${id}`)
 };
 
-// Price Rules API
+// Price Rules API (OD-matrix pricing — replaces the old flat/per_leg CRUD)
 export const priceRulesApi = {
-  getAll: () => fetch('/api/price-rules').then(r => assertOk<PriceRule[]>(r)),
-  create: (data: any) => apiRequest('POST', '/api/price-rules', data).then(res => res.json()),
-  update: (id: string, data: any) => apiRequest('PUT', `/api/price-rules/${id}`, data).then(res => res.json()),
-  delete: (id: string) => apiRequest('DELETE', `/api/price-rules/${id}`)
-};
-
-// Passenger OD-Matrix Pricing API
-export const passengerPriceMatrixApi = {
   getPatternGrid: (patternId: string, kind: 'regular' | 'seasonal' = 'regular', matrixId?: string) => {
     const qs = new URLSearchParams({ kind, ...(matrixId ? { matrixId } : {}) });
-    return fetch(`/api/pricing/matrix/pattern/${patternId}?${qs}`).then(r => assertOk<any>(r));
+    return fetch(`/api/price-rules/pattern/${patternId}?${qs}`).then(r => assertOk<any>(r));
   },
-  getGlobalList: () => fetch('/api/pricing/matrix/global').then(r => assertOk<any>(r)),
-  saveMatrix: (data: any) => apiRequest('PUT', '/api/pricing/matrix', data).then(res => res.json()),
-  listSeasonalTemplates: (patternId: string) => fetch(`/api/pricing/matrix/pattern/${patternId}/seasonal`).then(r => assertOk<any[]>(r)),
-  createSeasonalTemplate: (patternId: string, data: any) => apiRequest('POST', `/api/pricing/matrix/pattern/${patternId}/seasonal`, data).then(res => res.json()),
-  setMatrixActive: (id: string, isActive: boolean) => apiRequest('PATCH', `/api/pricing/matrix/${id}/active`, { isActive }).then(res => res.json()),
-  deleteMatrix: (id: string) => apiRequest('DELETE', `/api/pricing/matrix/${id}`),
-  getSyncStatus: (patternId: string) => fetch(`/api/pricing/matrix/pattern/${patternId}/sync-status`).then(r => assertOk<any>(r)),
-  sync: (patternId: string) => apiRequest('POST', `/api/pricing/matrix/pattern/${patternId}/sync`, {}).then(res => res.json()),
+  getGlobalList: () => fetch('/api/price-rules/global').then(r => assertOk<any>(r)),
+  savePriceRule: (data: any) => apiRequest('PUT', '/api/price-rules', data).then(res => res.json()),
+  listSeasonalTemplates: (patternId: string) => fetch(`/api/price-rules/pattern/${patternId}/seasonal`).then(r => assertOk<any[]>(r)),
+  createSeasonalTemplate: (patternId: string, data: any) => apiRequest('POST', `/api/price-rules/pattern/${patternId}/seasonal`, data).then(res => res.json()),
+  setPriceRuleActive: (id: string, isActive: boolean) => apiRequest('PATCH', `/api/price-rules/${id}/active`, { isActive }).then(res => res.json()),
+  deletePriceRule: (id: string) => apiRequest('DELETE', `/api/price-rules/${id}`),
+  getSyncStatus: (patternId: string) => fetch(`/api/price-rules/pattern/${patternId}/sync-status`).then(r => assertOk<any>(r)),
+  sync: (patternId: string) => apiRequest('POST', `/api/price-rules/pattern/${patternId}/sync`, {}).then(res => res.json()),
   listTripExceptions: (tripId: string) => fetch(`/api/pricing/trip-exceptions/${tripId}`).then(r => assertOk<any[]>(r)),
   upsertTripException: (data: any) => apiRequest('PUT', '/api/pricing/trip-exceptions', data).then(res => res.json()),
   deleteTripException: (id: string) => apiRequest('DELETE', `/api/pricing/trip-exceptions/${id}`),

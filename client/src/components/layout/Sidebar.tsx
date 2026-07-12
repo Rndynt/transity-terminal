@@ -58,7 +58,6 @@ const NAV_SECTIONS = [
       { name: "Trip Patterns", path: "/masters?tab=patterns", icon: Route, flag: "master.trip_patterns" },
       { name: "Trips", path: "/masters?tab=trips", icon: Calendar, flag: "master.trips" },
       { name: "Price Rules", path: "/masters?tab=pricing", icon: DollarSign, flag: "master.price_rules" },
-      { name: "Harga OD-Matrix", path: "/masters?tab=pricing-matrix", icon: DollarSign, flag: "master.price_rules" },
       { name: "Promo & Voucher", path: "/masters?tab=promos", icon: BadgePercent, flag: "master.promos" },
       { name: "Jenis Kargo", path: "/masters?tab=cargo-types", icon: Boxes, flag: "master.cargo_types" },
       { name: "Tarif Kargo", path: "/masters?tab=cargo-rates", icon: Weight, flag: "master.cargo_rates" },

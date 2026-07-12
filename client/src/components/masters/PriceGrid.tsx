@@ -13,7 +13,7 @@ export interface MatrixGridCellData<T = number> {
   value: T;
 }
 
-interface PriceMatrixGridProps<T = number> {
+interface PriceGridProps<T = number> {
   rows: MatrixGridRow[];
   cells: MatrixGridCellData<T>[];
   onChange: (originStopId: string, destinationStopId: string, value: T) => void;
@@ -47,14 +47,14 @@ function defaultNumericCell(value: number, onChange: (v: number) => void, disabl
  * via `renderCell` so cargo's matrix editor (Prompt #2) can reuse this
  * exact component with its own cell type instead of forking it.
  */
-export function PriceMatrixGrid<T = number>({
+export function PriceGrid<T = number>({
   rows,
   cells,
   onChange,
   renderCell,
   disabled,
   emptyLabel = 'Tambahkan minimal 2 halte ke pola ini untuk mengisi matrix harga.',
-}: PriceMatrixGridProps<T>) {
+}: PriceGridProps<T>) {
   if (rows.length < 2) {
     return <div className="text-xs text-muted-foreground p-4 text-center border rounded-lg bg-muted/20">{emptyLabel}</div>;
   }

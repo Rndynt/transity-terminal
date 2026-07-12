@@ -34,7 +34,6 @@ import TripPatternsManager from '@/components/masters/TripPatternsManager';
 import TripBasesManager from '@/components/masters/TripBasesManager';
 import TripsManager from '@/components/masters/TripsManager';
 import PriceRulesManager from '@/components/masters/PriceRulesManager';
-import PassengerPriceMatrixManager from '@/components/masters/PassengerPriceMatrixManager';
 import CargoTypesManager from '@/components/masters/CargoTypesManager';
 import CargoRatesManager from '@/components/masters/CargoRatesManager';
 import TripCostTemplatesManager from '@/components/masters/TripCostTemplatesManager';
@@ -60,7 +59,6 @@ const ALL_TABS: TabDef[] = [
   { id: 'trip-bases', label: 'Dasar Trip', icon: CalendarPlus, flag: 'master.trips', component: TripBasesManager },
   { id: 'trips', label: 'Trip', icon: CalendarDays, flag: 'master.trips', component: TripsManager },
   { id: 'pricing', label: 'Aturan Harga', icon: DollarSign, flag: 'master.price_rules', component: PriceRulesManager },
-  { id: 'pricing-matrix', label: 'Harga OD-Matrix', icon: DollarSign, flag: 'master.price_rules', component: PassengerPriceMatrixManager },
   { id: 'cargo-types', label: 'Jenis Kargo', icon: Tag, flag: 'master.cargo_types', component: CargoTypesManager },
   { id: 'cargo-rates', label: 'Tarif Kargo', icon: Package, flag: 'master.cargo_rates', component: CargoRatesManager },
   { id: 'cost-templates', label: 'Biaya Perjalanan', icon: Wallet, flag: 'master.cost_templates', component: TripCostTemplatesManager },

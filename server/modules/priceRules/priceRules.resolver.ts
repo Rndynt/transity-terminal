@@ -1,20 +1,20 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@server/db";
 import {
-  passengerPriceMatrices,
-  passengerPriceExceptions,
-  type PassengerPriceMatrix,
-  type PassengerPriceMatrixBlob,
+  priceRules,
+  priceRuleExceptions,
+  type PriceRule,
+  type PriceRuleBlob,
 } from "@shared/schema/pricing";
 
 // ============================================================================
 // DOMAIN-AGNOSTIC HELPERS
 // These know nothing about "passenger" vs "cargo" — they operate purely on
 // the `{ version, cells: { "originStopId|destStopId": { price } } }` blob
-// shape. Cargo pricing (Prompt #2) reuses these directly against its own
-// matrix table/rows; only the table-specific fetch functions below
+// shape. Cargo pricing reuses these directly against its own price table/
+// rows; only the table-specific fetch functions below
 // (getEffectivePatternMatrix / getGlobalMatrix / trip-exception lookup) are
-// domain-specific and will need a cargo-side sibling.
+// domain-specific and would need a cargo-side sibling.
 // ============================================================================
 
 export function matrixCellKey(originStopId: string, destinationStopId: string): string {
@@ -23,7 +23,7 @@ export function matrixCellKey(originStopId: string, destinationStopId: string): 
 
 /** Empty cell, missing key, or price<=0 all mean "price not set" -> 0. */
 export function getMatrixCellPrice(
-  blob: PassengerPriceMatrixBlob | null | undefined,
+  blob: PriceRuleBlob | null | undefined,
   originStopId: string,
   destinationStopId: string,
 ): number {
@@ -56,9 +56,10 @@ export interface MatrixStopLike {
 export interface MatrixGridRow { stopId: string; stopName: string; stopCode: string; sequence: number; }
 export interface MatrixGridCell { originStopId: string; destinationStopId: string; price: number; }
 
-/** Builds an upper-triangular (forward-only) grid for the UI from a matrix
- * row + the pattern's stops-in-sequence. Sequence is ONLY used for render
- * ordering here — the actual cell lookup below is always by stopId pair. */
+/** Builds an upper-triangular (forward-only) grid for the UI from a price
+ * rule row + the pattern's stops-in-sequence. Sequence is ONLY used for
+ * render ordering here — the actual cell lookup below is always by stopId
+ * pair. */
 export function extractMatrixGrid(
   matrixRow: { matrix: unknown } | null | undefined,
   patternStops: MatrixStopLike[],
@@ -70,7 +71,7 @@ export function extractMatrixGrid(
     stopCode: ps.stop?.code ?? '',
     sequence: ps.stopSequence,
   }));
-  const blob = (matrixRow?.matrix as PassengerPriceMatrixBlob | undefined) ?? { version: 1, cells: {} };
+  const blob = (matrixRow?.matrix as PriceRuleBlob | undefined) ?? { version: 1, cells: {} };
   const cells: MatrixGridCell[] = [];
   for (let i = 0; i < sorted.length; i++) {
     for (let j = i + 1; j < sorted.length; j++) {
@@ -84,12 +85,11 @@ export function extractMatrixGrid(
 
 /** Inverse of extractMatrixGrid: turns edited grid cells back into a JSONB
  * blob. Cells with price<=0 are OMITTED (not stored as 0) so the blob only
- * ever contains meaningfully-set prices — keeps `hasAnyPricedDestination`
- * cheap (any key present = priced) and the blob small. */
+ * ever contains meaningfully-set prices. */
 export function serializeMatrixGrid(
   cells: Array<{ originStopId: string; destinationStopId: string; price: number }>,
-): PassengerPriceMatrixBlob {
-  const out: PassengerPriceMatrixBlob = { version: 1, cells: {} };
+): PriceRuleBlob {
+  const out: PriceRuleBlob = { version: 1, cells: {} };
   for (const c of cells) {
     if (c.price > 0) {
       out.cells[matrixCellKey(c.originStopId, c.destinationStopId)] = { price: c.price };
@@ -103,12 +103,12 @@ export function serializeMatrixGrid(
 // ============================================================================
 
 async function getTripExceptionPrice(tripId: string, originStopId: string, destinationStopId: string): Promise<number> {
-  const [row] = await db.select().from(passengerPriceExceptions)
+  const [row] = await db.select().from(priceRuleExceptions)
     .where(and(
-      eq(passengerPriceExceptions.tripId, tripId),
-      eq(passengerPriceExceptions.originStopId, originStopId),
-      eq(passengerPriceExceptions.destinationStopId, destinationStopId),
-      isNull(passengerPriceExceptions.deletedAt),
+      eq(priceRuleExceptions.tripId, tripId),
+      eq(priceRuleExceptions.originStopId, originStopId),
+      eq(priceRuleExceptions.destinationStopId, destinationStopId),
+      isNull(priceRuleExceptions.deletedAt),
     ));
   if (!row) return 0;
   const price = Number(row.price);
@@ -135,49 +135,27 @@ export function pickActiveSeasonalOrRegular<T extends { kind: string; validFrom?
 
 /** Pattern tier: prefer an ACTIVE seasonal template whose window contains
  * serviceDate, else the regular row. Returns null if neither exists. */
-export async function getEffectivePatternMatrix(patternId: string, serviceDate: string): Promise<PassengerPriceMatrix | null> {
-  const rows = await db.select().from(passengerPriceMatrices)
+export async function getEffectivePatternMatrix(patternId: string, serviceDate: string): Promise<PriceRule | null> {
+  const rows = await db.select().from(priceRules)
     .where(and(
-      eq(passengerPriceMatrices.scope, 'pattern'),
-      eq(passengerPriceMatrices.patternId, patternId),
-      eq(passengerPriceMatrices.isActive, true),
-      isNull(passengerPriceMatrices.deletedAt),
+      eq(priceRules.scope, 'pattern'),
+      eq(priceRules.patternId, patternId),
+      eq(priceRules.isActive, true),
+      isNull(priceRules.deletedAt),
     ));
   if (rows.length === 0) return null;
   return pickActiveSeasonalOrRegular(rows, serviceDate);
 }
 
-export async function getGlobalMatrix(): Promise<PassengerPriceMatrix | null> {
-  const [row] = await db.select().from(passengerPriceMatrices)
+export async function getGlobalMatrix(): Promise<PriceRule | null> {
+  const [row] = await db.select().from(priceRules)
     .where(and(
-      eq(passengerPriceMatrices.scope, 'global'),
-      eq(passengerPriceMatrices.kind, 'regular'),
-      eq(passengerPriceMatrices.isActive, true),
-      isNull(passengerPriceMatrices.deletedAt),
+      eq(priceRules.scope, 'global'),
+      eq(priceRules.kind, 'regular'),
+      eq(priceRules.isActive, true),
+      isNull(priceRules.deletedAt),
     ));
   return row ?? null;
-}
-
-/**
- * Backward-compat gate (§5): before the matrix system has ANY data for a
- * pattern (nor a global fallback), consumers should fall back to the
- * legacy price_rules flat/per_leg logic rather than treating every OD as
- * "not priced". Once a matrix row exists (even an empty/partially-filled
- * one an admin started editing), we trust the matrix as authoritative and
- * stop falling back — a 0-priced OD at that point means "genuinely not
- * set yet", not "pre-migration".
- */
-export async function matrixSystemHasAnyData(patternId: string): Promise<boolean> {
-  const [patternRow] = await db.select({ id: passengerPriceMatrices.id }).from(passengerPriceMatrices)
-    .where(and(
-      eq(passengerPriceMatrices.scope, 'pattern'),
-      eq(passengerPriceMatrices.patternId, patternId),
-      isNull(passengerPriceMatrices.deletedAt),
-    ));
-  if (patternRow) return true;
-  const [globalRow] = await db.select({ id: passengerPriceMatrices.id }).from(passengerPriceMatrices)
-    .where(and(eq(passengerPriceMatrices.scope, 'global'), isNull(passengerPriceMatrices.deletedAt)));
-  return !!globalRow;
 }
 
 /**
@@ -202,16 +180,16 @@ export async function resolvePassengerCell(args: {
 
   return pickFirstPriced<'trip' | 'pattern' | 'global'>([
     { tag: 'trip', price: tripPrice },
-    { tag: 'pattern', price: patternMatrix ? getMatrixCellPrice(patternMatrix.matrix as PassengerPriceMatrixBlob, originStopId, destinationStopId) : 0 },
-    { tag: 'global', price: globalMatrix ? getMatrixCellPrice(globalMatrix.matrix as PassengerPriceMatrixBlob, originStopId, destinationStopId) : 0 },
+    { tag: 'pattern', price: patternMatrix ? getMatrixCellPrice(patternMatrix.matrix as PriceRuleBlob, originStopId, destinationStopId) : 0 },
+    { tag: 'global', price: globalMatrix ? getMatrixCellPrice(globalMatrix.matrix as PriceRuleBlob, originStopId, destinationStopId) : 0 },
   ]);
 }
 
 /**
- * Cheaper existence-only check used for OD-aware selectability (§6): does
- * ANY destination after `originStopId` on this pattern currently resolve to
- * a price > 0? Fetches the pattern+global matrices ONCE and scans in
- * memory rather than calling resolvePassengerCell per candidate stop.
+ * Cheaper existence-only check used for OD-aware selectability: does ANY
+ * destination after `originStopId` on this pattern currently resolve to a
+ * price > 0? Fetches the pattern+global rows ONCE and scans in memory
+ * rather than calling resolvePassengerCell per candidate stop.
  */
 export async function hasAnyPricedDestinationFromOrigin(args: {
   patternId: string;
@@ -226,8 +204,8 @@ export async function hasAnyPricedDestinationFromOrigin(args: {
     getEffectivePatternMatrix(patternId, serviceDate),
     getGlobalMatrix(),
   ]);
-  const patternBlob = patternMatrix?.matrix as PassengerPriceMatrixBlob | undefined;
-  const globalBlob = globalMatrix?.matrix as PassengerPriceMatrixBlob | undefined;
+  const patternBlob = patternMatrix?.matrix as PriceRuleBlob | undefined;
+  const globalBlob = globalMatrix?.matrix as PriceRuleBlob | undefined;
 
   return destinationStopIds.some(destinationStopId =>
     getMatrixCellPrice(patternBlob, originStopId, destinationStopId) > 0 ||
@@ -256,8 +234,8 @@ export async function listPricedDestinationsFromOrigin(args: {
     getEffectivePatternMatrix(patternId, serviceDate),
     getGlobalMatrix(),
   ]);
-  const patternBlob = patternMatrix?.matrix as PassengerPriceMatrixBlob | undefined;
-  const globalBlob = globalMatrix?.matrix as PassengerPriceMatrixBlob | undefined;
+  const patternBlob = patternMatrix?.matrix as PriceRuleBlob | undefined;
+  const globalBlob = globalMatrix?.matrix as PriceRuleBlob | undefined;
 
   return destinationStopIds.map(destinationStopId => {
     const patternPrice = getMatrixCellPrice(patternBlob, originStopId, destinationStopId);

@@ -2,8 +2,7 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, uuid, timestamp, integer, boolean, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { priceRuleScopeEnum } from "./enums";
-import { trips, tripPatterns } from "./scheduling";
+import { trips } from "./scheduling";
 
 export const seatInventory = pgTable("seat_inventory", {
   id:       uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -82,22 +81,8 @@ export const seatHolds = pgTable("seat_holds", {
   idxSeatHoldsTripSeat: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_trip_seat ON ${table} (trip_id, seat_no)`
 }));
 
-export const priceRules = pgTable("price_rules", {
-  id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  scope:     priceRuleScopeEnum("scope").notNull(),
-  patternId: uuid("pattern_id").references(() => tripPatterns.id),
-  tripId:    uuid("trip_id").references(() => trips.id),
-  legIndex:  integer("leg_index"),
-  priority:  integer("priority").default(0),
-  rule:      jsonb("rule").notNull(),
-  validFrom:  timestamp("valid_from", { withTimezone: true }),
-  validTo:    timestamp("valid_to", { withTimezone: true }),
-  deletedAt:  timestamp("deleted_at", { withTimezone: true })
-}, (table) => ({
-  idxPriceRulesPatternId: sql`CREATE INDEX IF NOT EXISTS idx_price_rules_pattern_id ON ${table} (pattern_id)`,
-  idxPriceRulesTripId: sql`CREATE INDEX IF NOT EXISTS idx_price_rules_trip_id ON ${table} (trip_id)`
-}));
-
-export const insertPriceRuleSchema = createInsertSchema(priceRules).omit({ id: true });
-export type PriceRule = typeof priceRules.$inferSelect;
-export type InsertPriceRule = z.infer<typeof insertPriceRuleSchema>;
+// NOTE: `price_rules` used to live here (flat/per_leg pricing rules). It has
+// been fully replaced by the OD-matrix pricing system — the `priceRules`
+// table now lives in ./pricing.ts under the SAME name (identity swap), with
+// a different shape (jsonb matrix keyed by stopId pairs, no more
+// tripId/legIndex/priority/rule columns). See shared/schema/pricing.ts.

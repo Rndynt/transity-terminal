@@ -2,11 +2,11 @@ import { db } from "@server/db";
 import { eq, and, or, desc, sql, inArray, isNull, gte, lte } from "drizzle-orm";
 import { fromZonedHHMMToUtc } from "@server/utils/timezone";
 import { createComponentLogger } from "@server/lib/logger";
-import { hasAnyPricedDestinationFromOrigin } from "@modules/pricing/priceMatrix.resolver";
+import { hasAnyPricedDestinationFromOrigin } from "@modules/priceRules/priceRules.resolver";
 import { ManifestEntry, ManifestFull, ManifestCargoEntry } from "@server/storage.interface";
 import {
   tripPatterns, patternStops, tripBases, trips, tripStopTimes, tripLegs,
-  seatInventory, seatHolds, priceRules, stops, vehicles, drivers, bookings, passengers,
+  seatInventory, seatHolds, priceRules, priceRuleExceptions, stops, vehicles, drivers, bookings, passengers,
   cargoShipments, scheduleExceptions, scheduleStopExceptions,
   type TripPattern, type InsertTripPattern,
   type PatternStop, type InsertPatternStop, type Stop,
@@ -15,7 +15,6 @@ import {
   type TripStopTime, type InsertTripStopTime,
   type TripLeg, type InsertTripLeg,
   type SeatInventory, type InsertSeatInventory,
-  type PriceRule, type InsertPriceRule,
   type CsoAvailableTrip,
   type CargoAvailableTrip,
   type Outlet,
@@ -243,8 +242,8 @@ export class SchedulingRepository {
         const tripIds = childTrips.map(t => t.id);
         await tx.update(tripStopTimes).set({ deletedAt: now }).where(inArray(tripStopTimes.tripId, tripIds));
         await tx.update(tripLegs).set({ deletedAt: now }).where(inArray(tripLegs.tripId, tripIds));
-        await tx.update(priceRules).set({ deletedAt: now }).where(
-          and(inArray(priceRules.tripId, tripIds), eq(priceRules.scope, 'trip'))
+        await tx.update(priceRuleExceptions).set({ deletedAt: now }).where(
+          inArray(priceRuleExceptions.tripId, tripIds)
         );
         await tx.delete(seatInventory).where(inArray(seatInventory.tripId, tripIds));
         await tx.delete(seatHolds).where(inArray(seatHolds.tripId, tripIds));
@@ -589,7 +588,6 @@ export class SchedulingRepository {
         .from(priceRules)
         .where(and(
           isNull(priceRules.deletedAt),
-          isNull(priceRules.tripId),
           inArray(priceRules.patternId, uniquePatternIds)
         ));
       for (const r of prRows) {
@@ -754,7 +752,7 @@ export class SchedulingRepository {
 
       await tx.update(tripStopTimes).set({ deletedAt: now }).where(eq(tripStopTimes.tripId, id));
       await tx.update(tripLegs).set({ deletedAt: now }).where(eq(tripLegs.tripId, id));
-      await tx.update(priceRules).set({ deletedAt: now }).where(and(eq(priceRules.tripId, id), eq(priceRules.scope, 'trip')));
+      await tx.update(priceRuleExceptions).set({ deletedAt: now }).where(eq(priceRuleExceptions.tripId, id));
       await tx.delete(seatInventory).where(eq(seatInventory.tripId, id));
       await tx.delete(seatHolds).where(eq(seatHolds.tripId, id));
       await tx.update(trips).set({ status: 'cancelled', deletedAt: now }).where(eq(trips.id, id));
@@ -898,38 +896,6 @@ export class SchedulingRepository {
 
   async deleteSeatInventory(tripId: string): Promise<void> {
     await db.delete(seatInventory).where(eq(seatInventory.tripId, tripId));
-  }
-
-  async getPriceRules(): Promise<PriceRule[]> {
-    return await db.select().from(priceRules).where(isNull(priceRules.deletedAt)).orderBy(desc(priceRules.priority));
-  }
-
-  async getPriceRulesForTrip(tripId: string, patternId: string): Promise<PriceRule[]> {
-    return await db.select().from(priceRules)
-      .where(
-        and(
-          isNull(priceRules.deletedAt),
-          or(
-            eq(priceRules.tripId, tripId),
-            and(eq(priceRules.patternId, patternId), isNull(priceRules.tripId))
-          )
-        )
-      )
-      .orderBy(desc(priceRules.priority));
-  }
-
-  async createPriceRule(data: InsertPriceRule): Promise<PriceRule> {
-    const [priceRule] = await db.insert(priceRules).values(data).returning();
-    return priceRule;
-  }
-
-  async updatePriceRule(id: string, data: Partial<InsertPriceRule>): Promise<PriceRule> {
-    const [priceRule] = await db.update(priceRules).set(data).where(eq(priceRules.id, id)).returning();
-    return priceRule;
-  }
-
-  async deletePriceRule(id: string): Promise<void> {
-    await db.update(priceRules).set({ deletedAt: new Date() }).where(eq(priceRules.id, id));
   }
 
   async tripHasBookings(tripId: string): Promise<boolean> {

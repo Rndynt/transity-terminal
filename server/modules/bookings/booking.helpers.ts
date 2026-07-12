@@ -1,5 +1,5 @@
 import { IStorage } from "@server/storage.interface";
-import { PricingService } from "@modules/pricing/pricing.service";
+import { PricingService } from "@modules/priceRules/pricing.service";
 import { PromosService, type PromoApplicationItem, type PromoValidationResult } from "@modules/promos/promos.service";
 import { passengers as passengersTable, seatInventory, seatHolds } from "@shared/schema";
 import { scheduleStopExceptions } from "@shared/schema/scheduling";

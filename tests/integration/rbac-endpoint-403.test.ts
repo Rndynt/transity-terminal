@@ -525,18 +525,18 @@ describe("RBAC preHandler 403 — outlets", () => {
 
 describe("RBAC preHandler 403 — priceRules", () => {
   runPreHandlerCase({
-    label: "POST /api/price-rules",
-    method: "POST",
+    label: "PUT /api/price-rules",
+    method: "PUT",
     url: "/api/price-rules",
     flag: "master.price_rules",
-    body: { scope: "pattern", rule: { base: 100 } },
+    body: { scope: "pattern", patternId: VALID_UUID, kind: "regular", cells: [], expectedUpdatedAt: null },
   });
   runPreHandlerCase({
-    label: "PUT /api/price-rules/:id",
-    method: "PUT",
-    url: `/api/price-rules/${VALID_UUID}`,
+    label: "PATCH /api/price-rules/:id/active",
+    method: "PATCH",
+    url: `/api/price-rules/${VALID_UUID}/active`,
     flag: "master.price_rules",
-    body: { priority: 1 },
+    body: { isActive: true },
   });
   runPreHandlerCase({
     label: "DELETE /api/price-rules/:id",
@@ -649,20 +649,14 @@ describe("RBAC happy-path — dengan flag yang tepat → 2xx asli", () => {
     expect(storage.createPromotion).toHaveBeenCalledTimes(1);
   });
 
-  it("POST /api/price-rules dengan master.price_rules → 2xx + body rule baru", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/api/price-rules",
-      headers: {
-        "content-type": "application/json",
-        "x-test-flags": "master.price_rules",
-      },
-      payload: JSON.stringify({ scope: "pattern", rule: { base: 100 } }),
-    });
-    expect(res.statusCode).toBeGreaterThanOrEqual(200);
-    expect(res.statusCode).toBeLessThan(300);
-    expect(storage.createPriceRule).toHaveBeenCalledTimes(1);
-  });
+  // NOTE: price-rules write endpoints (PUT/PATCH/DELETE) now go through
+  // PriceRulesService, which reads/writes the `price_rules` table directly
+  // via drizzle `db` (same pattern as scheduler.service.ts) rather than
+  // through the mocked `storage` object this suite fakes. A happy-path
+  // 2xx check here would need a real Postgres connection (or a `db` mock),
+  // which this in-memory RBAC suite doesn't set up — the 403/401
+  // preHandler checks above still fully cover the RBAC gating concern
+  // since requireFlag rejects before the handler (and its db calls) ever run.
 
   it("POST /api/trip-patterns dengan master.trip_patterns → 2xx + pattern baru", async () => {
     const res = await app.inject({

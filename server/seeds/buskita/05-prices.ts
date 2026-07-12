@@ -1,4 +1,6 @@
+import { db } from "@server/db";
 import { storage } from "@server/storage";
+import { priceRules } from "@shared/schema/pricing";
 import type { SeedContext } from "./context";
 
 export async function seedPrices(ctx: SeedContext) {
@@ -7,22 +9,33 @@ export async function seedPrices(ctx: SeedContext) {
   const p = ctx.patterns;
 
   const priceRuleDefs = [
-    { patternId: p.pSbyMlg01.id, price: 85000, currency: "IDR" },
-    { patternId: p.pMlgSby01.id, price: 85000, currency: "IDR" },
-    { patternId: p.pSbyMlg02.id, price: 55000, currency: "IDR" },
-    { patternId: p.pMlgSby02.id, price: 55000, currency: "IDR" },
-    { patternId: p.pSbyBli01.id, price: 250000, currency: "IDR" },
-    { patternId: p.pBliSby01.id, price: 250000, currency: "IDR" },
-    { patternId: p.pBliUbud01.id, price: 65000, currency: "IDR" },
-    { patternId: p.pUbudBli01.id, price: 65000, currency: "IDR" },
+    { patternId: p.pSbyMlg01.id, price: 85000 },
+    { patternId: p.pMlgSby01.id, price: 85000 },
+    { patternId: p.pSbyMlg02.id, price: 55000 },
+    { patternId: p.pMlgSby02.id, price: 55000 },
+    { patternId: p.pSbyBli01.id, price: 250000 },
+    { patternId: p.pBliSby01.id, price: 250000 },
+    { patternId: p.pBliUbud01.id, price: 65000 },
+    { patternId: p.pUbudBli01.id, price: 65000 },
   ];
 
+  // OD-matrix pricing: each seed pattern here is a simple 2-endpoint route
+  // (origin = first stop, destination = last stop by sequence), so one
+  // matrix cell covering the full journey is the equivalent of the old
+  // flat/per_leg "one price for the whole pattern" rule.
   for (const pr of priceRuleDefs) {
-    await storage.createPriceRule({
-      scope: "pattern", patternId: pr.patternId,
-      tripId: null, legIndex: null,
-      rule: { basePricePerLeg: pr.price, currency: pr.currency, multiplier: 1.0, pricingMode: "flat" },
-      validFrom: null, validTo: null, priority: 1,
+    const patternStops = await storage.getPatternStops(pr.patternId);
+    if (patternStops.length < 2) continue;
+    const sorted = [...patternStops].sort((a, b) => a.stopSequence - b.stopSequence);
+    const originStopId = sorted[0].stopId;
+    const destinationStopId = sorted[sorted.length - 1].stopId;
+
+    await db.insert(priceRules).values({
+      scope: "pattern",
+      patternId: pr.patternId,
+      kind: "regular",
+      matrix: { version: 1, cells: { [`${originStopId}|${destinationStopId}`]: { price: pr.price } } },
+      isActive: true,
     });
   }
 

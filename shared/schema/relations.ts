@@ -2,7 +2,8 @@ import { relations } from "drizzle-orm";
 import { stops, outlets } from "./network";
 import { drivers, layouts, vehicles } from "./fleet";
 import { tripPatterns, patternStops, tripBases, trips, tripStopTimes, tripLegs } from "./scheduling";
-import { seatInventory, priceRules } from "./inventory";
+import { seatInventory } from "./inventory";
+import { priceRules, priceRuleExceptions } from "./pricing";
 import { bookings, passengers, payments, printJobs, bookingHistory } from "./booking";
 import { appUsers } from "./app-users";
 import { reviews } from "./reviews";
@@ -68,7 +69,7 @@ export const tripsRelations = relations(trips, ({ one, many }) => ({
   tripLegs: many(tripLegs),
   seatInventory: many(seatInventory),
   bookings: many(bookings),
-  priceRules: many(priceRules)
+  priceRuleExceptions: many(priceRuleExceptions)
 }));
 
 export const tripStopTimesRelations = relations(tripStopTimes, ({ one }) => ({
@@ -87,8 +88,11 @@ export const seatInventoryRelations = relations(seatInventory, ({ one }) => ({
 }));
 
 export const priceRulesRelations = relations(priceRules, ({ one }) => ({
-  pattern: one(tripPatterns, { fields: [priceRules.patternId], references: [tripPatterns.id] }),
-  trip: one(trips, { fields: [priceRules.tripId], references: [trips.id] })
+  pattern: one(tripPatterns, { fields: [priceRules.patternId], references: [tripPatterns.id] })
+}));
+
+export const priceRuleExceptionsRelations = relations(priceRuleExceptions, ({ one }) => ({
+  trip: one(trips, { fields: [priceRuleExceptions.tripId], references: [trips.id] })
 }));
 
 export const bookingsRelations = relations(bookings, ({ one, many }) => ({

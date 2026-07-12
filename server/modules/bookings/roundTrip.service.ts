@@ -13,7 +13,7 @@ import {
 import { eq, and, inArray, gt, sql } from "drizzle-orm";
 import { generateBookingCode, generateTicketNumber, generateGroupCode } from "@server/utils/codeGenerator";
 import { webSocketService } from "@server/realtime/ws";
-import { PricingService } from "@modules/pricing/pricing.service";
+import { PricingService } from "@modules/priceRules/pricing.service";
 import { PrintService } from "@modules/printing/print.service";
 import { IStorage } from "@server/storage.interface";
 import { Booking, BookingGroup } from "@shared/schema";

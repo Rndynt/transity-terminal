@@ -13,7 +13,6 @@ import { registerTripPatternsRoutes } from "./modules/tripPatterns/tripPatterns.
 import { registerTripBasesRoutes } from "./modules/tripBases/tripBases.routes";
 import { registerTripsRoutes } from "./modules/trips/trips.routes";
 import { registerPriceRulesRoutes } from "./modules/priceRules/priceRules.routes";
-import { registerPriceMatrixRoutes } from "./modules/pricing/priceMatrix.routes";
 import { registerBookingsRoutes } from "./modules/bookings/bookings.routes";
 import { registerPaymentsRoutes } from "./modules/payments/payments.routes";
 import { registerCargoRoutes } from "./modules/cargo/cargo.routes";
@@ -285,7 +284,6 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
   registerTripBasesRoutes(app, storage);
   registerTripsRoutes(app, storage);
   await registerPriceRulesRoutes(app, storage);
-  await registerPriceMatrixRoutes(app, storage);
   registerBookingsRoutes(app, storage);
   registerPaymentsRoutes(app, storage);
   registerCargoRoutes(app, storage);

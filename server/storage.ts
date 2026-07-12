@@ -14,7 +14,7 @@ import type {
   TripPattern, InsertTripPattern, PatternStop, InsertPatternStop,
   TripBase, InsertTripBase, Trip, InsertTrip, TripWithDetails,
   TripStopTime, InsertTripStopTime, TripLeg, InsertTripLeg,
-  SeatInventory, InsertSeatInventory, PriceRule, InsertPriceRule,
+  SeatInventory, InsertSeatInventory,
   Booking, InsertBooking, Passenger, InsertPassenger,
   Payment, InsertPayment, PrintJob, InsertPrintJob,
   CargoShipment, CargoShipmentListItem, InsertCargoShipment, CargoType, InsertCargoType,
@@ -197,11 +197,6 @@ export class DatabaseStorage implements IStorage {
   createSeatInventory(data: InsertSeatInventory[]): Promise<SeatInventory[]> { return this.scheduling.createSeatInventory(data); }
   updateSeatInventory(tripId: string, seatNo: string, legIndexes: number[], updates: Partial<InsertSeatInventory>): Promise<void> { return this.scheduling.updateSeatInventory(tripId, seatNo, legIndexes, updates); }
   deleteSeatInventory(tripId: string): Promise<void> { return this.scheduling.deleteSeatInventory(tripId); }
-  getPriceRules(): Promise<PriceRule[]> { return this.scheduling.getPriceRules(); }
-  getPriceRulesForTrip(tripId: string, patternId: string): Promise<PriceRule[]> { return this.scheduling.getPriceRulesForTrip(tripId, patternId); }
-  createPriceRule(data: InsertPriceRule): Promise<PriceRule> { return this.scheduling.createPriceRule(data); }
-  updatePriceRule(id: string, data: Partial<InsertPriceRule>): Promise<PriceRule> { return this.scheduling.updatePriceRule(id, data); }
-  deletePriceRule(id: string): Promise<void> { return this.scheduling.deletePriceRule(id); }
   tripHasBookings(tripId: string): Promise<boolean> { return this.scheduling.tripHasBookings(tripId); }
   getTripByBaseAndDate(baseId: string, serviceDate: string): Promise<Trip | undefined> { return this.scheduling.getTripByBaseAndDate(baseId, serviceDate); }
   releaseHoldsForTrip(tripId: string): Promise<void> { return this.scheduling.releaseHoldsForTrip(tripId); }

@@ -1,7 +1,7 @@
 /**
  * Unit tests for the DOMAIN-AGNOSTIC, DB-free helpers in
- * server/modules/pricing/priceMatrix.resolver.ts — the pure logic behind
- * OD-matrix pricing (§10 of the passenger OD-matrix pricing prompt).
+ * server/modules/priceRules/priceRules.resolver.ts — the pure logic behind
+ * OD-matrix pricing.
  *
  * DB-dependent parts (resolvePassengerCell, hasAnyPricedDestinationFromOrigin,
  * getEffectivePatternMatrix's row fetch, consumer parity across
@@ -9,7 +9,7 @@
  * concurrency test) need a live Postgres connection and were NOT run in
  * this sandbox — see the final report's "known limitations" section.
  *
- * Run: `npx vitest run tests/priceMatrix.resolver.test.ts`
+ * Run: `npx vitest run tests/priceRules.resolver.test.ts`
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -19,8 +19,8 @@ import {
   pickActiveSeasonalOrRegular,
   extractMatrixGrid,
   serializeMatrixGrid,
-} from "@server/modules/pricing/priceMatrix.resolver";
-import type { PassengerPriceMatrixBlob } from "@shared/schema/pricing";
+} from "@server/modules/priceRules/priceRules.resolver";
+import type { PriceRuleBlob } from "@shared/schema/pricing";
 
 describe("matrixCellKey / getMatrixCellPrice", () => {
   it("builds a stable 'origin|dest' key", () => {
@@ -28,7 +28,7 @@ describe("matrixCellKey / getMatrixCellPrice", () => {
   });
 
   it("returns 0 for a missing cell", () => {
-    const blob: PassengerPriceMatrixBlob = { version: 1, cells: {} };
+    const blob: PriceRuleBlob = { version: 1, cells: {} };
     expect(getMatrixCellPrice(blob, "a", "b")).toBe(0);
   });
 
@@ -38,12 +38,12 @@ describe("matrixCellKey / getMatrixCellPrice", () => {
   });
 
   it("treats a stored price of exactly 0 as 'not set' -> 0", () => {
-    const blob: PassengerPriceMatrixBlob = { version: 1, cells: { "a|b": { price: 0 } } };
+    const blob: PriceRuleBlob = { version: 1, cells: { "a|b": { price: 0 } } };
     expect(getMatrixCellPrice(blob, "a", "b")).toBe(0);
   });
 
   it("returns the stored price for an existing cell", () => {
-    const blob: PassengerPriceMatrixBlob = { version: 1, cells: { "a|b": { price: 95000 } } };
+    const blob: PriceRuleBlob = { version: 1, cells: { "a|b": { price: 95000 } } };
     expect(getMatrixCellPrice(blob, "a", "b")).toBe(95000);
   });
 
@@ -51,7 +51,7 @@ describe("matrixCellKey / getMatrixCellPrice", () => {
     // JKT->BDG 95k, BDG->JOG 100k, JKT->JOG 200k — NOT 95k+100k=195k.
     // This is exactly the case the flat/per_leg legacy modes could never
     // express; the matrix must return each pair's OWN value untouched.
-    const blob: PassengerPriceMatrixBlob = {
+    const blob: PriceRuleBlob = {
       version: 1,
       cells: {
         "jkt|bdg": { price: 95000 },
