@@ -24,13 +24,17 @@ export default function PriceRulesManager() {
   const { data: patterns = [] } = useQuery({ queryKey: ['/api/trip-patterns'], queryFn: tripPatternsApi.getAll });
   const { data: outlets = [] } = useQuery({ queryKey: ['/api/outlets'], queryFn: outletsApi.getAll });
 
-  // Nama pola konsisten berformat "KotaAsal → KotaTujuan · via ..." atau
-  // "KotaAsal - KotaTujuan - ...". Ambil token pertama sebagai kota asal
-  // untuk mengelompokkan dropdown supaya tidak jadi daftar panjang datar
-  // yang susah dibaca saat pola-nya banyak (mis. beberapa varian rute
-  // Bandung<->Jakarta dengan "via" yang berbeda-beda).
-  const getOriginCity = (name: string): string => {
-    const firstSegment = name.split(/→|->|-|–|·/)[0]?.trim();
+  // Ambil kota asal dari stop pertama pola (field `city` pada Stop).
+  // Fallback ke parsing nama pola hanya saat data stops belum loaded.
+  // JANGAN split pada "-" karena kode trip seperti "MUDIK-01-..." akan
+  // menghasilkan token yang salah (mis. "MUDIK" bukan "Jakarta").
+  const getOriginCityFromStops = (
+    stops: Array<PatternStop & { stop: Stop | null }> | undefined,
+    patternName: string,
+  ): string => {
+    const firstCity = stops?.[0]?.stop?.city;
+    if (firstCity) return firstCity.toUpperCase();
+    const firstSegment = patternName.split(/→|->|–|·/)[0]?.trim();
     return firstSegment || 'Lainnya';
   };
 
@@ -71,7 +75,7 @@ export default function PriceRulesManager() {
       label: formatOdLabel(patternStopsQueries[idx]?.data, p.name),
       badge: p.code,
       subtitle: p.note || undefined,
-      group: getOriginCity(p.name),
+      group: getOriginCityFromStops(patternStopsQueries[idx]?.data, p.name),
     }))
     .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
 
