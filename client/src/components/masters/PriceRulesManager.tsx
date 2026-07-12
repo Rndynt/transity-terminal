@@ -114,6 +114,7 @@ export default function PriceRulesManager() {
               setKind={setKind}
               selectedSeasonalId={selectedSeasonalId}
               setSelectedSeasonalId={setSelectedSeasonalId}
+              allowIntraCityBooking={patterns.find((p: TripPattern) => p.id === patternId)?.allowIntraCityBooking ?? false}
             />
           )}
 
@@ -129,13 +130,14 @@ export default function PriceRulesManager() {
 }
 
 function PatternPriceEditor({
-  patternId, kind, setKind, selectedSeasonalId, setSelectedSeasonalId,
+  patternId, kind, setKind, selectedSeasonalId, setSelectedSeasonalId, allowIntraCityBooking,
 }: {
   patternId: string;
   kind: 'regular' | 'seasonal';
   setKind: (k: 'regular' | 'seasonal') => void;
   selectedSeasonalId: string;
   setSelectedSeasonalId: (id: string) => void;
+  allowIntraCityBooking: boolean;
 }) {
   const { toast } = useToast();
   const [localCells, setLocalCells] = useState<Map<string, number> | null>(null);
@@ -294,14 +296,23 @@ function PatternPriceEditor({
           </AlertDescription>
         </Alert>
       ) : (
-        <PriceGrid
-          rows={rows}
-          cells={[...cellMap.entries()].map(([key, price]) => {
-            const [originStopId, destinationStopId] = key.split('|');
-            return { originStopId, destinationStopId, value: price };
-          })}
-          onChange={handleChange}
-        />
+        <>
+          {!allowIntraCityBooking && (
+            <p className="text-[11px] text-muted-foreground -mt-1">
+              Sel bertanda "dalam kota" dimatikan karena pola ini belum mengizinkan rute pendek dalam kota
+              (lihat toggle di Pola Perjalanan).
+            </p>
+          )}
+          <PriceGrid
+            rows={rows}
+            cells={[...cellMap.entries()].map(([key, price]) => {
+              const [originStopId, destinationStopId] = key.split('|');
+              return { originStopId, destinationStopId, value: price };
+            })}
+            onChange={handleChange}
+            disableSameCityCells={!allowIntraCityBooking}
+          />
+        </>
       )}
 
       <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !localCells} data-testid="button-save-matrix">

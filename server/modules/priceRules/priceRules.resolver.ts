@@ -50,10 +50,10 @@ export function pickFirstPriced<T extends string>(sources: PriceSource<T>[]): { 
 export interface MatrixStopLike {
   stopId: string;
   stopSequence: number;
-  stop?: { name?: string | null; code?: string | null } | null;
+  stop?: { name?: string | null; code?: string | null; city?: string | null } | null;
 }
 
-export interface MatrixGridRow { stopId: string; stopName: string; stopCode: string; sequence: number; }
+export interface MatrixGridRow { stopId: string; stopName: string; stopCode: string; city: string | null; sequence: number; }
 export interface MatrixGridCell { originStopId: string; destinationStopId: string; price: number; }
 
 /** Builds an upper-triangular (forward-only) grid for the UI from a price
@@ -69,6 +69,7 @@ export function extractMatrixGrid(
     stopId: ps.stopId,
     stopName: ps.stop?.name ?? ps.stopId,
     stopCode: ps.stop?.code ?? '',
+    city: ps.stop?.city ?? null,
     sequence: ps.stopSequence,
   }));
   const blob = (matrixRow?.matrix as PriceRuleBlob | undefined) ?? { version: 1, cells: {} };

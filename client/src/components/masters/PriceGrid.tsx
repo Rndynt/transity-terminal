@@ -4,6 +4,7 @@ export interface MatrixGridRow {
   stopId: string;
   stopName: string;
   stopCode?: string;
+  city?: string | null;
   sequence: number;
 }
 
@@ -23,6 +24,12 @@ interface PriceGridProps<T = number> {
   renderCell?: (value: T, onChange: (next: T) => void, ctx: { originStopId: string; destinationStopId: string }) => React.ReactNode;
   disabled?: boolean;
   emptyLabel?: string;
+  /** When true, cells where origin.city === destination.city are rendered
+   * as non-editable/greyed instead of a normal input — those OD pairs can
+   * never actually be booked (see trip_patterns.allow_intra_city_booking),
+   * so offering an editable price for them is just confusing clutter.
+   * Pass `false` (or omit) for patterns that DO sell intra-city hops. */
+  disableSameCityCells?: boolean;
 }
 
 function defaultNumericCell(value: number, onChange: (v: number) => void, disabled?: boolean) {
@@ -54,6 +61,7 @@ export function PriceGrid<T = number>({
   renderCell,
   disabled,
   emptyLabel = 'Tambahkan minimal 2 halte ke pola ini untuk mengisi matrix harga.',
+  disableSameCityCells = false,
 }: PriceGridProps<T>) {
   if (rows.length < 2) {
     return <div className="text-xs text-muted-foreground p-4 text-center border rounded-lg bg-muted/20">{emptyLabel}</div>;
@@ -88,6 +96,25 @@ export function PriceGrid<T = number>({
                 if (destRow.sequence <= originRow.sequence) {
                   return <td key={destRow.stopId} className="bg-muted/30 border-b" />;
                 }
+
+                const sameCity = disableSameCityCells
+                  && !!originRow.city && !!destRow.city
+                  && originRow.city === destRow.city;
+
+                if (sameCity) {
+                  return (
+                    <td key={destRow.stopId} className="p-1 border-b bg-muted/40">
+                      <div
+                        className="h-8 flex items-center justify-center text-muted-foreground/60 text-[11px] rounded border border-dashed"
+                        title={`${originRow.stopName} dan ${destRow.stopName} sama-sama di kota ${originRow.city} — rute pendek dalam kota nonaktif untuk pola ini (lihat toggle "Izinkan Rute Pendek Dalam Kota" di Pola Perjalanan)`}
+                        data-testid="cell-intra-city-disabled"
+                      >
+                        dalam kota
+                      </div>
+                    </td>
+                  );
+                }
+
                 const key = `${originRow.stopId}|${destRow.stopId}`;
                 const value = (cellMap.get(key) ?? (0 as unknown as T));
                 return (
