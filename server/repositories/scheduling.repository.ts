@@ -511,11 +511,10 @@ export class SchedulingRepository {
         GROUP BY ps.pattern_id
       ),
       price_rule_check AS (
-        SELECT DISTINCT COALESCE(pr.trip_id, pr.pattern_id) AS ref_id, pr.trip_id, pr.pattern_id
+        SELECT DISTINCT pr.pattern_id
         FROM price_rules pr
         WHERE pr.deleted_at IS NULL
-          AND (pr.trip_id IN (SELECT id FROM eligible_trips)
-               OR pr.pattern_id IN (SELECT DISTINCT pattern_id FROM eligible_trips))
+          AND pr.pattern_id IN (SELECT DISTINCT pattern_id FROM eligible_trips)
       )
       SELECT
         et.id AS trip_id,
@@ -533,7 +532,7 @@ export class SchedulingRepository {
         tb.stop_count,
         pp.path AS pattern_stops,
         GREATEST(0, COALESCE(et.capacity, 0) - COALESCE(bc.cnt, 0) - COALESCE(hc.cnt, 0)) AS available_seats,
-        (EXISTS (SELECT 1 FROM price_rule_check prc WHERE prc.trip_id = et.id OR (prc.pattern_id = et.pattern_id AND prc.trip_id IS NULL))) AS has_price_rule
+        (EXISTS (SELECT 1 FROM price_rule_check prc WHERE prc.pattern_id = et.pattern_id)) AS has_price_rule
       FROM eligible_trips et
       INNER JOIN trip_patterns tp ON tp.id = et.pattern_id
       LEFT JOIN vehicles v ON v.id = et.vehicle_id

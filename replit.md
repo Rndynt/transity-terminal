@@ -27,6 +27,8 @@
 
 **Current dev DB seed:** re-imported on 2026-07-11 — ran `npx tsx scripts/db-migrate.ts` then `npm run db:push` (schema had drifted: `trip_patterns.allow_intra_city_booking` and the `passenger_price_matrices`/`passenger_price_exceptions` tables exist in `shared/schema` and in migration `0024_passenger_price_matrix.sql`, but `0024` was never added to `migrations/meta/_journal.json`, so Drizzle's migrator silently skipped it — `db:push` is what actually applies it, matching the comment left in that SQL file). Seeded with `npx tsx server/seeds/index.ts nusa` (Nusa Shuttle dataset: Jakarta/Bandung/Semarang/Yogyakarta).
 
+**Known fix — CSO available-trips 500:** `getRealTripsForCso` (server/repositories/scheduling.repository.ts) had a leftover `price_rule_check` CTE referencing `price_rules.trip_id`, a column that never existed on that table (per-trip overrides live in `price_rule_exceptions`, not `price_rules`). Fixed to key `has_price_rule` off `pattern_id` only, matching the actual schema.
+
 **Known fix — blank preview:** `@fastify/compress` (global) compresses Vite dev responses, and the compressed body arrives empty through Replit's preview proxy (200 status, 0 bytes) even though it works fine over direct localhost curl — this looks like "backend works, frontend blank". Compression is now only enabled in production (`server/index.ts`); keep it that way for dev.
 
 ## Overview
