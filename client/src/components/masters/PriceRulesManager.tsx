@@ -145,18 +145,18 @@ function PatternPriceEditor({
   const [seasonalTo, setSeasonalTo] = useState<Date>();
 
   const gridQuery = useQuery({
-    queryKey: ['/api/pricing/matrix/pattern', patternId, kind, selectedSeasonalId],
+    queryKey: ['/api/price-rules/pattern', patternId, kind, selectedSeasonalId],
     queryFn: () => priceRulesApi.getPatternGrid(patternId, kind, selectedSeasonalId || undefined),
   });
 
   const syncStatusQuery = useQuery({
-    queryKey: ['/api/pricing/matrix/pattern', patternId, 'sync-status'],
+    queryKey: ['/api/price-rules/pattern', patternId, 'sync-status'],
     queryFn: () => priceRulesApi.getSyncStatus(patternId),
     enabled: kind === 'regular',
   });
 
   const seasonalListQuery = useQuery({
-    queryKey: ['/api/pricing/matrix/pattern', patternId, 'seasonal-list'],
+    queryKey: ['/api/price-rules/pattern', patternId, 'seasonal-list'],
     queryFn: () => priceRulesApi.listSeasonalTemplates(patternId),
   });
 
@@ -185,12 +185,12 @@ function PatternPriceEditor({
     onSuccess: () => {
       toast({ title: 'Harga disimpan' });
       setLocalCells(null);
-      queryClient.invalidateQueries({ queryKey: ['/api/pricing/matrix/pattern', patternId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/price-rules/pattern', patternId] });
     },
     onError: (error: any) => {
       if (error?.responseData?.code === 'STALE_MATRIX' || error?.message?.includes('409')) {
         toast({ title: 'Data sudah berubah', description: 'Muat ulang halaman lalu coba simpan lagi.', variant: 'destructive' });
-        queryClient.invalidateQueries({ queryKey: ['/api/pricing/matrix/pattern', patternId] });
+        queryClient.invalidateQueries({ queryKey: ['/api/price-rules/pattern', patternId] });
       } else {
         toast({ title: 'Gagal menyimpan', description: error.message, variant: 'destructive' });
       }
@@ -201,7 +201,7 @@ function PatternPriceEditor({
     mutationFn: () => priceRulesApi.sync(patternId),
     onSuccess: () => {
       toast({ title: 'Berhasil sinkron', description: 'Pasangan OD yang belum diisi ditambahkan dengan harga 0.' });
-      queryClient.invalidateQueries({ queryKey: ['/api/pricing/matrix/pattern', patternId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/price-rules/pattern', patternId] });
     },
     onError: (error: any) => toast({ title: 'Gagal sync', description: error.message, variant: 'destructive' }),
   });
@@ -217,7 +217,7 @@ function PatternPriceEditor({
       toast({ title: 'Template musiman dibuat' });
       setShowSeasonalForm(false);
       setSeasonalName(''); setSeasonalFrom(undefined); setSeasonalTo(undefined);
-      queryClient.invalidateQueries({ queryKey: ['/api/pricing/matrix/pattern', patternId, 'seasonal-list'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/price-rules/pattern', patternId, 'seasonal-list'] });
       setKind('seasonal');
       setSelectedSeasonalId(created.id);
     },
@@ -284,6 +284,15 @@ function PatternPriceEditor({
 
       {gridQuery.isLoading ? (
         <div className="text-xs text-muted-foreground p-4">Memuat matrix...</div>
+      ) : gridQuery.isError ? (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            Gagal memuat data harga: {(gridQuery.error as Error)?.message || 'Terjadi kesalahan tak terduga.'}
+            {' '}Kemungkinan skema database belum di-migrate untuk sistem harga baru — jalankan{' '}
+            <code className="bg-black/10 px-1 rounded">npm run db:push</code> di server, lalu muat ulang halaman ini.
+          </AlertDescription>
+        </Alert>
       ) : (
         <PriceGrid
           rows={rows}
@@ -307,7 +316,7 @@ function GlobalPriceEditor() {
   const [localRows, setLocalRows] = useState<Array<{ originStopId: string; destinationStopId: string; price: number }> | null>(null);
 
   const { data: stops = [] } = useQuery({ queryKey: ['/api/stops'], queryFn: stopsApi.getAll });
-  const globalQuery = useQuery({ queryKey: ['/api/pricing/matrix/global'], queryFn: priceRulesApi.getGlobalList });
+  const globalQuery = useQuery({ queryKey: ['/api/price-rules/global'], queryFn: priceRulesApi.getGlobalList });
 
   const stopOptions = stops.map((s: Stop) => ({ value: s.id, label: `${s.name} (${s.code})` }));
 
@@ -324,7 +333,7 @@ function GlobalPriceEditor() {
     onSuccess: () => {
       toast({ title: 'Fallback global disimpan' });
       setLocalRows(null);
-      queryClient.invalidateQueries({ queryKey: ['/api/pricing/matrix/global'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/price-rules/global'] });
     },
     onError: (error: any) => toast({ title: 'Gagal menyimpan', description: error.message, variant: 'destructive' }),
   });
