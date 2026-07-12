@@ -154,7 +154,7 @@ export function PriceGrid<T = number>({
                         title={`${originRow.stopName} dan ${destRow.stopName} sama-sama di kota ${originRow.city} — rute pendek dalam kota nonaktif untuk pola ini`}
                         data-testid="cell-intra-city-disabled"
                       >
-                        dalam kota
+                        
                       </div>
                     </td>
                   );
