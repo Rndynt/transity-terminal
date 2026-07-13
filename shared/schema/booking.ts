@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, uuid, timestamp, integer, numeric, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, timestamp, integer, numeric, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { bookingStatusEnum, channelEnum, paymentMethodEnum, paymentStatusEnum, printStatusEnum, ticketStatusEnum, bookingHistoryActionEnum } from "./enums";
@@ -22,7 +22,7 @@ export const bookingGroups = pgTable("booking_groups", {
   createdBy:   text("created_by"),
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  idxBookingGroupsCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_booking_groups_created_at ON ${table} (created_at)`
+  idxBookingGroupsCreatedAt: index('idx_booking_groups_created_at').on(table.createdAt),
 }));
 
 export const insertBookingGroupSchema = createInsertSchema(bookingGroups).omit({
@@ -69,18 +69,18 @@ export const bookings = pgTable("bookings", {
   idempotencyKey:     text("idempotency_key"),
   createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
-  idxBookingsTripId: sql`CREATE INDEX IF NOT EXISTS idx_bookings_trip_id ON ${table} (trip_id)`,
-  idxBookingsStatus: sql`CREATE INDEX IF NOT EXISTS idx_bookings_status ON ${table} (status)`,
-  idxBookingsTripStatus: sql`CREATE INDEX IF NOT EXISTS idx_bookings_trip_status ON ${table} (trip_id, status)`,
-  idxBookingsOutletId: sql`CREATE INDEX IF NOT EXISTS idx_bookings_outlet_id ON ${table} (outlet_id)`,
-  idxBookingsCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_bookings_created_at ON ${table} (created_at)`,
-  idxBookingsPendingExpiry: sql`CREATE INDEX IF NOT EXISTS idx_bookings_pending_expiry ON ${table} (pending_expires_at) WHERE status = 'pending'`,
-  idxBookingsAppUserId: sql`CREATE INDEX IF NOT EXISTS idx_bookings_app_user_id ON ${table} (app_user_id) WHERE app_user_id IS NOT NULL`,
-  idxBookingsGroupId: sql`CREATE INDEX IF NOT EXISTS idx_bookings_group_id ON ${table} (group_id) WHERE group_id IS NOT NULL`,
-  idxBookingsOriginStop: sql`CREATE INDEX IF NOT EXISTS idx_bookings_origin_stop ON ${table} (origin_stop_id)`,
-  idxBookingsDestStop: sql`CREATE INDEX IF NOT EXISTS idx_bookings_destination_stop ON ${table} (destination_stop_id)`,
-  idxBookingsOutletCreated: sql`CREATE INDEX IF NOT EXISTS idx_bookings_outlet_created ON ${table} (outlet_id, created_at DESC)`,
-  uniqBookingsIdempotency: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_bookings_idempotency_key ON ${table} (idempotency_key) WHERE idempotency_key IS NOT NULL`
+  idxBookingsTripId:        index('idx_bookings_trip_id').on(table.tripId),
+  idxBookingsStatus:        index('idx_bookings_status').on(table.status),
+  idxBookingsTripStatus:    index('idx_bookings_trip_status').on(table.tripId, table.status),
+  idxBookingsOutletId:      index('idx_bookings_outlet_id').on(table.outletId),
+  idxBookingsCreatedAt:     index('idx_bookings_created_at').on(table.createdAt),
+  idxBookingsPendingExpiry: index('idx_bookings_pending_expiry').on(table.pendingExpiresAt).where(sql`status = 'pending'`),
+  idxBookingsAppUserId:     index('idx_bookings_app_user_id').on(table.appUserId).where(sql`app_user_id IS NOT NULL`),
+  idxBookingsGroupId:       index('idx_bookings_group_id').on(table.groupId).where(sql`group_id IS NOT NULL`),
+  idxBookingsOriginStop:    index('idx_bookings_origin_stop').on(table.originStopId),
+  idxBookingsDestStop:      index('idx_bookings_destination_stop').on(table.destinationStopId),
+  idxBookingsOutletCreated: index('idx_bookings_outlet_created').on(table.outletId, table.createdAt),
+  uniqBookingsIdempotency:  uniqueIndex('uniq_bookings_idempotency_key').on(table.idempotencyKey).where(sql`idempotency_key IS NOT NULL`),
 }));
 
 // §3.9a: bookingCode is notNull at the column level, but every TT
@@ -104,9 +104,9 @@ export const bookingPromoApplications = pgTable("booking_promo_applications", {
   discountAmount:  numeric("discount_amount", { precision: 12, scale: 2 }).notNull(),
   createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  idxBpaBookingId: sql`CREATE INDEX IF NOT EXISTS idx_bpa_booking_id ON ${table} (booking_id)`,
-  idxBpaPromoId:   sql`CREATE INDEX IF NOT EXISTS idx_bpa_promo_id ON ${table} (promo_id)`,
-  uniqBpaBookingPromo: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_bpa_booking_promo ON ${table} (booking_id, promo_id)`,
+  idxBpaBookingId:     index('idx_bpa_booking_id').on(table.bookingId),
+  idxBpaPromoId:       index('idx_bpa_promo_id').on(table.promoId),
+  uniqBpaBookingPromo: uniqueIndex('uniq_bpa_booking_promo').on(table.bookingId, table.promoId),
 }));
 
 export const insertBookingPromoApplicationSchema = createInsertSchema(bookingPromoApplications).omit({ id: true, createdAt: true });
@@ -125,8 +125,8 @@ export const passengers = pgTable("passengers", {
   fareAmount:     numeric("fare_amount", { precision: 12, scale: 2 }).notNull(),
   fareBreakdown:  jsonb("fare_breakdown")
 }, (table) => ({
-  idxPassengersBookingId: sql`CREATE INDEX IF NOT EXISTS idx_passengers_booking_id ON ${table} (booking_id)`,
-  idxPassengersBookingSeat: sql`CREATE INDEX IF NOT EXISTS idx_passengers_booking_seat ON ${table} (booking_id, seat_no)`
+  idxPassengersBookingId:   index('idx_passengers_booking_id').on(table.bookingId),
+  idxPassengersBookingSeat: index('idx_passengers_booking_seat').on(table.bookingId, table.seatNo),
 }));
 
 export const insertPassengerSchema = createInsertSchema(passengers).omit({ id: true });
@@ -146,28 +146,20 @@ export const payments = pgTable("payments", {
   // wajib JOIN ke payments.status='success' untuk filter row pending.
   paidAt:      timestamp("paid_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
-  idxPaymentsBookingId: sql`CREATE INDEX IF NOT EXISTS idx_payments_booking_id ON ${table} (booking_id)`,
-  idxPaymentsProviderRef: sql`CREATE INDEX IF NOT EXISTS idx_payments_provider_ref ON ${table} (provider_ref) WHERE provider_ref IS NOT NULL`,
-  idxPaymentsPaidAt: sql`CREATE INDEX IF NOT EXISTS idx_payments_paid_at ON ${table} (paid_at)`,
-  // P3 / P2 §7.9: functional index on (paid_at::date) so reports that
-  // group/filter by date hit an index instead of a full scan.
+  idxPaymentsBookingId:   index('idx_payments_booking_id').on(table.bookingId),
+  idxPaymentsProviderRef: index('idx_payments_provider_ref').on(table.providerRef).where(sql`provider_ref IS NOT NULL`),
+  idxPaymentsPaidAt:      index('idx_payments_paid_at').on(table.paidAt),
+  // P3 / P2 §7.9: functional index on paid_at grouped by UTC date so reports
+  // that filter/group by date hit an index instead of a full scan.
   //
   // Partial index: only `status = 'success'` rows are indexed. Callers
   // that want to use this index MUST include the predicate `status = 'success'`
-  // in their WHERE clause, otherwise Postgres falls back to a sequential
-  // scan or to `idx_payments_paid_at`.
+  // in their WHERE clause, otherwise Postgres falls back to a sequential scan.
   //
-  // Verified callers (all pass the partial predicate):
-  //   - server/modules/dashboard/dashboard.service.ts: today's revenue
-  //   - server/repositories/reports.repository.ts:
-  //       bookingDateConditions (paid mode), paymentFilters (paid mode),
-  //       getRevenueSummary daily breakdown, getBookingTrends daily breakdown,
-  //       getRefundReport gross_amount daily breakdown
-  //
-  // Date expression must be `paid_at::date` (matching the index's functional
-  // expression). Any caller using `date_trunc('day', paid_at)` would NOT
-  // hit this index — none currently exist (audited 2025-04).
-  idxPaymentsPaidDate: sql`CREATE INDEX IF NOT EXISTS idx_payments_paid_date ON ${table} ((paid_at::date)) WHERE status = 'success'`
+  // Expression uses AT TIME ZONE 'UTC' because paid_at is timestamptz and
+  // a plain ::date cast is timezone-dependent (NOT IMMUTABLE in Postgres).
+  // Callers must use `(paid_at AT TIME ZONE 'UTC')` to hit this index.
+  idxPaymentsPaidDate: index('idx_payments_paid_date').on(sql`(paid_at AT TIME ZONE 'UTC')`).where(sql`status = 'success'`),
 }));
 
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, paidAt: true });
@@ -182,7 +174,7 @@ export const printJobs = pgTable("print_jobs", {
   lastError: text("last_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
-  idxPrintJobsBookingId: sql`CREATE INDEX IF NOT EXISTS idx_print_jobs_booking_id ON ${table} (booking_id)`
+  idxPrintJobsBookingId: index('idx_print_jobs_booking_id').on(table.bookingId),
 }));
 
 export const insertPrintJobSchema = createInsertSchema(printJobs).omit({ id: true, createdAt: true });
@@ -198,7 +190,7 @@ export const bookingHistory = pgTable("booking_history", {
   performedBy:   text("performed_by"),
   createdAt:     timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
-  idxBookingHistoryBookingId: sql`CREATE INDEX IF NOT EXISTS idx_booking_history_booking_id ON ${table} (booking_id)`
+  idxBookingHistoryBookingId: index('idx_booking_history_booking_id').on(table.bookingId),
 }));
 
 export const insertBookingHistorySchema = createInsertSchema(bookingHistory).omit({ id: true, createdAt: true });

@@ -74,11 +74,11 @@ export const seatHolds = pgTable("seat_holds", {
   expiresAt:   timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
-  idxSeatHoldsTripId: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_trip_id ON ${table} (trip_id)`,
-  idxSeatHoldsExpiresAt: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_expires_at ON ${table} (expires_at)`,
-  idxSeatHoldsActive: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_active ON ${table} (trip_id, expires_at) WHERE booking_id IS NULL`,
-  idxSeatHoldsBookingId: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_booking_id ON ${table} (booking_id) WHERE booking_id IS NOT NULL`,
-  idxSeatHoldsTripSeat: sql`CREATE INDEX IF NOT EXISTS idx_seat_holds_trip_seat ON ${table} (trip_id, seat_no)`
+  idxSeatHoldsTripId:    index('idx_seat_holds_trip_id').on(table.tripId),
+  idxSeatHoldsExpiresAt: index('idx_seat_holds_expires_at').on(table.expiresAt),
+  idxSeatHoldsActive:    index('idx_seat_holds_active').on(table.tripId, table.expiresAt).where(sql`booking_id IS NULL`),
+  idxSeatHoldsBookingId: index('idx_seat_holds_booking_id').on(table.bookingId).where(sql`booking_id IS NOT NULL`),
+  idxSeatHoldsTripSeat:  index('idx_seat_holds_trip_seat').on(table.tripId, table.seatNo),
 }));
 
 // NOTE: `price_rules` used to live here (flat/per_leg pricing rules). It has

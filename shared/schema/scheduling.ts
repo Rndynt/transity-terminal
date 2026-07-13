@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, uuid, timestamp, integer, boolean, date, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, timestamp, integer, boolean, date, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { tripStatusEnum } from "./enums";
@@ -30,7 +30,7 @@ export const tripPatterns = pgTable("trip_patterns", {
 }, (table) => ({
   // PR α-1: FK index untuk pattern admin (which patterns use layout X).
   // Partial: default_layout_id nullable. Migration 0015 mendaftarkan index yang sama.
-  idxTripPatternsDefaultLayoutId: sql`CREATE INDEX IF NOT EXISTS idx_trip_patterns_default_layout_id ON ${table} (default_layout_id) WHERE default_layout_id IS NOT NULL`,
+  idxTripPatternsDefaultLayoutId: index('idx_trip_patterns_default_layout_id').on(table.defaultLayoutId).where(sql`default_layout_id IS NOT NULL`),
 }));
 
 export const insertTripPatternSchema = createInsertSchema(tripPatterns).omit({ id: true, createdAt: true });
@@ -48,8 +48,8 @@ export const patternStops = pgTable("pattern_stops", {
   createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow(),
   deletedAt:        timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
-  idxPatternStopsPatternId: sql`CREATE INDEX IF NOT EXISTS idx_pattern_stops_pattern_id ON ${table} (pattern_id)`,
-  idxPatternStopsStopId: sql`CREATE INDEX IF NOT EXISTS idx_pattern_stops_stop_id ON ${table} (stop_id)`
+  idxPatternStopsPatternId: index('idx_pattern_stops_pattern_id').on(table.patternId),
+  idxPatternStopsStopId: index('idx_pattern_stops_stop_id').on(table.stopId),
 }));
 
 export const insertPatternStopSchema = createInsertSchema(patternStops).omit({ id: true, createdAt: true });
@@ -82,9 +82,9 @@ export const tripBases = pgTable("trip_bases", {
   updatedAt:        timestamp("updated_at", { withTimezone: true }).defaultNow(),
   deletedAt:        timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
-  idxTripBasesActive:  sql`CREATE INDEX IF NOT EXISTS idx_trip_bases_active ON ${table} (active)`,
-  idxTripBasesPattern: sql`CREATE INDEX IF NOT EXISTS idx_trip_bases_pattern ON ${table} (pattern_id)`,
-  idxTripBasesValid:   sql`CREATE INDEX IF NOT EXISTS idx_trip_bases_valid ON ${table} (valid_from, valid_to)`
+  idxTripBasesActive:  index('idx_trip_bases_active').on(table.active),
+  idxTripBasesPattern: index('idx_trip_bases_pattern').on(table.patternId),
+  idxTripBasesValid:   index('idx_trip_bases_valid').on(table.validFrom, table.validTo),
 }));
 
 export const insertTripBaseSchema = createInsertSchema(tripBases).omit({ id: true, createdAt: true, updatedAt: true });
@@ -111,15 +111,15 @@ export const trips = pgTable("trips", {
   createdAt:                timestamp("created_at", { withTimezone: true }).defaultNow(),
   deletedAt:                timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
-  uniqTripBasePerDay: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_trip_base_per_day ON ${table} (base_id, service_date) WHERE base_id IS NOT NULL AND deleted_at IS NULL`,
-  idxTripsServiceDate: sql`CREATE INDEX IF NOT EXISTS idx_trips_service_date ON ${table} (service_date)`,
-  idxTripsPatternId: sql`CREATE INDEX IF NOT EXISTS idx_trips_pattern_id ON ${table} (pattern_id)`,
-  idxTripsStatus: sql`CREATE INDEX IF NOT EXISTS idx_trips_status ON ${table} (status)`,
-  idxTripsDriverId: sql`CREATE INDEX IF NOT EXISTS idx_trips_driver_id ON ${table} (driver_id)`,
-  idxTripsVehicleId: sql`CREATE INDEX IF NOT EXISTS idx_trips_vehicle_id ON ${table} (vehicle_id)`,
-  idxTripsPatternDate: sql`CREATE INDEX IF NOT EXISTS idx_trips_pattern_date ON ${table} (pattern_id, service_date)`,
-  idxTripsBaseDate: sql`CREATE INDEX IF NOT EXISTS idx_trips_base_date ON ${table} (base_id, service_date) WHERE base_id IS NOT NULL`,
-  idxTripsDateStatus: sql`CREATE INDEX IF NOT EXISTS idx_trips_date_status ON ${table} (service_date, status) WHERE deleted_at IS NULL`
+  uniqTripBasePerDay:  uniqueIndex('uniq_trip_base_per_day').on(table.baseId, table.serviceDate).where(sql`base_id IS NOT NULL AND deleted_at IS NULL`),
+  idxTripsServiceDate: index('idx_trips_service_date').on(table.serviceDate),
+  idxTripsPatternId:   index('idx_trips_pattern_id').on(table.patternId),
+  idxTripsStatus:      index('idx_trips_status').on(table.status),
+  idxTripsDriverId:    index('idx_trips_driver_id').on(table.driverId),
+  idxTripsVehicleId:   index('idx_trips_vehicle_id').on(table.vehicleId),
+  idxTripsPatternDate: index('idx_trips_pattern_date').on(table.patternId, table.serviceDate),
+  idxTripsBaseDate:    index('idx_trips_base_date').on(table.baseId, table.serviceDate).where(sql`base_id IS NOT NULL`),
+  idxTripsDateStatus:  index('idx_trips_date_status').on(table.serviceDate, table.status).where(sql`deleted_at IS NULL`),
 }));
 
 export const insertTripSchema = createInsertSchema(trips).omit({ id: true, createdAt: true });
@@ -189,8 +189,8 @@ export const scheduleExceptions = pgTable("schedule_exceptions", {
   createdBy:   text("created_by"),
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqBaseDate: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_schedule_exception_base_date ON ${table} (base_id, exception_date)`,
-  idxExceptionDate: sql`CREATE INDEX IF NOT EXISTS idx_schedule_exception_date ON ${table} (exception_date)`,
+  uniqBaseDate:     uniqueIndex('uniq_schedule_exception_base_date').on(table.baseId, table.exceptionDate),
+  idxExceptionDate: index('idx_schedule_exception_date').on(table.exceptionDate),
 }));
 
 export const insertScheduleExceptionSchema = createInsertSchema(scheduleExceptions).omit({ id: true, createdAt: true });
@@ -208,8 +208,8 @@ export const scheduleStopExceptions = pgTable("schedule_stop_exceptions", {
   createdBy:       text("created_by"),
   createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqBaseDateStop: sql`CREATE UNIQUE INDEX IF NOT EXISTS uniq_stop_exception_base_date_stop ON ${table} (base_id, exception_date, stop_id)`,
-  idxStopExceptionDate: sql`CREATE INDEX IF NOT EXISTS idx_stop_exception_date ON ${table} (exception_date)`,
+  uniqBaseDateStop:     uniqueIndex('uniq_stop_exception_base_date_stop').on(table.baseId, table.exceptionDate, table.stopId),
+  idxStopExceptionDate: index('idx_stop_exception_date').on(table.exceptionDate),
 }));
 
 export const insertScheduleStopExceptionSchema = createInsertSchema(scheduleStopExceptions).omit({ id: true, createdAt: true });
@@ -223,7 +223,7 @@ export const tripClosures = pgTable("trip_closures", {
   closedBy:  text("closed_by"),
   closedAt:  timestamp("closed_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  idxTripClosuresTripId: sql`CREATE INDEX IF NOT EXISTS idx_trip_closures_trip_id ON ${table} (trip_id)`,
+  idxTripClosuresTripId: index('idx_trip_closures_trip_id').on(table.tripId),
 }));
 
 export const insertTripClosureSchema = createInsertSchema(tripClosures).omit({ id: true, closedAt: true });
@@ -242,10 +242,10 @@ export const tripStopTimes = pgTable("trip_stop_times", {
   dwellSeconds:     integer("dwell_seconds").default(0),
   deletedAt:        timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
-  idxTstTripId: sql`CREATE INDEX IF NOT EXISTS idx_tst_trip_id ON ${table} (trip_id)`,
-  idxTstStopId: sql`CREATE INDEX IF NOT EXISTS idx_tst_stop_id ON ${table} (stop_id)`,
-  idxTstTripStop: sql`CREATE INDEX IF NOT EXISTS idx_tst_trip_stop ON ${table} (trip_id, stop_id) WHERE deleted_at IS NULL`,
-  idxTstTripSeq: sql`CREATE INDEX IF NOT EXISTS idx_tst_trip_seq ON ${table} (trip_id, stop_sequence) WHERE deleted_at IS NULL`
+  idxTstTripId:   index('idx_tst_trip_id').on(table.tripId),
+  idxTstStopId:   index('idx_tst_stop_id').on(table.stopId),
+  idxTstTripStop: index('idx_tst_trip_stop').on(table.tripId, table.stopId).where(sql`deleted_at IS NULL`),
+  idxTstTripSeq:  index('idx_tst_trip_seq').on(table.tripId, table.stopSequence).where(sql`deleted_at IS NULL`),
 }));
 
 export const insertTripStopTimeSchema = createInsertSchema(tripStopTimes).omit({ id: true });
@@ -305,7 +305,7 @@ export const tripLegs = pgTable("trip_legs", {
   durationMin: integer("duration_min").notNull(),
   deletedAt:   timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
-  idxTripLegsTripId: sql`CREATE INDEX IF NOT EXISTS idx_trip_legs_trip_id ON ${table} (trip_id)`
+  idxTripLegsTripId: index('idx_trip_legs_trip_id').on(table.tripId),
 }));
 
 export const insertTripLegSchema = createInsertSchema(tripLegs).omit({ id: true });

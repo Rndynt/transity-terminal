@@ -444,19 +444,24 @@ export class SchedulingRepository {
           AND tst.deleted_at IS NULL
           AND tst.trip_id IN (SELECT id FROM eligible_trips)
       ),
-      trip_bounds AS (
+      trip_bounds_agg AS (
         SELECT tst.trip_id,
                MIN(tst.stop_sequence) AS min_seq,
                MAX(tst.stop_sequence) AS max_seq,
-               COUNT(*)::int AS stop_count,
-               MAX(tst.arrive_at) FILTER (WHERE tst.stop_sequence = (
-                 SELECT MAX(t2.stop_sequence) FROM trip_stop_times t2
-                 WHERE t2.trip_id = tst.trip_id AND t2.deleted_at IS NULL
-               )) AS final_arrival_at
+               COUNT(*)::int AS stop_count
         FROM trip_stop_times tst
         WHERE tst.deleted_at IS NULL
           AND tst.trip_id IN (SELECT id FROM eligible_trips)
         GROUP BY tst.trip_id
+      ),
+      trip_bounds AS (
+        SELECT tba.trip_id, tba.min_seq, tba.max_seq, tba.stop_count,
+               tst_last.arrive_at AS final_arrival_at
+        FROM trip_bounds_agg tba
+        JOIN trip_stop_times tst_last
+          ON tst_last.trip_id = tba.trip_id
+         AND tst_last.stop_sequence = tba.max_seq
+         AND tst_last.deleted_at IS NULL
       ),
       boarding_check AS (
         SELECT tst.trip_id

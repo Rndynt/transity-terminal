@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, uuid, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, timestamp, integer, numeric, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -38,7 +38,7 @@ export const cargoRates = pgTable("cargo_rates", {
   // PR α-1: composite index untuk findCargoRate (cargo.repository.ts:65).
   // Setiap insert cargo shipment hit query ini 1-3x (global / pattern / trip
   // scope chain). Migration 0015 mendaftarkan index yang sama.
-  idxCargoRatesLookup: sql`CREATE INDEX IF NOT EXISTS idx_cargo_rates_lookup ON ${table} (cargo_type_id, scope, scope_ref_id, is_active)`,
+  idxCargoRatesLookup: index('idx_cargo_rates_lookup').on(table.cargoTypeId, table.scope, table.scopeRefId, table.isActive),
 }));
 
 export const cargoRatesRelations = relations(cargoRates, ({ one }) => ({
@@ -89,16 +89,17 @@ export const cargoShipments = pgTable("cargo_shipments", {
   createdBy:          text("created_by"),
   createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
-  idxCargoTripId: sql`CREATE INDEX IF NOT EXISTS idx_cargo_trip_id ON ${table} (trip_id)`,
-  idxCargoStatus: sql`CREATE INDEX IF NOT EXISTS idx_cargo_status ON ${table} (status)`,
-  idxCargoOutletId: sql`CREATE INDEX IF NOT EXISTS idx_cargo_outlet_id ON ${table} (outlet_id)`,
-  idxCargoTripStatus: sql`CREATE INDEX IF NOT EXISTS idx_cargo_trip_status ON ${table} (trip_id, status)`,
-  idxCargoPaidAt: sql`CREATE INDEX IF NOT EXISTS idx_cargo_paid_at ON ${table} (paid_at) WHERE paid_at IS NOT NULL`,
-  // P3: functional index on (paid_at::date) for daily/monthly cargo revenue
-  // reports.
-  idxCargoPaidDate: sql`CREATE INDEX IF NOT EXISTS idx_cargo_paid_date ON ${table} ((paid_at::date)) WHERE paid_at IS NOT NULL`,
-  idxCargoOutletCreated: sql`CREATE INDEX IF NOT EXISTS idx_cargo_outlet_created ON ${table} (outlet_id, created_at DESC)`,
-  idxCargoCargoType: sql`CREATE INDEX IF NOT EXISTS idx_cargo_cargo_type_id ON ${table} (cargo_type_id) WHERE cargo_type_id IS NOT NULL`
+  idxCargoTripId:       index('idx_cargo_trip_id').on(table.tripId),
+  idxCargoStatus:       index('idx_cargo_status').on(table.status),
+  idxCargoOutletId:     index('idx_cargo_outlet_id').on(table.outletId),
+  idxCargoTripStatus:   index('idx_cargo_trip_status').on(table.tripId, table.status),
+  idxCargoPaidAt:       index('idx_cargo_paid_at').on(table.paidAt).where(sql`paid_at IS NOT NULL`),
+  // P3: functional index on paid_at grouped by UTC date for daily/monthly
+  // cargo revenue reports. Uses AT TIME ZONE 'UTC' because paid_at is
+  // timestamptz — plain ::date cast is timezone-dependent (NOT IMMUTABLE).
+  idxCargoPaidDate:     index('idx_cargo_paid_date').on(sql`(paid_at AT TIME ZONE 'UTC')`).where(sql`paid_at IS NOT NULL`),
+  idxCargoOutletCreated: index('idx_cargo_outlet_created').on(table.outletId, table.createdAt),
+  idxCargoCargoType:    index('idx_cargo_cargo_type_id').on(table.cargoTypeId).where(sql`cargo_type_id IS NOT NULL`),
 }));
 
 export const cargoShipmentsRelations = relations(cargoShipments, ({ one }) => ({

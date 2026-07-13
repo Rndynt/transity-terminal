@@ -169,6 +169,13 @@
       "when": 1773697703593,
       "tag": "0024_trip_patterns_intra_city",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1773697704000,
+      "tag": "0025_performance_indexes",
+      "breakpoints": true
     }
   ]
 }
