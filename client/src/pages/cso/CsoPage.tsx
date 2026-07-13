@@ -1077,40 +1077,46 @@ export default function CsoPage() {
                   ) : null
                 )
               ) : (
-                <>
-                  {state.trip?.id && state.originSeq !== undefined && state.destinationSeq !== undefined ? (
-                    <SeatMap
-                      trip={state.trip}
-                      originSeq={state.originSeq}
-                      destinationSeq={state.destinationSeq}
-                      selectedSeats={state.selectedSeats}
-                      onSeatSelect={handleSeatSelect}
-                      onSeatDeselect={handleSeatDeselect}
-                      isPastTrip={isPastCsoTrip}
-                      externalAssignMode={assignModeInfo}
-                      onAssignModeChange={(mode) => {
-                        setAssignModeInfo(mode);
-                        if (!mode) navigate('/cso');
-                      }}
-                      rescheduleMode={rescheduleModeInfo}
-                      onRescheduleComplete={() => {
-                        setRescheduleModeInfo(null);
-                        navigate('/cso');
-                      }}
-                      onStartReschedule={(info) => {
-                        setRescheduleModeInfo(info);
-                      }}
-                      originStopId={state.originStop?.id}
-                      destinationStopId={state.destinationStop?.id}
-                    />
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-300">
-                      <Armchair className="w-12 h-12 mb-3" />
-                      <p className="text-sm font-medium text-gray-400">Data kursi tidak tersedia</p>
-                    </div>
-                  )}
+                <div className="h-full flex flex-col">
+                  <div className="flex-1 overflow-y-auto">
+                    {state.trip?.id && state.originSeq !== undefined && state.destinationSeq !== undefined ? (
+                      <SeatMap
+                        trip={state.trip}
+                        originSeq={state.originSeq}
+                        destinationSeq={state.destinationSeq}
+                        selectedSeats={state.selectedSeats}
+                        onSeatSelect={handleSeatSelect}
+                        onSeatDeselect={handleSeatDeselect}
+                        isPastTrip={isPastCsoTrip}
+                        externalAssignMode={assignModeInfo}
+                        onAssignModeChange={(mode) => {
+                          setAssignModeInfo(mode);
+                          if (!mode) navigate('/cso');
+                        }}
+                        rescheduleMode={rescheduleModeInfo}
+                        onRescheduleComplete={() => {
+                          setRescheduleModeInfo(null);
+                          navigate('/cso');
+                        }}
+                        onStartReschedule={(info) => {
+                          setRescheduleModeInfo(info);
+                        }}
+                        originStopId={state.originStop?.id}
+                        destinationStopId={state.destinationStop?.id}
+                      />
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-gray-300">
+                        <Armchair className="w-12 h-12 mb-3" />
+                        <p className="text-sm font-medium text-gray-400">Data kursi tidak tersedia</p>
+                      </div>
+                    )}
+                  </div>
+                  {/* Mobile: flex-shrink-0 sibling di luar area scroll di atas
+                      (bukan sticky) — selalu nempel di bawah panel tanpa perlu
+                      scroll dulu. Logic tampil-nya tidak berubah: hanya kalau
+                      ada kursi terpilih. */}
                   {selectedSeats.length > 0 && (
-                    <div className="md:hidden sticky bottom-0 -mx-3 -mb-3 mt-3 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white/95 backdrop-blur-sm border-t border-gray-200 z-10">
+                    <div className="md:hidden flex-shrink-0 border-t border-gray-200 bg-white -mx-3 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                       <button
                         onClick={() => bookingMode === 'round-trip' ? handleProceedToReturnTrip() : setMobilePanel('right')}
                         className="w-full h-11 bg-blue-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20"
@@ -1120,7 +1126,7 @@ export default function CsoPage() {
                       </button>
                     </div>
                   )}
-                </>
+                </div>
               )}
             </div>
 

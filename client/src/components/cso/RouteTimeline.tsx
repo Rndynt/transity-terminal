@@ -165,6 +165,19 @@ export default function RouteTimeline({
   const destIdx = selectedDestination ? sortedStopTimes.findIndex(st => st.stopId === selectedDestination.id) : -1;
   const legCount = originIdx >= 0 && destIdx > originIdx ? destIdx - originIdx : 0;
 
+  // Dipakai bareng oleh kartu ringkasan (desktop + mobile) dan action bar
+  // mobile di bawah — dihitung sekali di sini supaya keduanya selalu
+  // konsisten (logic tampil/enable tombol TIDAK berubah, cuma dipakai di
+  // dua tempat render yang berbeda).
+  const originTime = originIdx >= 0 ? formatTime(sortedStopTimes[originIdx]?.departAt) : null;
+  const destTime = destIdx >= 0 ? formatTime(sortedStopTimes[destIdx]?.arriveAt) : null;
+  const totalDuration = (originIdx >= 0 && destIdx >= 0)
+    ? calculateDuration(sortedStopTimes[originIdx]?.departAt, sortedStopTimes[destIdx]?.arriveAt)
+    : null;
+  const originClosed = selectedOrigin ? getStopException(selectedOrigin.id)?.disableBoarding : false;
+  const destClosed = selectedDestination ? getStopException(selectedDestination.id)?.disableAlighting : false;
+  const isValid = legCount > 0 && !originClosed && !destClosed;
+
   const isInSelectedRange = (i: number) => {
     if (originIdx < 0 || destIdx < 0) return false;
     return i >= originIdx && i <= destIdx;
@@ -223,7 +236,8 @@ export default function RouteTimeline({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="h-full flex flex-col">
+    <div className="flex-1 overflow-y-auto space-y-4">
       <div>
         <h3 className="text-sm font-bold text-gray-800 mb-0.5">Pilih Rute</h3>
         <p className="text-[11px] text-gray-400">Tentukan titik naik dan turun penumpang</p>
@@ -423,18 +437,7 @@ export default function RouteTimeline({
         })}
       </div>
 
-      {selectedOrigin && selectedDestination && (() => {
-        const originTime = originIdx >= 0 ? formatTime(sortedStopTimes[originIdx]?.departAt) : null;
-        const destTime = destIdx >= 0 ? formatTime(sortedStopTimes[destIdx]?.arriveAt) : null;
-        const totalDuration = (originIdx >= 0 && destIdx >= 0)
-          ? calculateDuration(sortedStopTimes[originIdx]?.departAt, sortedStopTimes[destIdx]?.arriveAt)
-          : null;
-        const originClosed = getStopException(selectedOrigin.id)?.disableBoarding;
-        const destClosed = getStopException(selectedDestination.id)?.disableAlighting;
-        const isValid = legCount > 0 && !originClosed && !destClosed;
-
-        return (
-          <>
+      {selectedOrigin && selectedDestination && (
           <div className={`rounded-xl overflow-hidden shadow-sm border-2 ${isValid ? 'border-blue-200' : 'border-rose-200'}`}>
             <div className={`px-4 py-3 ${isValid ? 'bg-gradient-to-r from-blue-50 to-indigo-50' : 'bg-rose-50'}`}>
               <div className="flex items-start justify-between gap-3">
@@ -500,29 +503,30 @@ export default function RouteTimeline({
               </button>
             )}
           </div>
+      )}
+    </div>
 
-          {/* Mobile: floating action bar pinned to the bottom of this panel.
-              Sama persis logic tampil/enable-nya (butuh onProceed + isValid),
-              cuma posisinya jadi mengambang di bawah layar, bukan ikut scroll. */}
-          {onProceed && (
-            <div className="md:hidden sticky bottom-0 -mx-3 -mb-3 mt-3 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white/95 backdrop-blur-sm border-t border-gray-200 z-10">
-              <button
-                onClick={isValid ? onProceed : undefined}
-                disabled={!isValid}
-                data-testid="btn-proceed-from-route-mobile"
-                className={`w-full py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
-                  isValid
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white active:bg-blue-800 shadow-lg shadow-blue-600/20'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
-              >
-                Lanjut Pilih Kursi <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-          </>
-        );
-      })()}
+    {/* Mobile: action bar flex-shrink-0, sibling di luar area scroll di atas
+        (bukan sticky) — jadi selalu nempel di bawah panel tanpa perlu
+        scroll dulu. Logic tampil/enable-nya identik dengan tombol desktop:
+        butuh onProceed + selectedOrigin + selectedDestination, disabled
+        kalau !isValid. */}
+    {selectedOrigin && selectedDestination && onProceed && (
+      <div className="md:hidden flex-shrink-0 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <button
+          onClick={isValid ? onProceed : undefined}
+          disabled={!isValid}
+          data-testid="btn-proceed-from-route-mobile"
+          className={`w-full py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+            isValid
+              ? 'bg-blue-600 hover:bg-blue-700 text-white active:bg-blue-800 shadow-lg shadow-blue-600/20'
+              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+          }`}
+        >
+          Lanjut Pilih Kursi <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    )}
     </div>
   );
 }

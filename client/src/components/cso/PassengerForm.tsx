@@ -546,39 +546,45 @@ export default function PassengerForm({
             </div>
           )}
 
-          <div className="flex gap-2 pt-3 mt-auto border-t border-gray-200 flex-shrink-0 sticky md:static bottom-0 -mx-3 md:mx-0 -mb-3 md:mb-0 px-3 md:px-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-0 bg-white/95 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none z-10">
-            {!isRoundTrip && (
-              <button
-                onClick={handleBookOnly}
-                disabled={!isPassengerValid || loading}
-                className="flex-1 h-10 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs md:text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                data-testid="btn-book-only"
-              >
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                <span className="hidden sm:inline">Booking Saja</span>
-                <span className="sm:hidden">Booking</span>
-              </button>
-            )}
-            {isRoundTrip && (
-              <button
-                onClick={onBack}
-                className="h-10 px-4 bg-gray-100 text-gray-600 rounded-xl font-semibold text-sm hover:bg-gray-200 transition-colors flex-shrink-0"
-                data-testid="btn-pax-pp-back"
-              >
-                Kembali
-              </button>
-            )}
-            <button
-              onClick={handlePayAndPrint}
-              disabled={!isPassengerValid || !isPaymentValid() || loading}
-              className="flex-1 h-10 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs md:text-sm font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              data-testid="btn-pay-confirm"
-            >
-              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CreditCard className="w-3.5 h-3.5" />}
-              Bayar & Cetak
-            </button>
-          </div>
         </div>
+      </div>
+
+      {/* Action bar: bukan bagian dari area scroll di atas — ini flex-shrink-0
+          sibling di bagian bawah kartu (h-full flex-col di root), jadi selalu
+          kelihatan mengambang di bawah layar mobile tanpa perlu scroll, dan
+          tetap menempel normal di layout desktop. Behavior tombol (disabled
+          sampai data & pembayaran valid) tidak berubah. */}
+      <div className="flex gap-2 pt-3 px-3 md:px-5 pb-3 border-t border-gray-200 flex-shrink-0 bg-white">
+        {!isRoundTrip && (
+          <button
+            onClick={handleBookOnly}
+            disabled={!isPassengerValid || loading}
+            className="flex-1 h-10 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs md:text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            data-testid="btn-book-only"
+          >
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+            <span className="hidden sm:inline">Booking Saja</span>
+            <span className="sm:hidden">Booking</span>
+          </button>
+        )}
+        {isRoundTrip && (
+          <button
+            onClick={onBack}
+            className="h-10 px-4 bg-gray-100 text-gray-600 rounded-xl font-semibold text-sm hover:bg-gray-200 transition-colors flex-shrink-0"
+            data-testid="btn-pax-pp-back"
+          >
+            Kembali
+          </button>
+        )}
+        <button
+          onClick={handlePayAndPrint}
+          disabled={!isPassengerValid || !isPaymentValid() || loading}
+          className="flex-1 h-10 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs md:text-sm font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          data-testid="btn-pay-confirm"
+        >
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CreditCard className="w-3.5 h-3.5" />}
+          Bayar & Cetak
+        </button>
       </div>
     </div>
   );

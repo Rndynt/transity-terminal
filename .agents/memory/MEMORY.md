@@ -6,3 +6,4 @@
 - [Drizzle migration journal drift](drizzle-journal-drift.md) — a migrations/*.sql file missing from meta/_journal.json is silently skipped by the app's migrate(); `npm run db:push` applies the delta.
 - [price_rules has no trip_id column](price-rules-no-trip-id.md) — per-trip price overrides live in `price_rule_exceptions`, not `price_rules` (pattern/global scope only); a query joining `price_rules.trip_id` is a bug, not schema drift.
 - [RouteTimeline connector lines](route-timeline-connector-lines.md) — measure real circle positions for timeline connector lines instead of stacking sibling divs; memoize effect deps to avoid ResizeObserver infinite loops.
+- [Mobile floating action bars](mobile-floating-action-bars.md) — sticky/mt-auto bottom bars in scrollable mobile panels fail silently when content is short; use flex-shrink-0 sibling of a flex-1 scroll area instead.
