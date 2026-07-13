@@ -437,7 +437,7 @@ export default function CsoPage() {
 
   const handleBackToSelect = () => {
     setPhase('select');
-    setMobilePanel('left');
+    setMobilePanel('right');
     clearPromoCode();
     updateState({ selectedSeats: [], passengers: [], payment: undefined });
     releaseAllHolds();
