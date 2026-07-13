@@ -4,12 +4,11 @@ import { useToast } from '@/hooks/use-toast';
 import { cargoApi, cargoTypesApi, stopsApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import {
-  Package, User, Phone, Weight, Hash,
-  Banknote, QrCode, Wallet, Building2, Loader2,
-  ArrowRight, Ruler, ShieldCheck
+  Package, Banknote, QrCode, Wallet, Building2, Loader2, ArrowRight
 } from 'lucide-react';
 import { fmtCurrency } from '@/lib/constants';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import CargoDetailsForm, { EMPTY_CARGO_DETAILS, isCargoDetailsValid, type CargoDetailsValue } from '@/components/cargo/CargoDetailsForm';
 import type { Stop, Outlet, CsoAvailableTrip, CargoType, CargoShipmentWithStops } from '@/types';
 
 interface CargoFormProps {
@@ -31,22 +30,15 @@ const PAYMENT_METHODS = [
 
 export default function CargoForm({ trip, originStop, destinationStop, outletId, outlet, csoTrip, onSuccess }: CargoFormProps) {
   const { toast } = useToast();
-  const [senderName, setSenderName] = useState('');
-  const [senderPhone, setSenderPhone] = useState('');
-  const [recipientName, setRecipientName] = useState('');
-  const [recipientPhone, setRecipientPhone] = useState('');
-  const [itemDescription, setItemDescription] = useState('');
-  const [quantity, setQuantity] = useState('1');
-  const [weightKg, setWeightKg] = useState('');
-  const [lengthCm, setLengthCm] = useState('');
-  const [widthCm, setWidthCm] = useState('');
-  const [heightCm, setHeightCm] = useState('');
-  const [declaredValue, setDeclaredValue] = useState('');
+  const [details, setDetails] = useState<CargoDetailsValue>(EMPTY_CARGO_DETAILS);
+  const {
+    senderName, senderPhone, recipientName, recipientPhone,
+    itemDescription, quantity, weightKg, lengthCm, widthCm, heightCm,
+    declaredValue, notes, cargoTypeId,
+  } = details;
+  const updateDetails = (patch: Partial<CargoDetailsValue>) => setDetails(prev => ({ ...prev, ...patch }));
   const [totalAmount, setTotalAmount] = useState('');
-  const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
-  const [cargoTypeId, setCargoTypeId] = useState('');
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [tariffQuote, setTariffQuote] = useState<{ found: boolean; calculatedAmount: number; pricePerKg?: number; minCharge?: number } | null>(null);
 
   const { data: allStops = [], isLoading: stopsLoading } = useQuery({
@@ -103,29 +95,8 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
     }
   });
 
-  const markTouched = (key: string) => setTouched(prev => ({ ...prev, [key]: true }));
-
-  const getError = (value: string, key: string, minLen = 2) => {
-    if (!touched[key]) return null;
-    if (!value.trim()) return 'Wajib diisi';
-    if (value.trim().length < minLen) return `Min. ${minLen} karakter`;
-    return null;
-  };
-
-  const getPhoneError = (phone: string, key: string) => {
-    if (!touched[key]) return null;
-    if (!phone.trim()) return 'Wajib diisi';
-    if (!/^0[0-9]{9,12}$/.test(phone)) return 'Format: 08xxxxxxxxxx';
-    return null;
-  };
-
   const isValid =
-    senderName.trim().length >= 2 &&
-    senderPhone.trim().length >= 10 &&
-    recipientName.trim().length >= 2 &&
-    recipientPhone.trim().length >= 10 &&
-    itemDescription.trim().length >= 2 &&
-    parseInt(quantity) > 0 &&
+    isCargoDetailsValid(details) &&
     parseFloat(totalAmount) > 0 &&
     paymentMethod &&
     actualOriginId &&
@@ -160,7 +131,6 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
 
   const originStopName = originStop?.name || allStops.find(s => s.id === selectedOriginId)?.name;
   const destStopName = destinationStop?.name || allStops.find(s => s.id === selectedDestId)?.name;
-  const activeCargoTypes = cargoTypes.filter((ct: CargoType) => ct.isActive !== false);
 
   if (stopsLoading || cargoTypesLoading) {
     return (
@@ -215,207 +185,7 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
       )}
 
       <div className="space-y-3 overflow-y-auto flex-1 pr-1">
-        <div className="border rounded-xl p-3 bg-amber-50/50 border-amber-200">
-          <div className="flex items-center gap-1.5 mb-2">
-            <User className="w-3.5 h-3.5 text-amber-600" />
-            <span className="text-xs font-semibold text-gray-700">Pengirim</span>
-          </div>
-          <div className="flex gap-2">
-            <div className="flex-[2]">
-              <input
-                value={senderName}
-                onChange={(e) => setSenderName(e.target.value)}
-                onBlur={() => markTouched('senderName')}
-                placeholder="Nama pengirim *"
-                className={`w-full h-8 px-2.5 bg-white border rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 ${
-                  getError(senderName, 'senderName') ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-200 focus:border-blue-300'
-                }`}
-                data-testid="input-sender-name"
-              />
-              {getError(senderName, 'senderName') && <p className="text-[10px] text-red-500 mt-0.5">{getError(senderName, 'senderName')}</p>}
-            </div>
-            <div className="flex-1">
-              <input
-                type="tel"
-                inputMode="numeric"
-                value={senderPhone}
-                onChange={(e) => setSenderPhone(e.target.value.replace(/[^0-9]/g, ''))}
-                onBlur={() => markTouched('senderPhone')}
-                placeholder="Telepon *"
-                className={`w-full h-8 px-2.5 bg-white border rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 ${
-                  getPhoneError(senderPhone, 'senderPhone') ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-200 focus:border-blue-300'
-                }`}
-                data-testid="input-sender-phone"
-              />
-              {getPhoneError(senderPhone, 'senderPhone') && <p className="text-[10px] text-red-500 mt-0.5">{getPhoneError(senderPhone, 'senderPhone')}</p>}
-            </div>
-          </div>
-        </div>
-
-        <div className="border rounded-xl p-3 bg-blue-50/50 border-blue-200">
-          <div className="flex items-center gap-1.5 mb-2">
-            <User className="w-3.5 h-3.5 text-blue-600" />
-            <span className="text-xs font-semibold text-gray-700">Penerima</span>
-          </div>
-          <div className="flex gap-2">
-            <div className="flex-[2]">
-              <input
-                value={recipientName}
-                onChange={(e) => setRecipientName(e.target.value)}
-                onBlur={() => markTouched('recipientName')}
-                placeholder="Nama penerima *"
-                className={`w-full h-8 px-2.5 bg-white border rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 ${
-                  getError(recipientName, 'recipientName') ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-200 focus:border-blue-300'
-                }`}
-                data-testid="input-recipient-name"
-              />
-              {getError(recipientName, 'recipientName') && <p className="text-[10px] text-red-500 mt-0.5">{getError(recipientName, 'recipientName')}</p>}
-            </div>
-            <div className="flex-1">
-              <input
-                type="tel"
-                inputMode="numeric"
-                value={recipientPhone}
-                onChange={(e) => setRecipientPhone(e.target.value.replace(/[^0-9]/g, ''))}
-                onBlur={() => markTouched('recipientPhone')}
-                placeholder="Telepon *"
-                className={`w-full h-8 px-2.5 bg-white border rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 ${
-                  getPhoneError(recipientPhone, 'recipientPhone') ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-200 focus:border-blue-300'
-                }`}
-                data-testid="input-recipient-phone"
-              />
-              {getPhoneError(recipientPhone, 'recipientPhone') && <p className="text-[10px] text-red-500 mt-0.5">{getPhoneError(recipientPhone, 'recipientPhone')}</p>}
-            </div>
-          </div>
-        </div>
-
-        <div className="border rounded-xl p-3 bg-gray-50 border-gray-200">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Package className="w-3.5 h-3.5 text-gray-600" />
-            <span className="text-xs font-semibold text-gray-700">Detail Barang</span>
-          </div>
-          <div className="space-y-2">
-            {activeCargoTypes.length > 0 && (
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-1 block">Jenis Kargo</label>
-                <SearchableSelect
-                  value={cargoTypeId}
-                  options={activeCargoTypes.map((ct: CargoType) => ({ value: ct.id, label: ct.name, badge: ct.code }))}
-                  placeholder="Pilih jenis..."
-                  searchPlaceholder="Cari jenis kargo..."
-                  onChange={setCargoTypeId}
-                  data-testid="select-cargo-type"
-                />
-              </div>
-            )}
-            <div>
-              <input
-                value={itemDescription}
-                onChange={(e) => setItemDescription(e.target.value)}
-                onBlur={() => markTouched('itemDesc')}
-                placeholder="Deskripsi barang *"
-                className={`w-full h-8 px-2.5 bg-white border rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 ${
-                  getError(itemDescription, 'itemDesc') ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-200 focus:border-blue-300'
-                }`}
-                data-testid="input-item-desc"
-              />
-              {getError(itemDescription, 'itemDesc') && <p className="text-[10px] text-red-500 mt-0.5">{getError(itemDescription, 'itemDesc')}</p>}
-            </div>
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <div className="relative">
-                  <Hash className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="number"
-                    min="1"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    placeholder="Jumlah"
-                    className="w-full h-8 pl-7 pr-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
-                    data-testid="input-quantity"
-                  />
-                </div>
-              </div>
-              <div className="flex-1">
-                <div className="relative">
-                  <Weight className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={weightKg}
-                    onChange={(e) => setWeightKg(e.target.value)}
-                    placeholder="Berat (kg)"
-                    className="w-full h-8 pl-7 pr-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
-                    data-testid="input-weight"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <div className="relative">
-                  <Ruler className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={lengthCm}
-                    onChange={(e) => setLengthCm(e.target.value)}
-                    placeholder="P (cm)"
-                    className="w-full h-8 pl-7 pr-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
-                    data-testid="input-length"
-                  />
-                </div>
-              </div>
-              <div className="flex-1">
-                <input
-                  type="number"
-                  step="0.1"
-                  value={widthCm}
-                  onChange={(e) => setWidthCm(e.target.value)}
-                  placeholder="L (cm)"
-                  className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
-                  data-testid="input-width"
-                />
-              </div>
-              <div className="flex-1">
-                <input
-                  type="number"
-                  step="0.1"
-                  value={heightCm}
-                  onChange={(e) => setHeightCm(e.target.value)}
-                  placeholder="T (cm)"
-                  className="w-full h-8 px-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
-                  data-testid="input-height"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <div className="relative">
-                  <ShieldCheck className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="number"
-                    value={declaredValue}
-                    onChange={(e) => setDeclaredValue(e.target.value)}
-                    placeholder="Nilai barang (Rp)"
-                    className="w-full h-8 pl-7 pr-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
-                    data-testid="input-declared-value"
-                  />
-                </div>
-              </div>
-            </div>
-            <div>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Catatan (opsional)"
-                rows={2}
-                className="w-full px-2.5 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300 resize-none"
-                data-testid="input-notes"
-              />
-            </div>
-          </div>
-        </div>
+        <CargoDetailsForm value={details} onChange={updateDetails} cargoTypes={cargoTypes} />
       </div>
 
       <div className="border-t border-gray-200 pt-3 mt-3 space-y-3 flex-shrink-0">
@@ -437,7 +207,6 @@ export default function CargoForm({ trip, originStop, destinationStop, outletId,
               type="number"
               value={totalAmount}
               onChange={(e) => setTotalAmount(e.target.value)}
-              onBlur={() => markTouched('totalAmount')}
               placeholder="Masukkan biaya..."
               className="w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm font-mono text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-300"
               data-testid="input-total-amount"

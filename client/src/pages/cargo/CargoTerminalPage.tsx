@@ -12,6 +12,7 @@ import { queryClient } from '@/lib/queryClient';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useLayout, useHideAppHeader } from '@/components/layout/LayoutContext';
+import CargoDetailsForm, { EMPTY_CARGO_DETAILS, isCargoDetailsValid, type CargoDetailsValue } from '@/components/cargo/CargoDetailsForm';
 import type { Stop, Outlet, CargoType, CargoAvailableTrip } from '@/types';
 
 const PAYMENT_METHODS = [
@@ -175,19 +176,13 @@ export default function CargoTerminalPage() {
   const [selectedOutletId, setSelectedOutletId] = useState('');
   const [destinationCity, setDestinationCity] = useState('');
   const [destinationOutletId, setDestinationOutletId] = useState('');
-  const [cargoTypeId, setCargoTypeId] = useState('');
-  const [weightKg, setWeightKg] = useState('');
-  const [itemDescription, setItemDescription] = useState('');
-  const [quantity, setQuantity] = useState('1');
-  const [lengthCm, setLengthCm] = useState('');
-  const [widthCm, setWidthCm] = useState('');
-  const [heightCm, setHeightCm] = useState('');
-  const [declaredValue, setDeclaredValue] = useState('');
-  const [notes, setNotes] = useState('');
-  const [senderName, setSenderName] = useState('');
-  const [senderPhone, setSenderPhone] = useState('');
-  const [recipientName, setRecipientName] = useState('');
-  const [recipientPhone, setRecipientPhone] = useState('');
+  const [details, setDetails] = useState<CargoDetailsValue>(EMPTY_CARGO_DETAILS);
+  const {
+    senderName, senderPhone, recipientName, recipientPhone, cargoTypeId,
+    itemDescription, quantity, weightKg, lengthCm, widthCm, heightCm,
+    declaredValue, notes,
+  } = details;
+  const updateDetails = (patch: Partial<CargoDetailsValue>) => setDetails(prev => ({ ...prev, ...patch }));
   const [selectedTripKey, setSelectedTripKey] = useState('');
   const [selectedTripDate, setSelectedTripDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
