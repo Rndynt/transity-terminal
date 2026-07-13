@@ -1,33 +1,40 @@
 /**
- * TransityTerminal — Performance Load Seeder
+ * TransityTerminal — Performance Load Seeder (v2)
  *
- * Generates high-volume realistic data untuk stress-testing query.
- * Semua data di-prefix "PL-" agar mudah diidentifikasi dan di-cleanup.
+ * Menghasilkan data volume tinggi untuk stress-test query.
+ * Semua data di-prefix "PL-" agar mudah diidentifikasi.
  *
  * Scale:
  *   •  25 stops  +  25 outlets  (5 kota × 5 masing-masing)
+ *   •  20 drivers
  *   •   3 layouts + 50 kendaraan
  *   • 100 patterns (rute) — direct 2-stop, beda kota
  *   •   2.000 trip bases  (100 rute × 20 jadwal, setiap 30 menit 05:00–14:30)
  *   •  60.000 trips  (30 hari)
- *   • 120.000 trip_stop_times  •  60.000 trip_legs
- *   • 840.000 seat_inventory   (14 kursi × 1 leg × 60K trips)
- *   • ~160.000 bookings + passengers + payments  (full 30 hari)
+ *   • 120.000 trip_stop_times  •  60.000 trip_legs  (legIndex=1)
+ *   • 840.000 seat_inventory   (14 kursi × 1 leg × 60K trips, legIndex=1)
+ *   • ~260K bookings + passengers + payments
  *   •   5.000 seat_holds  (aktif & kadaluarsa)
  *
  * Usage:
  *   npx tsx server/seeds/perfload/index.ts          # run seeder
- *   npx tsx server/seeds/perfload/index.ts --clean  # hapus data PL- dulu, lalu seed ulang
- *   npx tsx server/seeds/perfload/index.ts --drop   # hapus data PL- saja, tidak seed
+ *   npx tsx server/seeds/perfload/index.ts --clean  # hapus data PL- dulu, seed ulang
+ *   npx tsx server/seeds/perfload/index.ts --drop   # hapus data PL- saja
+ *
+ * FIX LOG (v2):
+ *   - legIndex 0→1 (computeLegIndexes(1,2) = [1], bukan [0])
+ *   - seat_holds.legIndexes [0]→[1]
+ *   - bookings.outletId diisi dari outlet origin stop
+ *   - trips.driverId + snapDriverName untuk semua trip
+ *   - 20 PL- drivers ditambahkan
+ *   - Cleanup SQL diperbaiki sesuai perubahan
  */
 import "@server/lib/loadEnv";
 import { randomUUID } from "node:crypto";
 import { db } from "@server/db";
-import { sql } from "drizzle-orm";
-import {
-  stops, outlets,
-} from "@shared/schema/network";
-import { layouts, vehicles } from "@shared/schema/fleet";
+import { sql, eq } from "drizzle-orm";
+import { stops, outlets } from "@shared/schema/network";
+import { layouts, vehicles, drivers } from "@shared/schema/fleet";
 import {
   tripPatterns, patternStops,
   tripBases, trips, tripStopTimes, tripLegs,
@@ -37,15 +44,17 @@ import { bookings, passengers, payments } from "@shared/schema/booking";
 import { priceRules } from "@shared/schema/pricing";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
-const NUM_PATTERNS        = 100;  // rute
-const BASES_PER_PATTERN   = 20;   // trip bases per rute (setiap 30 mnt dari 05:00)
-const DAYS                = 30;   // hari dimaterialisasi (15 lalu + hari ini + 14 mendatang)
-const CAPACITY            = 14;   // kursi per kendaraan
-const CHUNK               = 2000; // baris per batch insert
-const PAST_DAYS           = 15;   // hari lalu (index 0..14)
-const CHANNEL_FLAGS       = { CSO: true, WEB: false, APP: false, OTA: false };
-const OPERATOR_ID         = "perfload-operator";
-const PREFIX              = "PL-";
+const NUM_PATTERNS      = 100;
+const BASES_PER_PATTERN = 20;   // 05:00 – 14:30, tiap 30 mnt
+const DAYS              = 30;   // 15 hari lalu + hari ini + 14 mendatang
+const CAPACITY          = 14;
+const CHUNK             = 2000;
+const PAST_DAYS         = 15;   // index 0..14 = hari lalu
+const CHANNEL_FLAGS     = { CSO: true, WEB: false, APP: false, OTA: false };
+
+// LEG INDEX — computeLegIndexes(originSeq=1, destSeq=2) = [1]
+// Jangan ubah! Harus konsisten dengan booking.helpers.ts
+const LEG_IDX = 1;
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
 function chunkArr<T>(arr: T[], size: number): T[][] {
@@ -60,23 +69,19 @@ async function bulkInsert(table: any, rows: any[], size = CHUNK) {
 }
 
 function pad2(n: number) { return String(n).padStart(2, "0"); }
-
-/** HH:MM string dari total menit sejak tengah malam */
 function minsToHHMM(m: number) { return `${pad2(Math.floor(m / 60) % 24)}:${pad2(m % 60)}`; }
 
-/** Date ISO (YYYY-MM-DD) dari offset hari relatif ke hari ini */
 function dateOffset(today: Date, offsetDays: number): string {
   const d = new Date(today);
   d.setDate(d.getDate() + offsetDays);
   return d.toISOString().slice(0, 10);
 }
 
-/** Konversi dateStr (YYYY-MM-DD) + HH:MM (WIB / UTC+7) ke Date (UTC) */
 function wibToDate(dateStr: string, hhmm: string): Date {
   return new Date(`${dateStr}T${hhmm}:00+07:00`);
 }
 
-/** Random int [min, max] deterministik dari seed integer */
+/** Pseudo-random int [min, max] deterministik */
 function pseudoRand(seed: number, min: number, max: number): number {
   const x = Math.sin(seed * 9301 + 49297) * 233280;
   return min + Math.floor((x - Math.floor(x)) * (max - min + 1));
@@ -92,29 +97,27 @@ const CITIES = [
 ];
 
 const STOP_NAMES = [
-  // Jakarta (0-4)
+  // Jakarta (city 0)
   ["Atrium Senen","Cempaka Putih","MT Haryono Tebet","Grogol Petamburan","Rasuna Said Kuningan"],
-  // Bandung (5-9)
+  // Bandung (city 1)
   ["Dipatiukur","Pasteur","Cihampelas","Buah Batu","Gedebage"],
-  // Semarang (10-14)
+  // Semarang (city 2)
   ["Karangayu","Majapahit","Penggaron","Banyumanik","Ungaran"],
-  // Yogyakarta (15-19)
+  // Yogyakarta (city 3)
   ["Gading Mantrijeron","Jombor","Seturan","Prambanan","Klaten"],
-  // Surabaya (20-24)
+  // Surabaya (city 4)
   ["Bungurasih","Jambangan","Waru","Darmo Satelit","Tanjung Perak"],
 ];
 
-// Travel time (menit) antar kota [origCityIdx][destCityIdx]
 const TRAVEL_MINS: number[][] = [
   //  JKT   BDG   SMG   YGY   SBY
-  [   0,  180,  360,  420,  600 ], // JKT
-  [ 180,    0,  300,  360,  540 ], // BDG
-  [ 360,  300,    0,  120,  240 ], // SMG
-  [ 420,  360,  120,    0,  300 ], // YGY
-  [ 600,  540,  240,  300,    0 ], // SBY
+  [   0,  180,  360,  420,  600 ],
+  [ 180,    0,  300,  360,  540 ],
+  [ 360,  300,    0,  120,  240 ],
+  [ 420,  360,  120,    0,  300 ],
+  [ 600,  540,  240,  300,    0 ],
 ];
 
-// Tarif berdasarkan durasi perjalanan
 function fareForMins(mins: number): number {
   if (mins <= 180) return 95000;
   if (mins <= 300) return 150000;
@@ -122,7 +125,7 @@ function fareForMins(mins: number): number {
   return 280000;
 }
 
-// 14 seat Premio layout
+/** 14-seat Premio layout */
 const SEAT_MAP = (() => {
   const m: { seat_no: string; row: number; col: number; class: string }[] = [];
   m.push({ seat_no: "1A", row: 1, col: 1, class: "premio" });
@@ -134,14 +137,12 @@ const SEAT_MAP = (() => {
   }
   return m;
 })();
-const SEAT_NOS = SEAT_MAP.map(s => s.seat_no); // 14 entries
+const SEAT_NOS = SEAT_MAP.map(s => s.seat_no);
 
-// 20 departure times setiap 30 menit mulai 05:00
 const DEPARTURE_TIMES: string[] = Array.from({ length: BASES_PER_PATTERN }, (_, k) =>
-  minsToHHMM(5 * 60 + k * 30) // 05:00, 05:30, ..., 14:30
+  minsToHHMM(5 * 60 + k * 30)
 );
 
-// Nama acak untuk passenger
 const FIRST_NAMES = ["Budi","Siti","Ahmad","Dewi","Rudi","Rina","Joko","Ani","Hendra","Lestari",
                      "Agus","Wati","Eko","Indah","Wahyu","Putri","Dedi","Nita","Fajar","Yuni"];
 const LAST_NAMES  = ["Santoso","Rahayu","Kusuma","Wijaya","Susanto","Hartono","Utomo","Wibowo",
@@ -155,10 +156,8 @@ function fakeName(seed: number): string {
 // ─── Cleanup ──────────────────────────────────────────────────────────────────
 async function cleanPerfData() {
   console.log("\n[CLEANUP] Menghapus data PL- ...");
-
-  // Ikuti urutan FK: hapus dari tabel "daun" dulu
   await db.execute(sql`
-    DELETE FROM seat_holds      WHERE operator_id = ${OPERATOR_ID};
+    DELETE FROM seat_holds      WHERE hold_ref LIKE 'PL-%';
     DELETE FROM payments        WHERE booking_id IN (SELECT id FROM bookings WHERE booking_code LIKE 'PL-%');
     DELETE FROM passengers      WHERE booking_id IN (SELECT id FROM bookings WHERE booking_code LIKE 'PL-%');
     DELETE FROM bookings        WHERE booking_code LIKE 'PL-%';
@@ -174,8 +173,8 @@ async function cleanPerfData() {
     DELETE FROM outlets         WHERE stop_id IN (SELECT id FROM stops WHERE code LIKE 'PL-%');
     DELETE FROM stops           WHERE code LIKE 'PL-%';
     DELETE FROM layouts         WHERE name LIKE 'PL-%';
+    DELETE FROM drivers         WHERE code LIKE 'PL-%';
   `);
-
   console.log("  ✓ Data PL- dihapus");
 }
 
@@ -191,66 +190,92 @@ async function main() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Generate date range: offset -PAST_DAYS .. +(DAYS-PAST_DAYS-1)
   const serviceDates: string[] = Array.from({ length: DAYS }, (_, i) =>
     dateOffset(today, i - PAST_DAYS)
   );
-  // serviceDates[0]       = 15 hari lalu (paling lama)
-  // serviceDates[PAST_DAYS] = hari ini
-  // serviceDates[DAYS-1]  = 14 hari mendatang
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PHASE 1 — STOPS + OUTLETS + LAYOUT + VEHICLES
+  // PHASE 1 — STOPS + OUTLETS
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n[1] Membuat stops + outlets ...");
 
-  const stopData: { id: string; code: string; city: string; cityIdx: number; stopInCity: number }[] = [];
-  const stopRows: any[] = [];
+  const stopData: {
+    id: string; code: string; city: string; cityIdx: number; stopInCity: number; name: string;
+  }[] = [];
+  const stopRows: any[]   = [];
   const outletRows: any[] = [];
 
   for (let c = 0; c < CITIES.length; c++) {
     const city = CITIES[c];
     for (let s = 0; s < 5; s++) {
       const globalIdx = c * 5 + s;
-      const id = randomUUID();
+      const id   = randomUUID();
       const code = `PL-${city.key}-${s + 1}`;
-      const dlat = (s - 2) * 0.03;
-      const dlng = (s - 2) * 0.02;
-      stopData.push({ id, code, city: city.name, cityIdx: c, stopInCity: s });
+      const name = `PL-${STOP_NAMES[c][s]}`;
+      stopData.push({ id, code, city: city.name, cityIdx: c, stopInCity: s, name });
       stopRows.push({
-        id, code, name: `${PREFIX}${STOP_NAMES[c][s]}`, city: city.name,
+        id, code, name, city: city.name,
         isOutlet: true,
-        lat: String((city.lat + dlat).toFixed(6)),
-        lng: String((city.lng + dlng).toFixed(6)),
+        lat: String((city.lat + (s - 2) * 0.03).toFixed(6)),
+        lng: String((city.lng + (s - 2) * 0.02).toFixed(6)),
       });
       outletRows.push({
         stopId: id,
-        name: `${PREFIX}${STOP_NAMES[c][s]}`,
+        name,
         address: `Jl. Perfload ${globalIdx + 1}, ${city.name}`,
-        phone: `02${String(globalIdx).padStart(2,"0")}-PERF-${String(globalIdx + 1).padStart(4,"0")}`,
+        phone: `021-PERF-${String(globalIdx + 1).padStart(4, "0")}`,
       });
     }
   }
 
   await bulkInsert(stops, stopRows);
   await bulkInsert(outlets, outletRows);
-  console.log(`  ✓ ${stopRows.length} stops, ${outletRows.length} outlets`);
 
-  // ─── Layout ──────────────────────────────────────────────────────────────
-  console.log("\n[2] Membuat layout + vehicles ...");
+  // Query balik outletId berdasarkan stopId
+  const outletRows2 = await db.select({ id: outlets.id, stopId: outlets.stopId }).from(outlets)
+    .where(sql`stop_id = ANY(${sql`ARRAY[${sql.join(stopData.map(s => sql`${s.id}::uuid`), sql`, `)}]`})`);
+  const stopToOutletId = new Map<string, string>(outletRows2.map(o => [o.stopId!, o.id]));
+  console.log(`  ✓ ${stopRows.length} stops, ${outletRows.length} outlets (${stopToOutletId.size} outlet IDs diperoleh)`);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 2 — DRIVERS
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n[2] Membuat drivers ...");
+  const DRIVER_NAMES = [
+    "Slamet Riyadi","Bambang Susilo","Hartono Wibowo","Supriyanto Eko","Agung Prasetyo",
+    "Mulyadi Santoso","Dwi Cahyono","Hendri Kurniawan","Ari Setiawan","Yusuf Hidayat",
+    "Rizki Permana","Fandi Irawan","Doni Pradana","Bagas Nugroho","Taufik Hakim",
+    "Reza Firmansyah","Galih Purnomo","Wahyu Nugraha","Arif Budiman","Teguh Prasetya",
+  ];
+  const driverRows: any[] = DRIVER_NAMES.map((name, i) => ({
+    code:        `PL-DRV-${String(i + 1).padStart(3, "0")}`,
+    name,
+    phone:       `0812-PERF-${String(1000 + i)}`,
+    licenseNo:   `SIM-PL-${String(i + 1).padStart(5, "0")}`,
+    licenseType: "B2",
+    status:      "active",
+  }));
+  const driverIds: string[] = (
+    await db.insert(drivers).values(driverRows).returning({ id: drivers.id })
+  ).map(r => r.id);
+  console.log(`  ✓ ${driverIds.length} drivers`);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 3 — LAYOUT + VEHICLES
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n[3] Membuat layout + vehicles ...");
   const [layout14] = await db.insert(layouts).values({
     name: "PL-Premio 14 Seat",
     rows: 5, cols: 3,
     seatMap: SEAT_MAP,
   }).returning({ id: layouts.id });
 
-  // 50 vehicles, rotating plates
   const vehicleRows: any[] = Array.from({ length: 50 }, (_, i) => ({
-    code: `PL-V-${String(i + 1).padStart(3, "0")}`,
-    plate: `B ${String(1000 + i).padStart(4, "0")} PLF`,
+    code:     `PL-V-${String(i + 1).padStart(3, "0")}`,
+    plate:    `B ${String(1000 + i).padStart(4, "0")} PLF`,
     layoutId: layout14.id,
     capacity: CAPACITY,
-    notes: `PerfLoad Vehicle #${i + 1}`,
+    notes:    `PerfLoad Vehicle #${i + 1}`,
   }));
   const vehicleIds: string[] = (
     await db.insert(vehicles).values(vehicleRows).returning({ id: vehicles.id })
@@ -258,66 +283,59 @@ async function main() {
   console.log(`  ✓ 1 layout (14 kursi), ${vehicleIds.length} vehicles`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PHASE 2 — PATTERNS + PATTERN STOPS + PRICE RULES
+  // PHASE 4 — PATTERNS + PATTERN STOPS + PRICE RULES
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n[3] Membuat patterns ...");
+  console.log("\n[4] Membuat patterns ...");
 
-  /**
-   * 100 patterns: untuk setiap origin stop (25 total), buat 4 rute ke
-   * kota berbeda. i = origIdx*4 + j
-   *   origIdx  = floor(i/4)  → 0..24
-   *   j        = i%4         → 0..3  (dest ke 4 kota berbeda)
-   *   destCity = (origCity + j + 1) % 5
-   *   destStop = cityStops[destCity][origIdx % 5]
-   */
   const patternData: {
-    id: string; code: string; origStopId: string; destStopId: string;
-    origCityIdx: number; destCityIdx: number; travelMins: number;
+    id: string; code: string;
+    origStopId: string; destStopId: string;
+    origStopName: string; destStopName: string;
+    origCityIdx: number; destCityIdx: number;
+    travelMins: number;
   }[] = [];
-  const patternRows: any[] = [];
-  const patStopRows: any[] = [];
+  const patternRows: any[]   = [];
+  const patStopRows: any[]   = [];
   const priceRuleRows: any[] = [];
 
   for (let i = 0; i < NUM_PATTERNS; i++) {
-    const origIdx   = Math.floor(i / 4);         // 0..24
-    const j         = i % 4;                     // 0..3
-    const origCity  = Math.floor(origIdx / 5);   // 0..4
-    const destCity  = (origCity + j + 1) % 5;
-    const destIdx   = destCity * 5 + (origIdx % 5);
+    const origIdx  = Math.floor(i / 4);
+    const j        = i % 4;
+    const origCity = Math.floor(origIdx / 5);
+    const destCity = (origCity + j + 1) % 5;
+    const destIdx  = destCity * 5 + (origIdx % 5);
 
-    const origStop  = stopData[origIdx];
-    const destStop  = stopData[destIdx];
+    const origStop   = stopData[origIdx];
+    const destStop   = stopData[destIdx];
     const travelMins = TRAVEL_MINS[origCity][destCity];
     const fare       = fareForMins(travelMins);
-
-    const patId = randomUUID();
-    const code  = `PL-P${String(i + 1).padStart(3, "0")}`;
+    const patId      = randomUUID();
+    const code       = `PL-P${String(i + 1).padStart(3, "0")}`;
 
     patternData.push({
       id: patId, code,
       origStopId: origStop.id, destStopId: destStop.id,
+      origStopName: origStop.name, destStopName: destStop.name,
       origCityIdx: origCity, destCityIdx: destCity, travelMins,
     });
 
     patternRows.push({
       id: patId, code,
-      name: `${PREFIX}${CITIES[origCity].name} → ${CITIES[destCity].name} (${code})`,
+      name: `PL-${CITIES[origCity].name} → ${CITIES[destCity].name} (${code})`,
       vehicleClass: "premio-14",
       defaultLayoutId: layout14.id,
       active: true,
-      tags: ["perfload", CITIES[origCity].key.toLowerCase(), CITIES[destCity].key.toLowerCase()],
+      tags: ["perfload"],
       allowIntraCityBooking: false,
     });
 
-    // Pattern stops: seq 1 (boarding only) → seq 2 (alighting only)
     patStopRows.push(
       { patternId: patId, stopId: origStop.id, stopSequence: 1,
-        boardingAllowed: true, alightingAllowed: false, dwellSeconds: 0 },
+        boardingAllowed: true,  alightingAllowed: false, dwellSeconds: 0 },
       { patternId: patId, stopId: destStop.id, stopSequence: 2,
-        boardingAllowed: false, alightingAllowed: true, dwellSeconds: 0 },
+        boardingAllowed: false, alightingAllowed: true,  dwellSeconds: 0 },
     );
 
-    // Price rule: OD matrix, satu cell origin→dest
     priceRuleRows.push({
       scope: "pattern",
       patternId: patId,
@@ -336,47 +354,44 @@ async function main() {
   console.log(`  ✓ ${patternRows.length} patterns, ${patStopRows.length} pattern stops, ${priceRuleRows.length} price rules`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PHASE 3 — TRIP BASES
-  // 100 patterns × 20 departure times = 2.000 bases
+  // PHASE 5 — TRIP BASES
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n[4] Membuat trip bases (2.000) ...");
+  console.log("\n[5] Membuat trip bases (2.000) ...");
 
   const currentYear = today.getFullYear();
   const validFrom   = `${currentYear}-01-01`;
   const validTo     = `${currentYear + 1}-12-31`;
 
-  // Pre-generate base IDs agar bisa dipetakan saat generate trips
   const baseIds: string[] = Array.from({ length: NUM_PATTERNS * BASES_PER_PATTERN }, () => randomUUID());
-  const baseRows: any[] = [];
+  const baseRows: any[]   = [];
 
   for (let p = 0; p < NUM_PATTERNS; p++) {
-    const pat = patternData[p];
+    const pat   = patternData[p];
     const vehId = vehicleIds[p % vehicleIds.length];
-    const arrMins = pat.travelMins; // durasi perjalanan (menit)
 
     for (let t = 0; t < BASES_PER_PATTERN; t++) {
-      const baseIdx    = p * BASES_PER_PATTERN + t;
-      const departHHMM = DEPARTURE_TIMES[t];
-      const [dh, dm]   = departHHMM.split(":").map(Number);
-      const arrMinsTotal = dh * 60 + dm + arrMins;
-      const arrHHMM    = minsToHHMM(arrMinsTotal);
+      const baseIdx      = p * BASES_PER_PATTERN + t;
+      const departHHMM   = DEPARTURE_TIMES[t];
+      const [dh, dm]     = departHHMM.split(":").map(Number);
+      const arrMinsTotal = dh * 60 + dm + pat.travelMins;
+      const arrHHMM      = minsToHHMM(arrMinsTotal);
 
       baseRows.push({
-        id: baseIds[baseIdx],
-        code: `PL-${String(p + 1).padStart(3, "0")}/${departHHMM}`,
-        name: `${PREFIX}${CITIES[pat.origCityIdx].name}→${CITIES[pat.destCityIdx].name} ${departHHMM}`,
-        patternId: pat.id,
-        active: true,
-        timezone: "Asia/Jakarta",
+        id:              baseIds[baseIdx],
+        code:            `PL-${String(p + 1).padStart(3, "0")}/${departHHMM}`,
+        name:            `PL-${CITIES[pat.origCityIdx].name}→${CITIES[pat.destCityIdx].name} ${departHHMM}`,
+        patternId:       pat.id,
+        active:          true,
+        timezone:        "Asia/Jakarta",
         validFrom, validTo,
         mon: true, tue: true, wed: true, thu: true, fri: true, sat: true, sun: true,
-        defaultLayoutId: layout14.id,
+        defaultLayoutId:  layout14.id,
         defaultVehicleId: vehId,
-        capacity: CAPACITY,
-        channelFlags: CHANNEL_FLAGS,
+        capacity:         CAPACITY,
+        channelFlags:     CHANNEL_FLAGS,
         defaultStopTimes: [
           { stopSequence: 1, arriveAt: null,    departAt: departHHMM },
-          { stopSequence: 2, arriveAt: arrHHMM, departAt: null },
+          { stopSequence: 2, arriveAt: arrHHMM, departAt: null       },
         ],
       });
     }
@@ -388,33 +403,30 @@ async function main() {
   console.log(`  ✓ ${baseRows.length} trip bases`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PHASE 4 — TRIPS + STOP TIMES + LEGS + SEAT INVENTORY
-  // 2.000 bases × 30 hari = 60.000 trips
+  // PHASE 6 — TRIPS + STOP TIMES + LEGS + SEAT INVENTORY
+  // PENTING: legIndex = LEG_IDX (= 1), sesuai computeLegIndexes(originSeq=1, destSeq=2) = [1]
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n[5] Membuat trips, stop_times, legs, seat_inventory (ini yang paling berat) ...");
+  console.log("\n[6] Membuat trips, stop_times, legs, seat_inventory ...");
 
-  // Pre-generate semua trip UUIDs agar bisa dipakai di phase booking
   const totalTrips = NUM_PATTERNS * BASES_PER_PATTERN * DAYS;
   const tripUUIDs: string[] = Array.from({ length: totalTrips }, () => randomUUID());
 
-  // tripIdx(p, t, d) = p * BASES_PER_PATTERN * DAYS + t * DAYS + d
   function tripIdx(p: number, t: number, d: number) {
     return p * BASES_PER_PATTERN * DAYS + t * DAYS + d;
   }
 
   let insertedTrips = 0;
 
-  // Batch per hari supaya memory tetap rendah
   for (let d = 0; d < DAYS; d++) {
-    const serviceDate = serviceDates[d];
+    const serviceDate  = serviceDates[d];
+    const isPast       = d < PAST_DAYS;
     const tripBatch:     any[] = [];
     const stopTimeBatch: any[] = [];
     const legBatch:      any[] = [];
     const invBatch:      any[] = [];
 
     for (let p = 0; p < NUM_PATTERNS; p++) {
-      const pat    = patternData[p];
-      const fare   = fareForMins(pat.travelMins);
+      const pat  = patternData[p];
 
       for (let t = 0; t < BASES_PER_PATTERN; t++) {
         const baseIdx    = p * BASES_PER_PATTERN + t;
@@ -427,26 +439,32 @@ async function main() {
         const departAt = wibToDate(serviceDate, departHHMM);
         const arriveAt = wibToDate(serviceDate, arrHHMM);
 
-        const vehIdx = (p * BASES_PER_PATTERN + t) % vehicleIds.length;
-        const vehId  = vehicleIds[vehIdx];
+        const vehIdx     = (p * BASES_PER_PATTERN + t) % vehicleIds.length;
+        const vehId      = vehicleIds[vehIdx];
+        // Assign driver: setiap trip dapat driver berrotasi. Trip lalu wajib punya driver.
+        const driverIdx  = (p * BASES_PER_PATTERN * DAYS + t * DAYS + d) % driverIds.length;
+        const driverId   = driverIds[driverIdx];
+        const driverName = driverRows[driverIdx].name;
 
         tripBatch.push({
-          id: tid,
-          baseId: baseIds[baseIdx],
-          patternId: pat.id,
+          id:              tid,
+          baseId:          baseIds[baseIdx],
+          patternId:       pat.id,
           serviceDate,
-          status: "scheduled",
-          vehicleId: vehId,
-          layoutId: layout14.id,
-          capacity: CAPACITY,
+          status:          "scheduled",
+          vehicleId:       vehId,
+          layoutId:        layout14.id,
+          capacity:        CAPACITY,
+          driverId,                       // ← driver assigned
           originDepartHHMM: departHHMM,
-          channelFlags: CHANNEL_FLAGS,
-          snapRouteCode: `PL-P${String(p + 1).padStart(3, "0")}`,
-          snapRouteName: `${PREFIX}${CITIES[pat.origCityIdx].name}→${CITIES[pat.destCityIdx].name}`,
+          channelFlags:    CHANNEL_FLAGS,
+          snapRouteCode:   `PL-P${String(p + 1).padStart(3, "0")}`,
+          snapRouteName:   `PL-${CITIES[pat.origCityIdx].name}→${CITIES[pat.destCityIdx].name}`,
+          snapDriverName:  driverName,    // ← snap driver name
           snapVehiclePlate: `B ${String(1000 + vehIdx).padStart(4, "0")} PLF`,
         });
 
-        // Stop times
+        // Stop times: seq 1 (berangkat) dan seq 2 (tiba)
         stopTimeBatch.push(
           {
             tripId: tid, stopId: pat.origStopId, stopSequence: 1,
@@ -460,51 +478,43 @@ async function main() {
           },
         );
 
-        // Leg (1 leg untuk 2-stop route, leg_index = 0)
+        // Leg: legIndex = LEG_IDX (1), bukan 0
+        // computeLegIndexes(originSeq=1, destSeq=2) = [1]
         legBatch.push({
-          tripId: tid, legIndex: 0,
+          tripId: tid, legIndex: LEG_IDX,
           fromStopId: pat.origStopId, toStopId: pat.destStopId,
           departAt, arriveAt, durationMin: pat.travelMins,
         });
 
-        // Seat inventory: 14 kursi × 1 leg
+        // Seat inventory: 14 kursi × legIndex=LEG_IDX
         for (const seatNo of SEAT_NOS) {
-          invBatch.push({ tripId: tid, seatNo, legIndex: 0, booked: false });
+          invBatch.push({ tripId: tid, seatNo, legIndex: LEG_IDX, booked: false });
         }
       }
     }
 
-    // Bulk insert semua batch hari ini
-    for (const c of chunkArr(tripBatch, CHUNK)) {
-      await (db.insert(trips) as any).values(c);
-    }
-    for (const c of chunkArr(stopTimeBatch, CHUNK)) {
-      await (db.insert(tripStopTimes) as any).values(c);
-    }
-    for (const c of chunkArr(legBatch, CHUNK)) {
-      await (db.insert(tripLegs) as any).values(c);
-    }
-    for (const c of chunkArr(invBatch, CHUNK)) {
-      await (db.insert(seatInventory) as any).values(c);
-    }
+    for (const c of chunkArr(tripBatch,     CHUNK)) await (db.insert(trips)         as any).values(c);
+    for (const c of chunkArr(stopTimeBatch, CHUNK)) await (db.insert(tripStopTimes) as any).values(c);
+    for (const c of chunkArr(legBatch,      CHUNK)) await (db.insert(tripLegs)       as any).values(c);
+    for (const c of chunkArr(invBatch,      CHUNK)) await (db.insert(seatInventory)  as any).values(c);
 
     insertedTrips += tripBatch.length;
     process.stdout.write(`    trips: ${insertedTrips}/${totalTrips} (hari ${d + 1}/${DAYS})\r`);
   }
 
-  console.log(`\n  ✓ ${totalTrips} trips, ${totalTrips * 2} stop_times, ${totalTrips} legs, ${totalTrips * CAPACITY} seat_inventory rows`);
+  console.log(`\n  ✓ ${totalTrips} trips, ${totalTrips * 2} stop_times, ${totalTrips} legs (legIdx=${LEG_IDX}), ${totalTrips * CAPACITY} seat_inventory rows`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PHASE 5 — BOOKINGS + PASSENGERS + PAYMENTS
-  // Distribusi realistis selama 30 hari
+  // PHASE 7 — BOOKINGS + PASSENGERS + PAYMENTS
+  // bookings.outletId diisi dari outlet origin stop (CSO booking dari loket asal)
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n[6] Membuat bookings, passengers, payments ...");
+  console.log("\n[7] Membuat bookings, passengers, payments ...");
 
   const bookingRows:   any[] = [];
   const passengerRows: any[] = [];
   const paymentRows:   any[] = [];
 
-  // Seat inventory update tracker: (tripId → Set<seatNo>) yang booked=true
+  // Track kursi yang di-book (tripId → Set<seatNo>) untuk seat_inventory update + holds
   const bookedMap = new Map<string, Set<string>>();
 
   let bkCounter = 0;
@@ -515,23 +525,19 @@ async function main() {
     const isToday     = d === PAST_DAYS;
 
     for (let p = 0; p < NUM_PATTERNS; p++) {
-      const pat  = patternData[p];
-      const fare = fareForMins(pat.travelMins);
+      const pat       = patternData[p];
+      const fare      = fareForMins(pat.travelMins);
+      // outletId: booking dibuat dari outlet asal (origin stop)
+      const outletId  = stopToOutletId.get(pat.origStopId);
 
       for (let t = 0; t < BASES_PER_PATTERN; t++) {
-        const tid  = tripUUIDs[tripIdx(p, t, d)];
+        const tid        = tripUUIDs[tripIdx(p, t, d)];
         const departHHMM = DEPARTURE_TIMES[t];
 
-        // Jumlah booking per trip:
-        // - Lalu: 3–10 kursi terisi (pseudo-random), avg ~6–7
-        // - Hari ini: 2–8
-        // - Mendatang: 0–4
         const seed  = p * 1000 + t * 30 + d;
-        const nBook = isPast
-          ? pseudoRand(seed, 3, 10)
-          : isToday
-            ? pseudoRand(seed, 2, 8)
-            : pseudoRand(seed, 0, 4);
+        const nBook = isPast  ? pseudoRand(seed, 3, 10)
+                    : isToday ? pseudoRand(seed, 2, 8)
+                    :           pseudoRand(seed, 0, 4);
 
         if (nBook === 0) continue;
 
@@ -546,12 +552,10 @@ async function main() {
           const nameSeed  = bkCounter + k;
           const name      = fakeName(nameSeed);
 
-          // Status: paid untuk trip lalu, campuran untuk mendatang
           const status = isPast
             ? (k < 2 && pseudoRand(seed + k, 0, 9) < 2 ? "cancelled" : "paid")
             : (pseudoRand(seed + k, 0, 9) < 4 ? "pending" : "confirmed");
 
-          // Tanggal buat booking (1-7 hari sebelum perjalanan)
           const daysBeforeTrip = pseudoRand(seed + k, 1, 7);
           const createdAt = wibToDate(serviceDate, "08:00");
           createdAt.setDate(createdAt.getDate() - daysBeforeTrip);
@@ -562,15 +566,16 @@ async function main() {
             status,
             legType: "single",
             tripId: tid,
+            outletId,                      // ← outletId dari outlet origin stop
             originStopId: pat.origStopId,
             destinationStopId: pat.destStopId,
             originSeq: 1,
             destinationSeq: 2,
             channel: "CSO",
-            snapOriginStopName: `${PREFIX}${STOP_NAMES[pat.origCityIdx][stopData.find(s => s.id === pat.origStopId)!.stopInCity]}`,
-            snapDestinationStopName: `${PREFIX}${STOP_NAMES[pat.destCityIdx][stopData.find(s => s.id === pat.destStopId)!.stopInCity]}`,
-            snapDepartureHHMM: departHHMM,
-            totalAmount: String(fare),
+            snapOriginStopName:      pat.origStopName,
+            snapDestinationStopName: pat.destStopName,
+            snapDepartureHHMM:       departHHMM,
+            totalAmount:   String(fare),
             discountAmount: "0",
             currency: "IDR",
             createdBy: "perfload-seeder",
@@ -582,20 +587,24 @@ async function main() {
             bookingId,
             seatNo,
             fullName: name,
-            phone: `08${String(1000000000 + bkCounter).slice(1)}`,
+            phone:    `08${String(1000000000 + bkCounter).slice(1)}`,
             fareAmount: String(fare),
           });
 
-          const payStatus  = status === "paid" ? "success" : status === "cancelled" ? "failed" : "pending";
-          const paidAt     = status === "paid" ? new Date(createdAt.getTime() + 30 * 60_000) : createdAt;
-          const method     = PAYMENT_METHODS[bkCounter % PAYMENT_METHODS.length];
+          const payStatus = status === "paid"      ? "success"
+                          : status === "cancelled" ? "failed"
+                          :                          "pending";
+          const paidAt    = status === "paid"
+            ? new Date(createdAt.getTime() + 30 * 60_000)
+            : createdAt;
+          const method    = PAYMENT_METHODS[bkCounter % PAYMENT_METHODS.length];
 
           paymentRows.push({
             id: payId,
             bookingId,
             method,
-            status: payStatus,
-            amount: String(fare),
+            status:      payStatus,
+            amount:      String(fare),
             providerRef: payStatus === "success" ? `PERF-${code}` : null,
             paidAt,
           });
@@ -608,22 +617,14 @@ async function main() {
     }
   }
 
-  // Bulk insert booking data dalam satu pass
   console.log(`  → Inserting ${bookingRows.length} bookings ...`);
-  for (const c of chunkArr(bookingRows, CHUNK)) {
-    await (db.insert(bookings) as any).values(c);
-  }
-  for (const c of chunkArr(passengerRows, CHUNK)) {
-    await (db.insert(passengers) as any).values(c);
-  }
-  for (const c of chunkArr(paymentRows, CHUNK)) {
-    await (db.insert(payments) as any).values(c);
-  }
+  for (const c of chunkArr(bookingRows,   CHUNK)) await (db.insert(bookings)   as any).values(c);
+  for (const c of chunkArr(passengerRows, CHUNK)) await (db.insert(passengers) as any).values(c);
+  for (const c of chunkArr(paymentRows,   CHUNK)) await (db.insert(payments)   as any).values(c);
   console.log(`  ✓ ${bookingRows.length} bookings, ${passengerRows.length} passengers, ${paymentRows.length} payments`);
 
   // ─── Update seat_inventory.booked = true ──────────────────────────────────
-  console.log("\n[7] Menandai seat_inventory.booked = true ...");
-  // Lakukan satu UPDATE via SQL (lebih efisien daripada per-row)
+  console.log("\n[8] Menandai seat_inventory.booked = true ...");
   await db.execute(sql`
     UPDATE seat_inventory si
     SET    booked = true
@@ -631,48 +632,47 @@ async function main() {
     JOIN   passengers p ON p.booking_id = b.id
     WHERE  si.trip_id    = b.trip_id
       AND  si.seat_no    = p.seat_no
-      AND  si.leg_index  = 0
+      AND  si.leg_index  = ${LEG_IDX}
       AND  b.status      IN ('paid', 'confirmed', 'checked_in')
       AND  b.booking_code LIKE 'PL-%'
   `);
   console.log("  ✓ seat_inventory.booked diperbarui");
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PHASE 6 — SEAT HOLDS  (5.000 — mix aktif & kadaluarsa)
+  // PHASE 9 — SEAT HOLDS
+  // legIndexes = [LEG_IDX] sesuai computeLegIndexes(1,2) = [1]
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n[8] Membuat seat holds (5.000) ...");
+  console.log("\n[9] Membuat seat holds (5.000) ...");
 
   const holdRows: any[] = [];
   const TOTAL_HOLDS = 5000;
   const now = new Date();
 
   for (let h = 0; h < TOTAL_HOLDS; h++) {
-    // Pilih trip dari hari ini atau mendatang untuk holds aktif, hari lalu untuk expired
-    const isActive   = h % 3 !== 0; // 2/3 aktif, 1/3 kadaluarsa
-    const dayOffset  = isActive
-      ? pseudoRand(h, 0, DAYS - PAST_DAYS - 1) // 0..14 hari mendatang
-      : pseudoRand(h, 0, PAST_DAYS - 1);        // hari lalu (expired)
+    const isActive  = h % 3 !== 0;
+    const dayOffset = isActive
+      ? pseudoRand(h, 0, DAYS - PAST_DAYS - 1)
+      : pseudoRand(h, 0, PAST_DAYS - 1);
     const d = isActive ? PAST_DAYS + dayOffset : dayOffset;
-    const p = pseudoRand(h * 7, 0, NUM_PATTERNS - 1);
+    const p = pseudoRand(h * 7,  0, NUM_PATTERNS      - 1);
     const t = pseudoRand(h * 13, 0, BASES_PER_PATTERN - 1);
     const tid = tripUUIDs[tripIdx(p, t, d)];
 
-    // Pilih kursi yang tidak booked
-    const takenSeats  = bookedMap.get(tid) ?? new Set<string>();
-    const freeSeat    = SEAT_NOS.find((_, si) => !takenSeats.has(SEAT_NOS[(si + h) % CAPACITY]));
-    const seatNo      = freeSeat ?? SEAT_NOS[h % CAPACITY];
+    const takenSeats = bookedMap.get(tid) ?? new Set<string>();
+    const freeSeat   = SEAT_NOS.find((sn, si) => !takenSeats.has(SEAT_NOS[(si + h) % CAPACITY]));
+    const seatNo     = freeSeat ?? SEAT_NOS[h % CAPACITY];
 
     const expiresAt = isActive
-      ? new Date(now.getTime() + pseudoRand(h, 5, 30) * 60_000) // expire 5-30 mnt dari sekarang
-      : new Date(now.getTime() - pseudoRand(h, 1, 120) * 60_000); // sudah expired 1-120 mnt lalu
+      ? new Date(now.getTime() + pseudoRand(h, 5, 30) * 60_000)
+      : new Date(now.getTime() - pseudoRand(h, 1, 120) * 60_000);
 
     holdRows.push({
       holdRef:    `PL-HOLD-${String(h + 1).padStart(6, "0")}`,
       tripId:     tid,
       seatNo,
-      legIndexes: [0],
+      legIndexes: [LEG_IDX],              // ← [1], sesuai computeLegIndexes(1,2)
       ttlClass:   isActive ? "CSO_LONG" : "CSO_SHORT",
-      operatorId: OPERATOR_ID,
+      operatorId: "perfload-operator",
       bookingId:  null,
       expiresAt,
     });
@@ -686,26 +686,36 @@ async function main() {
   // ═══════════════════════════════════════════════════════════════════════════
   // SUMMARY
   // ═══════════════════════════════════════════════════════════════════════════
-  const invCount = await db.execute(sql`SELECT COUNT(*) AS c FROM seat_inventory WHERE trip_id IN (SELECT id FROM trips WHERE snap_route_code LIKE 'PL-%')`);
-  const invTotal = (invCount.rows[0] as any).c;
+  const invResult = await db.execute(sql`
+    SELECT COUNT(*) AS c FROM seat_inventory
+    WHERE trip_id IN (SELECT id FROM trips WHERE snap_route_code LIKE 'PL-%')
+  `);
+  const invTotal = (invResult.rows?.[0] as any)?.c ?? "?";
 
   console.log(`
 ═══════════════════════════════════════════════════════════
-  PERFLOAD SEED SELESAI
+  PERFLOAD SEED SELESAI (v2)
 ═══════════════════════════════════════════════════════════
   Stops / Outlets       : 25 / 25
+  Drivers               : ${driverIds.length}
   Layouts / Vehicles    : 1 / 50
   Patterns              : ${NUM_PATTERNS}
-  Trip Bases            : ${NUM_PATTERNS * BASES_PER_PATTERN} (${BASES_PER_PATTERN} per rute, tiap 30 mnt 05:00–14:30)
-  Trips                 : ${totalTrips.toLocaleString()} (${DAYS} hari)
-  Seat Inventory        : ${Number(invTotal).toLocaleString()} rows
-  Bookings              : ${bookingRows.length.toLocaleString()}
+  Trip Bases            : ${NUM_PATTERNS * BASES_PER_PATTERN}
+  Trips                 : ${totalTrips.toLocaleString()} (${DAYS} hari, semua ada driver)
+  Seat Inventory        : ${Number(invTotal).toLocaleString()} rows (legIndex=${LEG_IDX})
+  Bookings              : ${bookingRows.length.toLocaleString()} (semua ada outletId)
   Passengers            : ${passengerRows.length.toLocaleString()}
   Payments              : ${paymentRows.length.toLocaleString()}
-  Seat Holds            : ${holdRows.length.toLocaleString()}
+  Seat Holds            : ${holdRows.length.toLocaleString()} (legIndexes=[${LEG_IDX}])
 ═══════════════════════════════════════════════════════════
-  Jalankan --clean untuk reset + seed ulang
-  Jalankan --drop  untuk hapus data PL- saja
+  FIXES vs v1:
+  ✓ legIndex 0→${LEG_IDX}  (sesuai computeLegIndexes(1,2)=[${LEG_IDX}])
+  ✓ bookings.outletId diisi  → booking list tampil di CSO
+  ✓ trips.driverId+snapDriverName → SPJ/manifest bisa dicetak
+  ✓ seat_holds.legIndexes=[${LEG_IDX}]
+═══════════════════════════════════════════════════════════
+  npx tsx server/seeds/perfload/index.ts --clean   # seed ulang
+  npx tsx server/seeds/perfload/index.ts --drop    # hapus saja
 ═══════════════════════════════════════════════════════════
 `);
 }

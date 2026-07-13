@@ -187,15 +187,15 @@ export async function seedRbac() {
         'aaaaaaaa-0000-0000-0000-000000000001',
         'dev-user-001',
         'owner',
-        (SELECT id FROM outlets WHERE name = 'Dipatiukur' LIMIT 1),
+        NULL,
         true
       )
       ON CONFLICT (user_id) DO UPDATE SET
         role_id = EXCLUDED.role_id,
-        outlet_id = EXCLUDED.outlet_id,
+        outlet_id = NULL,
         is_active = EXCLUDED.is_active
     `);
-    console.log("  ✓ dev staff member (owner @ Dipatiukur)");
+    console.log("  ✓ dev staff member (owner, no outlet scope — sees all bookings/reports)");
   }
 
   console.log("[RBAC] Seed complete.");
