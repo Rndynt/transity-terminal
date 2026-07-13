@@ -231,27 +231,33 @@ export default function RouteTimeline({
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <p className={`text-sm font-semibold ${isOrigin || isDest ? 'text-gray-900' : 'text-gray-700'}`}>{stop.name}</p>
-                    {isOrigin && <span className="px-1.5 py-px bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold uppercase">Naik</span>}
-                    {isDest && <span className="px-1.5 py-px bg-rose-100 text-rose-700 rounded text-[9px] font-bold uppercase">Turun</span>}
-                    {!isOrigin && !isDest && (
-                      <div className="flex gap-1">
-                        {stopTime.effectiveBoardingAllowed !== false && !isLast && (
-                          boardingClosed
-                            ? <span className="px-1 py-px bg-amber-50 text-amber-500 rounded text-[8px] font-medium border border-amber-200 line-through">Pickup</span>
-                            : <span className="px-1 py-px bg-emerald-50 text-emerald-500 rounded text-[8px] font-medium border border-emerald-100">Pickup</span>
-                        )}
-                        {stopTime.effectiveAlightingAllowed !== false && !isFirst && (
-                          alightingClosed
-                            ? <span className="px-1 py-px bg-amber-50 text-amber-500 rounded text-[8px] font-medium border border-amber-200 line-through">Drop</span>
-                            : <span className="px-1 py-px bg-rose-50 text-rose-400 rounded text-[8px] font-medium border border-rose-100">Drop</span>
-                        )}
-                        {stopTime.effectiveBoardingAllowed === false && stopTime.effectiveAlightingAllowed === false && <span className="px-1 py-px bg-gray-100 text-gray-400 rounded text-[8px] font-medium">Transit</span>}
-                      </div>
-                    )}
+                    <div className="flex gap-1">
+                      {!isLast && stopTime.effectiveBoardingAllowed !== false && (
+                        isOrigin ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500 text-white">Naik</span>
+                        ) : boardingClosed ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-amber-200 bg-amber-50 text-amber-500 line-through">Naik</span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-emerald-200 bg-emerald-50 text-emerald-600">Naik</span>
+                        )
+                      )}
+                      {!isFirst && stopTime.effectiveAlightingAllowed !== false && (
+                        isDest ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-500 text-white">Turun</span>
+                        ) : alightingClosed ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-amber-200 bg-amber-50 text-amber-500 line-through">Turun</span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-rose-200 bg-rose-50 text-rose-500">Turun</span>
+                        )
+                      )}
+                      {!isFirst && !isLast && stopTime.effectiveBoardingAllowed === false && stopTime.effectiveAlightingAllowed === false && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 text-gray-400">Transit</span>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-[11px] text-gray-400 font-mono mt-0.5">
+                  <p className="text-xs text-gray-400 font-mono mt-1">
                     <Clock className="w-3 h-3 inline -mt-px mr-0.5" />
                     {isFirst
                       ? formatTime(stopTime.departAt)
@@ -269,14 +275,14 @@ export default function RouteTimeline({
                   {stopEx && (
                     <div className="flex items-center gap-1 mt-1">
                       <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
-                      <span className="text-[10px] text-amber-600 font-medium">
+                      <span className="text-xs text-amber-600 font-medium">
                         Ditutup Ops
                         {boardingClosed && !alightingClosed && ' (Naik)'}
                         {alightingClosed && !boardingClosed && ' (Turun)'}
                         {boardingClosed && alightingClosed && ' (Naik & Turun)'}
                       </span>
                       {stopEx.reason && (
-                        <span className="text-[9px] text-amber-400 ml-0.5">— {stopEx.reason}</span>
+                        <span className="text-xs text-amber-400 ml-0.5">— {stopEx.reason}</span>
                       )}
                     </div>
                   )}
@@ -353,12 +359,13 @@ export default function RouteTimeline({
               </div>
 
               {!isLast && legDuration && (
-                <div className="flex items-center px-4 py-0">
-                  <div className="flex flex-col items-center mr-4 w-5">
-                    <div className={`w-0.5 h-6 ${(inRange && !isDest) ? 'bg-blue-300' : 'bg-gray-200'}`} />
+                <div className="flex px-4 py-2">
+                  <div className="flex flex-col items-center mr-4 w-5 self-stretch">
+                    <div className={`w-0.5 flex-1 ${(inRange && !isDest) ? 'bg-blue-300' : 'bg-gray-200'}`} />
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] text-gray-400 -my-1">
-                    <span className="flex items-center gap-1"><ArrowDown className="w-2.5 h-2.5" />{formatDuration(legDuration)}</span>
+                  <div className="flex items-center gap-1 text-xs text-gray-400">
+                    <ArrowDown className="w-3 h-3" />
+                    <span>{formatDuration(legDuration)}</span>
                   </div>
                 </div>
               )}
@@ -384,7 +391,7 @@ export default function RouteTimeline({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-1">
                     <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-                    <span className="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Naik</span>
+                    <span className="text-[11px] text-gray-400 uppercase font-bold tracking-wider">Naik</span>
                   </div>
                   <p className="text-sm font-bold text-gray-900 leading-tight">{selectedOrigin.name}</p>
                   {originTime && (
@@ -392,23 +399,21 @@ export default function RouteTimeline({
                   )}
                 </div>
 
-                <div className="flex flex-col items-center pt-3 px-1 flex-shrink-0">
-                  <div className="flex items-center gap-1.5">
+                <div className="flex flex-col items-center pt-1 px-1 flex-shrink-0">
+                  {totalDuration && totalDuration > 0 && (
+                    <span className="text-sm font-bold text-gray-800">{formatDuration(totalDuration)}</span>
+                  )}
+                  <div className="flex items-center gap-1.5 mt-1">
                     <div className={`h-[2px] w-5 ${isValid ? 'bg-blue-300' : 'bg-rose-300'}`} />
-                    <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${isValid ? 'bg-blue-100' : 'bg-rose-100'}`}>
-                      <ArrowRight className={`w-3 h-3 ${isValid ? 'text-blue-500' : 'text-rose-500'}`} />
-                      <span className={`text-[10px] font-bold ${isValid ? 'text-blue-700' : 'text-rose-600'}`}>{legCount} leg</span>
-                    </div>
+                    <ArrowRight className={`w-3.5 h-3.5 ${isValid ? 'text-blue-500' : 'text-rose-500'}`} />
                     <div className={`h-[2px] w-5 ${isValid ? 'bg-blue-300' : 'bg-rose-300'}`} />
                   </div>
-                  {totalDuration && totalDuration > 0 && (
-                    <span className="text-[9px] text-gray-400 mt-0.5">{formatDuration(totalDuration)}</span>
-                  )}
+                  <span className="text-xs text-gray-400 mt-1">{legCount} pemberhentian</span>
                 </div>
 
                 <div className="flex-1 min-w-0 text-right">
                   <div className="flex items-center gap-1.5 justify-end mb-1">
-                    <span className="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Turun</span>
+                    <span className="text-[11px] text-gray-400 uppercase font-bold tracking-wider">Turun</span>
                     <div className="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0" />
                   </div>
                   <p className="text-sm font-bold text-gray-900 leading-tight">{selectedDestination.name}</p>
