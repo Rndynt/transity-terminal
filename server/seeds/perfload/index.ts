@@ -154,28 +154,29 @@ function fakeName(seed: number): string {
 }
 
 // ─── Cleanup ──────────────────────────────────────────────────────────────────
-async function cleanPerfData() {
-  console.log("\n[CLEANUP] Menghapus data PL- ...");
-  await db.execute(sql`
-    DELETE FROM seat_holds      WHERE hold_ref LIKE 'PL-%';
-    DELETE FROM payments        WHERE booking_id IN (SELECT id FROM bookings WHERE booking_code LIKE 'PL-%');
-    DELETE FROM passengers      WHERE booking_id IN (SELECT id FROM bookings WHERE booking_code LIKE 'PL-%');
-    DELETE FROM bookings        WHERE booking_code LIKE 'PL-%';
-    DELETE FROM seat_inventory  WHERE trip_id IN (SELECT id FROM trips WHERE snap_route_code LIKE 'PL-%');
-    DELETE FROM trip_legs       WHERE trip_id IN (SELECT id FROM trips WHERE snap_route_code LIKE 'PL-%');
-    DELETE FROM trip_stop_times WHERE trip_id IN (SELECT id FROM trips WHERE snap_route_code LIKE 'PL-%');
-    DELETE FROM trips           WHERE snap_route_code LIKE 'PL-%';
-    DELETE FROM trip_bases      WHERE code LIKE 'PL-%';
-    DELETE FROM price_rules     WHERE pattern_id IN (SELECT id FROM trip_patterns WHERE code LIKE 'PL-%');
-    DELETE FROM pattern_stops   WHERE pattern_id IN (SELECT id FROM trip_patterns WHERE code LIKE 'PL-%');
-    DELETE FROM trip_patterns   WHERE code LIKE 'PL-%';
-    DELETE FROM vehicles        WHERE code LIKE 'PL-%';
-    DELETE FROM outlets         WHERE stop_id IN (SELECT id FROM stops WHERE code LIKE 'PL-%');
-    DELETE FROM stops           WHERE code LIKE 'PL-%';
-    DELETE FROM layouts         WHERE name LIKE 'PL-%';
-    DELETE FROM drivers         WHERE code LIKE 'PL-%';
-  `);
-  console.log("  ✓ Data PL- dihapus");
+async function cleanPerfData(prefix: string) {
+  const p = prefix.replace(/'/g, "''"); // SQL-safe
+  console.log(`\n[CLEANUP] Menghapus data ${prefix}* ...`);
+  await db.execute(sql.raw(`
+    DELETE FROM seat_holds      WHERE hold_ref LIKE '${p}%';
+    DELETE FROM payments        WHERE booking_id IN (SELECT id FROM bookings WHERE booking_code LIKE '${p}%');
+    DELETE FROM passengers      WHERE booking_id IN (SELECT id FROM bookings WHERE booking_code LIKE '${p}%');
+    DELETE FROM bookings        WHERE booking_code LIKE '${p}%';
+    DELETE FROM seat_inventory  WHERE trip_id IN (SELECT id FROM trips WHERE snap_route_code LIKE '${p}%');
+    DELETE FROM trip_legs       WHERE trip_id IN (SELECT id FROM trips WHERE snap_route_code LIKE '${p}%');
+    DELETE FROM trip_stop_times WHERE trip_id IN (SELECT id FROM trips WHERE snap_route_code LIKE '${p}%');
+    DELETE FROM trips           WHERE snap_route_code LIKE '${p}%';
+    DELETE FROM trip_bases      WHERE code LIKE '${p}%';
+    DELETE FROM price_rules     WHERE pattern_id IN (SELECT id FROM trip_patterns WHERE code LIKE '${p}%');
+    DELETE FROM pattern_stops   WHERE pattern_id IN (SELECT id FROM trip_patterns WHERE code LIKE '${p}%');
+    DELETE FROM trip_patterns   WHERE code LIKE '${p}%';
+    DELETE FROM vehicles        WHERE code LIKE '${p}%';
+    DELETE FROM outlets         WHERE stop_id IN (SELECT id FROM stops WHERE code LIKE '${p}%');
+    DELETE FROM stops           WHERE code LIKE '${p}%';
+    DELETE FROM layouts         WHERE name LIKE '${p}%';
+    DELETE FROM drivers         WHERE code LIKE '${p}%';
+  `));
+  console.log(`  ✓ Data ${prefix}* dihapus`);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -184,8 +185,17 @@ async function main() {
   const doClean = args.includes("--clean") || args.includes("--drop");
   const dropOnly = args.includes("--drop");
 
-  if (doClean) await cleanPerfData();
+  // --prefix PL2- allows a second independent run alongside the first PL- dataset
+  const prefixArg = args.find(a => a.startsWith("--prefix="))?.split("=")[1]
+    ?? (args[args.indexOf("--prefix") + 1] !== undefined && !args[args.indexOf("--prefix") + 1].startsWith("--")
+      ? args[args.indexOf("--prefix") + 1]
+      : undefined);
+  const PREFIX = prefixArg ?? "PL-";
+
+  if (doClean) await cleanPerfData(PREFIX);
   if (dropOnly) { console.log("Done."); process.exit(0); }
+
+  console.log(`  Using prefix: "${PREFIX}"`);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -210,8 +220,8 @@ async function main() {
     for (let s = 0; s < 5; s++) {
       const globalIdx = c * 5 + s;
       const id   = randomUUID();
-      const code = `PL-${city.key}-${s + 1}`;
-      const name = `PL-${STOP_NAMES[c][s]}`;
+      const code = `${PREFIX}${city.key}-${s + 1}`;
+      const name = `${PREFIX}${STOP_NAMES[c][s]}`;
       stopData.push({ id, code, city: city.name, cityIdx: c, stopInCity: s, name });
       stopRows.push({
         id, code, name, city: city.name,
@@ -248,10 +258,10 @@ async function main() {
     "Reza Firmansyah","Galih Purnomo","Wahyu Nugraha","Arif Budiman","Teguh Prasetya",
   ];
   const driverRows: any[] = DRIVER_NAMES.map((name, i) => ({
-    code:        `PL-DRV-${String(i + 1).padStart(3, "0")}`,
+    code:        `${PREFIX}DRV-${String(i + 1).padStart(3, "0")}`,
     name,
     phone:       `0812-PERF-${String(1000 + i)}`,
-    licenseNo:   `SIM-PL-${String(i + 1).padStart(5, "0")}`,
+    licenseNo:   `SIM-${PREFIX}${String(i + 1).padStart(5, "0")}`,
     licenseType: "B2",
     status:      "active",
   }));
@@ -265,14 +275,14 @@ async function main() {
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n[3] Membuat layout + vehicles ...");
   const [layout14] = await db.insert(layouts).values({
-    name: "PL-Premio 14 Seat",
+    name: `${PREFIX}Premio 14 Seat`,
     rows: 5, cols: 3,
     seatMap: SEAT_MAP,
   }).returning({ id: layouts.id });
 
   const vehicleRows: any[] = Array.from({ length: 50 }, (_, i) => ({
-    code:     `PL-V-${String(i + 1).padStart(3, "0")}`,
-    plate:    `B ${String(1000 + i).padStart(4, "0")} PLF`,
+    code:     `${PREFIX}V-${String(i + 1).padStart(3, "0")}`,
+    plate:    `B ${String(1000 + i).padStart(4, "0")} ${PREFIX.replace(/[^A-Z0-9]/gi,"").slice(0,4).toUpperCase()}`,
     layoutId: layout14.id,
     capacity: CAPACITY,
     notes:    `PerfLoad Vehicle #${i + 1}`,
@@ -310,7 +320,7 @@ async function main() {
     const travelMins = TRAVEL_MINS[origCity][destCity];
     const fare       = fareForMins(travelMins);
     const patId      = randomUUID();
-    const code       = `PL-P${String(i + 1).padStart(3, "0")}`;
+    const code       = `${PREFIX}P${String(i + 1).padStart(3, "0")}`;
 
     patternData.push({
       id: patId, code,
@@ -321,7 +331,7 @@ async function main() {
 
     patternRows.push({
       id: patId, code,
-      name: `PL-${CITIES[origCity].name} → ${CITIES[destCity].name} (${code})`,
+      name: `${PREFIX}${CITIES[origCity].name} → ${CITIES[destCity].name} (${code})`,
       vehicleClass: "premio-14",
       defaultLayoutId: layout14.id,
       active: true,
@@ -378,8 +388,8 @@ async function main() {
 
       baseRows.push({
         id:              baseIds[baseIdx],
-        code:            `PL-${String(p + 1).padStart(3, "0")}/${departHHMM}`,
-        name:            `PL-${CITIES[pat.origCityIdx].name}→${CITIES[pat.destCityIdx].name} ${departHHMM}`,
+        code:            `${PREFIX}${String(p + 1).padStart(3, "0")}/${departHHMM}`,
+        name:            `${PREFIX}${CITIES[pat.origCityIdx].name}→${CITIES[pat.destCityIdx].name} ${departHHMM}`,
         patternId:       pat.id,
         active:          true,
         timezone:        "Asia/Jakarta",
@@ -458,10 +468,10 @@ async function main() {
           driverId,                       // ← driver assigned
           originDepartHHMM: departHHMM,
           channelFlags:    CHANNEL_FLAGS,
-          snapRouteCode:   `PL-P${String(p + 1).padStart(3, "0")}`,
-          snapRouteName:   `PL-${CITIES[pat.origCityIdx].name}→${CITIES[pat.destCityIdx].name}`,
+          snapRouteCode:   `${PREFIX}P${String(p + 1).padStart(3, "0")}`,
+          snapRouteName:   `${PREFIX}${CITIES[pat.origCityIdx].name}→${CITIES[pat.destCityIdx].name}`,
           snapDriverName:  driverName,    // ← snap driver name
-          snapVehiclePlate: `B ${String(1000 + vehIdx).padStart(4, "0")} PLF`,
+          snapVehiclePlate: `B ${String(1000 + vehIdx).padStart(4, "0")} ${PREFIX.replace(/[^A-Z0-9]/gi,"").slice(0,4).toUpperCase()}`,
         });
 
         // Stop times: seq 1 (berangkat) dan seq 2 (tiba)
@@ -548,7 +558,7 @@ async function main() {
           const bookingId = randomUUID();
           const passId    = randomUUID();
           const payId     = randomUUID();
-          const code      = `PL-${String(++bkCounter).padStart(7, "0")}`;
+          const code      = `${PREFIX}${String(++bkCounter).padStart(7, "0")}`;
           const nameSeed  = bkCounter + k;
           const name      = fakeName(nameSeed);
 
@@ -634,7 +644,7 @@ async function main() {
       AND  si.seat_no    = p.seat_no
       AND  si.leg_index  = ${LEG_IDX}
       AND  b.status      IN ('paid', 'confirmed', 'checked_in')
-      AND  b.booking_code LIKE 'PL-%'
+      AND  b.booking_code LIKE ${PREFIX + '%'}
   `);
   console.log("  ✓ seat_inventory.booked diperbarui");
 
@@ -667,7 +677,7 @@ async function main() {
       : new Date(now.getTime() - pseudoRand(h, 1, 120) * 60_000);
 
     holdRows.push({
-      holdRef:    `PL-HOLD-${String(h + 1).padStart(6, "0")}`,
+      holdRef:    `${PREFIX}HOLD-${String(h + 1).padStart(6, "0")}`,
       tripId:     tid,
       seatNo,
       legIndexes: [LEG_IDX],              // ← [1], sesuai computeLegIndexes(1,2)
@@ -688,7 +698,7 @@ async function main() {
   // ═══════════════════════════════════════════════════════════════════════════
   const invResult = await db.execute(sql`
     SELECT COUNT(*) AS c FROM seat_inventory
-    WHERE trip_id IN (SELECT id FROM trips WHERE snap_route_code LIKE 'PL-%')
+    WHERE trip_id IN (SELECT id FROM trips WHERE snap_route_code LIKE ${PREFIX + '%'})
   `);
   const invTotal = (invResult.rows?.[0] as any)?.c ?? "?";
 
