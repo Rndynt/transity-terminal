@@ -1,5 +1,10 @@
 # Pricing Identity-Swap & Legacy Removal Report
 
+> **Historical record — not current architecture documentation.** This report
+> documents the state of a refactor at the moment it was written. For the
+> current pricing model, see `docs/FEATURES.md` §5. Some follow-up cleanup
+> after this report is covered in `PRICING_LEGACY_CLEANUP_FINAL_REPORT.md`.
+
 ## 1. Complete Rename Map (old → new)
 
 | Kind | Old | New |

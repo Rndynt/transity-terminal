@@ -20,7 +20,7 @@ Dokumentasi teknis lengkap dengan penjelasan cara kerja, teknologi, dan logika p
 | [2. Terminal CSO](docs/FEATURES.md#2-terminal-cso-reservasi) | Alur reservasi, komponen UI, deep-link |
 | [3. Manajemen Kursi & Seat Hold](docs/FEATURES.md#3-manajemen-kursi--seat-hold) | Seat map, hold TTL, precompute inventory, leg index |
 | [4. Penjadwalan & Virtual Trip](docs/FEATURES.md#4-penjadwalan--virtual-trip) | Trip Base, materialisasi, virtual vs real trip |
-| [5. Perhitungan Harga](docs/FEATURES.md#5-perhitungan-harga--pricing-engine) | Price rules, mode per_leg/flat, contoh perhitungan |
+| [5. Perhitungan Harga](docs/FEATURES.md#5-perhitungan-harga--pricing-engine) | Price rules OD-matrix per pasangan asal-tujuan, precedence trip/pattern/global |
 | [6. Promo & Voucher](docs/FEATURES.md#6-promo--voucher) | Jenis promo, validasi, voucher redemption |
 | [7. Alur Booking](docs/FEATURES.md#7-alur-booking-pemesanan) | Flow lengkap, DB transaction, pending auto-cleanup |
 | [8. Kargo](docs/FEATURES.md#8-kargo--pengiriman-barang) | Tarif kargo, waybill, status lifecycle |

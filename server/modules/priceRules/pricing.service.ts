@@ -7,8 +7,6 @@ export interface FareQuote {
   breakdown: {
     base: number;
     legs: number;
-    pricePerLeg: number;
-    multiplier: number;
     ruleId: string;
     ruleScope: string;
     source?: 'trip' | 'pattern' | 'global';
@@ -44,8 +42,6 @@ export class PricingService {
       breakdown: {
         base: resolved.price,
         legs: Math.max(destinationSeq - originSeq, 0),
-        pricePerLeg: 0,
-        multiplier: 1,
         ruleId: resolved.source,
         ruleScope: resolved.source,
         source: resolved.source as 'trip' | 'pattern' | 'global',

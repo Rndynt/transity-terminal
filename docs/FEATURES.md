@@ -237,53 +237,55 @@ Saat trip dibuat, `precomputeInventory` membuat record `seat_inventory` untuk se
 
 ## 5. Perhitungan Harga & Pricing Engine
 
-### Logika Perhitungan Tarif Penumpang
+### Model: OD-Matrix (bukan flat/per-leg)
 
-Harga dihitung oleh `PricingService.quoteFare()`:
+Harga penumpang ditentukan per **pasangan asal-tujuan (OD pair)**, bukan satu harga rata untuk seluruh pola atau harga linear per-segmen. Ini krusial untuk pola 3+ kota di mana harga antar kota tidak proporsional terhadap jarak/jumlah leg (mis. Jakarta-Bandung Rp 95.000, Bandung-Jogja Rp 100.000, tapi Jakarta-Jogja Rp 200.000 — bukan hasil penjumlahan).
 
-```
-1. Cari price rule yang cocok (prioritas: trip-specific > pattern-specific)
-2. Hitung berdasarkan mode:
-   - per_leg: basePricePerLeg × jumlahLeg × multiplier
-   - flat:    basePricePerLeg × multiplier (berapa pun jumlah leg)
-3. Bulatkan ke integer terdekat
-```
+Setiap baris `price_rules` menyimpan sebuah **matrix**: objek JSON berisi harga per pasangan stop, di-key dengan `"<originStopId>|<destinationStopId>"`. Sel yang kosong atau bernilai 0 berarti "harga belum diset" untuk pasangan itu.
 
-### Contoh Perhitungan
+### Precedence Resolusi
+
+Untuk satu OD tertentu pada satu trip, harga dicari lewat `resolvePassengerCell()` (`server/modules/priceRules/priceRules.resolver.ts`) dengan urutan:
 
 ```
-Price Rule: basePricePerLeg = Rp 50.000, mode = per_leg, multiplier = 1
-
-Trip dari Stop A ke Stop C (2 legs):
-  Tarif = 50.000 × 2 × 1 = Rp 100.000
-
-Trip dari Stop A ke Stop B (1 leg):
-  Tarif = 50.000 × 1 × 1 = Rp 50.000
+1. price_rule_exceptions — override khusus SATU trip untuk OD ini (mis. promo satu hari)
+2. price_rules scope='pattern' — template musiman (kind='seasonal') yang jendela
+   valid_from/valid_to-nya mencakup tanggal trip; kalau tidak ada yang aktif,
+   pakai template reguler (kind='regular') pola tersebut
+3. price_rules scope='global' — fallback lintas-pola (jarang dipakai)
+4. Kalau tidak ada satupun yang mengisi harga > 0 → 0 ("harga belum diset")
 ```
 
-### Struktur Price Rule
+### Struktur `price_rules.matrix` (jsonb)
 
 ```json
 {
-  "pricingMode": "per_leg",
-  "basePricePerLeg": 50000,
-  "currency": "IDR",
-  "multiplier": 1
+  "version": 1,
+  "cells": {
+    "<stopIdJakarta>|<stopIdBandung>": { "price": 95000 },
+    "<stopIdBandung>|<stopIdJogja>": { "price": 100000 },
+    "<stopIdJakarta>|<stopIdJogja>": { "price": 200000 }
+  }
 }
 ```
 
 ### Validasi
 
-- Trip TANPA price rule: disabled di CSO, tidak bisa dipilih, tampil badge "Belum Ada Harga"
-- Jika tidak ada rule yang cocok, API mengembalikan error `NO_PRICE_RULE` (HTTP 422)
+- Trip tanpa harga sama sekali untuk outlet asal yang dipilih: disabled di CSO, tidak bisa dipilih, tampil badge "Belum Ada Harga".
+- Trip dengan SEBAGIAN OD sudah diisi harga tetap bisa dipilih (OD-aware selectability) — hanya kombinasi asal-tujuan yang harganya 0 yang diblokir saat CSO memilih rute spesifik.
+- Kalau OD yang diminta tetap resolve ke harga 0, API mengembalikan error `NO_PRICE_RULE` (HTTP 422).
+- Rute pendek dalam kota (mis. dua stop yang sama-sama di kota Bandung pada pola Jakarta-Bandung-Jogja) otomatis tersembunyi dari grid harga kalau pola belum mengaktifkan `allow_intra_city_booking` — lihat bagian Pola Perjalanan.
 
 ### File Terkait
 
 | File | Fungsi |
 |------|--------|
-| `server/modules/pricing/pricing.service.ts` | Logika perhitungan harga |
-| `server/modules/pricing/pricing.controller.ts` | API endpoint `/api/pricing/quote-fare` |
-| `shared/schema.ts` (priceRules) | Definisi tabel aturan harga |
+| `server/modules/priceRules/pricing.service.ts` | `quoteFare()` — perhitungan harga untuk satu booking |
+| `server/modules/priceRules/pricing.controller.ts` | API endpoint `/api/pricing/quote-fare` |
+| `server/modules/priceRules/priceRules.resolver.ts` | `resolvePassengerCell()` — resolver precedence, helper matrix/grid (domain-agnostic, dipakai juga oleh cargo pricing) |
+| `server/modules/priceRules/priceRules.service.ts` | CRUD `price_rules`/`price_rule_exceptions`, sync status, template musiman |
+| `shared/schema/pricing.ts` (`priceRules`, `priceRuleExceptions`) | Definisi tabel |
+| `client/src/components/masters/PriceRulesManager.tsx` | UI Master Data "Aturan Harga" |
 
 ---
 
