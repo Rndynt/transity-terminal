@@ -385,6 +385,7 @@ export default function RouteTimeline({
         const isValid = legCount > 0 && !originClosed && !destClosed;
 
         return (
+          <>
           <div className={`rounded-xl overflow-hidden shadow-sm border-2 ${isValid ? 'border-blue-200' : 'border-rose-200'}`}>
             <div className={`px-4 py-3 ${isValid ? 'bg-gradient-to-r from-blue-50 to-indigo-50' : 'bg-rose-50'}`}>
               <div className="flex items-start justify-between gap-3">
@@ -440,7 +441,7 @@ export default function RouteTimeline({
                 onClick={isValid ? onProceed : undefined}
                 disabled={!isValid}
                 data-testid="btn-proceed-from-route"
-                className={`w-full py-3 text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                className={`hidden md:flex w-full py-3 text-sm font-bold transition-all items-center justify-center gap-2 ${
                   isValid
                     ? 'bg-blue-600 hover:bg-blue-700 text-white active:bg-blue-800'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -450,6 +451,27 @@ export default function RouteTimeline({
               </button>
             )}
           </div>
+
+          {/* Mobile: floating action bar pinned to the bottom of this panel.
+              Sama persis logic tampil/enable-nya (butuh onProceed + isValid),
+              cuma posisinya jadi mengambang di bawah layar, bukan ikut scroll. */}
+          {onProceed && (
+            <div className="md:hidden sticky bottom-0 -mx-3 -mb-3 mt-3 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white/95 backdrop-blur-sm border-t border-gray-200 z-10">
+              <button
+                onClick={isValid ? onProceed : undefined}
+                disabled={!isValid}
+                data-testid="btn-proceed-from-route-mobile"
+                className={`w-full py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                  isValid
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white active:bg-blue-800 shadow-lg shadow-blue-600/20'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Lanjut Pilih Kursi <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          </>
         );
       })()}
     </div>

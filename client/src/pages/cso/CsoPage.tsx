@@ -1110,13 +1110,15 @@ export default function CsoPage() {
                     </div>
                   )}
                   {selectedSeats.length > 0 && (
-                    <button
-                      onClick={() => bookingMode === 'round-trip' ? handleProceedToReturnTrip() : setMobilePanel('right')}
-                      className="md:hidden w-full mt-3 h-10 bg-blue-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
-                      data-testid="mobile-btn-to-passenger"
-                    >
-                      {bookingMode === 'round-trip' ? 'Lanjut ke Jadwal Pulang' : 'Lanjut Isi Data'} <ChevronRight className="w-4 h-4" />
-                    </button>
+                    <div className="md:hidden sticky bottom-0 -mx-3 -mb-3 mt-3 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white/95 backdrop-blur-sm border-t border-gray-200 z-10">
+                      <button
+                        onClick={() => bookingMode === 'round-trip' ? handleProceedToReturnTrip() : setMobilePanel('right')}
+                        className="w-full h-11 bg-blue-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20"
+                        data-testid="mobile-btn-to-passenger"
+                      >
+                        {bookingMode === 'round-trip' ? 'Lanjut ke Jadwal Pulang' : 'Lanjut Isi Data'} <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                 </>
               )}

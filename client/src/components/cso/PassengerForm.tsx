@@ -546,7 +546,7 @@ export default function PassengerForm({
             </div>
           )}
 
-          <div className="flex gap-2 pt-3 mt-auto border-t border-gray-200 flex-shrink-0">
+          <div className="flex gap-2 pt-3 mt-auto border-t border-gray-200 flex-shrink-0 sticky md:static bottom-0 -mx-3 md:mx-0 -mb-3 md:mb-0 px-3 md:px-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-0 bg-white/95 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none z-10">
             {!isRoundTrip && (
               <button
                 onClick={handleBookOnly}
