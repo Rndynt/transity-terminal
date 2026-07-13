@@ -430,49 +430,65 @@ export class SchedulingRepository {
   }
 
   private async getRealTripsForCso(serviceDate: string, outletStopId: string): Promise<CsoAvailableTrip[]> {
+    // PERF: Start from the most selective predicate first:
+    //   trip_stop_times(stop_id = outlet) ∩ trips(service_date = date)
+    // → ~80 trips instead of scanning all 2000+ trips for the date.
+    // boarding_check now uses JOIN to trip_meta instead of a correlated
+    // subquery per row, eliminating O(n) re-scans of eligible_trips.
     const result = await db.execute(sql`
-      WITH eligible_trips AS (
+      WITH outlet_trips AS (
+        -- Most selective: trips that physically stop at this outlet on this date.
+        -- Uses idx_tst_trip_stop (trip_id, stop_id) + idx_trips_date_status.
+        SELECT tst.trip_id,
+               tst.stop_sequence                              AS outlet_seq,
+               COALESCE(tst.depart_at, tst.arrive_at)        AS depart_at_outlet
+        FROM trip_stop_times tst
+        INNER JOIN trips t ON t.id = tst.trip_id
+        WHERE tst.stop_id   = ${outletStopId}
+          AND tst.deleted_at IS NULL
+          AND t.service_date = ${serviceDate}
+          AND t.deleted_at  IS NULL
+      ),
+      trip_meta AS (
+        -- Full trip metadata for the pruned set (~80 trips, not 2000+).
         SELECT t.id, t.base_id, t.pattern_id, t.vehicle_id, t.driver_id, t.capacity, t.status
         FROM trips t
-        WHERE t.service_date = ${serviceDate}
-          AND t.deleted_at IS NULL
-      ),
-      outlet_stop_info AS (
-        SELECT tst.trip_id, tst.stop_sequence, COALESCE(tst.depart_at, tst.arrive_at) AS depart_at_outlet
-        FROM trip_stop_times tst
-        WHERE tst.stop_id = ${outletStopId}
-          AND tst.deleted_at IS NULL
-          AND tst.trip_id IN (SELECT id FROM eligible_trips)
-      ),
-      trip_bounds_agg AS (
-        SELECT tst.trip_id,
-               MIN(tst.stop_sequence) AS min_seq,
-               MAX(tst.stop_sequence) AS max_seq,
-               COUNT(*)::int AS stop_count
-        FROM trip_stop_times tst
-        WHERE tst.deleted_at IS NULL
-          AND tst.trip_id IN (SELECT id FROM eligible_trips)
-        GROUP BY tst.trip_id
+        WHERE t.id IN (SELECT trip_id FROM outlet_trips)
       ),
       trip_bounds AS (
-        SELECT tba.trip_id, tba.min_seq, tba.max_seq, tba.stop_count,
+        -- Stop-sequence bounds + final arrival for ~80 trips.
+        -- Uses idx_tst_trip_seq (trip_id, stop_sequence).
+        SELECT agg.trip_id, agg.min_seq, agg.max_seq, agg.stop_count,
                tst_last.arrive_at AS final_arrival_at
-        FROM trip_bounds_agg tba
+        FROM (
+          SELECT tst.trip_id,
+                 MIN(tst.stop_sequence) AS min_seq,
+                 MAX(tst.stop_sequence) AS max_seq,
+                 COUNT(*)::int          AS stop_count
+          FROM trip_stop_times tst
+          WHERE tst.trip_id IN (SELECT trip_id FROM outlet_trips)
+            AND tst.deleted_at IS NULL
+          GROUP BY tst.trip_id
+        ) agg
         JOIN trip_stop_times tst_last
-          ON tst_last.trip_id = tba.trip_id
-         AND tst_last.stop_sequence = tba.max_seq
-         AND tst_last.deleted_at IS NULL
+          ON tst_last.trip_id      = agg.trip_id
+         AND tst_last.stop_sequence = agg.max_seq
+         AND tst_last.deleted_at   IS NULL
       ),
       boarding_check AS (
-        SELECT tst.trip_id
+        -- Verify boarding is allowed at the outlet stop.
+        -- FIX: JOIN to trip_meta for pattern_id instead of correlated subquery,
+        --      eliminating an O(rows) re-scan of outlet_trips per tst row.
+        SELECT DISTINCT tst.trip_id
         FROM trip_stop_times tst
-        LEFT JOIN pattern_stops ps ON ps.pattern_id = (
-          SELECT et.pattern_id FROM eligible_trips et WHERE et.id = tst.trip_id
-        ) AND ps.stop_id = tst.stop_id AND ps.deleted_at IS NULL
+        INNER JOIN trip_meta tm ON tm.id = tst.trip_id
+        LEFT JOIN pattern_stops ps
+          ON ps.pattern_id = tm.pattern_id
+         AND ps.stop_id    = tst.stop_id
+         AND ps.deleted_at IS NULL
         INNER JOIN trip_bounds tb ON tb.trip_id = tst.trip_id
-        WHERE tst.stop_id = ${outletStopId}
+        WHERE tst.stop_id   = ${outletStopId}
           AND tst.deleted_at IS NULL
-          AND tst.trip_id IN (SELECT id FROM eligible_trips)
           AND COALESCE(tst.boarding_allowed, ps.boarding_allowed, true) = true
           AND tst.depart_at IS NOT NULL
           AND tst.stop_sequence < tb.max_seq
@@ -481,29 +497,41 @@ export class SchedulingRepository {
         SELECT b.trip_id, COUNT(p.id) AS cnt
         FROM bookings b
         JOIN passengers p ON p.booking_id = b.id
-        JOIN trip_stop_times origin_tst ON origin_tst.trip_id = b.trip_id AND origin_tst.stop_id = b.origin_stop_id AND origin_tst.deleted_at IS NULL
-        JOIN trip_stop_times dest_tst ON dest_tst.trip_id = b.trip_id AND dest_tst.stop_id = b.destination_stop_id AND dest_tst.deleted_at IS NULL
-        JOIN outlet_stop_info osi ON osi.trip_id = b.trip_id
-        WHERE b.trip_id IN (SELECT id FROM eligible_trips)
-          AND b.status IN ('pending', 'confirmed', 'checked_in', 'paid')
-          AND origin_tst.stop_sequence <= osi.stop_sequence
-          AND osi.stop_sequence < dest_tst.stop_sequence
+        JOIN outlet_trips ot ON ot.trip_id = b.trip_id
+        JOIN trip_stop_times origin_tst
+          ON origin_tst.trip_id  = b.trip_id
+         AND origin_tst.stop_id  = b.origin_stop_id
+         AND origin_tst.deleted_at IS NULL
+        JOIN trip_stop_times dest_tst
+          ON dest_tst.trip_id  = b.trip_id
+         AND dest_tst.stop_id  = b.destination_stop_id
+         AND dest_tst.deleted_at IS NULL
+        WHERE b.status IN ('pending', 'confirmed', 'checked_in', 'paid')
+          AND origin_tst.stop_sequence <= ot.outlet_seq
+          AND ot.outlet_seq < dest_tst.stop_sequence
         GROUP BY b.trip_id
       ),
       hold_counts AS (
         SELECT sh.trip_id, COUNT(*) AS cnt
         FROM seat_holds sh
-        INNER JOIN outlet_stop_info osi ON osi.trip_id = sh.trip_id
-        WHERE sh.trip_id IN (SELECT id FROM eligible_trips)
-          AND sh.expires_at > NOW()
+        INNER JOIN outlet_trips ot ON ot.trip_id = sh.trip_id
+        WHERE sh.expires_at > NOW()
           AND sh.booking_id IS NULL
           AND EXISTS (
             SELECT 1 FROM unnest(sh.leg_indexes) AS leg_idx
-            INNER JOIN trip_legs tl ON tl.trip_id = sh.trip_id AND tl.leg_index = leg_idx
-            INNER JOIN trip_stop_times lo ON lo.trip_id = sh.trip_id AND lo.stop_id = tl.from_stop_id AND lo.deleted_at IS NULL
-            INNER JOIN trip_stop_times ld ON ld.trip_id = sh.trip_id AND ld.stop_id = tl.to_stop_id AND ld.deleted_at IS NULL
-            WHERE lo.stop_sequence <= osi.stop_sequence
-              AND osi.stop_sequence < ld.stop_sequence
+            INNER JOIN trip_legs tl
+              ON tl.trip_id   = sh.trip_id
+             AND tl.leg_index = leg_idx
+            INNER JOIN trip_stop_times lo
+              ON lo.trip_id   = sh.trip_id
+             AND lo.stop_id   = tl.from_stop_id
+             AND lo.deleted_at IS NULL
+            INNER JOIN trip_stop_times ld
+              ON ld.trip_id   = sh.trip_id
+             AND ld.stop_id   = tl.to_stop_id
+             AND ld.deleted_at IS NULL
+            WHERE lo.stop_sequence <= ot.outlet_seq
+              AND ot.outlet_seq < ld.stop_sequence
           )
         GROUP BY sh.trip_id
       ),
@@ -512,42 +540,42 @@ export class SchedulingRepository {
         FROM pattern_stops ps
         JOIN stops s ON ps.stop_id = s.id
         WHERE ps.deleted_at IS NULL
-          AND ps.pattern_id IN (SELECT DISTINCT pattern_id FROM eligible_trips)
+          AND ps.pattern_id IN (SELECT DISTINCT pattern_id FROM trip_meta)
         GROUP BY ps.pattern_id
       ),
       price_rule_check AS (
         SELECT DISTINCT pr.pattern_id
         FROM price_rules pr
         WHERE pr.deleted_at IS NULL
-          AND pr.pattern_id IN (SELECT DISTINCT pattern_id FROM eligible_trips)
+          AND pr.pattern_id IN (SELECT DISTINCT pattern_id FROM trip_meta)
       )
       SELECT
-        et.id AS trip_id,
-        et.base_id,
-        et.pattern_id,
-        tp.code AS pattern_code,
-        v.code AS vehicle_code,
-        v.plate AS vehicle_plate,
-        d.name AS driver_name,
-        et.capacity,
-        et.status,
-        osi.depart_at_outlet,
+        tm.id           AS trip_id,
+        tm.base_id,
+        tm.pattern_id,
+        tp.code         AS pattern_code,
+        v.code          AS vehicle_code,
+        v.plate         AS vehicle_plate,
+        d.name          AS driver_name,
+        tm.capacity,
+        tm.status,
+        ot.depart_at_outlet,
         tb.final_arrival_at,
-        osi.stop_sequence AS outlet_stop_sequence,
+        ot.outlet_seq   AS outlet_stop_sequence,
         tb.stop_count,
-        pp.path AS pattern_stops,
-        GREATEST(0, COALESCE(et.capacity, 0) - COALESCE(bc.cnt, 0) - COALESCE(hc.cnt, 0)) AS available_seats,
-        (EXISTS (SELECT 1 FROM price_rule_check prc WHERE prc.pattern_id = et.pattern_id)) AS has_price_rule
-      FROM eligible_trips et
-      INNER JOIN trip_patterns tp ON tp.id = et.pattern_id
-      LEFT JOIN vehicles v ON v.id = et.vehicle_id
-      LEFT JOIN drivers d ON d.id = et.driver_id
-      INNER JOIN outlet_stop_info osi ON osi.trip_id = et.id
-      INNER JOIN trip_bounds tb ON tb.trip_id = et.id
-      INNER JOIN boarding_check bc_check ON bc_check.trip_id = et.id
-      LEFT JOIN booked_counts bc ON bc.trip_id = et.id
-      LEFT JOIN hold_counts hc ON hc.trip_id = et.id
-      LEFT JOIN pattern_paths pp ON pp.pattern_id = et.pattern_id
+        pp.path         AS pattern_stops,
+        GREATEST(0, COALESCE(tm.capacity, 0) - COALESCE(bc.cnt, 0) - COALESCE(hc.cnt, 0)) AS available_seats,
+        (EXISTS (SELECT 1 FROM price_rule_check prc WHERE prc.pattern_id = tm.pattern_id)) AS has_price_rule
+      FROM trip_meta tm
+      INNER JOIN outlet_trips ot      ON ot.trip_id    = tm.id
+      INNER JOIN trip_patterns tp     ON tp.id          = tm.pattern_id
+      LEFT  JOIN vehicles v           ON v.id           = tm.vehicle_id
+      LEFT  JOIN drivers d            ON d.id           = tm.driver_id
+      INNER JOIN trip_bounds tb       ON tb.trip_id     = tm.id
+      INNER JOIN boarding_check bc_ok ON bc_ok.trip_id  = tm.id
+      LEFT  JOIN booked_counts bc     ON bc.trip_id     = tm.id
+      LEFT  JOIN hold_counts hc       ON hc.trip_id     = tm.id
+      LEFT  JOIN pattern_paths pp     ON pp.pattern_id  = tm.pattern_id
     `);
 
     return (result.rows as CsoRealTripRow[]).map(row => ({

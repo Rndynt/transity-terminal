@@ -176,6 +176,13 @@
       "when": 1773697704000,
       "tag": "0025_performance_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1773697705000,
+      "tag": "0026_mv_trip_stats",
+      "breakpoints": true
     }
   ]
 }

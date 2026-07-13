@@ -136,16 +136,39 @@ export class ReportsRepository {
     const mode = f.dateMode || 'departure';
     const where = joinConditions([...bookingFilters(f, 'b', 't'), sql`b.status IN ${PAID_STATUSES_SQL}`]);
 
-    const summary = await db.execute(sql`
-      SELECT
-        COALESCE(SUM(b.total_amount::numeric), 0) as total_revenue,
-        COUNT(*)::int as total_bookings,
-        COALESCE(AVG(b.total_amount::numeric), 0) as avg_per_booking,
-        COUNT(DISTINCT b.trip_id)::int as total_trips
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      WHERE ${where}
-    `);
+    // PERF fast path: for departure-date mode with no booking-level filters
+    // (outlet / channel), aggregate the pre-computed mv_trip_stats (~60K rows)
+    // instead of scanning 500K+ bookings live.  Outlet-/channel-specific
+    // reports still use the live query because those filters are on bookings.
+    const canUseMv = mode === 'departure' && !f.outletId && !f.channel && !f.salesChannelCode;
+    const tripWhere = canUseMv ? joinConditions(tripFilters(f, 't')) : null;
+
+    let summary;
+    if (canUseMv) {
+      summary = await db.execute(sql`
+        SELECT
+          COALESCE(SUM(ms.paid_revenue), 0)                                                  AS total_revenue,
+          COALESCE(SUM(ms.paid_bookings), 0)::int                                            AS total_bookings,
+          CASE WHEN SUM(ms.paid_bookings) > 0
+            THEN ROUND(SUM(ms.paid_revenue) / NULLIF(SUM(ms.paid_bookings)::numeric, 0), 2)
+            ELSE 0 END                                                                       AS avg_per_booking,
+          COUNT(t.id)::int                                                                   AS total_trips
+        FROM mv_trip_stats ms
+        INNER JOIN trips t ON t.id = ms.trip_id
+        WHERE ${tripWhere}
+      `);
+    } else {
+      summary = await db.execute(sql`
+        SELECT
+          COALESCE(SUM(b.total_amount::numeric), 0) as total_revenue,
+          COUNT(*)::int as total_bookings,
+          COALESCE(AVG(b.total_amount::numeric), 0) as avg_per_booking,
+          COUNT(DISTINCT b.trip_id)::int as total_trips
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${where}
+      `);
+    }
 
     let daily;
     if (mode === 'paid') {
@@ -165,6 +188,19 @@ export class ReportsRepository {
         WHERE ${payWhere}
         GROUP BY py.paid_at::date
         ORDER BY py.paid_at::date
+      `);
+    } else if (canUseMv) {
+      // Fast path: daily breakdown by service_date from mv_trip_stats
+      daily = await db.execute(sql`
+        SELECT
+          t.service_date::text                     AS date,
+          COALESCE(SUM(ms.paid_revenue), 0)        AS revenue,
+          COALESCE(SUM(ms.paid_bookings), 0)::int  AS bookings
+        FROM mv_trip_stats ms
+        INNER JOIN trips t ON t.id = ms.trip_id
+        WHERE ${tripWhere}
+        GROUP BY t.service_date
+        ORDER BY t.service_date
       `);
     } else {
       const dd = dailyDateSelect(f, 'b', 't');
@@ -247,21 +283,45 @@ export class ReportsRepository {
     const mode = f.dateMode || 'departure';
     const where = joinConditions(bookingFilters(f, 'b', 't'));
 
-    const summary = await db.execute(sql`
-      SELECT
-        COUNT(*)::int as total_bookings,
-        COUNT(*) FILTER (WHERE b.status = 'paid')::int as paid_count,
-        COUNT(*) FILTER (WHERE b.status = 'cancelled')::int as canceled_count,
-        COUNT(*) FILTER (WHERE b.status = 'pending')::int as pending_count,
-        COUNT(*) FILTER (WHERE b.status = 'confirmed')::int as confirmed_count,
-        COUNT(*) FILTER (WHERE b.status = 'refunded')::int as refunded_count,
-        COUNT(*) FILTER (WHERE b.status = 'unseated')::int as unseated_count,
-        COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as total_revenue,
-        COUNT(DISTINCT b.trip_id)::int as total_trips
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      WHERE ${where}
-    `);
+    // PERF fast path: same rule as getRevenueSummary — departure mode with no
+    // booking-level filters uses mv_trip_stats instead of scanning 500K+ rows.
+    const canUseMv = mode === 'departure' && !f.outletId && !f.channel && !f.salesChannelCode;
+    const tripWhere = canUseMv ? joinConditions(tripFilters(f, 't')) : null;
+
+    let summary;
+    if (canUseMv) {
+      summary = await db.execute(sql`
+        SELECT
+          COALESCE(SUM(ms.total_bookings), 0)::int      AS total_bookings,
+          COALESCE(SUM(ms.paid_bookings), 0)::int        AS paid_count,
+          COALESCE(SUM(ms.cancelled_bookings), 0)::int   AS canceled_count,
+          COALESCE(SUM(ms.pending_bookings), 0)::int     AS pending_count,
+          COALESCE(SUM(ms.confirmed_bookings), 0)::int   AS confirmed_count,
+          COALESCE(SUM(ms.refunded_bookings), 0)::int    AS refunded_count,
+          COALESCE(SUM(ms.unseated_bookings), 0)::int    AS unseated_count,
+          COALESCE(SUM(ms.paid_revenue), 0)              AS total_revenue,
+          COUNT(t.id)::int                               AS total_trips
+        FROM mv_trip_stats ms
+        INNER JOIN trips t ON t.id = ms.trip_id
+        WHERE ${tripWhere}
+      `);
+    } else {
+      summary = await db.execute(sql`
+        SELECT
+          COUNT(*)::int as total_bookings,
+          COUNT(*) FILTER (WHERE b.status = 'paid')::int as paid_count,
+          COUNT(*) FILTER (WHERE b.status = 'cancelled')::int as canceled_count,
+          COUNT(*) FILTER (WHERE b.status = 'pending')::int as pending_count,
+          COUNT(*) FILTER (WHERE b.status = 'confirmed')::int as confirmed_count,
+          COUNT(*) FILTER (WHERE b.status = 'refunded')::int as refunded_count,
+          COUNT(*) FILTER (WHERE b.status = 'unseated')::int as unseated_count,
+          COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as total_revenue,
+          COUNT(DISTINCT b.trip_id)::int as total_trips
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${where}
+      `);
+    }
 
     const byStatus = await db.execute(sql`
       SELECT
@@ -332,6 +392,21 @@ export class ReportsRepository {
         WHERE ${payWhere}
         GROUP BY py.paid_at::date
         ORDER BY py.paid_at::date
+      `);
+    } else if (canUseMv) {
+      // Fast path daily: aggregate mv rows by service_date
+      daily = await db.execute(sql`
+        SELECT
+          t.service_date::text                                     AS date,
+          COALESCE(SUM(ms.total_bookings), 0)::int                AS bookings,
+          COALESCE(SUM(ms.paid_revenue), 0)                       AS revenue,
+          COALESCE(SUM(ms.paid_bookings), 0)::int                 AS paid,
+          COALESCE(SUM(ms.cancelled_bookings), 0)::int            AS canceled
+        FROM mv_trip_stats ms
+        INNER JOIN trips t ON t.id = ms.trip_id
+        WHERE ${tripWhere}
+        GROUP BY t.service_date
+        ORDER BY t.service_date
       `);
     } else {
       const dd = dailyDateSelect(f, 'b', 't');
@@ -478,21 +553,15 @@ export class ReportsRepository {
         COALESCE(t.snap_route_name, tp.name) as route_name,
         COALESCE(t.snap_route_code, tp.code) as route_code,
         COALESCE(t.snap_driver_name, d.name) as driver_name,
-        COALESCE(pax.count, 0)::int as passenger_count,
+        COALESCE(ts.active_pax, 0)::int as passenger_count,
         CASE WHEN t.capacity > 0
-          THEN ROUND(COALESCE(pax.count, 0)::numeric / t.capacity * 100, 1)
+          THEN ROUND(COALESCE(ts.active_pax, 0)::numeric / t.capacity * 100, 1)
           ELSE 0
         END as load_factor_pct
       FROM trips t
       LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
       LEFT JOIN drivers d ON t.driver_id = d.id
-      LEFT JOIN (
-        SELECT b.trip_id, COUNT(p.id) as count
-        FROM passengers p
-        INNER JOIN bookings b ON p.booking_id = b.id
-        WHERE p.ticket_status IN ${ACTIVE_TICKET_SQL}
-        GROUP BY b.trip_id
-      ) pax ON pax.trip_id = t.id
+      LEFT JOIN mv_trip_stats ts ON ts.trip_id = t.id
       WHERE ${where}
       ORDER BY t.service_date DESC, tp.name
     `);
@@ -503,20 +572,14 @@ export class ReportsRepository {
         COALESCE(t.snap_route_code, tp.code) as route_code,
         COUNT(t.id)::int as trip_count,
         SUM(t.capacity)::int as total_capacity,
-        COALESCE(SUM(pax.count), 0)::int as total_passengers,
+        COALESCE(SUM(ts.active_pax), 0)::int as total_passengers,
         CASE WHEN SUM(t.capacity) > 0
-          THEN ROUND(COALESCE(SUM(pax.count), 0)::numeric / SUM(t.capacity) * 100, 1)
+          THEN ROUND(COALESCE(SUM(ts.active_pax), 0)::numeric / SUM(t.capacity) * 100, 1)
           ELSE 0
         END as avg_load_factor_pct
       FROM trips t
       LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
-      LEFT JOIN (
-        SELECT b.trip_id, COUNT(p.id) as count
-        FROM passengers p
-        INNER JOIN bookings b ON p.booking_id = b.id
-        WHERE p.ticket_status IN ${ACTIVE_TICKET_SQL}
-        GROUP BY b.trip_id
-      ) pax ON pax.trip_id = t.id
+      LEFT JOIN mv_trip_stats ts ON ts.trip_id = t.id
       WHERE ${where}
       GROUP BY COALESCE(t.snap_route_name, tp.name), COALESCE(t.snap_route_code, tp.code)
       ORDER BY avg_load_factor_pct DESC
@@ -526,19 +589,13 @@ export class ReportsRepository {
       SELECT
         COUNT(t.id)::int as total_trips,
         COALESCE(SUM(t.capacity), 0)::int as total_capacity,
-        COALESCE(SUM(pax.count), 0)::int as total_passengers,
+        COALESCE(SUM(ts.active_pax), 0)::int as total_passengers,
         CASE WHEN SUM(t.capacity) > 0
-          THEN ROUND(COALESCE(SUM(pax.count), 0)::numeric / SUM(t.capacity) * 100, 1)
+          THEN ROUND(COALESCE(SUM(ts.active_pax), 0)::numeric / SUM(t.capacity) * 100, 1)
           ELSE 0
         END as avg_load_factor_pct
       FROM trips t
-      LEFT JOIN (
-        SELECT b.trip_id, COUNT(p.id) as count
-        FROM passengers p
-        INNER JOIN bookings b ON p.booking_id = b.id
-        WHERE p.ticket_status IN ${ACTIVE_TICKET_SQL}
-        GROUP BY b.trip_id
-      ) pax ON pax.trip_id = t.id
+      LEFT JOIN mv_trip_stats ts ON ts.trip_id = t.id
       WHERE ${where}
     `);
 
@@ -547,19 +604,13 @@ export class ReportsRepository {
         t.service_date::text as date,
         COUNT(t.id)::int as trips,
         SUM(t.capacity)::int as capacity,
-        COALESCE(SUM(pax.count), 0)::int as passengers,
+        COALESCE(SUM(ts.active_pax), 0)::int as passengers,
         CASE WHEN SUM(t.capacity) > 0
-          THEN ROUND(COALESCE(SUM(pax.count), 0)::numeric / SUM(t.capacity) * 100, 1)
+          THEN ROUND(COALESCE(SUM(ts.active_pax), 0)::numeric / SUM(t.capacity) * 100, 1)
           ELSE 0
         END as load_factor_pct
       FROM trips t
-      LEFT JOIN (
-        SELECT b.trip_id, COUNT(p.id) as count
-        FROM passengers p
-        INNER JOIN bookings b ON p.booking_id = b.id
-        WHERE p.ticket_status IN ${ACTIVE_TICKET_SQL}
-        GROUP BY b.trip_id
-      ) pax ON pax.trip_id = t.id
+      LEFT JOIN mv_trip_stats ts ON ts.trip_id = t.id
       WHERE ${where}
       GROUP BY t.service_date
       ORDER BY t.service_date

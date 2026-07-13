@@ -16,6 +16,10 @@ const LOCK_ENGINE_COMP   = 8240_005;
 // Lock terpisah supaya cleanup yang lambat (DELETE besar pertama kali) tidak
 // menahan lock cleanup hold yang dipakai tiap menit.
 const LOCK_NOTIF_CLEAN   = 8240_006;
+// PERF: mv_trip_stats materialized view refresh (every 5 min). Reports use
+// this view as a fast path instead of aggregating 500K+ booking rows live.
+const LOCK_MV_REFRESH    = 8240_007;
+const MV_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 // Interval cleanup notifikasi: 6 jam default (4× per hari sudah cukup).
 const NOTIF_CLEANUP_INTERVAL_MS = parseInt(process.env.NOTIF_CLEANUP_INTERVAL_MS || `${6 * 60 * 60 * 1000}`, 10);
 
@@ -325,6 +329,32 @@ export class Scheduler {
       this.cleanupExpiredHolds();
     } else {
       void this.cleanupExpiredSeatHoldsOnly();
+    }
+
+    // PERF: Refresh mv_trip_stats every 5 minutes so report fast-path stays
+    // fresh. CONCURRENTLY allows readers to keep using the old snapshot while
+    // the new one builds. Advisory lock prevents parallel refreshes across
+    // instances (each refresh scans bookings + passengers, so no point doubling).
+    // Gracefully skipped if the view doesn't exist yet (pre-migration env).
+    if (MV_REFRESH_INTERVAL_MS > 0) {
+      const refreshMv = async () => {
+        try {
+          await withAdvisoryLock(LOCK_MV_REFRESH, async () => {
+            await db.execute(sql`REFRESH MATERIALIZED VIEW CONCURRENTLY mv_trip_stats`);
+            log.debug('mv_trip_stats refreshed');
+          });
+        } catch (e: unknown) {
+          // Silently skip if view does not exist yet (fresh DB before migration runs).
+          const msg = e instanceof Error ? e.message : String(e);
+          if (!msg.includes('does not exist')) {
+            log.error({ err: e }, 'mv_trip_stats refresh failed');
+          }
+        }
+      };
+      setInterval(refreshMv, MV_REFRESH_INTERVAL_MS);
+      // Kick once on startup so the view is fresh immediately after boot.
+      void refreshMv();
+      log.info({ intervalMin: Math.round(MV_REFRESH_INTERVAL_MS / 60_000) }, 'mv_trip_stats refresh scheduled');
     }
 
     // Periodic schedule snapshot push to Console — this is the safety net so
