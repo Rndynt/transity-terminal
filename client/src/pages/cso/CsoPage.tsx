@@ -1116,7 +1116,7 @@ export default function CsoPage() {
                       scroll dulu. Logic tampil-nya tidak berubah: hanya kalau
                       ada kursi terpilih. */}
                   {selectedSeats.length > 0 && (
-                    <div className="md:hidden flex-shrink-0 border-t border-gray-200 bg-white -mx-3 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                    <div className="md:hidden flex-shrink-0 border-t border-gray-200 bg-white -mx-3 -mb-3 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                       <button
                         onClick={() => bookingMode === 'round-trip' ? handleProceedToReturnTrip() : setMobilePanel('right')}
                         className="w-full h-11 bg-blue-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20"
@@ -1288,7 +1288,7 @@ export default function CsoPage() {
                 </div>
               ) : (
                 /* Single mode: PassengerForm */
-                <div className="flex-1 overflow-y-auto p-3 md:p-5">
+                <div className="flex-1 overflow-y-auto">
                   <PassengerForm
                     selectedSeats={selectedSeats}
                     passengers={selectedSeats.map(seatNo => ({

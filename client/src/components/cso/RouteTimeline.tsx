@@ -512,7 +512,7 @@ export default function RouteTimeline({
         butuh onProceed + selectedOrigin + selectedDestination, disabled
         kalau !isValid. */}
     {selectedOrigin && selectedDestination && onProceed && (
-      <div className="md:hidden flex-shrink-0 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="md:hidden flex-shrink-0 border-t border-gray-200 bg-white -mx-3 -mb-3 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button
           onClick={isValid ? onProceed : undefined}
           disabled={!isValid}
