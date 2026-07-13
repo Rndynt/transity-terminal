@@ -162,6 +162,13 @@
       "when": 1773697702593,
       "tag": "0023_cargo_destination_outlet",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1773697703593,
+      "tag": "0024_trip_patterns_intra_city",
+      "breakpoints": true
     }
   ]
 }
