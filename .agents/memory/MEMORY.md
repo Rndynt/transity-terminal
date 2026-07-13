@@ -5,3 +5,4 @@
 - [Cargo vs reservation: real trips only, multi-stop destinations](cargo-real-trips-multistop.md) — cargo must never use virtual/unmaterialized trips or a single hardcoded destination stop; contrast with passenger reservation's more permissive model.
 - [Drizzle migration journal drift](drizzle-journal-drift.md) — a migrations/*.sql file missing from meta/_journal.json is silently skipped by the app's migrate(); `npm run db:push` applies the delta.
 - [price_rules has no trip_id column](price-rules-no-trip-id.md) — per-trip price overrides live in `price_rule_exceptions`, not `price_rules` (pattern/global scope only); a query joining `price_rules.trip_id` is a bug, not schema drift.
+- [RouteTimeline connector lines](route-timeline-connector-lines.md) — measure real circle positions for timeline connector lines instead of stacking sibling divs; memoize effect deps to avoid ResizeObserver infinite loops.

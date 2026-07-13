@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { tripsApi, stopsApi, tripPatternsApi } from '@/lib/api';
 import {
@@ -78,6 +78,9 @@ export default function RouteTimeline({
   onInitialRouteConsumed
 }: RouteTimelineProps) {
   const autoSelectDone = useRef(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const circleRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const [lineSegments, setLineSegments] = useState<{ top: number; height: number; color: string }[]>([]);
 
   const { data: stopTimes = [], isLoading } = useQuery<EffectiveStopTime[]>({
     queryKey: ['/api/trips', trip.id, 'stop-times', 'effective'],
@@ -125,7 +128,10 @@ export default function RouteTimeline({
     return stop.city === otherSelected.city;
   };
 
-  const sortedStopTimes = [...stopTimes].sort((a, b) => a.stopSequence - b.stopSequence);
+  const sortedStopTimes = useMemo(
+    () => [...stopTimes].sort((a, b) => a.stopSequence - b.stopSequence),
+    [stopTimes]
+  );
 
   useEffect(() => {
     if (autoSelectDone.current) return;
@@ -164,6 +170,49 @@ export default function RouteTimeline({
     return i >= originIdx && i <= destIdx;
   };
 
+  // Ukur posisi vertikal (center) tiap lingkaran stop secara nyata dari DOM,
+  // lalu gambar SATU garis penghubung absolut per segmen antar-stop. Ini
+  // menghindari garis "putus-putus" yang muncul kalau tiap baris menggambar
+  // separuh garisnya sendiri-sendiri (rawan celah 1px akibat pembulatan
+  // sub-pixel di browser mobile / layar retina).
+  const lastSegmentsKey = useRef<string>('');
+  useLayoutEffect(() => {
+    const measure = () => {
+      const container = listRef.current;
+      if (!container) return;
+      const containerTop = container.getBoundingClientRect().top;
+      const centers = sortedStopTimes.map((_, i) => {
+        const el = circleRefs.current[i];
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return Math.round(r.top - containerTop + r.height / 2);
+      });
+      const segments: { top: number; height: number; color: string }[] = [];
+      for (let i = 0; i < centers.length - 1; i++) {
+        const top = centers[i];
+        const bottom = centers[i + 1];
+        if (top == null || bottom == null) continue;
+        const segmentInRange = originIdx >= 0 && destIdx >= 0 && i >= originIdx && i + 1 <= destIdx;
+        const color = segmentInRange ? 'bg-blue-300' : 'bg-gray-300';
+        segments.push({ top, height: bottom - top, color });
+      }
+      // Rounding + skip-if-unchanged guard: a ResizeObserver observing this
+      // same container would otherwise retrigger every time setState causes
+      // a (sub-pixel-identical) re-render, producing an infinite update loop.
+      const key = JSON.stringify(segments);
+      if (key === lastSegmentsKey.current) return;
+      lastSegmentsKey.current = key;
+      setLineSegments(segments);
+    };
+
+    measure();
+    const container = listRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [sortedStopTimes, selectedOrigin, selectedDestination, stopExceptions, stops, originIdx, destIdx]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -180,7 +229,14 @@ export default function RouteTimeline({
         <p className="text-[11px] text-gray-400">Tentukan titik naik dan turun penumpang</p>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div ref={listRef} className="relative bg-white border border-gray-200 rounded-xl overflow-hidden">
+        {lineSegments.map((seg, i) => (
+          <div
+            key={i}
+            className={`absolute w-[3px] z-0 ${seg.color}`}
+            style={{ left: '25px', top: seg.top, height: seg.height }}
+          />
+        ))}
         {sortedStopTimes.map((stopTime, index) => {
           const stop = getStopById(stopTime.stopId);
           if (!stop) return null;
@@ -209,25 +265,20 @@ export default function RouteTimeline({
               <div className={`flex items-center px-4 py-3 transition-colors ${
                 isOrigin ? 'bg-emerald-50' : isDest ? 'bg-rose-50' : inRange ? 'bg-blue-50/40' : 'hover:bg-gray-50'
               }`}>
-                <div className="flex flex-col items-center mr-4 self-stretch">
-                  {!isFirst && (
-                    <div className={`w-0.5 flex-1 ${inRange || isOrigin ? 'bg-blue-300' : 'bg-gray-200'}`} />
-                  )}
-                  {isFirst && <div className="flex-1" />}
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                    isOrigin ? 'bg-emerald-500 ring-[3px] ring-emerald-200 shadow-sm' :
-                    isDest ? 'bg-rose-500 ring-[3px] ring-rose-200 shadow-sm' :
-                    inRange ? 'bg-blue-400 border-2 border-blue-300' :
-                    'bg-white border-2 border-gray-300'
-                  }`}>
+                <div className="flex flex-col items-center justify-center mr-4 self-stretch">
+                  <div
+                    ref={(el) => { circleRefs.current[index] = el; }}
+                    className={`relative z-10 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+                      isOrigin ? 'bg-emerald-500 ring-[3px] ring-emerald-200 shadow-sm' :
+                      isDest ? 'bg-rose-500 ring-[3px] ring-rose-200 shadow-sm' :
+                      inRange ? 'bg-blue-400 border-2 border-blue-300' :
+                      'bg-white border-2 border-gray-300'
+                    }`}
+                  >
                     {isOrigin && <ArrowRight className="w-2.5 h-2.5 text-white" />}
                     {isDest && <MapPin className="w-2.5 h-2.5 text-white" />}
                     {inRange && !isOrigin && !isDest && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                   </div>
-                  {!isLast && (
-                    <div className={`w-0.5 flex-1 ${inRange && !isDest ? 'bg-blue-300' : 'bg-gray-200'}`} />
-                  )}
-                  {isLast && <div className="flex-1" />}
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -236,24 +287,24 @@ export default function RouteTimeline({
                     <div className="flex gap-1">
                       {!isLast && stopTime.effectiveBoardingAllowed !== false && (
                         isOrigin ? (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500 text-white">Naik</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-emerald-500 text-white">Naik</span>
                         ) : boardingClosed ? (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-amber-200 bg-amber-50 text-amber-500 line-through">Naik</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-amber-50 text-amber-500 line-through">Naik</span>
                         ) : (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-emerald-200 bg-emerald-50 text-emerald-600">Naik</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-emerald-50 text-emerald-600">Naik</span>
                         )
                       )}
                       {!isFirst && stopTime.effectiveAlightingAllowed !== false && (
                         isDest ? (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-500 text-white">Turun</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-rose-500 text-white">Turun</span>
                         ) : alightingClosed ? (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-amber-200 bg-amber-50 text-amber-500 line-through">Turun</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-amber-50 text-amber-500 line-through">Turun</span>
                         ) : (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-rose-200 bg-rose-50 text-rose-500">Turun</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-rose-50 text-rose-500">Turun</span>
                         )
                       )}
                       {!isFirst && !isLast && stopTime.effectiveBoardingAllowed === false && stopTime.effectiveAlightingAllowed === false && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 text-gray-400">Transit</span>
+                        <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-gray-100 text-gray-400">Transit</span>
                       )}
                     </div>
                   </div>
@@ -360,9 +411,7 @@ export default function RouteTimeline({
 
               {!isLast && legDuration && (
                 <div className="flex px-4 py-2">
-                  <div className="flex flex-col items-center mr-4 w-5 self-stretch">
-                    <div className={`w-0.5 flex-1 ${(inRange && !isDest) ? 'bg-blue-300' : 'bg-gray-200'}`} />
-                  </div>
+                  <div className="w-5 mr-4 flex-shrink-0" />
                   <div className="flex items-center gap-1 text-xs text-gray-400">
                     <ArrowDown className="w-3 h-3" />
                     <span>{formatDuration(legDuration)}</span>
