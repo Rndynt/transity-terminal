@@ -143,25 +143,51 @@ export class ReportsRepository {
     const canUseMv = mode === 'departure' && !f.outletId && !f.channel && !f.salesChannelCode;
     const tripWhere = canUseMv ? joinConditions(tripFilters(f, 't')) : null;
 
-    let summary;
+    // payWhere is used by BOTH the daily query and all breakdown queries in paid mode.
+    // Hoisted here so we don't rebuild it multiple times.
+    //
+    // KEY OPTIMISATION — paid mode: bookingFilters() for paid mode emits a correlated
+    // EXISTS subquery ("does this booking have a payment with paid_at in range?") which
+    // forces Postgres to probe the payments index for every row in the 500K+ bookings
+    // table.  Instead we build payWhere and drive all paid-mode queries from the
+    // payments table (small, already indexed on paid_at) joined to bookings.
+    const payWhere = mode === 'paid' ? joinConditions([
+      ...paymentFilters(f, 'py', 'b', 't'),
+      sql`py.status = 'success'`,
+      sql`b.status IN ${PAID_STATUSES_SQL}`,
+    ]) : null;
+
+    // ── summary ──────────────────────────────────────────────────────────────
+    let summaryPromise: ReturnType<typeof db.execute>;
     if (canUseMv) {
-      summary = await db.execute(sql`
+      summaryPromise = db.execute(sql`
         SELECT
           COALESCE(SUM(ms.paid_revenue), 0)                                                  AS total_revenue,
           COALESCE(SUM(ms.paid_bookings), 0)::int                                            AS total_bookings,
           CASE WHEN SUM(ms.paid_bookings) > 0
             THEN ROUND(SUM(ms.paid_revenue) / NULLIF(SUM(ms.paid_bookings)::numeric, 0), 2)
             ELSE 0 END                                                                       AS avg_per_booking,
-          -- FIX: mirror the live query which counts only trips with ≥1 paid booking.
-          -- mv_trip_stats has one row per trip with ANY booking (incl. cancelled/pending),
-          -- so we must filter to paid_bookings > 0 to avoid inflating total_trips.
-          (COUNT(t.id) FILTER (WHERE ms.paid_bookings > 0))::int                           AS total_trips
+          -- only count trips that have ≥1 paid booking (mirrors the live COUNT DISTINCT path)
+          (COUNT(t.id) FILTER (WHERE ms.paid_bookings > 0))::int                            AS total_trips
         FROM mv_trip_stats ms
         INNER JOIN trips t ON t.id = ms.trip_id
         WHERE ${tripWhere}
       `);
+    } else if (mode === 'paid') {
+      // Payments-first: no correlated subquery, planner starts from payments filtered by date.
+      summaryPromise = db.execute(sql`
+        SELECT
+          COALESCE(SUM(py.amount::numeric), 0)                                               AS total_revenue,
+          COUNT(DISTINCT b.id)::int                                                          AS total_bookings,
+          ROUND(SUM(py.amount::numeric) / NULLIF(COUNT(DISTINCT b.id)::numeric, 0), 2)      AS avg_per_booking,
+          COUNT(DISTINCT b.trip_id)::int                                                     AS total_trips
+        FROM payments py
+        INNER JOIN bookings b ON py.booking_id = b.id
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${payWhere}
+      `);
     } else {
-      summary = await db.execute(sql`
+      summaryPromise = db.execute(sql`
         SELECT
           COALESCE(SUM(b.total_amount::numeric), 0) as total_revenue,
           COUNT(*)::int as total_bookings,
@@ -173,14 +199,10 @@ export class ReportsRepository {
       `);
     }
 
-    let daily;
+    // ── daily ─────────────────────────────────────────────────────────────────
+    let dailyPromise: ReturnType<typeof db.execute>;
     if (mode === 'paid') {
-      const payWhere = joinConditions([
-        ...paymentFilters(f, 'py', 'b', 't'),
-        sql`py.status = 'success'`,
-        sql`b.status IN ${PAID_STATUSES_SQL}`,
-      ]);
-      daily = await db.execute(sql`
+      dailyPromise = db.execute(sql`
         SELECT
           py.paid_at::date::text as date,
           COALESCE(SUM(py.amount::numeric), 0) as revenue,
@@ -193,8 +215,7 @@ export class ReportsRepository {
         ORDER BY py.paid_at::date
       `);
     } else if (canUseMv) {
-      // Fast path: daily breakdown by service_date from mv_trip_stats
-      daily = await db.execute(sql`
+      dailyPromise = db.execute(sql`
         SELECT
           t.service_date::text                     AS date,
           COALESCE(SUM(ms.paid_revenue), 0)        AS revenue,
@@ -207,7 +228,7 @@ export class ReportsRepository {
       `);
     } else {
       const dd = dailyDateSelect(f, 'b', 't');
-      daily = await db.execute(sql`
+      dailyPromise = db.execute(sql`
         SELECT
           ${dd.sel},
           COALESCE(SUM(b.total_amount::numeric), 0) as revenue,
@@ -220,57 +241,151 @@ export class ReportsRepository {
       `);
     }
 
-    const byChannel = await db.execute(sql`
-      SELECT
-        b.channel,
-        COALESCE(SUM(b.total_amount::numeric), 0) as revenue,
-        COUNT(*)::int as bookings
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      WHERE ${where}
-      GROUP BY b.channel
-      ORDER BY revenue DESC
-    `);
+    // ── byRoute ───────────────────────────────────────────────────────────────
+    // MV path: mv_trip_stats already has paid_revenue/paid_bookings → no bookings scan.
+    // Paid path: payments-first join — avoids correlated EXISTS.
+    // Other: standard bookings scan with covering index (idx_bookings_rpt_channel).
+    let byRoutePromise: ReturnType<typeof db.execute>;
+    if (canUseMv) {
+      byRoutePromise = db.execute(sql`
+        SELECT
+          COALESCE(t.snap_route_name, tp.name)    AS route_name,
+          COALESCE(t.snap_route_code, tp.code)    AS route_code,
+          COALESCE(SUM(ms.paid_revenue), 0)       AS revenue,
+          COALESCE(SUM(ms.paid_bookings), 0)::int AS bookings
+        FROM trips t
+        INNER JOIN mv_trip_stats ms ON ms.trip_id = t.id
+        LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
+        WHERE ${tripWhere}
+          AND ms.paid_bookings > 0
+        GROUP BY COALESCE(t.snap_route_name, tp.name), COALESCE(t.snap_route_code, tp.code)
+        ORDER BY revenue DESC
+      `);
+    } else if (mode === 'paid') {
+      byRoutePromise = db.execute(sql`
+        SELECT
+          COALESCE(t.snap_route_name, tp.name)          AS route_name,
+          COALESCE(t.snap_route_code, tp.code)          AS route_code,
+          COALESCE(SUM(py.amount::numeric), 0)          AS revenue,
+          COUNT(DISTINCT b.id)::int                     AS bookings
+        FROM payments py
+        INNER JOIN bookings b ON py.booking_id = b.id
+        INNER JOIN trips t ON b.trip_id = t.id
+        LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
+        WHERE ${payWhere}
+        GROUP BY COALESCE(t.snap_route_name, tp.name), COALESCE(t.snap_route_code, tp.code)
+        ORDER BY revenue DESC
+      `);
+    } else {
+      byRoutePromise = db.execute(sql`
+        SELECT
+          COALESCE(t.snap_route_name, tp.name)          AS route_name,
+          COALESCE(t.snap_route_code, tp.code)          AS route_code,
+          COALESCE(SUM(b.total_amount::numeric), 0)     AS revenue,
+          COUNT(*)::int                                 AS bookings
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
+        WHERE ${where}
+        GROUP BY COALESCE(t.snap_route_name, tp.name), COALESCE(t.snap_route_code, tp.code)
+        ORDER BY revenue DESC
+      `);
+    }
 
-    const byOutlet = await db.execute(sql`
-      SELECT
-        COALESCE(b.snap_outlet_name, o.name) as outlet_name,
-        COALESCE(SUM(b.total_amount::numeric), 0) as revenue,
-        COUNT(*)::int as bookings
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      LEFT JOIN outlets o ON b.outlet_id = o.id
-      WHERE ${where}
-      GROUP BY COALESCE(b.snap_outlet_name, o.name)
-      ORDER BY revenue DESC
-    `);
+    // ── byChannel / byOutlet / bySalesChannel ─────────────────────────────────
+    // Paid mode: payments-first JOIN (start from payments filtered by date → join bookings).
+    // Other modes: standard bookings scan; idx_bookings_rpt_* covering indexes (migration 0027)
+    //   allow index-only scans so heap access is skipped on large tables.
+    let byChannelPromise: ReturnType<typeof db.execute>;
+    let byOutletPromise: ReturnType<typeof db.execute>;
+    let bySalesChannelPromise: ReturnType<typeof db.execute>;
 
-    const bySalesChannel = await db.execute(sql`
-      SELECT
-        b.sales_channel_code as code,
-        COALESCE(MAX(b.sales_channel_name), b.sales_channel_code) as name,
-        COALESCE(SUM(b.total_amount::numeric), 0) as revenue,
-        COUNT(*)::int as bookings
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      WHERE ${where} AND b.channel = 'OTA' AND b.sales_channel_code IS NOT NULL
-      GROUP BY b.sales_channel_code
-      ORDER BY revenue DESC
-    `);
+    if (mode === 'paid') {
+      byChannelPromise = db.execute(sql`
+        SELECT
+          b.channel,
+          COALESCE(SUM(py.amount::numeric), 0) AS revenue,
+          COUNT(DISTINCT b.id)::int            AS bookings
+        FROM payments py
+        INNER JOIN bookings b ON py.booking_id = b.id
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${payWhere}
+        GROUP BY b.channel
+        ORDER BY revenue DESC
+      `);
+      byOutletPromise = db.execute(sql`
+        SELECT
+          COALESCE(b.snap_outlet_name, o.name) AS outlet_name,
+          COALESCE(SUM(py.amount::numeric), 0) AS revenue,
+          COUNT(DISTINCT b.id)::int            AS bookings
+        FROM payments py
+        INNER JOIN bookings b ON py.booking_id = b.id
+        INNER JOIN trips t ON b.trip_id = t.id
+        LEFT JOIN outlets o ON b.outlet_id = o.id
+        WHERE ${payWhere}
+        GROUP BY COALESCE(b.snap_outlet_name, o.name)
+        ORDER BY revenue DESC
+      `);
+      bySalesChannelPromise = db.execute(sql`
+        SELECT
+          b.sales_channel_code AS code,
+          COALESCE(MAX(b.sales_channel_name), b.sales_channel_code) AS name,
+          COALESCE(SUM(py.amount::numeric), 0) AS revenue,
+          COUNT(DISTINCT b.id)::int            AS bookings
+        FROM payments py
+        INNER JOIN bookings b ON py.booking_id = b.id
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${payWhere} AND b.channel = 'OTA' AND b.sales_channel_code IS NOT NULL
+        GROUP BY b.sales_channel_code
+        ORDER BY revenue DESC
+      `);
+    } else {
+      byChannelPromise = db.execute(sql`
+        SELECT
+          b.channel,
+          COALESCE(SUM(b.total_amount::numeric), 0) AS revenue,
+          COUNT(*)::int                             AS bookings
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${where}
+        GROUP BY b.channel
+        ORDER BY revenue DESC
+      `);
+      byOutletPromise = db.execute(sql`
+        SELECT
+          COALESCE(b.snap_outlet_name, o.name) AS outlet_name,
+          COALESCE(SUM(b.total_amount::numeric), 0) AS revenue,
+          COUNT(*)::int                             AS bookings
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        LEFT JOIN outlets o ON b.outlet_id = o.id
+        WHERE ${where}
+        GROUP BY COALESCE(b.snap_outlet_name, o.name)
+        ORDER BY revenue DESC
+      `);
+      bySalesChannelPromise = db.execute(sql`
+        SELECT
+          b.sales_channel_code AS code,
+          COALESCE(MAX(b.sales_channel_name), b.sales_channel_code) AS name,
+          COALESCE(SUM(b.total_amount::numeric), 0) AS revenue,
+          COUNT(*)::int                             AS bookings
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${where} AND b.channel = 'OTA' AND b.sales_channel_code IS NOT NULL
+        GROUP BY b.sales_channel_code
+        ORDER BY revenue DESC
+      `);
+    }
 
-    const byRoute = await db.execute(sql`
-      SELECT
-        COALESCE(t.snap_route_name, tp.name) as route_name,
-        COALESCE(t.snap_route_code, tp.code) as route_code,
-        COALESCE(SUM(b.total_amount::numeric), 0) as revenue,
-        COUNT(*)::int as bookings
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
-      WHERE ${where}
-      GROUP BY COALESCE(t.snap_route_name, tp.name), COALESCE(t.snap_route_code, tp.code)
-      ORDER BY revenue DESC
-    `);
+    // ── Run all 6 queries concurrently ──────────────────────────────────────
+    const [summary, daily, byChannel, byOutlet, bySalesChannel, byRoute] = await Promise.all([
+      summaryPromise,
+      dailyPromise,
+      byChannelPromise,
+      byOutletPromise,
+      bySalesChannelPromise,
+      byRoutePromise,
+    ]);
 
     return {
       summary: summary.rows[0],
@@ -291,98 +406,47 @@ export class ReportsRepository {
     const canUseMv = mode === 'departure' && !f.outletId && !f.channel && !f.salesChannelCode;
     const tripWhere = canUseMv ? joinConditions(tripFilters(f, 't')) : null;
 
-    let summary;
-    if (canUseMv) {
-      summary = await db.execute(sql`
-        SELECT
-          COALESCE(SUM(ms.total_bookings), 0)::int      AS total_bookings,
-          COALESCE(SUM(ms.paid_bookings), 0)::int        AS paid_count,
-          COALESCE(SUM(ms.cancelled_bookings), 0)::int   AS canceled_count,
-          COALESCE(SUM(ms.pending_bookings), 0)::int     AS pending_count,
-          COALESCE(SUM(ms.confirmed_bookings), 0)::int   AS confirmed_count,
-          COALESCE(SUM(ms.refunded_bookings), 0)::int    AS refunded_count,
-          COALESCE(SUM(ms.unseated_bookings), 0)::int    AS unseated_count,
-          COALESCE(SUM(ms.paid_revenue), 0)              AS total_revenue,
-          COUNT(t.id)::int                               AS total_trips
-        FROM mv_trip_stats ms
-        INNER JOIN trips t ON t.id = ms.trip_id
-        WHERE ${tripWhere}
-      `);
-    } else {
-      summary = await db.execute(sql`
-        SELECT
-          COUNT(*)::int as total_bookings,
-          COUNT(*) FILTER (WHERE b.status = 'paid')::int as paid_count,
-          COUNT(*) FILTER (WHERE b.status = 'cancelled')::int as canceled_count,
-          COUNT(*) FILTER (WHERE b.status = 'pending')::int as pending_count,
-          COUNT(*) FILTER (WHERE b.status = 'confirmed')::int as confirmed_count,
-          COUNT(*) FILTER (WHERE b.status = 'refunded')::int as refunded_count,
-          COUNT(*) FILTER (WHERE b.status = 'unseated')::int as unseated_count,
-          COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as total_revenue,
-          COUNT(DISTINCT b.trip_id)::int as total_trips
-        FROM bookings b
-        INNER JOIN trips t ON b.trip_id = t.id
-        WHERE ${where}
-      `);
-    }
+    // ── Build conditional queries before Promise.all ──────────────────────────
 
-    const byStatus = await db.execute(sql`
-      SELECT
-        b.status,
-        COUNT(*)::int as count,
-        COALESCE(SUM(b.total_amount::numeric), 0) as amount
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      WHERE ${where}
-      GROUP BY b.status
-      ORDER BY count DESC
-    `);
+    const summaryPromise = canUseMv
+      ? db.execute(sql`
+          SELECT
+            COALESCE(SUM(ms.total_bookings), 0)::int      AS total_bookings,
+            COALESCE(SUM(ms.paid_bookings), 0)::int        AS paid_count,
+            COALESCE(SUM(ms.cancelled_bookings), 0)::int   AS canceled_count,
+            COALESCE(SUM(ms.pending_bookings), 0)::int     AS pending_count,
+            COALESCE(SUM(ms.confirmed_bookings), 0)::int   AS confirmed_count,
+            COALESCE(SUM(ms.refunded_bookings), 0)::int    AS refunded_count,
+            COALESCE(SUM(ms.unseated_bookings), 0)::int    AS unseated_count,
+            COALESCE(SUM(ms.paid_revenue), 0)              AS total_revenue,
+            COUNT(t.id)::int                               AS total_trips
+          FROM mv_trip_stats ms
+          INNER JOIN trips t ON t.id = ms.trip_id
+          WHERE ${tripWhere}
+        `)
+      : db.execute(sql`
+          SELECT
+            COUNT(*)::int as total_bookings,
+            COUNT(*) FILTER (WHERE b.status = 'paid')::int as paid_count,
+            COUNT(*) FILTER (WHERE b.status = 'cancelled')::int as canceled_count,
+            COUNT(*) FILTER (WHERE b.status = 'pending')::int as pending_count,
+            COUNT(*) FILTER (WHERE b.status = 'confirmed')::int as confirmed_count,
+            COUNT(*) FILTER (WHERE b.status = 'refunded')::int as refunded_count,
+            COUNT(*) FILTER (WHERE b.status = 'unseated')::int as unseated_count,
+            COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as total_revenue,
+            COUNT(DISTINCT b.trip_id)::int as total_trips
+          FROM bookings b
+          INNER JOIN trips t ON b.trip_id = t.id
+          WHERE ${where}
+        `);
 
-    const byChannel = await db.execute(sql`
-      SELECT
-        b.channel,
-        COUNT(*)::int as count,
-        COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as revenue
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      WHERE ${where}
-      GROUP BY b.channel
-      ORDER BY count DESC
-    `);
-
-    const bySalesChannel = await db.execute(sql`
-      SELECT
-        b.sales_channel_code as code,
-        COALESCE(MAX(b.sales_channel_name), b.sales_channel_code) as name,
-        COUNT(*)::int as count,
-        COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as revenue
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      WHERE ${where} AND b.channel = 'OTA' AND b.sales_channel_code IS NOT NULL
-      GROUP BY b.sales_channel_code
-      ORDER BY count DESC
-    `);
-
-    const byOutlet = await db.execute(sql`
-      SELECT
-        COALESCE(b.snap_outlet_name, o.name, 'Tanpa Outlet') as outlet_name,
-        COUNT(*)::int as count,
-        COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as revenue
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      LEFT JOIN outlets o ON b.outlet_id = o.id
-      WHERE ${where}
-      GROUP BY COALESCE(b.snap_outlet_name, o.name, 'Tanpa Outlet')
-      ORDER BY count DESC
-    `);
-
-    let daily;
+    let dailyPromise: ReturnType<typeof db.execute>;
     if (mode === 'paid') {
       const payWhere = joinConditions([
         ...paymentFilters(f, 'py', 'b', 't'),
         sql`py.status = 'success'`,
       ]);
-      daily = await db.execute(sql`
+      dailyPromise = db.execute(sql`
         SELECT
           py.paid_at::date::text as date,
           COUNT(DISTINCT b.id)::int as bookings,
@@ -397,8 +461,7 @@ export class ReportsRepository {
         ORDER BY py.paid_at::date
       `);
     } else if (canUseMv) {
-      // Fast path daily: aggregate mv rows by service_date
-      daily = await db.execute(sql`
+      dailyPromise = db.execute(sql`
         SELECT
           t.service_date::text                                     AS date,
           COALESCE(SUM(ms.total_bookings), 0)::int                AS bookings,
@@ -413,7 +476,7 @@ export class ReportsRepository {
       `);
     } else {
       const dd = dailyDateSelect(f, 'b', 't');
-      daily = await db.execute(sql`
+      dailyPromise = db.execute(sql`
         SELECT
           ${dd.sel},
           COUNT(*)::int as bookings,
@@ -428,24 +491,81 @@ export class ReportsRepository {
       `);
     }
 
-    const recent = await db.execute(sql`
-      SELECT
-        b.id, b.booking_code, b.status, b.channel, b.total_amount,
-        b.created_at, t.service_date,
-        COALESCE(t.snap_route_name, tp.name) as route_name,
-        COALESCE(b.snap_outlet_name, o.name, '-') as outlet_name,
-        COALESCE(b.snap_origin_stop_name, os.name) as origin_name,
-        COALESCE(b.snap_destination_stop_name, ds.name) as destination_name
-      FROM bookings b
-      INNER JOIN trips t ON b.trip_id = t.id
-      LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
-      LEFT JOIN outlets o ON b.outlet_id = o.id
-      LEFT JOIN stops os ON b.origin_stop_id = os.id
-      LEFT JOIN stops ds ON b.destination_stop_id = ds.id
-      WHERE ${where}
-      ORDER BY b.created_at DESC
-      LIMIT 100
-    `);
+    // ── Run all 7 queries concurrently ──────────────────────────────────────
+    const [summary, byStatus, byChannel, bySalesChannel, byOutlet, daily, recent] = await Promise.all([
+      summaryPromise,
+
+      // Breakdown queries always need individual booking rows.
+      // idx_bookings_rpt_channel / idx_bookings_rpt_outlet / idx_bookings_rpt_sales_ch
+      // covering indexes (migration 0027) allow index-only scans here.
+      db.execute(sql`
+        SELECT
+          b.status,
+          COUNT(*)::int as count,
+          COALESCE(SUM(b.total_amount::numeric), 0) as amount
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${where}
+        GROUP BY b.status
+        ORDER BY count DESC
+      `),
+      db.execute(sql`
+        SELECT
+          b.channel,
+          COUNT(*)::int as count,
+          COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as revenue
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${where}
+        GROUP BY b.channel
+        ORDER BY count DESC
+      `),
+      db.execute(sql`
+        SELECT
+          b.sales_channel_code as code,
+          COALESCE(MAX(b.sales_channel_name), b.sales_channel_code) as name,
+          COUNT(*)::int as count,
+          COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as revenue
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        WHERE ${where} AND b.channel = 'OTA' AND b.sales_channel_code IS NOT NULL
+        GROUP BY b.sales_channel_code
+        ORDER BY count DESC
+      `),
+      db.execute(sql`
+        SELECT
+          COALESCE(b.snap_outlet_name, o.name, 'Tanpa Outlet') as outlet_name,
+          COUNT(*)::int as count,
+          COALESCE(SUM(b.total_amount::numeric) FILTER (WHERE b.status IN ${PAID_STATUSES_SQL}), 0) as revenue
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        LEFT JOIN outlets o ON b.outlet_id = o.id
+        WHERE ${where}
+        GROUP BY COALESCE(b.snap_outlet_name, o.name, 'Tanpa Outlet')
+        ORDER BY count DESC
+      `),
+
+      dailyPromise,
+
+      db.execute(sql`
+        SELECT
+          b.id, b.booking_code, b.status, b.channel, b.total_amount,
+          b.created_at, t.service_date,
+          COALESCE(t.snap_route_name, tp.name) as route_name,
+          COALESCE(b.snap_outlet_name, o.name, '-') as outlet_name,
+          COALESCE(b.snap_origin_stop_name, os.name) as origin_name,
+          COALESCE(b.snap_destination_stop_name, ds.name) as destination_name
+        FROM bookings b
+        INNER JOIN trips t ON b.trip_id = t.id
+        LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
+        LEFT JOIN outlets o ON b.outlet_id = o.id
+        LEFT JOIN stops os ON b.origin_stop_id = os.id
+        LEFT JOIN stops ds ON b.destination_stop_id = ds.id
+        WHERE ${where}
+        ORDER BY b.created_at DESC
+        LIMIT 100
+      `),
+    ]);
 
     return {
       summary: summary.rows[0],
