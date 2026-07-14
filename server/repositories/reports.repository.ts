@@ -152,7 +152,10 @@ export class ReportsRepository {
           CASE WHEN SUM(ms.paid_bookings) > 0
             THEN ROUND(SUM(ms.paid_revenue) / NULLIF(SUM(ms.paid_bookings)::numeric, 0), 2)
             ELSE 0 END                                                                       AS avg_per_booking,
-          COUNT(t.id)::int                                                                   AS total_trips
+          -- FIX: mirror the live query which counts only trips with ≥1 paid booking.
+          -- mv_trip_stats has one row per trip with ANY booking (incl. cancelled/pending),
+          -- so we must filter to paid_bookings > 0 to avoid inflating total_trips.
+          (COUNT(t.id) FILTER (WHERE ms.paid_bookings > 0))::int                           AS total_trips
         FROM mv_trip_stats ms
         INNER JOIN trips t ON t.id = ms.trip_id
         WHERE ${tripWhere}

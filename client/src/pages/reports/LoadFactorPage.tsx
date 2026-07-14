@@ -65,6 +65,7 @@ export default function LoadFactorPage() {
       icon={Users}
       isLoading={isLoading}
       filterBar={<ReportFilters value={filters} onChange={setFilters} showOutlet={false} showChannel={false} lockedOutletId={scopedOutletId ?? undefined} />}
+      stalenessNote="Data penumpang aktif diperbarui otomatis setiap ±5 menit."
     >
       <SummaryCardsGrid items={[
         { label: 'Rata-rata Load Factor', value: `${avgLF}%`, icon: Percent, iconBg: avgLF >= 60 ? 'bg-green-100' : 'bg-orange-100', iconColor: avgLF >= 60 ? 'text-green-600' : 'text-orange-600' },

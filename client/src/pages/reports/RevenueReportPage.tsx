@@ -56,6 +56,12 @@ export default function RevenueReportPage() {
     bookings: Number(d.bookings),
   }));
 
+  // MV fast path is active when mode=departure and no booking-level filters.
+  // DATE_MODES here only exposes 'paid'/'created', so this is false in normal UI use —
+  // but kept for correctness if filters change in the future.
+  const canUseMv = (!filters.dateMode || filters.dateMode === 'departure')
+    && !filters.outletId && !filters.channel && !filters.salesChannelCode;
+
   return (
     <ReportPageLayout
       title="Laporan Pendapatan"
@@ -63,6 +69,7 @@ export default function RevenueReportPage() {
       icon={DollarSign}
       isLoading={isLoading}
       filterBar={<ReportFilters value={filters} onChange={setFilters} lockedOutletId={scopedOutletId ?? undefined} dateModeOptions={DATE_MODES} />}
+      stalenessNote={canUseMv ? "Data ringkasan diperbarui otomatis setiap ±5 menit. Menambah filter outlet atau kanal akan beralih ke data real-time." : undefined}
     >
       <SummaryCardsGrid items={[
         { label: 'Total Pendapatan', value: fmtCurrency(Number(summary?.total_revenue || 0)), icon: DollarSign, iconBg: 'bg-green-100', iconColor: 'text-green-600' },
