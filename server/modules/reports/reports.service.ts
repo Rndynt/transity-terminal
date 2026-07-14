@@ -31,8 +31,8 @@ export class ReportsService {
     return await this.repo.getTripProfitability(f);
   }
 
-  async getLoadFactor(f: ReportFilters) {
-    return await this.repo.getLoadFactor(f);
+  async getLoadFactor(f: ReportFilters, tripsPage: number = 1, tripsPageSize: number = 100) {
+    return await this.repo.getLoadFactor(f, tripsPage, tripsPageSize);
   }
 
   async getCancellationsReport(f: ReportFilters) {

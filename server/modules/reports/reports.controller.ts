@@ -68,7 +68,10 @@ export class ReportsController {
   async getLoadFactor(req: FastifyRequest, reply: FastifyReply) {
     try {
       const filters = parseFilters(req);
-      const data = await reportsService.getLoadFactor(filters);
+      const q = req.query as { tripsPage?: string; tripsPageSize?: string };
+      const tripsPage     = Math.max(1, parseInt(q.tripsPage     || '1',   10) || 1);
+      const tripsPageSize = Math.max(1, parseInt(q.tripsPageSize || '100', 10) || 100);
+      const data = await reportsService.getLoadFactor(filters, tripsPage, tripsPageSize);
       reply.send(data);
     } catch (e) {
       if (e instanceof Error && e.name === 'ZodError') return reply.code(400).send({ error: 'Parameter filter tidak valid' });

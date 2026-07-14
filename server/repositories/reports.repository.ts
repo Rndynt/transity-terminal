@@ -544,86 +544,104 @@ export class ReportsRepository {
     };
   }
 
-  async getLoadFactor(f: ReportFilters) {
+  async getLoadFactor(f: ReportFilters, tripsPage: number = 1, tripsPageSize: number = 100) {
     const where = joinConditions(tripFilters(f, 't'));
+    const page   = Math.max(1, tripsPage);
+    const limit  = Math.min(Math.max(1, tripsPageSize), 200); // cap at 200 rows/page
+    const offset = (page - 1) * limit;
 
-    const trips_data = await db.execute(sql`
-      SELECT
-        t.id as trip_id,
-        t.service_date::text,
-        t.status as trip_status,
-        t.capacity,
-        COALESCE(t.snap_route_name, tp.name) as route_name,
-        COALESCE(t.snap_route_code, tp.code) as route_code,
-        COALESCE(t.snap_driver_name, d.name) as driver_name,
-        COALESCE(ts.active_pax, 0)::int as passenger_count,
-        CASE WHEN t.capacity > 0
-          THEN ROUND(COALESCE(ts.active_pax, 0)::numeric / t.capacity * 100, 1)
-          ELSE 0
-        END as load_factor_pct
-      FROM trips t
-      LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
-      LEFT JOIN drivers d ON t.driver_id = d.id
-      LEFT JOIN mv_trip_stats ts ON ts.trip_id = t.id
-      WHERE ${where}
-      ORDER BY t.service_date DESC, tp.name
-    `);
+    // Run all queries concurrently — summary/daily/byRoute use mv_trip_stats (fast),
+    // trips_data is paginated so it only fetches one slice of rows.
+    const [trips_data, byRoute, summary, daily, tripsCount] = await Promise.all([
+      db.execute(sql`
+        SELECT
+          t.id as trip_id,
+          t.service_date::text,
+          t.status as trip_status,
+          t.capacity,
+          COALESCE(t.snap_route_name, tp.name) as route_name,
+          COALESCE(t.snap_route_code, tp.code) as route_code,
+          COALESCE(t.snap_driver_name, d.name) as driver_name,
+          COALESCE(ts.active_pax, 0)::int as passenger_count,
+          CASE WHEN t.capacity > 0
+            THEN ROUND(COALESCE(ts.active_pax, 0)::numeric / t.capacity * 100, 1)
+            ELSE 0
+          END as load_factor_pct
+        FROM trips t
+        LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
+        LEFT JOIN drivers d ON t.driver_id = d.id
+        LEFT JOIN mv_trip_stats ts ON ts.trip_id = t.id
+        WHERE ${where}
+        ORDER BY t.service_date DESC, tp.name
+        LIMIT ${limit} OFFSET ${offset}
+      `),
 
-    const byRoute = await db.execute(sql`
-      SELECT
-        COALESCE(t.snap_route_name, tp.name) as route_name,
-        COALESCE(t.snap_route_code, tp.code) as route_code,
-        COUNT(t.id)::int as trip_count,
-        SUM(t.capacity)::int as total_capacity,
-        COALESCE(SUM(ts.active_pax), 0)::int as total_passengers,
-        CASE WHEN SUM(t.capacity) > 0
-          THEN ROUND(COALESCE(SUM(ts.active_pax), 0)::numeric / SUM(t.capacity) * 100, 1)
-          ELSE 0
-        END as avg_load_factor_pct
-      FROM trips t
-      LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
-      LEFT JOIN mv_trip_stats ts ON ts.trip_id = t.id
-      WHERE ${where}
-      GROUP BY COALESCE(t.snap_route_name, tp.name), COALESCE(t.snap_route_code, tp.code)
-      ORDER BY avg_load_factor_pct DESC
-    `);
+      db.execute(sql`
+        SELECT
+          COALESCE(t.snap_route_name, tp.name) as route_name,
+          COALESCE(t.snap_route_code, tp.code) as route_code,
+          COUNT(t.id)::int as trip_count,
+          SUM(t.capacity)::int as total_capacity,
+          COALESCE(SUM(ts.active_pax), 0)::int as total_passengers,
+          CASE WHEN SUM(t.capacity) > 0
+            THEN ROUND(COALESCE(SUM(ts.active_pax), 0)::numeric / SUM(t.capacity) * 100, 1)
+            ELSE 0
+          END as avg_load_factor_pct
+        FROM trips t
+        LEFT JOIN trip_patterns tp ON t.pattern_id = tp.id
+        LEFT JOIN mv_trip_stats ts ON ts.trip_id = t.id
+        WHERE ${where}
+        GROUP BY COALESCE(t.snap_route_name, tp.name), COALESCE(t.snap_route_code, tp.code)
+        ORDER BY avg_load_factor_pct DESC
+      `),
 
-    const summary = await db.execute(sql`
-      SELECT
-        COUNT(t.id)::int as total_trips,
-        COALESCE(SUM(t.capacity), 0)::int as total_capacity,
-        COALESCE(SUM(ts.active_pax), 0)::int as total_passengers,
-        CASE WHEN SUM(t.capacity) > 0
-          THEN ROUND(COALESCE(SUM(ts.active_pax), 0)::numeric / SUM(t.capacity) * 100, 1)
-          ELSE 0
-        END as avg_load_factor_pct
-      FROM trips t
-      LEFT JOIN mv_trip_stats ts ON ts.trip_id = t.id
-      WHERE ${where}
-    `);
+      db.execute(sql`
+        SELECT
+          COUNT(t.id)::int as total_trips,
+          COALESCE(SUM(t.capacity), 0)::int as total_capacity,
+          COALESCE(SUM(ts.active_pax), 0)::int as total_passengers,
+          CASE WHEN SUM(t.capacity) > 0
+            THEN ROUND(COALESCE(SUM(ts.active_pax), 0)::numeric / SUM(t.capacity) * 100, 1)
+            ELSE 0
+          END as avg_load_factor_pct
+        FROM trips t
+        LEFT JOIN mv_trip_stats ts ON ts.trip_id = t.id
+        WHERE ${where}
+      `),
 
-    const daily = await db.execute(sql`
-      SELECT
-        t.service_date::text as date,
-        COUNT(t.id)::int as trips,
-        SUM(t.capacity)::int as capacity,
-        COALESCE(SUM(ts.active_pax), 0)::int as passengers,
-        CASE WHEN SUM(t.capacity) > 0
-          THEN ROUND(COALESCE(SUM(ts.active_pax), 0)::numeric / SUM(t.capacity) * 100, 1)
-          ELSE 0
-        END as load_factor_pct
-      FROM trips t
-      LEFT JOIN mv_trip_stats ts ON ts.trip_id = t.id
-      WHERE ${where}
-      GROUP BY t.service_date
-      ORDER BY t.service_date
-    `);
+      db.execute(sql`
+        SELECT
+          t.service_date::text as date,
+          COUNT(t.id)::int as trips,
+          SUM(t.capacity)::int as capacity,
+          COALESCE(SUM(ts.active_pax), 0)::int as passengers,
+          CASE WHEN SUM(t.capacity) > 0
+            THEN ROUND(COALESCE(SUM(ts.active_pax), 0)::numeric / SUM(t.capacity) * 100, 1)
+            ELSE 0
+          END as load_factor_pct
+        FROM trips t
+        LEFT JOIN mv_trip_stats ts ON ts.trip_id = t.id
+        WHERE ${where}
+        GROUP BY t.service_date
+        ORDER BY t.service_date
+      `),
+
+      // Cheap count — trips table has index on service_date, so this is fast.
+      db.execute(sql`
+        SELECT COUNT(t.id)::int AS total
+        FROM trips t
+        WHERE ${where}
+      `),
+    ]);
 
     return {
-      summary: summary.rows[0],
-      byRoute: byRoute.rows,
-      daily: daily.rows,
-      trips: trips_data.rows,
+      summary:       summary.rows[0],
+      byRoute:       byRoute.rows,
+      daily:         daily.rows,
+      trips:         trips_data.rows,
+      tripsTotal:    Number((tripsCount.rows[0] as any)?.total ?? 0),
+      tripsPage:     page,
+      tripsPageSize: limit,
     };
   }
 
