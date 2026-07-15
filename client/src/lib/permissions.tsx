@@ -24,13 +24,13 @@ interface PermissionsContextValue {
 
 const PermissionsContext = createContext<PermissionsContextValue | null>(null);
 
-export function PermissionsProvider({ children }: { children: ReactNode }) {
+export function PermissionsProvider({ children, enabled = true }: { children: ReactNode; enabled?: boolean }) {
   const [data, setData] = useState<PermissionsData>({
     flags: [],
     role: null,
     outletId: null,
   });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(enabled);
 
   const refresh = useCallback(async () => {
     try {
@@ -49,8 +49,13 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (enabled) {
+      setIsLoading(true);
+      refresh();
+    } else {
+      setIsLoading(false);
+    }
+  }, [enabled, refresh]);
 
   const flagSet = new Set(data.flags);
 

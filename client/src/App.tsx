@@ -5,7 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { PermissionsProvider } from "@/lib/permissions";
+import { PermissionsProvider, usePermissions } from "@/lib/permissions";
 import { RequireFlag } from "@/components/rbac/RequireFlag";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { useLocation, Redirect } from "wouter";
@@ -40,14 +40,28 @@ const CustomersPage = lazy(() => import("@/pages/customers/CustomersPage"));
 const SettingsPage = lazy(() => import("@/pages/admin/SettingsPage"));
 
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+// Enables PermissionsProvider only once auth is confirmed, so the two
+// fetches (session + permissions) are initiated in sequence but the loader
+// stays mounted throughout both phases — no animation restart.
+function PermissionsProviderWithAuth({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  return (
+    <PermissionsProvider enabled={!authLoading && isAuthenticated}>
+      {children}
+    </PermissionsProvider>
+  );
+}
+
+// Single gate that covers auth + setup check + permissions in ONE loader mount.
+function AppGate({ children }: { children: React.ReactNode }) {
+  const { isLoading: authLoading, isAuthenticated } = useAuth();
+  const { isLoading: permLoading } = usePermissions();
   const [setupChecked, setSetupChecked] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
+    if (!authLoading && isAuthenticated && !setupChecked) {
       fetch("/api/setup/status")
         .then(r => r.json())
         .then(data => {
@@ -58,23 +72,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
         })
         .catch(() => {})
         .finally(() => setSetupChecked(true));
-    } else if (!isLoading) {
+    } else if (!authLoading && !isAuthenticated) {
       setSetupChecked(true);
     }
-  }, [isLoading, isAuthenticated, navigate]);
+  }, [authLoading, isAuthenticated, setupChecked, navigate]);
 
-  if (isLoading || (isAuthenticated && !setupChecked)) {
+  if (authLoading || permLoading || (isAuthenticated && !setupChecked)) {
     return <PageLoader />;
   }
-
-  if (!isAuthenticated) {
-    return <Redirect to="/login" />;
-  }
-
-  if (needsSetup) {
-    return <Redirect to="/setup" />;
-  }
-
+  if (!isAuthenticated) return <Redirect to="/login" />;
+  if (needsSetup) return <Redirect to="/setup" />;
   return <>{children}</>;
 }
 
@@ -85,10 +92,9 @@ function Router() {
         <Route path="/login" component={LoginPage} />
         <Route path="/setup" component={SetupPage} />
         <Route>
-          <ProtectedRoute>
-            <PermissionsProvider>
-              <AppLayout>
-                <Suspense fallback={<PageLoader />}>
+          <AppGate>
+            <AppLayout>
+              <Suspense fallback={null}>
                   <Switch>
                     <Route path="/">
                       <RequireFlag flag="page.cso">
@@ -218,9 +224,8 @@ function Router() {
                     <Route component={NotFound} />
                   </Switch>
                 </Suspense>
-              </AppLayout>
-            </PermissionsProvider>
-          </ProtectedRoute>
+            </AppLayout>
+          </AppGate>
         </Route>
       </Switch>
     </Suspense>
@@ -233,12 +238,14 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <ErrorBoundary>
-            <Toaster />
-            <Router />
-          </ErrorBoundary>
-        </TooltipProvider>
+        <PermissionsProviderWithAuth>
+          <TooltipProvider>
+            <ErrorBoundary>
+              <Toaster />
+              <Router />
+            </ErrorBoundary>
+          </TooltipProvider>
+        </PermissionsProviderWithAuth>
       </AuthProvider>
     </QueryClientProvider>
   );
