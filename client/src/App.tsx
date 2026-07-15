@@ -77,9 +77,9 @@ function AppGate({ children }: { children: React.ReactNode }) {
     }
   }, [authLoading, isAuthenticated, setupChecked, navigate]);
 
-  if (authLoading || permLoading || (isAuthenticated && !setupChecked)) {
-    return <PageLoader />;
-  }
+  // While auth is resolving: blank (fast, ~100ms). No full-screen spinner —
+  // once authenticated the app shell renders and each page shows its own skeleton.
+  if (authLoading) return null;
   if (!isAuthenticated) return <Redirect to="/login" />;
   if (needsSetup) return <Redirect to="/setup" />;
   return <>{children}</>;
@@ -87,7 +87,7 @@ function AppGate({ children }: { children: React.ReactNode }) {
 
 function Router() {
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={null}>
       <Switch>
         <Route path="/login" component={LoginPage} />
         <Route path="/setup" component={SetupPage} />
