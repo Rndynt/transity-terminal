@@ -54,7 +54,7 @@ const getDateStr = (offset: number): string => {
 
 type TripWithTariff = CargoAvailableTrip & {
   date: string;
-  tariff?: { found: boolean; calculatedAmount: number; pricePerKg: number; pricePerLeg: number; minCharge: number; legCount: number } | null;
+  tariff?: { found: boolean; calculatedAmount: number; pricePerKg: number; minCharge: number } | null;
 };
 
 function OutletSelector({ value, outlets, stops: stopsList, onChange }: {
@@ -462,7 +462,7 @@ export default function CargoTerminalPage() {
     const generation = tariffRequestGenerationRef.current;
     const w = parseFloat(weightKg) || 1;
     const tripId = trip.tripId;
-    const result = await cargoApi.quoteTariff(cargoTypeId, originStopId, trip.destinationStopId, w, tripId);
+    const result = await cargoApi.quoteTariff(cargoTypeId, originStopId, trip.destinationStopId, w, tripId, date);
     if (!isMountedRef.current || generation !== tariffRequestGenerationRef.current) return;
     const key = `${trip.tripId || trip.baseId}-${date}`;
     setTariffCache(prev => ({ ...prev, [key]: result }));
@@ -1026,9 +1026,6 @@ export default function CargoTerminalPage() {
                   {selectedTrip?.tariff?.found && (
                     <div className="text-right text-[10px] text-gray-500 space-y-0.5">
                       <div>Rp {Number(selectedTrip.tariff.pricePerKg).toLocaleString('id-ID')}/kg x {weightKg || '1'} kg</div>
-                      {Number(selectedTrip.tariff.pricePerLeg) > 0 && (
-                        <div>+ Rp {Number(selectedTrip.tariff.pricePerLeg).toLocaleString('id-ID')}/leg x {selectedTrip.tariff.legCount}</div>
-                      )}
                       {Number(selectedTrip.tariff.minCharge) > 0 && (
                         <div>Min. charge: Rp {Number(selectedTrip.tariff.minCharge).toLocaleString('id-ID')}</div>
                       )}

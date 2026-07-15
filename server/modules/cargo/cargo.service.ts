@@ -3,6 +3,7 @@ import { InsertCargoShipment, CargoShipment, CargoShipmentListItem, CargoAvailab
 import { db } from "@server/db";
 import { sql, eq } from "drizzle-orm";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { resolveCargoCell } from "./cargoRates.resolver";
 
 /**
  * S1-09: lihat `server/modules/rbac/README.md`. Mapping flag:
@@ -56,43 +57,51 @@ export class CargoService {
     return `WB-${yy}${mm}${dd}-${id}`;
   }
 
-  async countLegsBetweenStops(tripId: string, originStopId: string, destinationStopId: string): Promise<number> {
-    const stopTimes = await this.storage.getTripStopTimes(tripId);
-    if (!stopTimes || stopTimes.length === 0) return 1;
-
-    const originSeq = stopTimes.find(st => st.stopId === originStopId)?.stopSequence;
-    const destSeq = stopTimes.find(st => st.stopId === destinationStopId)?.stopSequence;
-
-    if (originSeq === undefined || destSeq === undefined) return 1;
-    const legCount = Math.abs(destSeq - originSeq);
-    return Math.max(legCount, 1);
-  }
-
   async calculateTariff(
     cargoTypeId: string,
     originStopId: string,
     destinationStopId: string,
     weightKg: number,
-    tripId?: string
-  ): Promise<{ pricePerKg: number; pricePerLeg: number; minCharge: number; legCount: number; calculatedAmount: number } | null> {
-    const rate = await this.storage.findCargoRate(cargoTypeId, originStopId, destinationStopId, tripId);
-    if (!rate) return null;
+    tripId?: string,
+    serviceDate?: string,
+  ): Promise<{ pricePerKg: number; minCharge: number; calculatedAmount: number } | null> {
+    // Cargo pricing is pattern-scoped only (no global tier — design
+    // decision #4), so a patternId is required to resolve anything. The
+    // only way to know which pattern an OD belongs to is via the trip;
+    // `serviceDate` is derived from the trip's own service date for
+    // seasonal resolution unless the caller already knows it (e.g. the CSO
+    // terminal page, which is quoting a specific trip on a specific date
+    // it already fetched) and passes it explicitly to skip the lookup.
+    let patternId: string | undefined;
+    let effectiveServiceDate = serviceDate;
 
-    const pricePerKg = parseFloat(rate.pricePerKg);
-    const pricePerLeg = parseFloat(rate.pricePerLeg || '0');
-    const minCharge = parseFloat(rate.minCharge);
-
-    let legCount = 1;
     if (tripId) {
-      legCount = await this.countLegsBetweenStops(tripId, originStopId, destinationStopId);
+      const trip = await this.storage.getTripById(tripId);
+      if (trip?.patternId) {
+        patternId = trip.patternId;
+        if (!effectiveServiceDate) effectiveServiceDate = String(trip.serviceDate);
+      }
     }
 
-    const weightCost = pricePerKg * weightKg;
-    const legCost = pricePerLeg * legCount;
-    const calculated = weightCost + legCost;
-    const calculatedAmount = Math.max(calculated, minCharge);
+    if (!patternId || !effectiveServiceDate) return null;
 
-    return { pricePerKg, pricePerLeg, minCharge, legCount, calculatedAmount };
+    const resolved = await resolveCargoCell({
+      patternId,
+      tripId,
+      cargoTypeId,
+      originStopId,
+      destinationStopId,
+      serviceDate: effectiveServiceDate,
+    });
+
+    if (resolved.pricePerKg <= 0) return null; // "Tarif belum diatur"
+
+    const cargoType = await this.storage.getCargoTypeById(cargoTypeId);
+    const minCharge = cargoType?.minCharge ? parseFloat(cargoType.minCharge) : 0;
+
+    const calculatedAmount = Math.max(resolved.pricePerKg * weightKg, minCharge);
+
+    return { pricePerKg: resolved.pricePerKg, minCharge, calculatedAmount };
   }
 
   async getAvailableTrips(serviceDate: string, originStopId: string, destinationStopIds: string[]): Promise<CargoAvailableTrip[]> {

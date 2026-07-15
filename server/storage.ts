@@ -18,7 +18,7 @@ import type {
   Booking, InsertBooking, Passenger, InsertPassenger,
   Payment, InsertPayment, PrintJob, InsertPrintJob,
   CargoShipment, CargoShipmentListItem, InsertCargoShipment, CargoType, InsertCargoType,
-  CargoRate, InsertCargoRate, CsoAvailableTrip, CargoAvailableTrip,
+  CsoAvailableTrip, CargoAvailableTrip,
   TripCostTemplate, InsertTripCostTemplate, TripCostItem, InsertTripCostItem,
   Promotion, InsertPromotion, PromoCondition, PromoConditionInput, Voucher, InsertVoucher,
   BookingPromoApplication, InsertBookingPromoApplication
@@ -236,14 +236,6 @@ export class DatabaseStorage implements IStorage {
   createCargoType(data: InsertCargoType): Promise<CargoType> { return this.cargo.createCargoType(data); }
   updateCargoType(id: string, data: Partial<InsertCargoType>): Promise<CargoType> { return this.cargo.updateCargoType(id, data); }
   deleteCargoType(id: string): Promise<void> { return this.cargo.deleteCargoType(id); }
-  getCargoRates(cargoTypeId?: string): Promise<CargoRate[]> { return this.cargo.getCargoRates(cargoTypeId); }
-  getCargoRateById(id: string): Promise<CargoRate | undefined> { return this.cargo.getCargoRateById(id); }
-  createCargoRate(data: InsertCargoRate): Promise<CargoRate> { return this.cargo.createCargoRate(data); }
-  updateCargoRate(id: string, data: Partial<InsertCargoRate>): Promise<CargoRate> { return this.cargo.updateCargoRate(id, data); }
-  deleteCargoRate(id: string): Promise<void> { return this.cargo.deleteCargoRate(id); }
-  findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string, tripId?: string): Promise<CargoRate | undefined> {
-    return this.cargo.findCargoRate(cargoTypeId, originStopId, destinationStopId, tripId, (id) => this.scheduling.getTripById(id));
-  }
   getCargoShipments(
     filters?: { tripId?: string; status?: string; outletId?: string },
     opts?: { limit?: number; offset?: number }

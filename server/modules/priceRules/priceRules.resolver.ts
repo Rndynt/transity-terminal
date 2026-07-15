@@ -21,16 +21,34 @@ export function matrixCellKey(originStopId: string, destinationStopId: string): 
   return `${originStopId}|${destinationStopId}`;
 }
 
-/** Empty cell, missing key, or price<=0 all mean "price not set" -> 0. */
+/**
+ * Empty cell, missing key, or value<=0 all mean "price not set" -> 0.
+ *
+ * Cargo identity-swap: generalized to be agnostic of the cell's numeric
+ * field name — passenger cells are `{ price }`, cargo cells are
+ * `{ pricePerKg }`. `field` defaults to `'price'` so every existing
+ * passenger call site below (and in priceRules.service.ts) is UNCHANGED;
+ * the cargo resolver passes `'pricePerKg'` explicitly.
+ *
+ * Deliberately loosely-typed on `blob` (a plain `Record<string, unknown>`
+ * per cell) rather than threading a generic cell-shape type parameter
+ * through: a concrete non-index-signature type like `PriceRuleBlob` or
+ * `CargoRateBlob` is awkward for TS to infer against a generic `Record<
+ * string, TCell>` parameter (mapped-type inference in that position is
+ * unreliable), and this function's whole job is a single dynamic-key
+ * lookup that doesn't gain much from that extra precision — correctness
+ * here is covered by the resolver test suites (passenger + cargo) instead.
+ */
 export function getMatrixCellPrice(
-  blob: PriceRuleBlob | null | undefined,
+  blob: { cells?: Record<string, Record<string, unknown>> } | null | undefined,
   originStopId: string,
   destinationStopId: string,
+  field: string = 'price',
 ): number {
   if (!blob?.cells) return 0;
   const cell = blob.cells[matrixCellKey(originStopId, destinationStopId)];
-  const price = cell?.price;
-  return typeof price === 'number' && Number.isFinite(price) && price > 0 ? price : 0;
+  const value = cell?.[field];
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 export interface PriceSource<TTag extends string> { tag: TTag; price: number; }
@@ -54,15 +72,25 @@ export interface MatrixStopLike {
 }
 
 export interface MatrixGridRow { stopId: string; stopName: string; stopCode: string; city: string | null; sequence: number; }
-export interface MatrixGridCell { originStopId: string; destinationStopId: string; price: number; }
+/**
+ * Generalized (cargo identity-swap) via an index signature instead of a
+ * hardcoded `price: number` — passenger cells carry `price`, cargo cells
+ * carry `pricePerKg`. Nothing in either service's `.ts` code statically
+ * reads a specific field off these cells (both just JSON-passthrough the
+ * grid to the HTTP response), so the looser index signature costs nothing
+ * while letting `extractMatrixGrid`/`serializeMatrixGrid` be shared as-is.
+ */
+export interface MatrixGridCell { originStopId: string; destinationStopId: string; [field: string]: string | number; }
 
-/** Builds an upper-triangular (forward-only) grid for the UI from a price
- * rule row + the pattern's stops-in-sequence. Sequence is ONLY used for
+/** Builds an upper-triangular (forward-only) grid for the UI from a price/
+ * rate row + the pattern's stops-in-sequence. Sequence is ONLY used for
  * render ordering here — the actual cell lookup below is always by stopId
- * pair. */
+ * pair. `field` defaults to `'price'` (passenger); cargo passes
+ * `'pricePerKg'`. */
 export function extractMatrixGrid(
   matrixRow: { matrix: unknown } | null | undefined,
   patternStops: MatrixStopLike[],
+  field: string = 'price',
 ): { rows: MatrixGridRow[]; cells: MatrixGridCell[] } {
   const sorted = [...patternStops].sort((a, b) => a.stopSequence - b.stopSequence);
   const rows: MatrixGridRow[] = sorted.map(ps => ({
@@ -72,28 +100,32 @@ export function extractMatrixGrid(
     city: ps.stop?.city ?? null,
     sequence: ps.stopSequence,
   }));
-  const blob = (matrixRow?.matrix as PriceRuleBlob | undefined) ?? { version: 1, cells: {} };
+  const blob = (matrixRow?.matrix as { cells?: Record<string, Record<string, unknown>> } | undefined) ?? { cells: {} };
   const cells: MatrixGridCell[] = [];
   for (let i = 0; i < sorted.length; i++) {
     for (let j = i + 1; j < sorted.length; j++) {
       const originStopId = sorted[i].stopId;
       const destinationStopId = sorted[j].stopId;
-      cells.push({ originStopId, destinationStopId, price: getMatrixCellPrice(blob, originStopId, destinationStopId) });
+      const value = getMatrixCellPrice(blob, originStopId, destinationStopId, field);
+      cells.push({ originStopId, destinationStopId, [field]: value });
     }
   }
   return { rows, cells };
 }
 
 /** Inverse of extractMatrixGrid: turns edited grid cells back into a JSONB
- * blob. Cells with price<=0 are OMITTED (not stored as 0) so the blob only
- * ever contains meaningfully-set prices. */
+ * blob. Cells with value<=0 are OMITTED (not stored as 0) so the blob only
+ * ever contains meaningfully-set prices. `field` defaults to `'price'`
+ * (passenger); cargo passes `'pricePerKg'`. */
 export function serializeMatrixGrid(
-  cells: Array<{ originStopId: string; destinationStopId: string; price: number }>,
-): PriceRuleBlob {
-  const out: PriceRuleBlob = { version: 1, cells: {} };
+  cells: MatrixGridCell[],
+  field: string = 'price',
+): { version: 1; cells: Record<string, Record<string, number>> } {
+  const out: { version: 1; cells: Record<string, Record<string, number>> } = { version: 1, cells: {} };
   for (const c of cells) {
-    if (c.price > 0) {
-      out.cells[matrixCellKey(c.originStopId, c.destinationStopId)] = { price: c.price };
+    const value = c[field];
+    if (typeof value === 'number' && value > 0) {
+      out.cells[matrixCellKey(c.originStopId, c.destinationStopId)] = { [field]: value };
     }
   }
   return out;

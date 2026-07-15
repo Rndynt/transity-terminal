@@ -20,7 +20,18 @@ export const promoTypeEnum = pgEnum('promo_type', ['percentage', 'fixed']);
 export const promoScopeEnum = pgEnum('promo_scope', ['global', 'pattern', 'trip', 'outlet', 'channel']);
 export const voucherStatusEnum = pgEnum('voucher_status', ['active', 'used', 'expired', 'revoked']);
 export const driverStatusEnum = pgEnum('driver_status', ['active', 'inactive', 'suspended']);
-export const cargoRateScopeEnum = pgEnum('cargo_rate_scope', ['global', 'pattern', 'trip']);
+/**
+ * Cargo OD-matrix identity swap: the old `cargo_rate_scope`
+ * ('global'|'pattern'|'trip') is GONE. Cargo has no global tier and trip
+ * overrides now live in `cargo_rate_exceptions`, not a scope value — so
+ * unlike passenger's `price_rule_scope` (which genuinely has 2 live
+ * values: 'global'|'pattern'), cargo would only ever have ONE possible
+ * scope value ('pattern'). A column/enum that can only ever hold one
+ * value is dead weight, so `scope` was dropped entirely from
+ * `cargo_rates` (see shared/schema/cargo.ts) rather than kept as a
+ * constant. `cargoRateKindEnum` mirrors passenger's `price_rule_kind`.
+ */
+export const cargoRateKindEnum = pgEnum('cargo_rate_kind', ['regular', 'seasonal']);
 export const cargoStatusEnum = pgEnum('cargo_status', ['pending', 'received', 'loaded', 'in_transit', 'arrived', 'delivered', 'returned', 'cancelled']);
 export const spjStatusEnum = pgEnum('spj_status', ['draft', 'issued', 'on_trip', 'settled']);
 export const costItemCategoryEnum = pgEnum('cost_item_category', ['bbm', 'tol', 'makan', 'parkir', 'lainnya']);

@@ -296,8 +296,6 @@ describe("CargoService — service-layer guard (S1-09)", () => {
       getCargoShipmentById: vi.fn(async () => ({ id: "c1" })),
       getCargoShipmentByWaybill: vi.fn(async () => null),
       getCargoAvailableTrips: vi.fn(async () => []),
-      getTripStopTimes: vi.fn(async () => []),
-      findCargoRate: vi.fn(async () => null),
       createCargoShipment: vi.fn(async (d: any) => ({ id: "c-new", waybillNumber: d.waybillNumber, ...d })),
     };
   }

@@ -2,11 +2,9 @@ import { db } from "@server/db";
 import { eq, and, desc, sql, isNull } from "drizzle-orm";
 import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "@server/constants/pagination";
 import {
-  cargoShipments, cargoTypes, cargoRates, stops, trips,
+  cargoShipments, cargoTypes, cargoRates, cargoRateExceptions, stops,
   type CargoShipment, type CargoShipmentListItem, type InsertCargoShipment,
   type CargoType, type InsertCargoType,
-  type CargoRate, type InsertCargoRate,
-  type Trip
 } from "@shared/schema";
 
 export class CargoRepository {
@@ -33,97 +31,9 @@ export class CargoRepository {
     const now = new Date();
     await db.transaction(async (tx) => {
       await tx.delete(cargoRates).where(eq(cargoRates.cargoTypeId, id));
+      await tx.delete(cargoRateExceptions).where(eq(cargoRateExceptions.cargoTypeId, id));
       await tx.update(cargoTypes).set({ deletedAt: now }).where(eq(cargoTypes.id, id));
     });
-  }
-
-  async getCargoRates(cargoTypeId?: string): Promise<CargoRate[]> {
-    if (cargoTypeId) {
-      return await db.select().from(cargoRates).where(eq(cargoRates.cargoTypeId, cargoTypeId)).orderBy(desc(cargoRates.createdAt));
-    }
-    return await db.select().from(cargoRates).orderBy(desc(cargoRates.createdAt));
-  }
-
-  async getCargoRateById(id: string): Promise<CargoRate | undefined> {
-    const [cr] = await db.select().from(cargoRates).where(eq(cargoRates.id, id));
-    return cr;
-  }
-
-  async createCargoRate(data: InsertCargoRate): Promise<CargoRate> {
-    const [cr] = await db.insert(cargoRates).values(data).returning();
-    return cr;
-  }
-
-  async updateCargoRate(id: string, data: Partial<InsertCargoRate>): Promise<CargoRate> {
-    const [cr] = await db.update(cargoRates).set(data).where(eq(cargoRates.id, id)).returning();
-    return cr;
-  }
-
-  async deleteCargoRate(id: string): Promise<void> {
-    await db.delete(cargoRates).where(eq(cargoRates.id, id));
-  }
-
-  async findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string, tripId?: string, getTripById?: (id: string) => Promise<Trip | undefined>): Promise<CargoRate | undefined> {
-    const findBestInScope = async (scope: 'global' | 'pattern' | 'trip', scopeRefId: string): Promise<CargoRate | undefined> => {
-      const [routeSpecific] = await db.select().from(cargoRates).where(
-        and(
-          eq(cargoRates.cargoTypeId, cargoTypeId),
-          eq(cargoRates.scope, scope),
-          eq(cargoRates.scopeRefId, scopeRefId),
-          eq(cargoRates.originStopId, originStopId),
-          eq(cargoRates.destinationStopId, destinationStopId),
-          eq(cargoRates.isActive, true)
-        )
-      );
-      if (routeSpecific) return routeSpecific;
-
-      const [scopeFallback] = await db.select().from(cargoRates).where(
-        and(
-          eq(cargoRates.cargoTypeId, cargoTypeId),
-          eq(cargoRates.scope, scope),
-          eq(cargoRates.scopeRefId, scopeRefId),
-          isNull(cargoRates.originStopId),
-          isNull(cargoRates.destinationStopId),
-          eq(cargoRates.isActive, true)
-        )
-      );
-      return scopeFallback;
-    };
-
-    if (tripId) {
-      const tripRate = await findBestInScope('trip', tripId);
-      if (tripRate) return tripRate;
-
-      if (getTripById) {
-        const trip = await getTripById(tripId);
-        if (trip?.patternId) {
-          const patternRate = await findBestInScope('pattern', trip.patternId);
-          if (patternRate) return patternRate;
-        }
-      }
-    }
-
-    const [globalRouteSpecific] = await db.select().from(cargoRates).where(
-      and(
-        eq(cargoRates.cargoTypeId, cargoTypeId),
-        eq(cargoRates.scope, 'global'),
-        eq(cargoRates.originStopId, originStopId),
-        eq(cargoRates.destinationStopId, destinationStopId),
-        eq(cargoRates.isActive, true)
-      )
-    );
-    if (globalRouteSpecific) return globalRouteSpecific;
-
-    const [globalFallback] = await db.select().from(cargoRates).where(
-      and(
-        eq(cargoRates.cargoTypeId, cargoTypeId),
-        eq(cargoRates.scope, 'global'),
-        isNull(cargoRates.originStopId),
-        isNull(cargoRates.destinationStopId),
-        eq(cargoRates.isActive, true)
-      )
-    );
-    return globalFallback;
   }
 
   async getCargoShipments(

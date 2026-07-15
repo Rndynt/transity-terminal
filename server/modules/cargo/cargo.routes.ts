@@ -5,6 +5,7 @@ import { requireFlag, requireOutletScope } from "@modules/rbac/rbac.middleware";
 
 export function registerCargoRoutes(app: FastifyInstance, storage: IStorage) {
   const cargoController = new CargoController(storage);
+  const write = { preHandler: [requireFlag('master.cargo_rates')] };
 
   app.get('/api/cargo-types', async (req, reply) => cargoController.getCargoTypes(req, reply));
   app.get('/api/cargo-types/:id', async (req, reply) => cargoController.getCargoTypeById(req, reply));
@@ -12,11 +13,26 @@ export function registerCargoRoutes(app: FastifyInstance, storage: IStorage) {
   app.put('/api/cargo-types/:id', { preHandler: [requireFlag('master.cargo_types')] }, async (req, reply) => cargoController.updateCargoType(req, reply));
   app.delete('/api/cargo-types/:id', { preHandler: [requireFlag('master.cargo_types')] }, async (req, reply) => cargoController.deleteCargoType(req, reply));
 
-  app.get('/api/cargo-rates', async (req, reply) => cargoController.getCargoRates(req, reply));
-  app.get('/api/cargo-rates/:id', async (req, reply) => cargoController.getCargoRateById(req, reply));
-  app.post('/api/cargo-rates', { preHandler: [requireFlag('master.cargo_rates')] }, async (req, reply) => cargoController.createCargoRate(req, reply));
-  app.put('/api/cargo-rates/:id', { preHandler: [requireFlag('master.cargo_rates')] }, async (req, reply) => cargoController.updateCargoRate(req, reply));
-  app.delete('/api/cargo-rates/:id', { preHandler: [requireFlag('master.cargo_rates')] }, async (req, reply) => cargoController.deleteCargoRate(req, reply));
+  // Cargo OD-matrix pricing (mirrors /api/price-rules, + cargoTypeId dimension)
+  app.get('/api/cargo-rates/priced-destinations', async (req, reply) => cargoController.cargoPricedDestinations(req, reply));
+  app.get('/api/cargo-rates/pattern/:patternId', async (req, reply) => cargoController.getCargoRatePatternGrid(req, reply));
+  app.put('/api/cargo-rates', write, async (req, reply) => cargoController.saveCargoRate(req, reply));
+  app.patch('/api/cargo-rates/:id/active', write, async (req, reply) => cargoController.setCargoRateActive(req, reply));
+  app.delete('/api/cargo-rates/:id', write, async (req, reply) => cargoController.deleteCargoRate(req, reply));
+  app.post('/api/cargo-rates/duplicate', write, async (req, reply) => cargoController.duplicateCargoRate(req, reply));
+
+  // Seasonal templates (pattern+cargoType-scoped)
+  app.get('/api/cargo-rates/pattern/:patternId/seasonal', async (req, reply) => cargoController.listCargoSeasonalTemplates(req, reply));
+  app.post('/api/cargo-rates/pattern/:patternId/seasonal', write, async (req, reply) => cargoController.createCargoSeasonalTemplate(req, reply));
+
+  // Sync (read-time detection + manual button — no webhooks)
+  app.get('/api/cargo-rates/pattern/:patternId/sync-status', async (req, reply) => cargoController.getCargoRateSyncStatus(req, reply));
+  app.post('/api/cargo-rates/pattern/:patternId/sync', write, async (req, reply) => cargoController.syncCargoRate(req, reply));
+
+  // Trip exceptions (per-trip, per-cargoType, per-OD overrides)
+  app.get('/api/cargo-rates/trip-exceptions/:tripId', async (req, reply) => cargoController.listCargoTripExceptions(req, reply));
+  app.put('/api/cargo-rates/trip-exceptions', write, async (req, reply) => cargoController.upsertCargoTripException(req, reply));
+  app.delete('/api/cargo-rates/trip-exceptions/:id', write, async (req, reply) => cargoController.deleteCargoTripException(req, reply));
 
   app.get('/api/cargo/available-trips', async (req, reply) => cargoController.getAvailableTrips(req, reply));
   app.get('/api/cargo/quote-tariff', async (req, reply) => cargoController.quoteTariff(req, reply));

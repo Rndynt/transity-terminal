@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, uuid, timestamp, integer, numeric, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, timestamp, integer, numeric, boolean, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { cargoRateScopeEnum, cargoStatusEnum, channelEnum, paymentMethodEnum } from "./enums";
-import { trips } from "./scheduling";
+import { cargoRateKindEnum, cargoStatusEnum, channelEnum, paymentMethodEnum } from "./enums";
+import { trips, tripPatterns } from "./scheduling";
 import { stops, outlets } from "./network";
 
 export const cargoTypes = pgTable("cargo_types", {
@@ -14,6 +14,14 @@ export const cargoTypes = pgTable("cargo_types", {
   isActive:     boolean("is_active").default(true),
   description:  text("description"),
   maxWeightKg:  numeric("max_weight_kg", { precision: 8, scale: 2 }),
+  // Cargo OD-matrix identity swap: minCharge moved HERE from the rate/matrix
+  // row. Rationale: a minimum charge is a property of the cargo type TIER
+  // (kecil/sedang/besar/dokumen/...), independent of which route it ships
+  // on — Rp 15.000 minimum for "Paket Mini" is the same whether it goes
+  // JKT-BDG or JKT-SMG. Keeping it on the rate would mean re-entering the
+  // same min-charge value in every single pattern×cargoType matrix cell
+  // instead of once per cargo type.
+  minCharge:    numeric("min_charge", { precision: 12, scale: 2 }).notNull().default('0'),
   createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow(),
   deletedAt:    timestamp("deleted_at", { withTimezone: true })
 });
@@ -22,34 +30,106 @@ export const insertCargoTypeSchema = createInsertSchema(cargoTypes).omit({ id: t
 export type CargoType = typeof cargoTypes.$inferSelect;
 export type InsertCargoType = z.infer<typeof insertCargoTypeSchema>;
 
+/**
+ * OD-matrix pricing for CARGO. Full identity-swap of the old flat/scope-chain
+ * `cargo_rates` (scope global|pattern|trip, one row per OD pair, price_per_kg
+ * + price_per_leg + min_charge columns) — that shape is GONE. This table now
+ * owns the `cargo_rates` name with the OD-matrix shape below, mirroring
+ * `price_rules` (see shared/schema/pricing.ts) with ONE extra dimension:
+ * every row is bound to a (pattern, cargoType) pair, not just a pattern.
+ *
+ * Differences from passenger `price_rules`, both deliberate:
+ *   - NO `scope` column/global tier. Every row is pattern-scoped (patternId
+ *     is NOT NULL here, unlike passenger's nullable patternId for its
+ *     'global' rows) — cargo pricing always needs to know which physical
+ *     route it's for, so a network-wide fallback price doesn't make sense
+ *     the way it does for passenger fares. Trip-level overrides live in
+ *     `cargo_rate_exceptions`, not a scope value.
+ *   - Cells store `{ pricePerKg: number }`, not `{ price: number }` — the
+ *     final amount is derived (pricePerKg * weightKg, clamped to the cargo
+ *     type's minCharge) rather than being a flat fare.
+ *
+ * Precedence at resolve time (see cargoRates.resolver.ts):
+ *   trip exception (cargo_rate_exceptions) > pattern (seasonal active-window
+ *   > regular) > 0 ("Tarif belum diatur"). No global fallback.
+ */
 export const cargoRates = pgTable("cargo_rates", {
-  id:                 uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  cargoTypeId:        uuid("cargo_type_id").notNull().references(() => cargoTypes.id),
-  scope:              cargoRateScopeEnum("scope").notNull().default('global'),
-  scopeRefId:         uuid("scope_ref_id"),
-  originStopId:       uuid("origin_stop_id").references(() => stops.id),
-  destinationStopId:  uuid("destination_stop_id").references(() => stops.id),
-  isActive:           boolean("is_active").default(true),
-  pricePerKg:         numeric("price_per_kg", { precision: 12, scale: 2 }).notNull(),
-  pricePerLeg:        numeric("price_per_leg", { precision: 12, scale: 2 }).notNull().default('0'),
-  minCharge:          numeric("min_charge", { precision: 12, scale: 2 }).notNull().default('0'),
-  createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow()
+  id:           uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  cargoTypeId:  uuid("cargo_type_id").notNull().references(() => cargoTypes.id),
+  patternId:    uuid("pattern_id").notNull().references(() => tripPatterns.id),
+  // { version: 1, cells: { "<originStopId>|<destStopId>": { pricePerKg: number } } }
+  // Keyed by stopId pair, NEVER by sequence (sequence is render-only).
+  // Missing key or pricePerKg<=0 => "tarif belum diset".
+  matrix:       jsonb("matrix").notNull().default(sql`'{"version":1,"cells":{}}'::jsonb`),
+  kind:         cargoRateKindEnum("kind").notNull().default('regular'),
+  name:         text("name"), // seasonal template name, e.g. "Tarif Lebaran 2026"
+  validFrom:    timestamp("valid_from", { withTimezone: true }),
+  validTo:      timestamp("valid_to", { withTimezone: true }),
+  isActive:     boolean("is_active").notNull().default(true),
+  updatedAt:    timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(), // optimistic lock
+  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow(),
+  deletedAt:    timestamp("deleted_at", { withTimezone: true }),
 }, (table) => ({
-  // PR α-1: composite index untuk findCargoRate (cargo.repository.ts:65).
-  // Setiap insert cargo shipment hit query ini 1-3x (global / pattern / trip
-  // scope chain). Migration 0015 mendaftarkan index yang sama.
-  idxCargoRatesLookup: index('idx_cargo_rates_lookup').on(table.cargoTypeId, table.scope, table.scopeRefId, table.isActive),
+  // Partial unique: one row per (cargoType, pattern, kind, window) while
+  // alive. Regular rows always have valid_from/valid_to = NULL, so this
+  // also guarantees at most one regular row per (cargoType, pattern).
+  // (Supersedes the old idxCargoRatesLookup, which indexed the now-removed
+  // scope/scope_ref_id columns from PR α-1 / migration 0025 — see
+  // CARGO_OD_MATRIX_IMPLEMENTATION_REPORT.md.)
+  uniqCargoTypePatternKindWindow: uniqueIndex("uniq_cargo_rate_cargo_type_pattern_kind_window")
+    .on(table.cargoTypeId, table.patternId, table.kind, table.validFrom, table.validTo)
+    .where(sql`deleted_at IS NULL`),
+  idxPatternCargoType: index("idx_cargo_rates_pattern_cargo_type").on(table.patternId, table.cargoTypeId),
 }));
 
 export const cargoRatesRelations = relations(cargoRates, ({ one }) => ({
   cargoType: one(cargoTypes, { fields: [cargoRates.cargoTypeId], references: [cargoTypes.id] }),
-  originStop: one(stops, { fields: [cargoRates.originStopId], references: [stops.id], relationName: "cargoRateOriginStop" }),
-  destinationStop: one(stops, { fields: [cargoRates.destinationStopId], references: [stops.id], relationName: "cargoRateDestinationStop" })
+  pattern: one(tripPatterns, { fields: [cargoRates.patternId], references: [tripPatterns.id] }),
 }));
 
 export const insertCargoRateSchema = createInsertSchema(cargoRates).omit({ id: true, createdAt: true });
 export type CargoRate = typeof cargoRates.$inferSelect;
 export type InsertCargoRate = z.infer<typeof insertCargoRateSchema>;
+
+/** Shape of the `cargo_rates.matrix` jsonb column. */
+export interface CargoRateBlob {
+  version: 1;
+  cells: Record<string, { pricePerKg: number }>;
+}
+
+/**
+ * Sparse per-trip, per-OD, per-cargoType price override. NOT a matrix — one
+ * row per overridden (cargoType, OD pair) on ONE specific materialized trip
+ * (e.g. a promo rate for a single day's departure). Wins over any
+ * `cargo_rates` tier. Mirrors `price_rule_exceptions` with an added
+ * cargoType dimension (cargo has no equivalent of a single flat trip fare —
+ * every override is still per cargo type).
+ */
+export const cargoRateExceptions = pgTable("cargo_rate_exceptions", {
+  id:                 uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tripId:             uuid("trip_id").notNull().references(() => trips.id),
+  cargoTypeId:        uuid("cargo_type_id").notNull().references(() => cargoTypes.id),
+  originStopId:       uuid("origin_stop_id").notNull(),
+  destinationStopId:  uuid("destination_stop_id").notNull(),
+  pricePerKg:         numeric("price_per_kg", { precision: 12, scale: 2 }).notNull(),
+  updatedAt:          timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow(),
+  deletedAt:          timestamp("deleted_at", { withTimezone: true }),
+}, (table) => ({
+  uniqTripCargoTypeOd: uniqueIndex("uniq_cargo_rate_exception_trip_cargo_type_od")
+    .on(table.tripId, table.cargoTypeId, table.originStopId, table.destinationStopId)
+    .where(sql`deleted_at IS NULL`),
+  idxTripId: index("idx_cargo_rate_exception_trip_id").on(table.tripId),
+}));
+
+export const cargoRateExceptionsRelations = relations(cargoRateExceptions, ({ one }) => ({
+  trip: one(trips, { fields: [cargoRateExceptions.tripId], references: [trips.id] }),
+  cargoType: one(cargoTypes, { fields: [cargoRateExceptions.cargoTypeId], references: [cargoTypes.id] }),
+}));
+
+export const insertCargoRateExceptionSchema = createInsertSchema(cargoRateExceptions).omit({ id: true, createdAt: true });
+export type CargoRateException = typeof cargoRateExceptions.$inferSelect;
+export type InsertCargoRateException = z.infer<typeof insertCargoRateExceptionSchema>;
 
 export const cargoShipments = pgTable("cargo_shipments", {
   id:                 uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -68,7 +148,7 @@ export const cargoShipments = pgTable("cargo_shipments", {
   senderName:         text("sender_name").notNull(),
   senderPhone:        text("sender_phone").notNull(),
   recipientName:      text("recipient_name").notNull(),
-  recipientPhone:     text("recipient_phone").notNull(),
+  recipientPhone:      text("recipient_phone").notNull(),
   itemDescription:    text("item_description").notNull(),
   quantity:           integer("quantity").notNull().default(1),
   weightKg:           numeric("weight_kg", { precision: 8, scale: 2 }),

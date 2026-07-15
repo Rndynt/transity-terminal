@@ -14,7 +14,9 @@
  *   I6.  cancelBooking cancelled (idempotent style) → throw 'cannot be canceled'.
  *   I7.  processPaymentWebhook success first time → bookingId di-resolve.
  *   I8.  processPaymentWebhook replay → idempotent flag.
- *   I9.  CargoService.calculateTariff — math (weight*ppk + leg*ppl, min cap).
+ *   I9.  CargoService.calculateTariff — resolver pattern-tier (trip
+ *        exception > pattern) + minCharge dari cargo_types (tanpa leg
+ *        logic); tanpa tripId → null (tak ada tier global lagi).
  *   I10. RefundsService.create + reject — record dibuat dan status berubah.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -86,7 +88,7 @@ const storageMock: any = {
     { stopId: 'S1', stopSequence: 1 },
     { stopId: 'S2', stopSequence: 2 },
   ]),
-  findCargoRate: vi.fn(),
+  getCargoTypeById: vi.fn(),
 };
 
 vi.mock("@server/storage", () => ({ storage: storageMock }));
@@ -131,7 +133,10 @@ beforeEach(() => {
   storageMock.getTripById.mockImplementation(async () => ({
     id: 't1', patternId: 'p1', serviceDate: '2026-05-01', status: 'scheduled',
   }));
-  storageMock.findCargoRate.mockReset();
+  storageMock.getCargoTypeById.mockReset();
+  storageMock.getCargoTypeById.mockImplementation(async () => ({
+    id: 'ct1', code: 'CT1', name: 'Cargo Type 1', minCharge: '5000',
+  }));
 });
 
 // ============================================================
@@ -276,33 +281,61 @@ describe("S2-11 / webhook integration", () => {
 // I9: cargo tariff math
 // ============================================================
 describe("S2-11 / cargo tariff", () => {
-  it("I9: calculateTariff = max(weight*pricePerKg + leg*pricePerLeg, minCharge)", async () => {
-    // Rate: 1000/kg, 500/leg, min 5000.
-    storageMock.findCargoRate.mockResolvedValue({
-      pricePerKg: "1000",
-      pricePerLeg: "500",
-      minCharge: "5000",
-    });
-    // Trip stop times: S0(0) -> S2(2) → leg count = 2.
-
+  it("I9: calculateTariff = max(pricePerKg*weight, minCharge dari cargo_types), tanpa leg logic; tanpa tripId → null", async () => {
     const { CargoService } = await import("@modules/cargo/cargo.service");
     const svc = new CargoService(storageMock as any);
 
-    // 3kg dari S0 ke S2 (2 leg): 3*1000 + 2*500 = 4000 → masih < min 5000
-    // → calculatedAmount = 5000.
+    // Pattern regular matrix: S0->S2 = 1000/kg. minCharge di cargo type
+    // (mock default di beforeEach) = 5000. resolveCargoCell melakukan 2
+    // select paralel: [0] trip-exception (kosong), [1] pattern regular.
+    pushSelectResult([]); // no trip exception
+    pushSelectResult([{
+      id: 'rate1', patternId: 'p1', cargoTypeId: 'ct1', kind: 'regular',
+      matrix: { version: 1, cells: { 'S0|S2': { pricePerKg: 1000 } } },
+      isActive: true, deletedAt: null, updatedAt: new Date(),
+    }]);
+    // 3kg: 3*1000 = 3000 < min 5000 → calculatedAmount = 5000.
     const t1 = await svc.calculateTariff("ct1", "S0", "S2", 3, "trip-1");
     expect(t1).not.toBeNull();
-    expect(t1!.legCount).toBe(2);
+    expect(t1!.pricePerKg).toBe(1000);
+    expect(t1!.minCharge).toBe(5000);
     expect(t1!.calculatedAmount).toBe(5000);
 
-    // 10kg dari S0 ke S2: 10*1000 + 2*500 = 11000 → di atas min → 11000.
+    pushSelectResult([]);
+    pushSelectResult([{
+      id: 'rate1', patternId: 'p1', cargoTypeId: 'ct1', kind: 'regular',
+      matrix: { version: 1, cells: { 'S0|S2': { pricePerKg: 1000 } } },
+      isActive: true, deletedAt: null, updatedAt: new Date(),
+    }]);
+    // 10kg: 10*1000 = 10000 > min 5000 → 10000 (tak ada lagi +leg*ppl).
     const t2 = await svc.calculateTariff("ct1", "S0", "S2", 10, "trip-1");
-    expect(t2!.calculatedAmount).toBe(11000);
+    expect(t2!.calculatedAmount).toBe(10000);
 
-    // tanpa tripId → legCount default 1.
+    // Tanpa tripId → tak ada patternId untuk resolve (cargo scope
+    // pattern-only sejak identity swap, tak ada tier global) → null,
+    // TANPA menyentuh db sama sekali (0 select baru dikonsumsi).
     const t3 = await svc.calculateTariff("ct1", "S0", "S2", 10);
-    expect(t3!.legCount).toBe(1);
-    expect(t3!.calculatedAmount).toBe(10 * 1000 + 1 * 500);
+    expect(t3).toBeNull();
+  });
+
+  it("I9b: trip exception mengalahkan pattern regular", async () => {
+    const { CargoService } = await import("@modules/cargo/cargo.service");
+    const svc = new CargoService(storageMock as any);
+
+    // Trip exception: 2000/kg (override), pattern regular tetap 1000/kg
+    // tapi harus diabaikan karena exception menang.
+    pushSelectResult([{
+      id: 'ex1', tripId: 'trip-1', cargoTypeId: 'ct1',
+      originStopId: 'S0', destinationStopId: 'S2',
+      pricePerKg: '2000', deletedAt: null,
+    }]);
+    pushSelectResult([{
+      id: 'rate1', patternId: 'p1', cargoTypeId: 'ct1', kind: 'regular',
+      matrix: { version: 1, cells: { 'S0|S2': { pricePerKg: 1000 } } },
+      isActive: true, deletedAt: null, updatedAt: new Date(),
+    }]);
+    const t = await svc.calculateTariff("ct1", "S0", "S2", 1, "trip-1");
+    expect(t!.pricePerKg).toBe(2000);
   });
 });
 

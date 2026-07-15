@@ -20,7 +20,7 @@ export default function CargoTypesManager() {
   const [showForm, setShowForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [form, setForm] = useState({ code: '', name: '', description: '', maxWeightKg: '', isActive: true });
+  const [form, setForm] = useState({ code: '', name: '', description: '', maxWeightKg: '', minCharge: '', isActive: true });
 
   const { data: cargoTypes = [], isLoading } = useQuery<CargoType[]>({
     queryKey: ['/api/cargo-types'],
@@ -57,7 +57,7 @@ export default function CargoTypesManager() {
   });
 
   const resetForm = () => {
-    setForm({ code: '', name: '', description: '', maxWeightKg: '', isActive: true });
+    setForm({ code: '', name: '', description: '', maxWeightKg: '', minCharge: '', isActive: true });
     setEditId(null);
     setShowForm(false);
   };
@@ -68,6 +68,7 @@ export default function CargoTypesManager() {
       name: ct.name,
       description: ct.description || '',
       maxWeightKg: ct.maxWeightKg || '',
+      minCharge: ct.minCharge || '',
       isActive: ct.isActive !== false
     });
     setEditId(ct.id);
@@ -81,6 +82,7 @@ export default function CargoTypesManager() {
       name: form.name.trim(),
       description: form.description.trim() || null,
       maxWeightKg: form.maxWeightKg ? form.maxWeightKg : null,
+      minCharge: form.minCharge ? form.minCharge : '0',
       isActive: form.isActive
     };
     if (editId) {
@@ -168,6 +170,18 @@ export default function CargoTypesManager() {
               data-testid="input-cargo-type-max-weight"
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="minCharge">Tarif Minimum (Rp)</Label>
+            <Input
+              id="minCharge"
+              type="number"
+              value={form.minCharge}
+              onChange={e => setForm(f => ({ ...f, minCharge: e.target.value }))}
+              placeholder="15000"
+              data-testid="input-cargo-type-min-charge"
+            />
+            <p className="text-[11px] text-muted-foreground">Tarif akhir kargo dijamin minimum sebesar ini, berapapun beratnya.</p>
+          </div>
           <div className="flex items-center justify-between rounded-lg border px-4 py-3 bg-muted/30">
             <div>
               <p className="text-sm font-medium">Aktif</p>
@@ -211,6 +225,7 @@ export default function CargoTypesManager() {
                 <div className="flex gap-3 text-[11px] text-muted-foreground mt-0.5">
                   {ct.description && <span>{ct.description}</span>}
                   {ct.maxWeightKg && <span>Maks. {ct.maxWeightKg} kg</span>}
+                  <span>Min. Rp{Number(ct.minCharge || 0).toLocaleString('id-ID')}</span>
                 </div>
               </div>
               <RowActionsMenu

@@ -1,16 +1,59 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
+import { z } from "zod";
 import { CargoService } from "./cargo.service";
+import { CargoRatesService, StaleCargoRateError } from "./cargoRates.service";
+import { listPricedDestinationsFromOriginCargo } from "./cargoRates.resolver";
 import { IStorage } from "@server/storage.interface";
-import { insertCargoShipmentSchema, insertCargoTypeSchema, insertCargoRateSchema } from "@shared/schema";
+import { insertCargoShipmentSchema, insertCargoTypeSchema } from "@shared/schema";
 import { buildServiceContext } from "@modules/rbac/rbac.guard";
 import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "@server/constants/pagination";
 
+const cargoCellSchema = z.object({
+  originStopId: z.string().uuid(),
+  destinationStopId: z.string().uuid(),
+  pricePerKg: z.coerce.number().min(0),
+});
+
+const saveCargoRateSchema = z.object({
+  patternId: z.string().uuid(),
+  cargoTypeId: z.string().uuid(),
+  kind: z.enum(['regular', 'seasonal']).default('regular'),
+  matrixId: z.string().uuid().optional(),
+  name: z.string().optional(),
+  validFrom: z.string().nullable().optional(),
+  validTo: z.string().nullable().optional(),
+  cells: z.array(cargoCellSchema),
+  expectedUpdatedAt: z.string().nullable(),
+});
+
+const cargoSeasonalCreateSchema = z.object({
+  name: z.string().min(1, 'Nama template wajib diisi'),
+  validFrom: z.string(),
+  validTo: z.string(),
+  duplicateFromRegular: z.boolean().default(true),
+});
+
+const cargoTripExceptionUpsertSchema = z.object({
+  tripId: z.string().uuid(),
+  cargoTypeId: z.string().uuid(),
+  originStopId: z.string().uuid(),
+  destinationStopId: z.string().uuid(),
+  pricePerKg: z.coerce.number().min(0),
+});
+
+const duplicateCargoRateSchema = z.object({
+  sourceMatrixId: z.string().uuid(),
+  toCargoTypeId: z.string().uuid(),
+});
+
 export class CargoController {
   private cargoService: CargoService;
+  private cargoRatesService: CargoRatesService;
   private storage: IStorage;
 
   constructor(storage: IStorage) {
     this.cargoService = new CargoService(storage);
+    this.cargoRatesService = new CargoRatesService(storage);
     this.storage = storage;
   }
 
@@ -114,7 +157,7 @@ export class CargoController {
   }
 
   async quoteTariff(req: FastifyRequest, reply: FastifyReply) {
-    const { cargoTypeId, originStopId, destinationStopId, weightKg, tripId } = req.query as { cargoTypeId?: string; originStopId?: string; destinationStopId?: string; weightKg?: string; tripId?: string };
+    const { cargoTypeId, originStopId, destinationStopId, weightKg, tripId, serviceDate } = req.query as { cargoTypeId?: string; originStopId?: string; destinationStopId?: string; weightKg?: string; tripId?: string; serviceDate?: string };
     if (!cargoTypeId || !originStopId || !destinationStopId || !weightKg) {
       return reply.code(400).send({ error: 'cargoTypeId, originStopId, destinationStopId, weightKg are required' });
     }
@@ -123,7 +166,8 @@ export class CargoController {
       originStopId as string,
       destinationStopId as string,
       parseFloat(weightKg as string),
-      tripId as string | undefined
+      tripId as string | undefined,
+      serviceDate as string | undefined,
     );
     if (!result) {
       return reply.send({ found: false, calculatedAmount: 0 });
@@ -162,45 +206,141 @@ export class CargoController {
     reply.code(204).send();
   }
 
-  async getCargoRates(req: FastifyRequest, reply: FastifyReply) {
+  async getCargoRatePatternGrid(req: FastifyRequest, reply: FastifyReply) {
+    const { patternId } = req.params as { patternId: string };
+    const { cargoTypeId, kind, matrixId } = req.query as { cargoTypeId?: string; kind?: 'regular' | 'seasonal'; matrixId?: string };
+    if (!cargoTypeId) {
+      return reply.code(400).send({ error: 'cargoTypeId wajib diisi' });
+    }
+    const grid = await this.cargoRatesService.getPatternCargoGrid(patternId, cargoTypeId, kind ?? 'regular', matrixId);
+    reply.send(grid);
+  }
+
+  async saveCargoRate(req: FastifyRequest, reply: FastifyReply) {
+    try {
+      const data = saveCargoRateSchema.parse(req.body);
+      const saved = await this.cargoRatesService.saveCargoRate(data, buildServiceContext(req));
+      reply.send(saved);
+    } catch (err) {
+      this.handleRateError(req, reply, err);
+    }
+  }
+
+  async listCargoSeasonalTemplates(req: FastifyRequest, reply: FastifyReply) {
+    const { patternId } = req.params as { patternId: string };
     const { cargoTypeId } = req.query as { cargoTypeId?: string };
-    const rates = await this.storage.getCargoRates(cargoTypeId as string);
-    reply.send(rates);
-  }
-
-  async getCargoRateById(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params as { id: string };
-    const cr = await this.storage.getCargoRateById(id);
-    if (!cr) return reply.code(404).send({ error: 'Cargo rate not found' });
-    reply.send(cr);
-  }
-
-  async createCargoRate(req: FastifyRequest, reply: FastifyReply) {
-    const validated = insertCargoRateSchema.parse(req.body);
-    if (validated.scope && validated.scope !== 'global' && !validated.scopeRefId) {
-      return reply.code(400).send({ message: 'scopeRefId is required when scope is pattern or trip' });
+    if (!cargoTypeId) {
+      return reply.code(400).send({ error: 'cargoTypeId wajib diisi' });
     }
-    const cr = await this.storage.createCargoRate(validated);
-    reply.code(201).send(cr);
+    const rows = await this.cargoRatesService.listSeasonalTemplates(patternId, cargoTypeId);
+    reply.send(rows);
   }
 
-  async updateCargoRate(req: FastifyRequest, reply: FastifyReply) {
-    const { id } = req.params as { id: string };
-    const validated = insertCargoRateSchema.partial().parse(req.body);
-    const existing = await this.storage.getCargoRateById(id);
-    if (!existing) return reply.code(404).send({ error: 'Cargo rate not found' });
-    const effectiveScope = validated.scope ?? existing.scope ?? 'global';
-    const effectiveRefId = validated.scopeRefId !== undefined ? validated.scopeRefId : existing.scopeRefId;
-    if (effectiveScope !== 'global' && !effectiveRefId) {
-      return reply.code(400).send({ message: 'scopeRefId is required when scope is pattern or trip' });
+  async createCargoSeasonalTemplate(req: FastifyRequest, reply: FastifyReply) {
+    try {
+      const { patternId } = req.params as { patternId: string };
+      const { cargoTypeId } = req.query as { cargoTypeId?: string };
+      if (!cargoTypeId) {
+        return reply.code(400).send({ error: 'cargoTypeId wajib diisi' });
+      }
+      const data = cargoSeasonalCreateSchema.parse(req.body);
+      const created = await this.cargoRatesService.createSeasonalTemplate(patternId, cargoTypeId, data.name, data.validFrom, data.validTo, data.duplicateFromRegular, buildServiceContext(req));
+      reply.code(201).send(created);
+    } catch (err) {
+      this.handleRateError(req, reply, err);
     }
-    const cr = await this.storage.updateCargoRate(id, validated);
-    reply.send(cr);
+  }
+
+  async duplicateCargoRate(req: FastifyRequest, reply: FastifyReply) {
+    try {
+      const data = duplicateCargoRateSchema.parse(req.body);
+      const created = await this.cargoRatesService.duplicateMatrixToCargoType(data.sourceMatrixId, data.toCargoTypeId, buildServiceContext(req));
+      reply.code(201).send(created);
+    } catch (err) {
+      this.handleRateError(req, reply, err);
+    }
+  }
+
+  async setCargoRateActive(req: FastifyRequest, reply: FastifyReply) {
+    const { id } = req.params as { id: string };
+    const { isActive } = req.body as { isActive: boolean };
+    await this.cargoRatesService.setCargoRateActive(id, !!isActive, buildServiceContext(req));
+    reply.send({ success: true });
   }
 
   async deleteCargoRate(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
-    await this.storage.deleteCargoRate(id);
-    reply.code(204).send();
+    await this.cargoRatesService.deleteCargoRate(id, buildServiceContext(req));
+    reply.send({ success: true });
+  }
+
+  async getCargoRateSyncStatus(req: FastifyRequest, reply: FastifyReply) {
+    const { patternId } = req.params as { patternId: string };
+    const { cargoTypeId } = req.query as { cargoTypeId?: string };
+    if (!cargoTypeId) {
+      return reply.code(400).send({ error: 'cargoTypeId wajib diisi' });
+    }
+    const status = await this.cargoRatesService.computeCargoSyncStatus(patternId, cargoTypeId);
+    reply.send(status);
+  }
+
+  async syncCargoRate(req: FastifyRequest, reply: FastifyReply) {
+    const { patternId } = req.params as { patternId: string };
+    const { cargoTypeId } = req.query as { cargoTypeId?: string };
+    if (!cargoTypeId) {
+      return reply.code(400).send({ error: 'cargoTypeId wajib diisi' });
+    }
+    const updated = await this.cargoRatesService.syncMissingPairs(patternId, cargoTypeId, buildServiceContext(req));
+    reply.send(updated);
+  }
+
+  async listCargoTripExceptions(req: FastifyRequest, reply: FastifyReply) {
+    const { tripId } = req.params as { tripId: string };
+    const rows = await this.cargoRatesService.listTripExceptions(tripId);
+    reply.send(rows);
+  }
+
+  async upsertCargoTripException(req: FastifyRequest, reply: FastifyReply) {
+    try {
+      const data = cargoTripExceptionUpsertSchema.parse(req.body);
+      const row = await this.cargoRatesService.upsertTripException(data.tripId, data.cargoTypeId, data.originStopId, data.destinationStopId, data.pricePerKg, buildServiceContext(req));
+      reply.send(row);
+    } catch (err) {
+      this.handleRateError(req, reply, err);
+    }
+  }
+
+  async deleteCargoTripException(req: FastifyRequest, reply: FastifyReply) {
+    const { id } = req.params as { id: string };
+    await this.cargoRatesService.deleteTripException(id, buildServiceContext(req));
+    reply.send({ success: true });
+  }
+
+  async cargoPricedDestinations(req: FastifyRequest, reply: FastifyReply) {
+    const query = req.query as { patternId?: string; cargoTypeId?: string; originStopId?: string; destinationStopIds?: string; serviceDate?: string };
+    if (!query.patternId || !query.cargoTypeId || !query.originStopId || !query.serviceDate) {
+      return reply.code(400).send({ error: 'patternId, cargoTypeId, originStopId, dan serviceDate wajib diisi' });
+    }
+    const destinationStopIds = (query.destinationStopIds || '').split(',').filter(Boolean);
+    const list = await listPricedDestinationsFromOriginCargo({
+      patternId: query.patternId,
+      cargoTypeId: query.cargoTypeId,
+      originStopId: query.originStopId,
+      destinationStopIds,
+      serviceDate: query.serviceDate,
+    });
+    reply.send(list);
+  }
+
+  private handleRateError(req: FastifyRequest, reply: FastifyReply, err: unknown) {
+    req.log.error({ err }, 'Cargo rate error');
+    if (err instanceof StaleCargoRateError) {
+      return reply.code(409).send({ error: err.message, code: 'STALE_CARGO_RATE' });
+    }
+    const error = err as { name?: string; message?: string; errors?: unknown };
+    if (error.name === 'ZodError') {
+      return reply.code(400).send({ error: 'Validasi gagal', code: 'VALIDATION_ERROR', details: error.errors });
+    }
+    reply.code(400).send({ error: error.message || 'Internal server error' });
   }
 }

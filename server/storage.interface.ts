@@ -2,13 +2,13 @@ import type {
   Stop, Outlet, Vehicle, Layout, TripPattern,
   PatternStop, TripBase, Trip, TripWithDetails, TripStopTime, TripLeg,
   SeatInventory, Booking, Passenger,
-  Payment, PrintJob, CargoShipment, CargoShipmentListItem, CargoType, CargoRate,
+  Payment, PrintJob, CargoShipment, CargoShipmentListItem, CargoType,
   Driver, InsertDriver,
   InsertStop, InsertOutlet, InsertVehicle, InsertLayout,
   InsertTripPattern, InsertPatternStop, InsertTripBase, InsertTrip,
   InsertTripStopTime, InsertBooking,
   InsertPassenger, InsertPayment, InsertPrintJob, InsertCargoShipment,
-  InsertCargoType, InsertCargoRate,
+  InsertCargoType,
   InsertTripLeg, InsertSeatInventory,
   TripCostTemplate, InsertTripCostTemplate,
   TripCostItem, InsertTripCostItem,
@@ -265,13 +265,6 @@ export interface IStorage {
   createCargoType(data: InsertCargoType): Promise<CargoType>;
   updateCargoType(id: string, data: Partial<InsertCargoType>): Promise<CargoType>;
   deleteCargoType(id: string): Promise<void>;
-
-  getCargoRates(cargoTypeId?: string): Promise<CargoRate[]>;
-  getCargoRateById(id: string): Promise<CargoRate | undefined>;
-  createCargoRate(data: InsertCargoRate): Promise<CargoRate>;
-  updateCargoRate(id: string, data: Partial<InsertCargoRate>): Promise<CargoRate>;
-  deleteCargoRate(id: string): Promise<void>;
-  findCargoRate(cargoTypeId: string, originStopId: string, destinationStopId: string, tripId?: string): Promise<CargoRate | undefined>;
 
   getCargoShipments(
     filters?: { tripId?: string; status?: string; outletId?: string },

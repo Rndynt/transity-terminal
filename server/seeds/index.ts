@@ -37,7 +37,7 @@ async function loadSeedModules(set: SeedSet) {
       patterns:  { name: "Trip Patterns",       deps: ["stops", "layouts"],              run: async (ctx: SeedCtx) => { await seedPatterns(ctx); await seedPatternStops(ctx); } },
       prices:    { name: "Price Rules",         deps: ["patterns"],                      run: async (ctx: SeedCtx) => { await seedPrices(ctx); } },
       tripbases: { name: "Trip Bases",          deps: ["patterns", "vehicles"],          run: async (ctx: SeedCtx) => { await seedTripBases(ctx); } },
-      cargo:     { name: "Cargo Types & Rates", deps: [] as string[],                    run: async (_ctx: SeedCtx) => { await seedCargo(); } },
+      cargo:     { name: "Cargo Types & Rates", deps: ["patterns"],                       run: async (ctx: SeedCtx) => { await seedCargo(ctx); } },
       trips:     { name: "Materialize Trips",   deps: ["tripbases"],                     run: async (ctx: SeedCtx) => { await seedTrips(ctx); } },
       rbac:      { name: "RBAC & Feature Flags",deps: [] as string[],                    run: async (_ctx: SeedCtx) => { await seedRbac(); } },
     },
@@ -77,6 +77,7 @@ async function cleanDatabase() {
       bookings,
       cargo_shipments,
       cargo_rates,
+      cargo_rate_exceptions,
       seat_holds,
       seat_inventory,
       trip_stop_times,
@@ -174,7 +175,7 @@ Targets:
   patterns    Trip patterns & stops (depends: stops, layouts)
   prices      Price rules (depends: patterns)
   tripbases   Trip base schedules (depends: patterns, vehicles)
-  cargo       Cargo types & rates
+  cargo       Cargo types & OD-matrix rates (depends: patterns)
   trips       Materialize trips (depends: tripbases)
   rbac        Roles, feature flags & matrix
 

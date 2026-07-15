@@ -2,7 +2,7 @@ CREATE TYPE "public"."booking_history_action" AS ENUM('unseated', 'reassigned', 
 --> statement-breakpoint
 CREATE TYPE "public"."booking_status" AS ENUM('pending', 'confirmed', 'checked_in', 'paid', 'cancelled', 'refunded', 'unseated');
 --> statement-breakpoint
-CREATE TYPE "public"."cargo_rate_scope" AS ENUM('global', 'pattern', 'trip');
+CREATE TYPE "public"."cargo_rate_kind" AS ENUM('regular', 'seasonal');
 --> statement-breakpoint
 CREATE TYPE "public"."cargo_status" AS ENUM('pending', 'received', 'loaded', 'in_transit', 'arrived', 'delivered', 'returned', 'cancelled');
 --> statement-breakpoint

@@ -322,14 +322,26 @@ export const cargoTypesApi = {
 };
 
 export const cargoRatesApi = {
-  getAll: (cargoTypeId?: string) => {
-    const qs = cargoTypeId ? `?cargoTypeId=${cargoTypeId}` : '';
-    return fetch(`/api/cargo-rates${qs}`).then(r => assertOk<any[]>(r));
+  getPatternGrid: (patternId: string, cargoTypeId: string, kind: 'regular' | 'seasonal' = 'regular', matrixId?: string) => {
+    const qs = new URLSearchParams({ cargoTypeId, kind, ...(matrixId ? { matrixId } : {}) });
+    return fetch(`/api/cargo-rates/pattern/${patternId}?${qs}`).then(r => assertOk<any>(r));
   },
-  getById: (id: string) => fetch(`/api/cargo-rates/${id}`).then(r => assertOk<any>(r)),
-  create: (data: Record<string, unknown>) => apiRequest('POST', '/api/cargo-rates', data).then(res => res.json()),
-  update: (id: string, data: Record<string, unknown>) => apiRequest('PUT', `/api/cargo-rates/${id}`, data).then(res => res.json()),
-  delete: (id: string) => apiRequest('DELETE', `/api/cargo-rates/${id}`)
+  saveCargoRate: (data: any) => apiRequest('PUT', '/api/cargo-rates', data).then(res => res.json()),
+  listSeasonalTemplates: (patternId: string, cargoTypeId: string) =>
+    fetch(`/api/cargo-rates/pattern/${patternId}/seasonal?cargoTypeId=${cargoTypeId}`).then(r => assertOk<any[]>(r)),
+  createSeasonalTemplate: (patternId: string, cargoTypeId: string, data: any) =>
+    apiRequest('POST', `/api/cargo-rates/pattern/${patternId}/seasonal?cargoTypeId=${cargoTypeId}`, data).then(res => res.json()),
+  setCargoRateActive: (id: string, isActive: boolean) => apiRequest('PATCH', `/api/cargo-rates/${id}/active`, { isActive }).then(res => res.json()),
+  deleteCargoRate: (id: string) => apiRequest('DELETE', `/api/cargo-rates/${id}`),
+  duplicateToCargoType: (sourceMatrixId: string, toCargoTypeId: string) =>
+    apiRequest('POST', '/api/cargo-rates/duplicate', { sourceMatrixId, toCargoTypeId }).then(res => res.json()),
+  getSyncStatus: (patternId: string, cargoTypeId: string) =>
+    fetch(`/api/cargo-rates/pattern/${patternId}/sync-status?cargoTypeId=${cargoTypeId}`).then(r => assertOk<any>(r)),
+  sync: (patternId: string, cargoTypeId: string) =>
+    apiRequest('POST', `/api/cargo-rates/pattern/${patternId}/sync?cargoTypeId=${cargoTypeId}`, {}).then(res => res.json()),
+  listTripExceptions: (tripId: string) => fetch(`/api/cargo-rates/trip-exceptions/${tripId}`).then(r => assertOk<any[]>(r)),
+  upsertTripException: (data: any) => apiRequest('PUT', '/api/cargo-rates/trip-exceptions', data).then(res => res.json()),
+  deleteTripException: (id: string) => apiRequest('DELETE', `/api/cargo-rates/trip-exceptions/${id}`),
 };
 
 export const cargoApi = {
@@ -346,9 +358,10 @@ export const cargoApi = {
   create: (data: Record<string, unknown>) => apiRequest('POST', '/api/cargo', data).then(res => res.json()),
   update: (id: string, data: Record<string, unknown>) => apiRequest('PUT', `/api/cargo/${id}`, data).then(res => res.json()),
   updateStatus: (id: string, status: string) => apiRequest('PATCH', `/api/cargo/${id}/status`, { status }).then(res => res.json()),
-  quoteTariff: (cargoTypeId: string, originStopId: string, destinationStopId: string, weightKg: number, tripId?: string) => {
+  quoteTariff: (cargoTypeId: string, originStopId: string, destinationStopId: string, weightKg: number, tripId?: string, serviceDate?: string) => {
     const params = new URLSearchParams({ cargoTypeId, originStopId, destinationStopId, weightKg: String(weightKg) });
     if (tripId) params.set('tripId', tripId);
+    if (serviceDate) params.set('serviceDate', serviceDate);
     return fetch(`/api/cargo/quote-tariff?${params}`).then(r => assertOk<any>(r));
   },
   getAvailableTrips: (date: string, originStopId: string, destinationStopIds: string[]) => {
