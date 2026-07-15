@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { usePermissions } from '@/lib/permissions';
 import ForbiddenPage from '@/pages/auth/ForbiddenPage';
+import { PageLoader } from '@/components/ui/page-loader';
 
 interface RequireFlagProps {
   flag?: string;
@@ -11,7 +12,7 @@ interface RequireFlagProps {
 
 export function RequireFlag({ flag, flags, children, fallback }: RequireFlagProps) {
   const { can, isLoading } = usePermissions();
-  if (isLoading) return null;
+  if (isLoading) return <PageLoader />;
   const allFlags = [...(flags ?? []), ...(flag ? [flag] : [])];
   const denied = allFlags.some(f => !can(f));
   if (denied) {
