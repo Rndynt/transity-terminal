@@ -41,43 +41,27 @@ const SettingsPage = lazy(() => import("@/pages/admin/SettingsPage"));
 
 function PageLoader() {
   return (
-    <div className="flex flex-col items-center justify-center flex-1 h-full min-h-[60vh] gap-4 select-none">
-      {/* Animated circular progress ring */}
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gray-50 gap-4 select-none">
       <div className="relative w-14 h-14">
-        {/* Track */}
         <svg className="w-full h-full -rotate-90" viewBox="0 0 56 56">
+          <circle cx="28" cy="28" r="22" fill="none" stroke="currentColor" strokeWidth="4" className="text-blue-100" />
           <circle
-            cx="28" cy="28" r="22"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="4"
-            className="text-blue-100"
-          />
-          {/* Animated arc */}
-          <circle
-            cx="28" cy="28" r="22"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeDasharray="138.2"
-            className="text-blue-600 animate-[progress-spin_1.2s_ease-in-out_infinite]"
-            style={{
-              animation: "progress-spin 1.2s cubic-bezier(0.4,0,0.2,1) infinite",
-            }}
+            cx="28" cy="28" r="22" fill="none" stroke="currentColor"
+            strokeWidth="4" strokeLinecap="round" strokeDasharray="138.2"
+            className="text-blue-600"
+            style={{ animation: "progress-spin 1.2s cubic-bezier(0.4,0,0.2,1) infinite" }}
           />
         </svg>
-        {/* Inner dot pulse */}
         <span className="absolute inset-0 flex items-center justify-center">
           <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
         </span>
       </div>
-      <p className="text-xs text-gray-400 tracking-wide">Memuat halaman…</p>
+      <p className="text-xs text-gray-400 tracking-wide">Memuat…</p>
       <style>{`
         @keyframes progress-spin {
-          0%   { stroke-dashoffset: 138.2; opacity: 1; }
-          50%  { stroke-dashoffset: 34.6;  opacity: 1; }
-          100% { stroke-dashoffset: 138.2; opacity: 1; }
+          0%   { stroke-dashoffset: 138.2; }
+          50%  { stroke-dashoffset: 34.6; }
+          100% { stroke-dashoffset: 138.2; }
         }
       `}</style>
     </div>
@@ -108,14 +92,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }, [isLoading, isAuthenticated, navigate]);
 
   if (isLoading || (isAuthenticated && !setupChecked)) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-          <p className="text-sm text-gray-500">Memuat sesi...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (!isAuthenticated) {
