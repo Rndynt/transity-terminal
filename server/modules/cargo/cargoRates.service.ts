@@ -255,22 +255,39 @@ export class CargoRatesService {
    * pattern_stops) against keys present in this (pattern, cargoType)'s
    * regular row. Never auto-mutates; UI shows an alert + manual "Sync"
    * button that calls syncMissingPairs() below. Sync is per (pattern,
-   * cargoType) — design decision #9. */
+   * cargoType) — design decision #9.
+   *
+   * Mirrors PriceGrid's disableSameCityCells filter: when the pattern has
+   * allowIntraCityBooking = false, same-city OD pairs are hidden from the
+   * matrix UI and must also be excluded from the sync count so the alert
+   * matches exactly the inputs the user can see. */
   async computeCargoSyncStatus(patternId: string, cargoTypeId: string): Promise<CargoSyncStatus> {
-    const patternStops = await this.storage.getPatternStops(patternId);
+    const [patternStops, pattern] = await Promise.all([
+      this.storage.getPatternStops(patternId),
+      this.storage.getTripPatternById(patternId),
+    ]);
     const sorted = [...patternStops].sort((a, b) => a.stopSequence - b.stopSequence);
+    const disableSameCity = !pattern?.allowIntraCityBooking;
 
     const currentPairKeys = new Set<string>();
     const pairMeta = new Map<string, { originStopId: string; destinationStopId: string; originName: string; destinationName: string }>();
     for (let i = 0; i < sorted.length; i++) {
       for (let j = i + 1; j < sorted.length; j++) {
-        const key = matrixCellKey(sorted[i].stopId, sorted[j].stopId);
+        const origin = sorted[i];
+        const dest = sorted[j];
+        // Skip same-city pairs when the pattern does not allow intra-city
+        // routes — these cells are hidden in PriceGrid and must not count
+        // as "missing" in the sync alert.
+        if (disableSameCity && origin.stop?.city && dest.stop?.city && origin.stop.city === dest.stop.city) {
+          continue;
+        }
+        const key = matrixCellKey(origin.stopId, dest.stopId);
         currentPairKeys.add(key);
         pairMeta.set(key, {
-          originStopId: sorted[i].stopId,
-          destinationStopId: sorted[j].stopId,
-          originName: sorted[i].stop?.name ?? sorted[i].stopId,
-          destinationName: sorted[j].stop?.name ?? sorted[j].stopId,
+          originStopId: origin.stopId,
+          destinationStopId: dest.stopId,
+          originName: origin.stop?.name ?? origin.stopId,
+          destinationName: dest.stop?.name ?? dest.stopId,
         });
       }
     }
