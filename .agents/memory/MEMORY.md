@@ -9,3 +9,4 @@
 - [Mobile floating action bars](mobile-floating-action-bars.md) — sticky/mt-auto bottom bars in scrollable mobile panels fail silently when content is short; use flex-shrink-0 sibling of a flex-1 scroll area instead.
 - [mv_trip_stats materialized view](mv-trip-stats-pattern.md) — report fast path: use mv instead of aggregating 500K+ bookings live; refresh every 5 min by scheduler.
 - [CSO trips early outlet prune](cso-trips-early-prune.md) — getRealTripsForCso must start from outlet_trips CTE (most selective), not eligible_trips; fixes correlated subquery in boarding_check.
+- [Migration index IMMUTABLE fixes](migration-index-immutable-fixes.md) — timestamptz functional indexes (AT TIME ZONE / ::date) are STABLE not IMMUTABLE; use plain column refs instead.

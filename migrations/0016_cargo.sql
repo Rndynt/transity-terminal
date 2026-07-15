@@ -128,7 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_cargo_trip_status ON "cargo_shipments" (trip_id, 
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_cargo_paid_at ON "cargo_shipments" (paid_at) WHERE paid_at IS NOT NULL;
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS idx_cargo_paid_date ON "cargo_shipments" ((paid_at::date)) WHERE paid_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_cargo_paid_date ON "cargo_shipments" (paid_at) WHERE paid_at IS NOT NULL;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_cargo_outlet_created ON "cargo_shipments" (outlet_id, created_at DESC);
 --> statement-breakpoint

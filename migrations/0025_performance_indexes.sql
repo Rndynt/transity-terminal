@@ -126,9 +126,7 @@ CREATE INDEX IF NOT EXISTS idx_payments_provider_ref ON payments (provider_ref) 
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_payments_paid_at ON payments (paid_at);
 --> statement-breakpoint
--- Note: paid_at is timestamptz; ::date is timezone-dependent so NOT IMMUTABLE.
--- Use AT TIME ZONE 'UTC' to make the expression immutable.
-CREATE INDEX IF NOT EXISTS idx_payments_paid_date ON payments ((paid_at AT TIME ZONE 'UTC')) WHERE status = 'success';
+CREATE INDEX IF NOT EXISTS idx_payments_paid_date ON payments (paid_at) WHERE status = 'success';
 
 --> statement-breakpoint
 -- ─── print_jobs ──────────────────────────────────────────────────────────────
@@ -158,8 +156,7 @@ CREATE INDEX IF NOT EXISTS idx_cargo_trip_status ON cargo_shipments (trip_id, st
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_cargo_paid_at ON cargo_shipments (paid_at) WHERE paid_at IS NOT NULL;
 --> statement-breakpoint
--- Note: paid_at is timestamptz; use AT TIME ZONE 'UTC' for an IMMUTABLE expression.
-CREATE INDEX IF NOT EXISTS idx_cargo_paid_date ON cargo_shipments ((paid_at AT TIME ZONE 'UTC')) WHERE paid_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_cargo_paid_date ON cargo_shipments (paid_at) WHERE paid_at IS NOT NULL;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_cargo_outlet_created ON cargo_shipments (outlet_id, created_at DESC);
 --> statement-breakpoint
@@ -167,4 +164,4 @@ CREATE INDEX IF NOT EXISTS idx_cargo_cargo_type_id ON cargo_shipments (cargo_typ
 
 --> statement-breakpoint
 -- ─── cargo_rates ─────────────────────────────────────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_cargo_rates_lookup ON cargo_rates (cargo_type_id, scope, scope_ref_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_cargo_rates_lookup ON cargo_rates (cargo_type_id, pattern_id, is_active);
