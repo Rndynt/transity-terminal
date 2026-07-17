@@ -1,0 +1,35 @@
+-- Fixes a live-DB drift left over from the pricing identity-swap
+-- (see PRICING_IDENTITY_SWAP_REPORT.md).
+--
+-- Root cause: `price_rule_scope` was originally created in
+-- migrations/0002_enums.sql as ENUM('pattern','trip','leg','time') for the
+-- OLD flat/per_leg price_rules system. When the OD-matrix redesign
+-- landed, migrations/0013_pricing.sql tried to (re)create it as
+-- ENUM('global','pattern'):
+--
+--   DO $$ BEGIN
+--     CREATE TYPE "price_rule_scope" AS ENUM ('global', 'pattern');
+--   EXCEPTION
+--     WHEN duplicate_object THEN null;   -- <-- silently swallowed here
+--   END $$;
+--
+-- Because the type already existed from 0002, Postgres raised
+-- duplicate_object, the DO block swallowed it, and CREATE TYPE never ran.
+-- The live enum was left with its OLD labels — 'global' was never added.
+-- Every query filtering `scope = 'global'` (getGlobalMatrix in
+-- priceRules.resolver.ts, the admin "Aturan Harga" global-matrix CRUD in
+-- priceRules.service.ts) then fails at the Postgres client-binding step
+-- with: invalid input value for enum price_rule_scope: "global".
+--
+-- This repo's live-apply path is `npm run db:push` (drizzle-kit push,
+-- schema-diff against the live DB) — it does not execute files in this
+-- folder. Apply this statement directly against the live database (see
+-- README/runbook), then this file stands as the audit-trail record.
+--
+-- Idempotent and safe to run on a live DB: adding an enum label is a fast
+-- metadata-only change, no table rewrite, no lock contention with reads.
+-- The unused old labels ('trip','leg','time') are left in place — Postgres
+-- can't cheaply drop enum labels pre-16 and no code references them, so
+-- they're inert.
+
+ALTER TYPE "price_rule_scope" ADD VALUE IF NOT EXISTS 'global';
