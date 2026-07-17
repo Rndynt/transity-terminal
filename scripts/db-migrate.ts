@@ -15,6 +15,7 @@
  *
  * Exit code: 0 sukses, 1 gagal (CI harus stop deploy).
  */
+import "../server/lib/loadEnv";
 import { runSchemaMigrations } from "../server/migrator";
 import { runMigrations } from "../server/migrate";
 import { pool } from "../server/db";
