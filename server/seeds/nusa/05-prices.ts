@@ -13,10 +13,6 @@ export async function seedPrices(ctx: SeedContext) {
     { patternId: p.pBdgJkt01.id, price: 95000 },
     { patternId: p.pJktBdg02.id, price: 80000 },
     { patternId: p.pBdgJkt02.id, price: 80000 },
-    { patternId: p.pJktSmg01.id, price: 160000 },
-    { patternId: p.pSmgJkt01.id, price: 160000 },
-    { patternId: p.pSmgYgy01.id, price: 80000 },
-    { patternId: p.pYgySmg01.id, price: 80000 },
   ];
 
   // OD-matrix pricing: each seed pattern here is a simple 2-endpoint route
@@ -39,7 +35,6 @@ export async function seedPrices(ctx: SeedContext) {
     });
   }
 
-  console.log("  ✓ 8 price rules");
+  console.log("  ✓ 4 price rules");
   console.log("    JKT↔BDG-01 Rp 95.000 (Premio) | JKT↔BDG-02 Rp 80.000 (Commuter)");
-  console.log("    JKT↔SMG    Rp 160.000         | SMG↔YGY    Rp 80.000");
 }
