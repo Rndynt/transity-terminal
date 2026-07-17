@@ -478,6 +478,13 @@ export class AppService {
         if (!t.origin?.departAt) return true;
         return new Date(t.origin.departAt).getTime() > now.getTime();
       })
+      // Belum Ada Harga: exclude trips whose resolved OD fare is 0. Uses the
+      // RAW matrix price (farePerPerson/originalFarePerPerson), never
+      // discountedFarePerPerson, and runs BEFORE enrichTripsWithPromo so a
+      // promo that discounts a genuinely-priced trip down to 0 can never
+      // cause it to be wrongly dropped here. Mirrors CSO's "Belum Ada Harga"
+      // gating for the App/API gateway.
+      .filter(t => t.farePerPerson > 0)
       .sort((a, b) => {
         const aTime = a.origin?.departAt ? new Date(a.origin.departAt).getTime() : 0;
         const bTime = b.origin?.departAt ? new Date(b.origin.departAt).getTime() : 0;
@@ -624,7 +631,7 @@ export class AppService {
     })
     .from(tripStopTimes)
     .innerJoin(stops, eq(tripStopTimes.stopId, stops.id))
-    .where(inArray(tripStopTimes.tripId, tripIds))
+    .where(and(inArray(tripStopTimes.tripId, tripIds), isNull(tripStopTimes.deletedAt)))
     .orderBy(tripStopTimes.stopSequence);
 
     const stopTimesByTrip = new Map<string, typeof allStopTimes>();
