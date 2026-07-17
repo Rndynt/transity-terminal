@@ -5,23 +5,31 @@ import { db } from "@server/db";
 import { bookings } from "@shared/schema/booking";
 import type { IStorage } from "@server/storage.interface";
 import { buildScheduleSnapshot } from "@server/lib/scheduleSnapshot";
+import { evaluateServiceKey, getTerminalServiceKey } from "@server/lib/serviceKey";
 
 export function registerConsoleRoutes(app: FastifyInstance, storage: IStorage) {
   const requireServiceKey = (req: FastifyRequest, reply: FastifyReply): boolean => {
-    const incoming = req.headers["x-service-key"] as string | undefined;
-    const expected = process.env.TERMINAL_SERVICE_KEY || "";
-    if (!expected) {
+    // Console's own dev-pass behavior (kept local, not in the shared
+    // evaluator): when no key is configured AT ALL, console fails closed
+    // in production but open in dev, REGARDLESS of whether a header was
+    // sent. `evaluateServiceKey` treats "no key configured + no header"
+    // as unconditionally `ok`, which would collapse this NODE_ENV branch
+    // for that one combination — so that specific pre-check stays here to
+    // preserve the exact original status codes.
+    if (!getTerminalServiceKey()) {
       if (process.env.NODE_ENV === "production") {
         reply.code(503).send({ error: "TERMINAL_SERVICE_KEY not configured" });
         return false;
       }
       return true;
     }
-    if (!incoming) {
+    const incoming = req.headers["x-service-key"] as string | undefined;
+    const result = evaluateServiceKey(incoming);
+    if (result.kind === "missing-header") {
       reply.code(401).send({ error: "Missing X-Service-Key header" });
       return false;
     }
-    if (incoming !== expected) {
+    if (result.kind === "invalid") {
       reply.code(401).send({ error: "Invalid service key" });
       return false;
     }

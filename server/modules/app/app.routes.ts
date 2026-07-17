@@ -2,8 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { AppController } from "./app.controller";
 import { IStorage } from "@server/storage.interface";
 import { appAuthMiddleware } from "./app.auth";
-
-const getTerminalServiceKey = () => process.env.TERMINAL_SERVICE_KEY || '';
+import { evaluateServiceKey } from "@server/lib/serviceKey";
 
 // S1-08: CORS sekarang ditangani sentral di server/index.ts via @fastify/cors.
 // Route-level header injection di sini DIHAPUS supaya tidak konflik /
@@ -11,25 +10,22 @@ const getTerminalServiceKey = () => process.env.TERMINAL_SERVICE_KEY || '';
 
 function serviceKeyMiddleware(req: FastifyRequest, reply: FastifyReply, done: () => void) {
   const incomingKey = req.headers['x-service-key'] as string | undefined;
-  if (!incomingKey) {
-    if (getTerminalServiceKey()) {
+  const result = evaluateServiceKey(incomingKey);
+  switch (result.kind) {
+    case 'missing-header':
       reply.code(401).send({ error: 'Missing X-Service-Key header', code: 'MISSING_SERVICE_KEY' });
       return;
-    }
-    req.isServiceClient = true;
-    done();
-    return;
+    case 'not-configured':
+      reply.code(401).send({ error: 'Service key not configured on this terminal', code: 'SERVICE_KEY_NOT_CONFIGURED' });
+      return;
+    case 'invalid':
+      reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
+      return;
+    case 'ok':
+      req.isServiceClient = true;
+      done();
+      return;
   }
-  if (!getTerminalServiceKey()) {
-    reply.code(401).send({ error: 'Service key not configured on this terminal', code: 'SERVICE_KEY_NOT_CONFIGURED' });
-    return;
-  }
-  if (incomingKey !== getTerminalServiceKey()) {
-    reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
-    return;
-  }
-  req.isServiceClient = true;
-  done();
 }
 
 export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
@@ -57,10 +53,11 @@ export function registerAppRoutes(app: FastifyInstance, storage: IStorage) {
   async function bookingAuthMiddleware(req: FastifyRequest, reply: FastifyReply) {
     const incomingKey = req.headers['x-service-key'] as string | undefined;
     if (incomingKey) {
-      if (!getTerminalServiceKey()) {
+      const result = evaluateServiceKey(incomingKey);
+      if (result.kind === 'not-configured') {
         return reply.code(401).send({ error: 'Service key not configured on this terminal', code: 'SERVICE_KEY_NOT_CONFIGURED' });
       }
-      if (incomingKey !== getTerminalServiceKey()) {
+      if (result.kind === 'invalid') {
         return reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
       }
       req.isServiceClient = true;
