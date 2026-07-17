@@ -43,7 +43,6 @@ export async function seedCargo(ctx: SeedContext) {
   const p = ctx.patterns;
   const patternIds: string[] = [
     p.pJktBdg01.id, p.pBdgJkt01.id, p.pJktBdg02.id, p.pBdgJkt02.id,
-    p.pJktSmg01.id, p.pSmgJkt01.id, p.pSmgYgy01.id, p.pYgySmg01.id,
   ];
 
   let rateCount = 0;
