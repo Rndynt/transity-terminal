@@ -190,6 +190,13 @@
       "when": 1752457200000,
       "tag": "0027_report_covering_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1752457300000,
+      "tag": "0028_fix_price_rule_scope_enum",
+      "breakpoints": true
     }
   ]
 }
