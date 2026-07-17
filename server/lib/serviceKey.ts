@@ -30,13 +30,19 @@ export function getTerminalServiceKey(): string {
  *   - header present + no configured key -> not-configured
  *   - header present + mismatch       -> invalid
  *   - header present + match          -> ok
+ *
+ * `expected` is optional — pass it explicitly when a call site reads the
+ * configured key differently (a module-level const captured at import
+ * time, or a `.trim()`'d value) so timing/trim semantics stay identical
+ * to that call site's original behavior. Defaults to
+ * `getTerminalServiceKey()` (a fresh `process.env` read) when omitted.
  */
-export function evaluateServiceKey(incomingKey: string | undefined): ServiceKeyResult {
-  const expected = getTerminalServiceKey();
+export function evaluateServiceKey(incomingKey: string | undefined, expected?: string): ServiceKeyResult {
+  const key = expected !== undefined ? expected : getTerminalServiceKey();
   if (!incomingKey) {
-    return expected ? { kind: 'missing-header' } : { kind: 'ok' };
+    return key ? { kind: 'missing-header' } : { kind: 'ok' };
   }
-  if (!expected) return { kind: 'not-configured' };
-  if (incomingKey !== expected) return { kind: 'invalid' };
+  if (!key) return { kind: 'not-configured' };
+  if (incomingKey !== key) return { kind: 'invalid' };
   return { kind: 'ok' };
 }

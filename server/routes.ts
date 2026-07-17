@@ -31,6 +31,7 @@ import { registerMaintenanceRoutes } from "./modules/maintenance/maintenance.rou
 import { registerCustomersRoutes } from "./modules/customers/customers.routes";
 import { registerSettingsRoutes } from "./modules/settings/settings.routes";
 import { registerConsoleRoutes } from "./modules/console/console.routes";
+import { evaluateServiceKey } from "@server/lib/serviceKey";
 
 const TERMINAL_SERVICE_KEY = process.env.TERMINAL_SERVICE_KEY || '';
 
@@ -46,11 +47,11 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
       return reply.send({ status: 'ok', warning: 'TERMINAL_SERVICE_KEY not configured — development mode' });
     }
 
-    if (!incomingKey) {
+    const result = evaluateServiceKey(incomingKey, TERMINAL_SERVICE_KEY);
+    if (result.kind === 'missing-header') {
       return reply.code(401).send({ error: 'Missing X-Service-Key header', code: 'MISSING_SERVICE_KEY' });
     }
-
-    if (incomingKey !== TERMINAL_SERVICE_KEY) {
+    if (result.kind === 'invalid') {
       return reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
     }
 
@@ -65,10 +66,11 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
   app.get('/api/health/deep', async (req, reply) => {
     const incomingKey = req.headers['x-service-key'] as string | undefined;
     if (TERMINAL_SERVICE_KEY) {
-      if (!incomingKey) {
+      const result = evaluateServiceKey(incomingKey, TERMINAL_SERVICE_KEY);
+      if (result.kind === 'missing-header') {
         return reply.code(401).send({ error: 'Missing X-Service-Key header', code: 'MISSING_SERVICE_KEY' });
       }
-      if (incomingKey !== TERMINAL_SERVICE_KEY) {
+      if (result.kind === 'invalid') {
         return reply.code(401).send({ error: 'Invalid service key', code: 'INVALID_SERVICE_KEY' });
       }
     }
@@ -216,7 +218,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
       // Dev: izinkan tanpa key supaya developer bisa curl /api/metrics lokal.
     } else {
       const incomingKey = req.headers['x-service-key'] as string | undefined;
-      if (!incomingKey || incomingKey !== TERMINAL_SERVICE_KEY) {
+      const result = evaluateServiceKey(incomingKey, TERMINAL_SERVICE_KEY);
+      if (result.kind === 'missing-header' || result.kind === 'invalid') {
         return reply.code(401).send({ error: 'Invalid or missing service key' });
       }
     }

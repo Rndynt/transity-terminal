@@ -4,6 +4,7 @@ import { log } from '@server/vite';
 import { createSocketIoAdapter } from './redis';
 import { verifyToken, type AppUserPayload } from '@server/modules/app/app.auth';
 import { createComponentLogger } from '@server/lib/logger';
+import { evaluateServiceKey } from '@server/lib/serviceKey';
 
 const wsLog = createComponentLogger('ws');
 
@@ -111,7 +112,8 @@ class WebSocketService {
 
       // Service-key path (Console BE, engine internal).
       if (auth.serviceKey) {
-        if (!expectedServiceKey) {
+        const result = evaluateServiceKey(auth.serviceKey, expectedServiceKey ?? '');
+        if (result.kind === 'not-configured') {
           // CR-S2-07-HIGH: klien KIRIM serviceKey tapi server tidak punya
           // expectedServiceKey untuk verify → ini misconfiguration ops yang
           // berbahaya (key bisa accidentally bocor + di-trust). Reject
@@ -119,7 +121,7 @@ class WebSocketService {
           wsLog.error('handshake rejected: client supplied serviceKey but TERMINAL_SERVICE_KEY env not configured on server');
           return next(new Error('service key auth not configured on server'));
         }
-        if (auth.serviceKey !== expectedServiceKey) {
+        if (result.kind === 'invalid') {
           return next(new Error('invalid service key'));
         }
         socket.data = { kind: 'service' };
