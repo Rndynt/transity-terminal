@@ -16,7 +16,6 @@ import { webSocketService } from "@server/realtime/ws";
 import { PricingService } from "@modules/priceRules/pricing.service";
 import { PrintService } from "@modules/printing/print.service";
 import { IStorage } from "@server/storage.interface";
-import { Booking, BookingGroup } from "@shared/schema";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 import { assertTripBookable } from "./booking.helpers";
 

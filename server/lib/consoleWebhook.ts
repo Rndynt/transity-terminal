@@ -414,17 +414,3 @@ export async function sendTestEvent(): Promise<EmitResult> {
   };
   return emitToConsole(payload);
 }
-
-// Test/diagnostic helpers
-export function _retryQueueSize(): number {
-  return queue.size;
-}
-
-export function _clearRetryQueue(): void {
-  queue.clear();
-  if (timer) {
-    clearTimeout(timer);
-    timer = null;
-  }
-  timerFiresAt = null;
-}

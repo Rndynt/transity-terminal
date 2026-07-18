@@ -1,5 +1,5 @@
 import { parseISO, getDay } from "date-fns";
-import { fromZonedTime, formatInTimeZone, toZonedTime as dateFnsToZonedTime } from "date-fns-tz";
+import { fromZonedTime, formatInTimeZone } from "date-fns-tz";
 import { createComponentLogger } from "../lib/logger";
 
 const log = createComponentLogger("timezone");
@@ -104,50 +104,6 @@ export function formatTimeInTZ(timestamp: Date | null | undefined, tz: string = 
 }
 
 /**
- * Format timestamp in the specified timezone as HH:MM:SS
- * @param timestamp UTC timestamp (Date object)
- * @param tz Timezone string (e.g., "Asia/Jakarta")
- * @returns Time string in HH:MM:SS format
- */
-export function formatTimeWithSecondsInTZ(timestamp: Date | null | undefined, tz: string = 'Asia/Jakarta'): string | null {
-  if (!timestamp) return null;
-  return formatInTimeZone(timestamp, tz, 'HH:mm:ss');
-}
-
-/**
- * Format timestamp in the specified timezone as full datetime string
- * @param timestamp UTC timestamp (Date object)
- * @param tz Timezone string (e.g., "Asia/Jakarta")
- * @returns DateTime string in "yyyy-MM-dd HH:mm:ss" format
- */
-export function formatDateTimeInTZ(timestamp: Date | null | undefined, tz: string = 'Asia/Jakarta'): string | null {
-  if (!timestamp) return null;
-  return formatInTimeZone(timestamp, tz, 'yyyy-MM-dd HH:mm:ss');
-}
-
-/**
- * Convert UTC timestamp to zoned time
- * @param utcTimestamp UTC timestamp
- * @param tz Timezone string (e.g., "Asia/Jakarta")
- * @returns Zoned Date object
- */
-export function toZonedTimeSafe(utcTimestamp: Date, tz: string = 'Asia/Jakarta'): Date {
-  return dateFnsToZonedTime(utcTimestamp, tz);
-}
-
-/**
- * Get timezone offset in hours for a specific date
- * @param tz Timezone string (e.g., "Asia/Jakarta")
- * @param date Optional date to check offset for (defaults to now)
- * @returns Offset in hours (e.g., +7 for Asia/Jakarta)
- */
-export function getTimezoneOffset(tz: string = 'Asia/Jakarta', date: Date = new Date()): number {
-  const zonedDate = dateFnsToZonedTime(date, tz);
-  const offsetMs = zonedDate.getTime() - date.getTime();
-  return offsetMs / (1000 * 60 * 60);
-}
-
-/**
  * Ensure timezone is set to default if not specified
  * @param timezone Timezone string or null/undefined
  * @returns Timezone string, defaulting to "Asia/Jakarta"
@@ -157,33 +113,4 @@ export function ensureDefaultTimezone(timezone?: string | null): string {
     return 'Asia/Jakarta';
   }
   return timezone;
-}
-
-/**
- * Validate that a time string is in correct format
- * @param timeStr Time string to validate
- * @returns true if valid, false otherwise
- */
-export function isValidTimeFormat(timeStr: string | null | undefined): boolean {
-  if (!timeStr) return false;
-  const normalized = normalizeTimeFormat(timeStr);
-  return normalized !== null;
-}
-
-/**
- * Get current time in specified timezone as HH:MM
- * @param tz Timezone string (e.g., "Asia/Jakarta")
- * @returns Current time string in HH:MM format
- */
-export function getCurrentTimeInTZ(tz: string = 'Asia/Jakarta'): string {
-  return formatInTimeZone(new Date(), tz, 'HH:mm');
-}
-
-/**
- * Get current date in specified timezone as YYYY-MM-DD
- * @param tz Timezone string (e.g., "Asia/Jakarta")
- * @returns Current date string in YYYY-MM-DD format
- */
-export function getCurrentDateInTZ(tz: string = 'Asia/Jakarta'): string {
-  return formatInTimeZone(new Date(), tz, 'yyyy-MM-dd');
 }

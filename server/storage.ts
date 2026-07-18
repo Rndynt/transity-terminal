@@ -1,5 +1,5 @@
 import {
-  IStorage, ManifestEntry, ManifestFull, ManifestCargoEntry,
+  IStorage, ManifestEntry, ManifestFull,
   TripStopTimeWithEffectiveFlags, BulkUpsertStopTimeInput,
   ActivePassengerForTrip, UnseatedPassengerForTrip,
 } from "./storage.interface";

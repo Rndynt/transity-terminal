@@ -74,11 +74,6 @@ async function getFlagsFromDb(roleId: string): Promise<Set<string>> {
   }
 }
 
-export async function getEffectiveFlags(userId: string, userRoleHint?: string | null): Promise<Set<string>> {
-  const perms = await getEffectivePermissions(userId, userRoleHint);
-  return perms.flags;
-}
-
 export async function getEffectivePermissions(
   userId: string,
   userRoleHint?: string | null

@@ -1,5 +1,5 @@
 import { IStorage, TripStopTimeWithEffectiveFlags, BulkUpsertStopTimeInput } from "@server/storage.interface";
-import { InsertTripStopTime, TripStopTime, Trip } from "@shared/schema";
+import { InsertTripStopTime, TripStopTime } from "@shared/schema";
 import { TripLegsService } from "@modules/tripLegs/tripLegs.service";
 import { SeatInventoryService } from "@modules/seatInventory/seatInventory.service";
 

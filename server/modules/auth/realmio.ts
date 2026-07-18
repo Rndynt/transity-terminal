@@ -1,5 +1,5 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { getEffectivePermissions, type EffectivePermissions } from "@modules/rbac/rbac.service";
+import { getEffectivePermissions } from "@modules/rbac/rbac.service";
 import { createComponentLogger } from "@server/lib/logger";
 
 const log = createComponentLogger("auth.realmio");
@@ -87,23 +87,6 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
     await attachRbac(req);
   } catch {
     return reply.code(401).send({ message: "Unauthorized" });
-  }
-}
-
-export async function optionalAuth(req: FastifyRequest, _reply: FastifyReply) {
-  if (DEV_BYPASS_AUTH) {
-    req.user = DEV_USER;
-    await attachRbac(req);
-    return;
-  }
-
-  try {
-    const user = await verifyWithRealmio(req.headers.cookie, req.headers.authorization);
-    if (user) {
-      req.user = user;
-      await attachRbac(req);
-    }
-  } catch {
   }
 }
 

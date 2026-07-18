@@ -4,7 +4,6 @@ import type { SeedContext } from "./context";
 export async function seedPatterns(ctx: SeedContext) {
   console.log("\n[5] Creating trip patterns...");
 
-  const s = ctx.stops;
   const l = ctx.layouts;
 
   ctx.patterns.pSbyMlg01 = await storage.createTripPattern({

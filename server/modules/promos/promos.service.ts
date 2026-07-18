@@ -1,5 +1,5 @@
 import { IStorage } from "@server/storage.interface";
-import { type Promotion, type Voucher, type InsertPromotion, type InsertVoucher, type PromoCondition, type PromoConditionInput, type InsertBookingPromoApplication } from "@shared/schema";
+import { type Promotion, type Voucher, type InsertPromotion, type PromoCondition, type PromoConditionInput, type InsertBookingPromoApplication } from "@shared/schema";
 import crypto from "crypto";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 

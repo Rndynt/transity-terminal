@@ -3,7 +3,6 @@ import { BookingsService } from "./bookings.service";
 import { UnseatService } from "./unseat.service";
 import { RescheduleService } from "./reschedule.service";
 import { IStorage } from "@server/storage.interface";
-import { insertBookingSchema, insertPassengerSchema, insertPaymentSchema } from "@shared/schema";
 import { z } from "zod";
 import { buildServiceContext } from "@modules/rbac/rbac.guard";
 

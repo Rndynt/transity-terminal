@@ -2,14 +2,14 @@ import { db } from "@server/db";
 import { webSocketService } from "@server/realtime/ws";
 import { 
   appUsers, reviews, bookings, payments, trips, tripPatterns, 
-  tripStopTimes, stops, patternStops, vehicles, cargoShipments, cargoTypes,
-  seatInventory, tripLegs, seatHolds, tripBases, scheduleExceptions,
-  operatorSettings, vouchers, promotions, passengers, bookingPromoApplications,
-  type AppUser, type InsertAppUser, type Review, type InsertReview
+  tripStopTimes, stops, patternStops, vehicles,
+  seatInventory, seatHolds, tripBases, scheduleExceptions,
+  operatorSettings, vouchers, promotions, bookingPromoApplications,
+  type AppUser, type Review
 } from "@shared/schema";
-import { eq, and, desc, sql, gte, lte, inArray, gt, isNull, not } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, gt, isNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { signToken, type AppUserPayload } from "./app.auth";
+import { signToken } from "./app.auth";
 import { IStorage } from "@server/storage.interface";
 import { fromZonedHHMMToUtc } from "@server/utils/timezone";
 import {
@@ -86,22 +86,6 @@ interface TripSearchResult {
   appliedPromo: AppliedPromoSummary | null;
   stops: TripStopPointWithCity[];
   isVirtual?: boolean;
-}
-
-interface UserBookingSummary {
-  id: string;
-  tripId: string;
-  serviceDate: string | null;
-  patternCode: string;
-  patternName: string;
-  originStopId: string | null;
-  destinationStopId: string | null;
-  originSeq: number | null;
-  destinationSeq: number | null;
-  status: string | null;
-  totalAmount: string | null;
-  channel: string | null;
-  createdAt: Date | null;
 }
 
 interface TripReviewItem {

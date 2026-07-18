@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireFlag } from "@modules/rbac/rbac.middleware";
 import { db } from "@server/db";
 import { operatorSettings } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getConsoleHealth, sendTestEvent } from "@server/lib/consoleWebhook";
 
 // B8: Zod schema for PUT /api/settings body. All fields optional (partial

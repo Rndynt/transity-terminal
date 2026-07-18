@@ -25,7 +25,7 @@ import { scheduler } from "./scheduler";
 import { runMigrations } from "./migrate";
 import { seedRbac } from "./modules/rbac/rbac.seed";
 import { existsSync } from "fs";
-import { join, resolve } from "path";
+import { join } from "path";
 import { runSchemaMigrations } from "./migrator";
 import { logger } from "./lib/logger";
 

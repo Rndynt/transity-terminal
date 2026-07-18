@@ -11,7 +11,7 @@ export class TripStopTimesController {
     this.tripStopTimesService = new TripStopTimesService(storage);
   }
 
-  private async validateStopTimesForPayload(payload: Array<{ stopSequence: number; departAt?: string | Date | null; arriveAt?: string | Date | null }>, tripId: string): Promise<{ valid: boolean; errors: Array<{ stopSequence: number; field: string; message: string }> }> {
+  private async validateStopTimesForPayload(payload: Array<{ stopSequence: number; departAt?: string | Date | null; arriveAt?: string | Date | null }>): Promise<{ valid: boolean; errors: Array<{ stopSequence: number; field: string; message: string }> }> {
     const errors: Array<{ stopSequence: number; field: string; message: string }> = [];
 
     if (payload.length < 2) {
@@ -173,7 +173,7 @@ export class TripStopTimesController {
     }
     
     // Validate the payload before persisting to maintain atomicity
-    const tempValidation = await this.validateStopTimesForPayload(validatedData, tripId);
+    const tempValidation = await this.validateStopTimesForPayload(validatedData);
     
     if (!tempValidation.valid) {
       return reply.code(400).send({

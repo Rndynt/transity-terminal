@@ -32,7 +32,6 @@ import { and, eq, gt, inArray } from "drizzle-orm";
 import { webSocketService } from "@server/realtime/ws";
 import { randomUUID } from "node:crypto";
 import { createComponentLogger } from "@server/lib/logger";
-import type { IStorage } from "@server/storage.interface";
 
 const log = createComponentLogger("holdsAdapter");
 

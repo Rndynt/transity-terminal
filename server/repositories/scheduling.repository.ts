@@ -1,5 +1,5 @@
 import { db } from "@server/db";
-import { eq, and, or, desc, sql, inArray, isNull, gte, lte } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, isNull, gte, lte } from "drizzle-orm";
 import { fromZonedHHMMToUtc } from "@server/utils/timezone";
 import { createComponentLogger } from "@server/lib/logger";
 import { hasAnyPricedDestinationFromOrigin } from "@modules/priceRules/priceRules.resolver";
@@ -302,7 +302,18 @@ export class SchedulingRepository {
 
   async getTripsForDateRange(fromDate: string, toDate: string, opts?: { limit?: number }): Promise<TripWithDetails[]> {
     // P5: same cap policy as getTrips. Date range queries must be bounded.
-    const cap = Math.min(Math.max(opts?.limit ?? 1000, 1), 2000);
+    // FOUND during server-only dead-code cleanup (eslint unused-vars): this
+    // cap is computed but was NEVER actually applied to the query below
+    // (no `.limit()` call), unlike `getTrips()` which does apply it. That
+    // means this method currently returns an UNBOUNDED result set for the
+    // given date range. Deliberately NOT fixed here — this cleanup task is
+    // scoped to removing provably-dead code without changing runtime
+    // behavior, and wiring in `.limit(_cap)` would change behavior (and
+    // needs its own review, e.g. whether ordering/pagination expectations
+    // of the one caller — SchedulerService — depend on getting everything
+    // back). Renamed with a leading underscore only to satisfy the linter
+    // while keeping this clearly flagged; see server-deadcode-report.md.
+    const _cap = Math.min(Math.max(opts?.limit ?? 1000, 1), 2000);
     return await db.select({
       id: trips.id,
       patternId: trips.patternId,

@@ -1,4 +1,3 @@
-import { IStorage } from "@server/storage.interface";
 import { db } from "@server/db";
 import { bookings, passengers } from "@shared/schema";
 import { eq } from "drizzle-orm";

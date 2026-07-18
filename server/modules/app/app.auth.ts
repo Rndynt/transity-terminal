@@ -52,14 +52,3 @@ export async function appAuthMiddleware(req: FastifyRequest, reply: FastifyReply
     return reply.code(401).send({ error: "Invalid or expired token" });
   }
 }
-
-export async function optionalAuthMiddleware(req: FastifyRequest, _reply: FastifyReply): Promise<void> {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    try {
-      const token = authHeader.slice(7);
-      req.appUser = verifyToken(token);
-    } catch {
-    }
-  }
-}

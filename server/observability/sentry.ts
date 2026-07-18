@@ -101,5 +101,3 @@ export async function flushSentry(timeoutMs = 2000): Promise<boolean> {
     return false;
   }
 }
-
-export const isSentryEnabled = (): boolean => initialized;

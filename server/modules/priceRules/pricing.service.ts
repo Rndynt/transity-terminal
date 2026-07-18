@@ -16,7 +16,11 @@ export interface FareQuote {
 export class PricingService {
   constructor(private storage: IStorage) {}
 
-  async quoteFare(tripId: string, originSeq: number, destinationSeq: number, seatClass?: string): Promise<FareQuote> {
+  // `_seatClass` is reserved for a future seat-class-differentiated fare
+  // feature (VIP vs Regular on the same trip) — not yet implemented; no
+  // caller currently passes it. Kept (not removed) as a documented,
+  // intentional placeholder rather than deleting the parameter.
+  async quoteFare(tripId: string, originSeq: number, destinationSeq: number, _seatClass?: string): Promise<FareQuote> {
     const trip = await this.storage.getTripById(tripId);
     if (!trip) throw new Error('TRIP_NOT_FOUND');
     if (!trip.patternId) throw new Error('NO_PRICE_RULE');

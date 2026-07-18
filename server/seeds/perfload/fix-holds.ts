@@ -5,9 +5,7 @@
 import "@server/lib/loadEnv";
 import { db } from "@server/db";
 import { sql } from "drizzle-orm";
-import { seatHolds, seatInventory } from "@shared/schema/inventory";
-import { bookings, passengers } from "@shared/schema/booking";
-import { trips } from "@shared/schema/scheduling";
+import { seatHolds } from "@shared/schema/inventory";
 
 const CHUNK   = 2000;
 const LEG_IDX = 1;

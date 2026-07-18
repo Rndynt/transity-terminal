@@ -1,9 +1,8 @@
 import { IStorage } from "@server/storage.interface";
 import { TripBasesService } from "@modules/tripBases/tripBases.service";
-import { TripBase, TripWithDetails } from "@shared/schema";
-import { ensureDefaultTimezone } from "@server/utils/timezone";
+import { TripBase } from "@shared/schema";
 import { db } from "@server/db";
-import { sql, inArray, and, eq, gte, lte, isNull } from "drizzle-orm";
+import { sql, and, eq, gte, lte, isNull } from "drizzle-orm";
 import { scheduleExceptions, patternStops, scheduleStopExceptions } from "@shared/schema/scheduling";
 import { stops } from "@shared/schema/network";
 import { fireAndForget } from "@server/lib/consoleWebhook";

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "server/seeds/index.ts",
+    "server/seeds/perfload/index.ts",
+    "server/seeds/perfload/fix-holds.ts",
+    "scripts/db-migrate.ts",
+    "scripts/add-missing-columns.ts"
+  ],
+  "project": [
+    "server/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+  "ignoreExportsUsedInFile": true
+}

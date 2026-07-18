@@ -10,7 +10,6 @@ import {
 import {
   BOOKINGS_DEFAULT_LIMIT,
   BOOKINGS_MAX_LIMIT,
-  clampBookingsPageSize as clampPageSize,
 } from "@server/constants/pagination";
 
 export class BookingRepository {

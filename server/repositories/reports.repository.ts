@@ -2,7 +2,6 @@ import { db } from "@server/db";
 import { sql, type SQL } from "drizzle-orm";
 
 const PAID_STATUSES_SQL = sql.raw(`('paid','confirmed','checked_in')`);
-const ACTIVE_TICKET_SQL = sql.raw(`('active','checked_in')`);
 const EXCLUDE_CARGO_SQL = sql.raw(`('cancelled','returned')`);
 
 export interface ReportFilters {

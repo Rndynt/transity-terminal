@@ -42,7 +42,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
 
       const data = await upstream.json();
       return reply.code(upstream.status).send(data);
-    } catch (err) {
+    } catch {
       return reply.code(502).send({ message: "Auth service unavailable" });
     }
   });
@@ -78,7 +78,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
 
       const data = await upstream.json();
       return reply.code(upstream.status).send(data);
-    } catch (err) {
+    } catch {
       return reply.code(502).send({ message: "Auth service unavailable" });
     }
   });
@@ -118,7 +118,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
 
       const data = await upstream.json().catch(() => ({ success: true }));
       return reply.code(upstream.ok ? upstream.status : 200).send(data);
-    } catch (err) {
+    } catch {
       // Even if Realmio is unreachable, clear cookies so the user is logged out locally
       const incomingCookieNames = (req.headers.cookie ?? "")
         .split(";")
@@ -163,7 +163,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
 
       const data = await upstream.json();
       return reply.send(data);
-    } catch (err) {
+    } catch {
       return reply.code(401).send({ user: null, session: null });
     }
   });
@@ -252,7 +252,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
 
       const data = await upstream.json();
       return reply.send(data);
-    } catch (err) {
+    } catch {
       return reply.code(401).send({ user: null });
     }
   });

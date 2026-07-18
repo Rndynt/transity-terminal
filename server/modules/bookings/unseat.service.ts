@@ -447,7 +447,6 @@ export class UnseatService {
       const allPax = await tx.select().from(passengers).where(eq(passengers.bookingId, booking.id));
       const hasActivePax = allPax.some(p => p.ticketStatus === 'active');
       if (hasActivePax && booking.status === 'unseated') {
-        const previousStatus = booking.status;
         const newStatus = 'paid';
         await tx.update(bookings)
           .set({ status: newStatus })

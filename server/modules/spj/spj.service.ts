@@ -1,7 +1,7 @@
 import { db } from "@server/db";
-import { spj, spjCostLines, trips, drivers, vehicles, tripPatterns, tripCostTemplates, tripCostItems } from "@shared/schema";
+import { spj, spjCostLines } from "@shared/schema";
 import type { Spj, SpjCostLine, SpjWithDetails } from "@shared/schema";
-import { eq, sql, desc } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "@server/constants/pagination";
 
 type CostCategory = 'bbm' | 'tol' | 'makan' | 'parkir' | 'lainnya';

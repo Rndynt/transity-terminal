@@ -32,7 +32,7 @@
 import "@server/lib/loadEnv";
 import { randomUUID } from "node:crypto";
 import { db } from "@server/db";
-import { sql, eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { stops, outlets } from "@shared/schema/network";
 import { layouts, vehicles, drivers } from "@shared/schema/fleet";
 import {
@@ -429,7 +429,6 @@ async function main() {
 
   for (let d = 0; d < DAYS; d++) {
     const serviceDate  = serviceDates[d];
-    const isPast       = d < PAST_DAYS;
     const tripBatch:     any[] = [];
     const stopTimeBatch: any[] = [];
     const legBatch:      any[] = [];
