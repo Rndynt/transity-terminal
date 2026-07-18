@@ -56,6 +56,30 @@ export async function runMigrations() {
     `);
     log.info("users: ensured all required columns exist");
 
+    // price_rule_scope: PR#pricing-swap drift fix (see
+    // migrations/0028_fix_price_rule_scope_enum.sql for the full root-cause
+    // writeup). The type was originally created by 0002_enums.sql with the
+    // OLD flat-pricing labels; when the OD-matrix redesign tried to
+    // recreate it with 'global'+'pattern', a swallowed duplicate_object
+    // exception meant that never applied. Any DB whose history predates
+    // that redesign is left with 'global' missing from the live enum,
+    // which throws "invalid input value for enum price_rule_scope: global"
+    // — surfacing as a 500 on booking/fare-quote endpoints that fall
+    // through to the global pricing tier. Adding an enum label is a fast,
+    // lock-free metadata-only change, safe to run unconditionally on every
+    // boot (IF NOT EXISTS makes it a no-op once fixed).
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM pg_type WHERE typname = 'price_rule_scope'
+        ) THEN
+          ALTER TYPE "price_rule_scope" ADD VALUE IF NOT EXISTS 'global';
+        END IF;
+      END $$;
+    `);
+    log.info("price_rule_scope: ensured 'global' enum label exists");
+
   } catch (err) {
     log.error({ err }, "safety-net migration failed");
     throw err;
