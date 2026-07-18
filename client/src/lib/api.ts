@@ -101,6 +101,8 @@ export const tripsApi = {
   create: (data: any) => apiRequest('POST', '/api/trips', data).then(res => res.json()),
   update: (id: string, data: any) => apiRequest('PUT', `/api/trips/${id}`, data).then(res => res.json()),
   delete: (id: string) => apiRequest('DELETE', `/api/trips/${id}`),
+  bulkDelete: (ids: string[]) => apiRequest('POST', '/api/trips/bulk-delete', { ids }).then(res => res.json()),
+  bulkUpdateStatus: (ids: string[], status: string) => apiRequest('PATCH', '/api/trips/bulk-status', { ids, status }).then(res => res.json()),
   deriveLegs: (id: string) => apiRequest('POST', `/api/trips/${id}/derive-legs`).then(res => res.json()),
   precomputeSeatInventory: (id: string) => apiRequest('POST', `/api/trips/${id}/precompute-seat-inventory`).then(res => res.json()),
   getStopTimes: (id: string) => fetch(`/api/trips/${id}/stop-times`).then(r => assertOk<TripStopTime[]>(r)),

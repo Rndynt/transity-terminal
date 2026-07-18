@@ -13,7 +13,9 @@ export function registerTripsRoutes(app: FastifyInstance, storage: IStorage) {
   app.get('/api/trips/:id', async (req, reply) => tripsController.getById(req, reply));
   app.post('/api/trips', { preHandler: [requireFlag('master.trips')] }, async (req, reply) => tripsController.create(req, reply));
   app.put('/api/trips/:id', { preHandler: [requireFlag('master.trips')] }, async (req, reply) => tripsController.update(req, reply));
-  app.delete('/api/trips/:id', { preHandler: [requireFlag('master.trips')] }, async (req, reply) => tripsController.delete(req, reply));
+  app.delete('/api/trips/:id', { preHandler: [requireFlag('master.trips.delete')] }, async (req, reply) => tripsController.delete(req, reply));
+  app.post('/api/trips/bulk-delete', { preHandler: [requireFlag('master.trips.delete')] }, async (req, reply) => tripsController.bulkDelete(req, reply));
+  app.patch('/api/trips/bulk-status', { preHandler: [requireFlag('master.trips')] }, async (req, reply) => tripsController.bulkUpdateStatus(req, reply));
 
   app.get('/api/trips/:tripId/stop-times', async (req, reply) => tripStopTimesController.getByTrip(req, reply));
   app.get('/api/trips/:tripId/stop-times/effective', async (req, reply) => tripStopTimesController.getByTripWithEffectiveFlags(req, reply));

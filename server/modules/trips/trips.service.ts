@@ -142,6 +142,25 @@ export class TripsService {
     void this.emitWebhook("schedule.deleted", trip);
   }
 
+  async bulkDeleteTrips(ids: string[]): Promise<{ deleted: number; errors: { id: string; reason: string }[] }> {
+    const errors: { id: string; reason: string }[] = [];
+    let deleted = 0;
+    for (const id of ids) {
+      try {
+        await this.deleteTrip(id);
+        deleted++;
+      } catch (e) {
+        errors.push({ id, reason: e instanceof Error ? e.message : 'Unknown error' });
+      }
+    }
+    return { deleted, errors };
+  }
+
+  async bulkUpdateTripStatus(ids: string[], status: string): Promise<{ updated: number }> {
+    await Promise.all(ids.map(id => this.storage.updateTrip(id, { status } as any)));
+    return { updated: ids.length };
+  }
+
   async deriveLegs(tripId: string): Promise<void> {
     const trip = await this.getTripById(tripId);
     await this.tripLegsService.deriveLegsFromTrip(trip);

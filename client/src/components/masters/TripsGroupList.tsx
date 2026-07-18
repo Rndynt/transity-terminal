@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Clock, ChevronRight, ChevronsUpDown, Pencil, Trash2, FileText, ClipboardList, Route, Grid3X3, User, Bus } from 'lucide-react';
 import { RowActionsMenu } from './RowActionsMenu';
 import { TripStatusBadge } from '@/components/shared/StatusBadges';
@@ -24,6 +25,11 @@ interface TripsGroupListProps {
   isCreatingSpj: boolean;
   isDerivingLegs: boolean;
   isPrecomputingInventory: boolean;
+  // Bulk selection
+  selectedTripIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onGroupSelect: (patternId: string, tripIds: string[], checked: boolean) => void;
+  canDelete: boolean;
 }
 
 export default function TripsGroupList({
@@ -46,6 +52,10 @@ export default function TripsGroupList({
   isCreatingSpj,
   isDerivingLegs,
   isPrecomputingInventory,
+  selectedTripIds,
+  onToggleSelect,
+  onGroupSelect,
+  canDelete,
 }: TripsGroupListProps) {
   const groups: { pattern: TripPattern | undefined; patternId: string; trips: Trip[] }[] = [];
   const seen = new Set<string>();
@@ -102,6 +112,10 @@ export default function TripsGroupList({
         const minDate = dates.reduce((a, b) => (a < b ? a : b));
         const maxDate = dates.reduce((a, b) => (a > b ? a : b));
 
+        const groupTripIds = groupTrips.map((t) => t.id);
+        const allGroupSelected = groupTripIds.length > 0 && groupTripIds.every((id) => selectedTripIds.has(id));
+        const someGroupSelected = groupTripIds.some((id) => selectedTripIds.has(id));
+
         return (
           <div key={patternId} data-testid={`trip-group-${patternId}`}>
             <button
@@ -111,6 +125,17 @@ export default function TripsGroupList({
               data-testid={`trip-group-toggle-${patternId}`}
             >
               <div className="flex items-center gap-3 min-w-0">
+                {/* Group-level checkbox — stop propagation so click doesn't toggle expand */}
+                <span
+                  onClick={(e) => { e.stopPropagation(); onGroupSelect(patternId, groupTripIds, !allGroupSelected); }}
+                  className="shrink-0"
+                >
+                  <Checkbox
+                    checked={allGroupSelected}
+                    data-state={someGroupSelected && !allGroupSelected ? 'indeterminate' : undefined}
+                    className="pointer-events-none"
+                  />
+                </span>
                 <ChevronRight className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-nowrap min-w-0">
@@ -146,6 +171,7 @@ export default function TripsGroupList({
                 <table className="w-full text-sm">
                   <thead className="sticky top-16 z-10 bg-muted">
                     <tr className="border-b text-muted-foreground text-xs">
+                      <th className="w-10 px-4 py-2" />
                       <th className="text-left px-4 py-2 font-medium">Tanggal</th>
                       <th className="text-left px-3 py-2 font-medium">Berangkat</th>
                       <th className="text-left px-3 py-2 font-medium hidden sm:table-cell">Kendaraan</th>
@@ -159,9 +185,20 @@ export default function TripsGroupList({
                     {groupTrips.map((trip) => {
                       const vehicle = getVehicle(trip.vehicleId);
                       const departTime = getDepartureTime(trip);
+                      const isSelected = selectedTripIds.has(trip.id);
 
                       return (
-                        <tr key={trip.id} className="hover:bg-muted/20 transition-colors" data-testid={`trip-row-${trip.id}`}>
+                        <tr
+                          key={trip.id}
+                          className={`hover:bg-muted/20 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}
+                          data-testid={`trip-row-${trip.id}`}
+                        >
+                          <td className="px-4 py-2.5">
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => onToggleSelect(trip.id)}
+                            />
+                          </td>
                           <td className="px-4 py-2.5 whitespace-nowrap font-medium">
                             {formatServiceDate(trip.serviceDate)}
                           </td>
@@ -217,7 +254,7 @@ export default function TripsGroupList({
                                 { label: 'Turunkan Leg', icon: <Route className="h-3.5 w-3.5" />, onClick: () => onDeriveLegs(trip.id), disabled: isDerivingLegs },
                                 { label: 'Hitung Inventori', icon: <Grid3X3 className="h-3.5 w-3.5" />, onClick: () => onPrecomputeInventory(trip.id), disabled: isPrecomputingInventory },
                                 { label: 'Edit', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => onEdit(trip) },
-                                { label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => onDelete(trip.id), variant: 'destructive', disabled: isDeleting },
+                                ...(canDelete ? [{ label: 'Hapus', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => onDelete(trip.id), variant: 'destructive' as const, disabled: isDeleting }] : []),
                               ]}
                               data-testid={`actions-trip-${trip.id}`}
                             />

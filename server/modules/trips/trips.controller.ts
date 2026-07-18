@@ -90,6 +90,27 @@ export class TripsController {
     }
   }
 
+  async bulkDelete(req: FastifyRequest, reply: FastifyReply) {
+    const { ids } = req.body as { ids: string[] };
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return reply.code(400).send({ error: 'ids must be a non-empty array' });
+    }
+    const result = await this.tripsService.bulkDeleteTrips(ids);
+    reply.send(result);
+  }
+
+  async bulkUpdateStatus(req: FastifyRequest, reply: FastifyReply) {
+    const { ids, status } = req.body as { ids: string[]; status: string };
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return reply.code(400).send({ error: 'ids must be a non-empty array' });
+    }
+    if (!['scheduled', 'cancelled', 'closed'].includes(status)) {
+      return reply.code(400).send({ error: 'Invalid status value' });
+    }
+    const result = await this.tripsService.bulkUpdateTripStatus(ids, status);
+    reply.send(result);
+  }
+
   async deriveLegs(req: FastifyRequest, reply: FastifyReply) {
     const { id } = req.params as { id: string };
     await this.tripsService.deriveLegs(id);

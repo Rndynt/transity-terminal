@@ -6,11 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { tripsApi, tripPatternsApi, vehiclesApi, layoutsApi, driversApi, spjApi } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
-import { Plus, CalendarDays } from 'lucide-react';
+import { Plus, CalendarDays, Trash2, CheckSquare } from 'lucide-react';
 import { useLocation } from 'wouter';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import MasterFormDialog from './MasterFormDialog';
@@ -21,6 +22,7 @@ import { todayStr } from '@/lib/date';
 import { TripStatusBadge } from '@/components/shared/StatusBadges';
 import TripScheduleEditor from './TripScheduleEditor';
 import ManifestDialog from '@/components/manifest/ManifestDialog';
+import { usePermissions } from '@/lib/permissions';
 
 interface TripFormData {
   patternId: string;
@@ -41,7 +43,12 @@ function SectionDivider({ label }: { label: string }) {
   );
 }
 
+const TODAY = todayStr();
+
 export default function TripsManager() {
+  const { can } = usePermissions();
+  const canDelete = can('master.trips.delete');
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSchedulingDialogOpen, setIsSchedulingDialogOpen] = useState(false);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
@@ -50,7 +57,7 @@ export default function TripsManager() {
   const [manifestTripId, setManifestTripId] = useState<string | null>(null);
   const [formData, setFormData] = useState<TripFormData>({
     patternId: '',
-    serviceDate: todayStr(),
+    serviceDate: TODAY,
     vehicleId: '',
     layoutId: '',
     capacity: '',
@@ -66,6 +73,10 @@ export default function TripsManager() {
   const [datePreset, setDatePreset] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // Bulk selection state
+  const [selectedTripIds, setSelectedTripIds] = useState<Set<string>>(new Set());
+  const [bulkStatusValue, setBulkStatusValue] = useState<string>('');
 
   const toggleGroup = (patternId: string) => {
     setExpandedGroups(prev => {
@@ -157,6 +168,36 @@ export default function TripsManager() {
     }
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (ids: string[]) => tripsApi.bulkDelete(ids),
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+      setSelectedTripIds(new Set());
+      const errCount = result?.errors?.length ?? 0;
+      if (errCount > 0) {
+        toast({ title: 'Sebagian berhasil dihapus', description: `${result.deleted} trip dihapus, ${errCount} gagal (ada booking aktif).`, variant: 'destructive' });
+      } else {
+        toast({ title: 'Berhasil', description: `${result.deleted} trip berhasil dihapus.` });
+      }
+    },
+    onError: (error) => {
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal menghapus trip', variant: 'destructive' });
+    }
+  });
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: string }) => tripsApi.bulkUpdateStatus(ids, status),
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+      setSelectedTripIds(new Set());
+      setBulkStatusValue('');
+      toast({ title: 'Berhasil', description: `${result.updated} trip berhasil diperbarui.` });
+    },
+    onError: (error) => {
+      toast({ title: 'Gagal', description: error instanceof Error ? error.message : 'Gagal memperbarui status', variant: 'destructive' });
+    }
+  });
+
   const deriveLegsMutation = useMutation({
     mutationFn: tripsApi.deriveLegs,
     onSuccess: () => {
@@ -176,7 +217,7 @@ export default function TripsManager() {
   });
 
   const resetForm = () => {
-    setFormData({ patternId: '', serviceDate: todayStr(), vehicleId: '', layoutId: '', capacity: '', driverId: '', status: 'scheduled' });
+    setFormData({ patternId: '', serviceDate: TODAY, vehicleId: '', layoutId: '', capacity: '', driverId: '', status: 'scheduled' });
   };
 
   const handleCreate = () => { setEditingTrip(null); resetForm(); setIsDialogOpen(true); };
@@ -247,7 +288,7 @@ export default function TripsManager() {
   };
 
   const activeFilterCount = [
-    filterStatus !== 'all',
+    filterStatus !== 'all' && filterStatus !== 'past',
     filterPatternId !== 'all',
     filterDateFrom !== '' || filterDateTo !== '',
   ].filter(Boolean).length;
@@ -261,18 +302,29 @@ export default function TripsManager() {
     setSearchQuery('');
   };
 
+  const isPastTrip = (trip: Trip) => trip.serviceDate < TODAY;
+
   const filteredTrips = useMemo(() => {
     return trips.filter(trip => {
-      const pattern = getPattern(trip.patternId);
-      const vehicle = getVehicle(trip.vehicleId);
+      const past = isPastTrip(trip);
 
-      if (filterStatus !== 'all' && (trip.status || 'scheduled') !== filterStatus) return false;
+      if (filterStatus === 'past') {
+        // Past tab: show only past trips
+        if (!past) return false;
+      } else {
+        // Active tabs: exclude past trips
+        if (past) return false;
+        if (filterStatus !== 'all' && (trip.status || 'scheduled') !== filterStatus) return false;
+      }
+
       if (filterPatternId !== 'all' && trip.patternId !== filterPatternId) return false;
       if (filterDateFrom && trip.serviceDate < filterDateFrom) return false;
       if (filterDateTo && trip.serviceDate > filterDateTo) return false;
 
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
+        const pattern = getPattern(trip.patternId);
+        const vehicle = getVehicle(trip.vehicleId);
         const patternName = pattern?.name?.toLowerCase() || '';
         const patternCode = pattern?.code?.toLowerCase() || '';
         const vehiclePlate = vehicle?.plate?.toLowerCase() || '';
@@ -283,24 +335,72 @@ export default function TripsManager() {
       }
       return true;
     }).sort((a, b) => {
-      if (a.serviceDate !== b.serviceDate) return b.serviceDate.localeCompare(a.serviceDate);
+      if (a.serviceDate !== b.serviceDate) return a.serviceDate.localeCompare(b.serviceDate);
       const aTime = getDepartureTime(a) || '';
       const bTime = getDepartureTime(b) || '';
       return aTime.localeCompare(bTime);
     });
   }, [trips, filterStatus, filterPatternId, filterDateFrom, filterDateTo, searchQuery, patterns, vehicles]);
 
+  // Count upcoming (non-past) trips by status
+  const upcomingTrips = useMemo(() => trips.filter(t => !isPastTrip(t)), [trips]);
+  const pastTripCount = useMemo(() => trips.filter(t => isPastTrip(t)).length, [trips]);
+
   const statusCounts = useMemo(() => ({
-    all: trips.length,
-    scheduled: trips.filter(t => (t.status || 'scheduled') === 'scheduled').length,
-    cancelled: trips.filter(t => t.status === 'cancelled').length,
-    closed: trips.filter(t => t.status === 'closed').length,
-  }), [trips]);
+    all: upcomingTrips.length,
+    scheduled: upcomingTrips.filter(t => (t.status || 'scheduled') === 'scheduled').length,
+    cancelled: upcomingTrips.filter(t => t.status === 'cancelled').length,
+    closed: upcomingTrips.filter(t => t.status === 'closed').length,
+    past: pastTripCount,
+  }), [upcomingTrips, pastTripCount]);
 
   const uniquePatterns = useMemo(() =>
     patterns.filter(p => trips.some(t => t.patternId === p.id)),
     [patterns, trips]
   );
+
+  // Bulk selection helpers
+  const handleToggleSelect = (id: string) => {
+    setSelectedTripIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleGroupSelect = (patternId: string, tripIds: string[], checked: boolean) => {
+    setSelectedTripIds(prev => {
+      const next = new Set(prev);
+      tripIds.forEach(id => checked ? next.add(id) : next.delete(id));
+      return next;
+    });
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectedTripIds(checked ? new Set(filteredTrips.map(t => t.id)) : new Set());
+  };
+
+  const handleBulkStatus = () => {
+    if (!bulkStatusValue || selectedTripIds.size === 0) return;
+    bulkStatusMutation.mutate({ ids: Array.from(selectedTripIds), status: bulkStatusValue });
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedTripIds.size === 0) return;
+    bulkDeleteMutation.mutate(Array.from(selectedTripIds));
+  };
+
+  const allVisibleSelected = filteredTrips.length > 0 && filteredTrips.every(t => selectedTripIds.has(t.id));
+  const someVisibleSelected = filteredTrips.some(t => selectedTripIds.has(t.id));
+
+  const TAB_CONFIG = [
+    { key: 'all', label: 'Semua' },
+    { key: 'scheduled', label: 'Terjadwal' },
+    { key: 'cancelled', label: 'Dibatalkan' },
+    { key: 'closed', label: 'Ditutup' },
+    { key: 'past', label: 'Sudah Lewat' },
+  ] as const;
 
   return (
     <div className="space-y-5" data-testid="trips-manager">
@@ -320,25 +420,32 @@ export default function TripsManager() {
       </div>
 
       {/* Status Tabs */}
-      <div className="flex items-center gap-1 border-b">
-        {(['all', 'scheduled', 'cancelled', 'closed'] as const).map(status => {
-          const labels: Record<string, string> = { all: 'Semua', scheduled: 'Terjadwal', cancelled: 'Dibatalkan', closed: 'Ditutup' };
-          const count = statusCounts[status];
-          const isActive = filterStatus === status;
+      <div className="flex items-center gap-1 border-b overflow-x-auto">
+        {TAB_CONFIG.map(({ key, label }) => {
+          const count = statusCounts[key];
+          const isActive = filterStatus === key;
+          const isPastTab = key === 'past';
           return (
             <button
-              key={status}
-              onClick={() => setFilterStatus(status)}
-              data-testid={`filter-status-${status}`}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              key={key}
+              onClick={() => {
+                setFilterStatus(key);
+                setSelectedTripIds(new Set());
+              }}
+              data-testid={`filter-status-${key}`}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
                 isActive
-                  ? 'border-primary text-primary'
+                  ? isPastTab
+                    ? 'border-muted-foreground text-muted-foreground'
+                    : 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
               }`}
             >
-              {labels[status]}
+              {label}
               <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                isActive ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                isActive
+                  ? isPastTab ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'
+                  : 'bg-muted text-muted-foreground'
               }`}>
                 {count}
               </span>
@@ -366,6 +473,71 @@ export default function TripsManager() {
         getPatternName={(id) => getPattern(id)?.name}
       />
 
+      {/* Bulk Action Bar */}
+      {filteredTrips.length > 0 && (
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
+          someVisibleSelected
+            ? 'bg-primary/5 border-primary/20'
+            : 'bg-muted/30 border-border'
+        }`}>
+          <Checkbox
+            checked={allVisibleSelected}
+            data-state={someVisibleSelected && !allVisibleSelected ? 'indeterminate' : undefined}
+            onCheckedChange={(checked) => handleSelectAll(!!checked)}
+          />
+          {selectedTripIds.size > 0 ? (
+            <>
+              <span className="text-sm font-medium text-foreground">
+                <CheckSquare className="h-3.5 w-3.5 inline mr-1 text-primary" />
+                {selectedTripIds.size} trip dipilih
+              </span>
+              <div className="flex items-center gap-2 ml-auto flex-wrap">
+                <Select value={bulkStatusValue} onValueChange={setBulkStatusValue}>
+                  <SelectTrigger className="w-36 h-8 text-sm">
+                    <SelectValue placeholder="Ubah status..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="scheduled">Terjadwal</SelectItem>
+                    <SelectItem value="cancelled">Dibatalkan</SelectItem>
+                    <SelectItem value="closed">Ditutup</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  onClick={handleBulkStatus}
+                  disabled={!bulkStatusValue || bulkStatusMutation.isPending}
+                  className="h-8"
+                >
+                  {bulkStatusMutation.isPending ? 'Memproses...' : 'Terapkan'}
+                </Button>
+                {canDelete && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleteMutation.isPending}
+                    className="h-8"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                    {bulkDeleteMutation.isPending ? 'Menghapus...' : 'Hapus'}
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedTripIds(new Set())}
+                  className="h-8"
+                >
+                  Batalkan
+                </Button>
+              </div>
+            </>
+          ) : (
+            <span className="text-xs text-muted-foreground">Centang untuk memilih trip</span>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <Card>
         <CardContent className="p-0">
@@ -379,13 +551,18 @@ export default function TripsManager() {
               <CalendarDays className="w-10 h-10 opacity-25" />
               <div className="text-center">
                 <p className="text-sm font-medium">
-                  {searchQuery || activeFilterCount > 0 ? 'Tidak ada trip yang cocok' : 'Belum ada data trip'}
+                  {filterStatus === 'past'
+                    ? 'Tidak ada trip yang sudah lewat'
+                    : searchQuery || activeFilterCount > 0
+                    ? 'Tidak ada trip yang cocok'
+                    : 'Belum ada data trip'}
                 </p>
                 <p className="text-xs mt-1 opacity-70">
-                  {searchQuery || activeFilterCount > 0
+                  {filterStatus === 'past'
+                    ? 'Trip yang tanggalnya sudah lewat akan muncul di sini'
+                    : searchQuery || activeFilterCount > 0
                     ? 'Coba ubah kata kunci atau filter yang digunakan'
-                    : 'Klik "Tambah Trip" untuk membuat jadwal perjalanan baru'
-                  }
+                    : 'Klik "Tambah Trip" untuk membuat jadwal perjalanan baru'}
                 </p>
               </div>
               {(searchQuery || activeFilterCount > 0) && (
@@ -415,6 +592,10 @@ export default function TripsManager() {
               isCreatingSpj={createSpjMutation.isPending}
               isDerivingLegs={deriveLegsMutation.isPending}
               isPrecomputingInventory={precomputeSeatInventoryMutation.isPending}
+              selectedTripIds={selectedTripIds}
+              onToggleSelect={handleToggleSelect}
+              onGroupSelect={handleGroupSelect}
+              canDelete={canDelete}
             />
           )}
         </CardContent>
