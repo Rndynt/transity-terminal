@@ -151,6 +151,10 @@ export const priceRulesApi = {
   listTripExceptions: (tripId: string) => fetch(`/api/pricing/trip-exceptions/${tripId}`).then(r => assertOk<any[]>(r)),
   upsertTripException: (data: any) => apiRequest('PUT', '/api/pricing/trip-exceptions', data).then(res => res.json()),
   deleteTripException: (id: string) => apiRequest('DELETE', `/api/pricing/trip-exceptions/${id}`),
+  // Exception-aware priced OD matrix for one trip: { [originStopId]: { [destinationStopId]: price } }.
+  // Powers RouteTimeline's OD-aware Naik/Turun gating — same authority as
+  // the App API's GET /api/app/trips/:id `pricedMatrix` field.
+  getTripPricedMatrix: (tripId: string) => fetch(`/api/pricing/trip-matrix/${tripId}`).then(r => assertOk<Record<string, Record<string, number>>>(r)),
 };
 
 // Bookings API

@@ -4,10 +4,14 @@
  * OD-matrix pricing.
  *
  * DB-dependent parts (resolvePassengerCell, hasAnyPricedDestinationFromOrigin,
- * getEffectivePatternMatrix's row fetch, consumer parity across
+ * getEffectivePatternMatrix's row fetch, buildPricedMatrix's DB-fetching
+ * wrapper + getTripExceptionsForTrip, consumer parity across
  * pricing.service/app.service/scheduleSnapshot, and the 409 optimistic-lock
  * concurrency test) need a live Postgres connection and were NOT run in
  * this sandbox — see the final report's "known limitations" section.
+ * buildPricedMatrixCore is the pure logic extracted FROM buildPricedMatrix
+ * specifically so this precedence/eligibility logic CAN be covered here
+ * without a DB — see the "buildPricedMatrixCore" describe block below.
  *
  * Run: `npx vitest run tests/priceRules.resolver.test.ts`
  */
@@ -19,6 +23,8 @@ import {
   pickActiveSeasonalOrRegular,
   extractMatrixGrid,
   serializeMatrixGrid,
+  buildPricedMatrixCore,
+  type PricedMatrixStopInput,
 } from "@server/modules/priceRules/priceRules.resolver";
 import type { PriceRuleBlob } from "@shared/schema/pricing";
 
@@ -166,5 +172,110 @@ describe("extractMatrixGrid / serializeMatrixGrid round-trip", () => {
     expect(cells.find(c => c.originStopId === "jkt" && c.destinationStopId === "bdg")?.price).toBe(95000);
     expect(cells.find(c => c.originStopId === "bdg" && c.destinationStopId === "jog")?.price).toBe(100000);
     expect(cells.find(c => c.originStopId === "jkt" && c.destinationStopId === "jog")?.price).toBe(200000);
+  });
+});
+
+describe("buildPricedMatrixCore (exception-aware priced matrix)", () => {
+  // Same 3-city pattern used in the OD-aware pricedMatrix spec's own
+  // verification example: Jakarta pickups (ATR, JTW) -> Bandung
+  // (PST, CHP, DPU) -> Semarang drop (KAY). ATR/JTW are board-only
+  // (first-city pickups), KAY is alight-only (final destination).
+  const stops: PricedMatrixStopInput[] = [
+    { stopId: "ATR", stopSequence: 1, boardingAllowed: true, alightingAllowed: false, city: "Jakarta" },
+    { stopId: "JTW", stopSequence: 2, boardingAllowed: true, alightingAllowed: false, city: "Jakarta" },
+    { stopId: "PST", stopSequence: 3, boardingAllowed: true, alightingAllowed: true, city: "Bandung" },
+    { stopId: "CHP", stopSequence: 4, boardingAllowed: true, alightingAllowed: true, city: "Bandung" },
+    { stopId: "DPU", stopSequence: 5, boardingAllowed: true, alightingAllowed: true, city: "Bandung" },
+    { stopId: "KAY", stopSequence: 6, boardingAllowed: false, alightingAllowed: true, city: "Semarang" },
+  ];
+
+  // CHP->KAY is deliberately absent (unpriced transit OD). DPU->KAY is
+  // deliberately absent from the PATTERN tier only, so it exercises the
+  // global-tier fallback. PST|CHP (intra-city, both Bandung, both
+  // boardable+alightable) IS priced here on purpose: it isolates the
+  // intra-city filter as the ONLY reason it gets excluded below — unlike
+  // ATR/JTW, which are board-only and would be excluded by the
+  // boarding/alighting filters regardless of the intra-city flag.
+  const patternMatrix: PriceRuleBlob = {
+    version: 1,
+    cells: {
+      "ATR|PST": { price: 150000 },
+      "ATR|CHP": { price: 150000 },
+      "ATR|DPU": { price: 150000 },
+      "ATR|KAY": { price: 250000 },
+      "JTW|PST": { price: 150000 },
+      "JTW|KAY": { price: 250000 },
+      "PST|KAY": { price: 120000 },
+      "PST|CHP": { price: 45000 },
+    },
+  };
+
+  const globalMatrix: PriceRuleBlob = {
+    version: 1,
+    cells: {
+      "DPU|KAY": { price: 60000 },
+    },
+  };
+
+  it("includes a priced main OD (ATR Jakarta -> KAY Semarang)", () => {
+    const matrix = buildPricedMatrixCore({
+      stops, patternMatrix, globalMatrix, tripExceptions: new Map(), allowIntraCityBooking: false,
+    });
+    expect(matrix["ATR"]["KAY"]).toBe(250000);
+  });
+
+  it("omits an unpriced transit OD (CHP -> KAY has no price at any tier)", () => {
+    const matrix = buildPricedMatrixCore({
+      stops, patternMatrix, globalMatrix, tripExceptions: new Map(), allowIntraCityBooking: false,
+    });
+    expect(matrix["CHP"]?.["KAY"]).toBeUndefined();
+  });
+
+  it("a trip-exception overrides the pattern price for the same OD pair", () => {
+    const tripExceptions = new Map([["ATR|KAY", 230000]]);
+    const matrix = buildPricedMatrixCore({
+      stops, patternMatrix, globalMatrix, tripExceptions, allowIntraCityBooking: false,
+    });
+    expect(matrix["ATR"]["KAY"]).toBe(230000); // not the pattern's 250000
+  });
+
+  it("falls back to the global tier when the pattern has no cell for that pair", () => {
+    const matrix = buildPricedMatrixCore({
+      stops, patternMatrix, globalMatrix, tripExceptions: new Map(), allowIntraCityBooking: false,
+    });
+    expect(matrix["DPU"]["KAY"]).toBe(60000);
+  });
+
+  it("excludes an intra-city pair (PST -> CHP, both Bandung) when allowIntraCityBooking=false, even though it IS priced", () => {
+    const matrix = buildPricedMatrixCore({
+      stops, patternMatrix, globalMatrix, tripExceptions: new Map(), allowIntraCityBooking: false,
+    });
+    expect(matrix["PST"]?.["CHP"]).toBeUndefined();
+  });
+
+  it("includes that same intra-city pair once allowIntraCityBooking=true", () => {
+    const matrix = buildPricedMatrixCore({
+      stops, patternMatrix, globalMatrix, tripExceptions: new Map(), allowIntraCityBooking: true,
+    });
+    expect(matrix["PST"]["CHP"]).toBe(45000);
+  });
+
+  it("never uses an alight-only stop (KAY) as an origin, or a board-only stop (ATR/JTW) as a destination", () => {
+    const matrix = buildPricedMatrixCore({
+      stops, patternMatrix, globalMatrix, tripExceptions: new Map(), allowIntraCityBooking: false,
+    });
+    expect(matrix["KAY"]).toBeUndefined();
+    for (const originStopId of Object.keys(matrix)) {
+      expect(matrix[originStopId]["ATR"]).toBeUndefined();
+      expect(matrix[originStopId]["JTW"]).toBeUndefined();
+    }
+  });
+
+  it("omits an origin entirely when it has no priced+bookable destination (sparse map)", () => {
+    const empty: PriceRuleBlob = { version: 1, cells: {} };
+    const matrix = buildPricedMatrixCore({
+      stops, patternMatrix: empty, globalMatrix: empty, tripExceptions: new Map(), allowIntraCityBooking: false,
+    });
+    expect(matrix).toEqual({});
   });
 });

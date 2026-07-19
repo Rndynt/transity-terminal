@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { tripsApi, stopsApi, tripPatternsApi } from '@/lib/api';
+import { tripsApi, stopsApi, tripPatternsApi, priceRulesApi } from '@/lib/api';
 import {
   Clock, ArrowDown, MapPin, ArrowRight, Check, ChevronRight, Loader2, AlertTriangle
 } from 'lucide-react';
@@ -115,6 +115,27 @@ export default function RouteTimeline({
   const currentPattern = patterns.find(p => p.id === trip.patternId);
   const allowIntraCityBooking = currentPattern?.allowIntraCityBooking ?? false;
 
+  // OD-aware pricing gate: same exception-accurate matrix the App API
+  // exposes on trip detail (GET /api/app/trips/:id `pricedMatrix`),
+  // fetched here from its CSO-facing sibling endpoint — CSO uses session
+  // auth and can't call the App API directly, so this hits
+  // PriceRulesService.getPricedMatrixForTrip instead, which delegates to
+  // the SAME buildPricedMatrix. Used below to grey out Naik/Turun
+  // combinations that would form an unpriced OD, so a CSO can never reach
+  // the booking call that would otherwise 422 on NO_PRICE_RULE.
+  const { data: pricedMatrix = {}, isSuccess: pricedMatrixLoaded } = useQuery<Record<string, Record<string, number>>>({
+    queryKey: ['/api/pricing/trip-matrix', trip.id],
+    queryFn: () => priceRulesApi.getTripPricedMatrix(trip.id),
+    enabled: !!trip.id,
+  });
+
+  // true kalau originStopId -> destinationStopId ADA di pricedMatrix dengan
+  // harga > 0. Fail-open (anggap priced) selagi query belum selesai, biar
+  // tombol tidak sekejap nge-grey-out semua lalu "lompat" begitu data
+  // datang — 422 dari server tetap jadi penjaga terakhir kalau ada race.
+  const isOdPriced = (originStopId: string, destinationStopId: string) =>
+    !pricedMatrixLoaded || (pricedMatrix[originStopId]?.[destinationStopId] ?? 0) > 0;
+
   const getStopException = (stopId: string) => stopExceptions.find(e => e.stopId === stopId);
 
   const getStopById = (stopId: string) => stops.find(s => s.id === stopId);
@@ -132,6 +153,25 @@ export default function RouteTimeline({
     () => [...stopTimes].sort((a, b) => a.stopSequence - b.stopSequence),
     [stopTimes]
   );
+
+  // Dipakai saat BELUM ada titik naik/turun yang dipilih sama sekali: stop
+  // yang sama sekali tidak muncul sebagai origin manapun, atau tidak
+  // pernah muncul sebagai destination manapun, di pricedMatrix — grey-out
+  // preemptif sebelum CSO sempat mencoba memilihnya.
+  const stopsWithNoPricedDestination = useMemo(() => {
+    if (!pricedMatrixLoaded) return new Set<string>();
+    const withDest = new Set(Object.keys(pricedMatrix));
+    return new Set(sortedStopTimes.map(st => st.stopId).filter(id => !withDest.has(id)));
+  }, [pricedMatrix, pricedMatrixLoaded, sortedStopTimes]);
+
+  const stopsWithNoPricedOrigin = useMemo(() => {
+    if (!pricedMatrixLoaded) return new Set<string>();
+    const withOrigin = new Set<string>();
+    for (const destinations of Object.values(pricedMatrix)) {
+      for (const destinationStopId of Object.keys(destinations)) withOrigin.add(destinationStopId);
+    }
+    return new Set(sortedStopTimes.map(st => st.stopId).filter(id => !withOrigin.has(id)));
+  }, [pricedMatrix, pricedMatrixLoaded, sortedStopTimes]);
 
   useEffect(() => {
     if (autoSelectDone.current) return;
@@ -176,7 +216,14 @@ export default function RouteTimeline({
     : null;
   const originClosed = selectedOrigin ? getStopException(selectedOrigin.id)?.disableBoarding : false;
   const destClosed = selectedDestination ? getStopException(selectedDestination.id)?.disableAlighting : false;
-  const isValid = legCount > 0 && !originClosed && !destClosed;
+  // legCount > 0 guard: kalau origin/dest sama stop (leg tidak valid), itu
+  // sudah pesan error tersendiri di bawah — jangan tumpang tindih dengan
+  // pesan "Belum Ada Harga" (pricedMatrix memang tidak pernah punya entry
+  // stop->dirinya sendiri, jadi tanpa guard ini originDestUnpriced bisa
+  // salah ke-true untuk kasus itu juga).
+  const originDestUnpriced = !!(selectedOrigin && selectedDestination && legCount > 0
+    && !isOdPriced(selectedOrigin.id, selectedDestination.id));
+  const isValid = legCount > 0 && !originClosed && !destClosed && !originDestUnpriced;
 
   const isInSelectedRange = (i: number) => {
     if (originIdx < 0 || destIdx < 0) return false;
@@ -269,6 +316,17 @@ export default function RouteTimeline({
           // guard rute pendek dalam-kota (lihat isSameCityBlocked).
           const blockedByCityAsOrigin = !isDest && isSameCityBlocked(stop, selectedDestination);
           const blockedByCityAsDest = !isOrigin && isSameCityBlocked(stop, selectedOrigin);
+          // OD-aware "Belum Ada Harga" gate, mirroring blockedByCityAsOrigin/
+          // Dest exactly: kalau lawan pasangannya sudah dipilih, cek pasangan
+          // spesifik itu; kalau belum ada yang dipilih sama sekali, cek
+          // apakah stop ini SECARA TOTAL tidak pernah punya OD berharga ke
+          // arah manapun (preemptive grey-out).
+          const notPricedAsOrigin = !isDest && (
+            selectedDestination ? !isOdPriced(stop.id, selectedDestination.id) : stopsWithNoPricedDestination.has(stop.id)
+          );
+          const notPricedAsDest = !isOrigin && (
+            selectedOrigin ? !isOdPriced(selectedOrigin.id, stop.id) : stopsWithNoPricedOrigin.has(stop.id)
+          );
           const inRange = isInSelectedRange(index);
 
           const nextStopTime = sortedStopTimes[index + 1];
@@ -369,6 +427,13 @@ export default function RouteTimeline({
                       >
                         Naik
                       </span>
+                    ) : notPricedAsOrigin ? (
+                      <span
+                        title="Belum Ada Harga — kombinasi titik naik & turun ini belum diisi harga"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-50 border border-red-100 text-red-300 cursor-not-allowed inline-flex items-center gap-1"
+                      >
+                        <AlertTriangle className="w-3 h-3" />Naik
+                      </span>
                     ) : (
                       <button
                         onClick={() => onOriginSelect(stop, stopTime.stopSequence)}
@@ -401,6 +466,13 @@ export default function RouteTimeline({
                         className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
                       >
                         Turun
+                      </span>
+                    ) : notPricedAsDest ? (
+                      <span
+                        title="Belum Ada Harga — kombinasi titik naik & turun ini belum diisi harga"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-50 border border-red-100 text-red-300 cursor-not-allowed inline-flex items-center gap-1"
+                      >
+                        <AlertTriangle className="w-3 h-3" />Turun
                       </span>
                     ) : (
                       <button
@@ -479,11 +551,19 @@ export default function RouteTimeline({
 
             {!isValid && (
               <div className="px-4 py-2 bg-rose-50 border-t border-rose-200 flex items-center gap-2">
-                <span className="text-rose-500 text-sm font-bold">⚠</span>
+                {originDestUnpriced ? (
+                  <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-red-100 text-red-700 rounded-md text-[10px] font-semibold flex-shrink-0">
+                    <AlertTriangle className="w-3 h-3" />Belum Ada Harga
+                  </span>
+                ) : (
+                  <span className="text-rose-500 text-sm font-bold">⚠</span>
+                )}
                 <p className="text-xs text-rose-700 font-medium">
                   {originClosed || destClosed
                     ? 'Titik yang dipilih sedang ditutup oleh operasional. Pilih stop lain.'
-                    : 'Titik naik dan turun tidak boleh sama. Pilih stop yang berbeda.'}
+                    : legCount <= 0
+                    ? 'Titik naik dan turun tidak boleh sama. Pilih stop yang berbeda.'
+                    : 'Rute ini belum memiliki harga. Pilih titik naik atau turun yang lain.'}
                 </p>
               </div>
             )}

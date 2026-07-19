@@ -109,6 +109,25 @@ X-Service-Key: sk_live_xxx
 - **Concurrent materialize aman** — jika dua request materialize masuk bersamaan untuk base+tanggal yang sama, sistem menggunakan database unique constraint untuk memastikan trip hanya dibuat sekali
 - **Trip ID dari response materialize selalu berupa UUID real** (bukan `virtual-*` lagi) — gunakan UUID ini untuk semua request selanjutnya
 
+### (Opsional) Pilih Titik Naik/Turun Selain Pasangan Default
+
+Secara default, `origin`/`destination` dari hasil Step 1 SUDAH merupakan satu pasangan OD yang tervalidasi dan berharga — cukup teruskan langsung ke Step 3/4 tanpa langkah tambahan apa pun.
+
+Kalau Console ingin menawarkan pemilihan titik naik/turun lain di sepanjang rute trip (bukan cuma pasangan kota yang dicari), panggil:
+
+```http
+GET /api/app/trips/{tripId}?serviceDate={serviceDate}
+X-Service-Key: sk_live_xxx
+```
+
+> Untuk trip virtual, materialize dulu (Step selanjutnya di bawah) baru panggil endpoint ini dengan `tripId` UUID hasil materialize — trip virtual yang belum dimaterialize akan mengembalikan error di endpoint ini juga.
+
+Response memuat `stops[]` (urutan lengkap semua titik trip, dengan `boardingAllowed`/`alightingAllowed`) DAN `pricedMatrix`: `{ [originStopId]: { [destinationStopId]: price } }`.
+
+**Wajib divalidasi sebelum booking:** pasangan naik/turun yang dipilih user HARUS ada di `pricedMatrix[originStopId]?.[destinationStopId]` dengan nilai `> 0`. Kalau pasangan itu ABSEN dari `pricedMatrix` (baik key origin-nya sendiri tidak ada, atau ada tapi destination-nya tidak ada di dalamnya), pasangan tersebut TIDAK bisa dibooking — jangan tampilkan sebagai opsi, atau nonaktifkan opsinya di UI. Ini satu-satunya sumber kebenaran untuk "bisa dibooking atau tidak"; jangan menyimpulkan dari `boardingAllowed`/`alightingAllowed` saja (dua stop yang sama-sama boleh naik/turun tetap bisa TIDAK priced sebagai pasangan, misalnya segmen transit yang belum diisi harga, atau pasangan dalam kota yang tidak dijual pola ini).
+
+Kalau Console tetap mengirim pasangan yang tidak priced ke `POST /api/app/bookings` (mis. karena race dengan perubahan harga), API akan menolak dengan `422 NO_PRICE_RULE` (lihat tabel Error Handling) — bukan lagi 500.
+
 ### Step 2: Materialize Trip Virtual (Jika `isVirtual: true`)
 
 Langkah ini **wajib** jika trip yang dipilih user berstatus virtual. Jika trip sudah real (`isVirtual: false`), langkah ini dilewati.
@@ -448,8 +467,13 @@ Field penting di response list:
 | `404` | `Trip not found` | `tripId` tidak valid (atau belum dimaterialize untuk virtual trip) |
 | `404` | `Trip has no layout` | Trip belum dikonfigurasi seatmap oleh operator |
 | `404` | `Booking not found` | Booking ID tidak ditemukan |
+| `422` | `Price not set for selected route` (`code: NO_PRICE_RULE`) | OD yang dipilih belum punya harga di matrix — validasi `pricedMatrix` sebelum booking (lihat bagian "Pilih Titik Naik/Turun") mencegah ini terjadi |
+| `422` | `Route not allowed for this pattern` (`code: intra-city-not-allowed`) | Pasangan naik/turun sama-sama di kota yang sama dan pola belum mengizinkan rute dalam-kota |
+| `422` | `Stop temporarily closed` (`code: stop-closed-by-ops`) | Titik naik/turun sedang ditutup operasional untuk tanggal ini (schedule exception) |
 | `422` | `Base trip tidak eligible...` | Materialize gagal — jadwal tidak berlaku di tanggal ini |
 | `503` | `Payment webhook not configured` | `PAYMENT_WEBHOOK_SECRET` belum diset di terminal |
+
+> **Catatan `422 NO_PRICE_RULE` / `intra-city-not-allowed` / `stop-closed-by-ops`:** ketiganya HTTP 422 dengan body `{ error, code, details }` — `code` selalu mesin-terbaca dan stabil (jangan parse `error`/`details` untuk logic, keduanya cuma untuk ditampilkan/dilog). Response ini berlaku di `POST /api/bookings` maupun `POST /api/bookings/pending`.
 
 ---
 
@@ -514,6 +538,9 @@ Contoh terjemahan:
 | `Minimum purchase amount is X` | `Pembelian minimal Rp X untuk menggunakan voucher ini.` |
 | `Trip not found` | `Perjalanan tidak ditemukan. Silakan cari ulang.` |
 | `Booking not found` | `Booking tidak ditemukan.` |
+| `Price not set for selected route` (`NO_PRICE_RULE`) | `Rute ini belum tersedia untuk dipesan. Silakan pilih rute lain.` |
+| `Route not allowed for this pattern` (`intra-city-not-allowed`) | `Titik naik dan turun yang dipilih tidak bisa dipesan untuk rute ini. Silakan pilih titik lain.` |
+| `Stop temporarily closed` (`stop-closed-by-ops`) | `Titik naik/turun sedang ditutup sementara. Silakan pilih titik lain atau coba lagi nanti.` |
 | `Base trip tidak eligible...` | `Jadwal tidak tersedia untuk tanggal ini. Silakan pilih tanggal lain.` |
 | `Payment already processed` | (Anggap sukses — jangan tampilkan error) |
 | `Validation failed` | `Data tidak lengkap. Silakan periksa kembali.` |

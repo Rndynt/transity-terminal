@@ -25,7 +25,7 @@ import {
 } from "@modules/bookings/booking.helpers";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
 import { AtomicHoldService } from "@modules/bookings/atomicHold.service";
-import { resolvePassengerCell } from "@modules/priceRules/priceRules.resolver";
+import { resolvePassengerCell, buildPricedMatrix } from "@modules/priceRules/priceRules.resolver";
 import { createComponentLogger } from "@server/lib/logger";
 
 const log = createComponentLogger("app.service");
@@ -86,6 +86,22 @@ interface TripSearchResult {
   appliedPromo: AppliedPromoSummary | null;
   stops: TripStopPointWithCity[];
   isVirtual?: boolean;
+  // Deliberately NO `pricedMatrix` field here (see TripDetailResponse for
+  // that). searchTrips takes originCity/destinationCity (see
+  // searchTripsSchema in app.controller.ts), not stop IDs, and every row
+  // already carries exactly ONE resolved origin/destination pair — there is
+  // no stop picker at this stage. Only createBookingSchema takes
+  // originStopId/destinationStopId (+ seatNo), meaning any client picking a
+  // pickup/drop OTHER than the default pair returned here must already be
+  // calling GET /api/app/trips/:id first (which HAS `pricedMatrix`) to get
+  // the trip's full stop list — so that endpoint is the right (and only)
+  // place to validate a custom OD pair. Adding a full per-row sparse matrix
+  // to every search result would multiply payload size for multi-city
+  // patterns without a consumer that reads it. If a future search UI adds
+  // its own stop picker directly on result rows, move/duplicate the
+  // buildPricedMatrix call from getTripDetail into searchRealTrips /
+  // searchVirtualTrips at that point — don't reintroduce coarse per-stop
+  // booleans instead.
 }
 
 interface TripReviewItem {
@@ -190,6 +206,20 @@ interface TripDetailResponse {
     boardingAllowed: boolean;
     alightingAllowed: boolean;
   }>;
+  /**
+   * Exception-aware, sparse, per-origin priced OD matrix:
+   * `pricedMatrix[originStopId][destinationStopId] = price`. A pair
+   * present with price>0 is bookable as-is; an ABSENT pair (either the
+   * origin key itself, or the destination key inside it) means that OD is
+   * not bookable — unpriced, boarding/alighting-closed, or blocked by the
+   * pattern's intra-city rule. Consumers picking a custom pickup/drop pair
+   * (not just the default search-matched OD) MUST validate the exact
+   * selected origin->destination against `pricedMatrix[origin]?.[destination]`
+   * before calling POST /api/app/bookings — this replaces any need for
+   * per-stop `*Availability` booleans. See docs/FEATURES.md "OD-Matrix"
+   * section and TRANSITY_CONSOLE_INTEGRATION.md for the full contract.
+   */
+  pricedMatrix: Record<string, Record<string, number>>;
   reviews: { count: number; avgRating: number };
 }
 
@@ -933,6 +963,28 @@ export class AppService {
       }
     );
 
+    // Exception-aware priced OD matrix, built from the SAME trip/pattern/
+    // stopTimes already loaded above for stopsData (no extra trip/pattern/
+    // stopTimes queries — buildPricedMatrix only adds its own pattern-
+    // matrix + global-matrix + trip-exceptions fetches). trip.patternId is
+    // required by the schema (NOT NULL), so this only ever skips when the
+    // pattern row itself is missing/soft-deleted.
+    const pricedMatrix = trip.patternId
+      ? await buildPricedMatrix({
+          patternId: trip.patternId,
+          tripId: resolvedId,
+          serviceDate: String(trip.serviceDate),
+          stops: stopsData.map(s => ({
+            stopId: s.stopId,
+            stopSequence: s.sequence,
+            boardingAllowed: s.boardingAllowed,
+            alightingAllowed: s.alightingAllowed,
+            city: s.city,
+          })),
+          allowIntraCityBooking: pattern?.allowIntraCityBooking ?? false,
+        })
+      : {};
+
     const reviewStats = await db.execute(sql`
       SELECT COUNT(*)::int as count, COALESCE(AVG(rating), 0)::numeric(3,1) as avg_rating
       FROM reviews WHERE trip_id = ${resolvedId}
@@ -965,6 +1017,7 @@ export class AppService {
         available: totalSeats - seatsSold,
       },
       stops: stopsData,
+      pricedMatrix,
       reviews: {
         count: Number(reviewStats.rows[0]?.count || 0),
         avgRating: Number(reviewStats.rows[0]?.avg_rating || 0)

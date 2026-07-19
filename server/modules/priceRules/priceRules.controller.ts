@@ -154,6 +154,25 @@ export class PriceRulesController {
     reply.send(list);
   }
 
+  /**
+   * Exception-aware priced OD matrix for one trip — powers CSO's "Pilih
+   * Rute" (RouteTimeline.tsx) OD-aware Naik/Turun gating. Unlike
+   * pricedDestinations above (pattern+global only), this is accurate
+   * against trip-exceptions too, matching exactly what booking will
+   * actually charge/allow. Same authority as GET /api/app/trips/:id's
+   * pricedMatrix field (both call PriceRulesService.getPricedMatrixForTrip
+   * -> buildPricedMatrix), so CSO and the App API never disagree.
+   */
+  async tripPricedMatrix(req: FastifyRequest, reply: FastifyReply) {
+    try {
+      const { tripId } = req.params as { tripId: string };
+      const matrix = await this.service.getPricedMatrixForTrip(tripId);
+      reply.send(matrix);
+    } catch (err) {
+      this.handleError(req, reply, err);
+    }
+  }
+
   private handleError(req: FastifyRequest, reply: FastifyReply, err: unknown) {
     req.log.error({ err }, 'Price rule error');
     if (err instanceof StalePriceRuleError) {

@@ -85,6 +85,11 @@ type BookingFlowError = Error & {
   statusCode?: number;
   errors?: unknown;
   issues?: Array<{ message?: string }>;
+  // Machine-readable error code (e.g. 'NO_PRICE_RULE', 'intra-city-not-allowed',
+  // 'stop-closed-by-ops') set by booking.helpers.ts. Confirmed NOT stripped by
+  // asBookingError below — it only wraps non-Error throwables, an already-Error
+  // instance (and its .message/.code) passes through untouched.
+  code?: string;
 };
 
 function asBookingError(e: unknown): BookingFlowError {
@@ -231,7 +236,41 @@ export class BookingsController {
           details: error.message
         });
       }
-      
+
+      // Unpriced OD (server safety-net): never surface this as an opaque
+      // 500 — it's a client-correctable business error (route/date needs a
+      // price rule), not a server fault. All three checks because the
+      // signal can arrive either as .code (booking.helpers.ts's
+      // quoteFareForBooking, fixed to preserve it) or as a raw
+      // message === 'NO_PRICE_RULE' from any other caller of
+      // pricingService.quoteFare that doesn't go through that wrapper.
+      if (error.code === 'NO_PRICE_RULE' || error.message === 'NO_PRICE_RULE' || error.message.includes('NO_PRICE_RULE')) {
+        return reply.code(422).send({
+          error: 'Price not set for selected route',
+          code: 'NO_PRICE_RULE',
+          details: error.message
+        });
+      }
+
+      // Intra-city / stop-closed-by-ops (booking.helpers.ts validateBoardingAlighting):
+      // also client-correctable business errors, not server faults — map to
+      // 422 with the SAME code the helper already threw rather than 500.
+      if (error.code === 'intra-city-not-allowed') {
+        return reply.code(422).send({
+          error: 'Route not allowed for this pattern',
+          code: error.code,
+          details: error.message
+        });
+      }
+
+      if (error.code === 'stop-closed-by-ops') {
+        return reply.code(422).send({
+          error: 'Stop temporarily closed',
+          code: error.code,
+          details: error.message
+        });
+      }
+
       // Generic server error
       reply.code(500).send({
         error: 'Internal server error',
@@ -375,6 +414,34 @@ export class BookingsController {
         return reply.code(400).send({
           error: 'Seat hold validation failed',
           code: 'SEAT_NOT_HELD',
+          details: error.message
+        });
+      }
+
+      // Same 422 safety-net as create() above — createPendingBooking also
+      // reaches pricing via calculateBookingTotal -> quoteFareForBooking,
+      // so an unpriced OD must not fall through to a generic 500 here
+      // either. See the comments on the equivalent branches in create().
+      if (error.code === 'NO_PRICE_RULE' || error.message === 'NO_PRICE_RULE' || error.message.includes('NO_PRICE_RULE')) {
+        return reply.code(422).send({
+          error: 'Price not set for selected route',
+          code: 'NO_PRICE_RULE',
+          details: error.message
+        });
+      }
+
+      if (error.code === 'intra-city-not-allowed') {
+        return reply.code(422).send({
+          error: 'Route not allowed for this pattern',
+          code: error.code,
+          details: error.message
+        });
+      }
+
+      if (error.code === 'stop-closed-by-ops') {
+        return reply.code(422).send({
+          error: 'Stop temporarily closed',
+          code: error.code,
           details: error.message
         });
       }

@@ -67,7 +67,16 @@ export async function quoteFareForBooking(
     return await pricingService.quoteFare(tripId, originSeq, destinationSeq);
   } catch (err) {
     if (err instanceof Error && err.message === 'NO_PRICE_RULE') {
-      throw new Error('Trip ini belum memiliki aturan harga. Hubungi admin untuk mengatur harga sebelum memesan tiket.');
+      // Rethrown with a user-friendly message (unchanged, in case anything
+      // already displays .message directly), but the machine-readable
+      // NO_PRICE_RULE signal must survive on .code — otherwise
+      // bookings.controller.ts's `error.code === 'NO_PRICE_RULE'` branch
+      // can never match and this falls through to a generic 500.
+      const friendly: Error & { code?: string } = new Error(
+        'Trip ini belum memiliki aturan harga. Hubungi admin untuk mengatur harga sebelum memesan tiket.'
+      );
+      friendly.code = 'NO_PRICE_RULE';
+      throw friendly;
     }
     throw err;
   }

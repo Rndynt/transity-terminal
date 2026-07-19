@@ -135,6 +135,30 @@ export function serializeMatrixGrid(
 // PASSENGER-SPECIFIC FETCH + RESOLVE
 // ============================================================================
 
+/**
+ * Bulk-fetches every non-deleted trip-exception row for ONE trip in a
+ * single query, keyed by matrixCellKey("originStopId|destinationStopId")
+ * -> price. Used by buildPricedMatrix so building the whole matrix stays
+ * O(1) DB round-trips for exceptions regardless of stop count — calling
+ * the per-OD getTripExceptionPrice below once per candidate pair would be
+ * N+1 (N = number of upper-triangular stop pairs on the pattern).
+ */
+export async function getTripExceptionsForTrip(tripId: string): Promise<Map<string, number>> {
+  const rows = await db.select().from(priceRuleExceptions)
+    .where(and(
+      eq(priceRuleExceptions.tripId, tripId),
+      isNull(priceRuleExceptions.deletedAt),
+    ));
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    const price = Number(row.price);
+    if (Number.isFinite(price) && price > 0) {
+      map.set(matrixCellKey(row.originStopId, row.destinationStopId), price);
+    }
+  }
+  return map;
+}
+
 async function getTripExceptionPrice(tripId: string, originStopId: string, destinationStopId: string): Promise<number> {
   const [row] = await db.select().from(priceRuleExceptions)
     .where(and(
@@ -274,5 +298,112 @@ export async function listPricedDestinationsFromOrigin(args: {
     const patternPrice = getMatrixCellPrice(patternBlob, originStopId, destinationStopId);
     const price = patternPrice > 0 ? patternPrice : getMatrixCellPrice(globalBlob, originStopId, destinationStopId);
     return { destinationStopId, price };
+  });
+}
+
+/**
+ * Stop shape buildPricedMatrix needs per stop on the trip: identity +
+ * ordering + the EFFECTIVE (schedule-exception-aware) boarding/alighting
+ * flags + city. Callers already have this after loading a trip's ordered
+ * stop times (e.g. IStorage.getTripStopTimesWithEffectiveFlags + the stops
+ * themselves) — see AppService.getTripDetail and
+ * PriceRulesService.getPricedMatrixForTrip for the two current call sites.
+ */
+export interface PricedMatrixStopInput {
+  stopId: string;
+  stopSequence: number;
+  boardingAllowed: boolean;
+  alightingAllowed: boolean;
+  city: string | null;
+}
+
+/**
+ * Pure matrix-building core, split out from buildPricedMatrix so it's
+ * unit-testable without a DB (same reasoning as pickActiveSeasonalOrRegular
+ * above). Walks the SAME upper-triangular (j > i, sequence order) pairing
+ * as extractMatrixGrid, resolves each pair with the SAME precedence as
+ * resolvePassengerCell (trip-exception > pattern > global, via
+ * pickFirstPriced), then applies the 3 eligibility filters booking enforces
+ * (see booking.helpers.ts validateBoardingAlighting +
+ * ~lines 190-217 for the intra-city guard, mirrored identically in
+ * cargoRates.service.ts ~274-293) so a pair only ends up in the result if
+ * it would actually be bookable as-is.
+ */
+export function buildPricedMatrixCore(args: {
+  stops: PricedMatrixStopInput[];
+  patternMatrix: PriceRuleBlob | null | undefined;
+  globalMatrix: PriceRuleBlob | null | undefined;
+  tripExceptions: Map<string, number>;
+  allowIntraCityBooking: boolean;
+}): Record<string, Record<string, number>> {
+  const { patternMatrix, globalMatrix, tripExceptions, allowIntraCityBooking } = args;
+  const sorted = [...args.stops].sort((a, b) => a.stopSequence - b.stopSequence);
+  const result: Record<string, Record<string, number>> = {};
+
+  for (let i = 0; i < sorted.length; i++) {
+    const origin = sorted[i];
+    if (!origin.boardingAllowed) continue; // filter 1: origin must allow boarding
+
+    for (let j = i + 1; j < sorted.length; j++) {
+      const dest = sorted[j];
+      if (!dest.alightingAllowed) continue; // filter 2: destination must allow alighting
+      // filter 3: intra-city guard (skip same-city pairs unless the pattern opts in)
+      if (!allowIntraCityBooking && origin.city && dest.city && origin.city === dest.city) continue;
+
+      const key = matrixCellKey(origin.stopId, dest.stopId);
+      const { price } = pickFirstPriced<'trip' | 'pattern' | 'global'>([
+        { tag: 'trip', price: tripExceptions.get(key) ?? 0 },
+        { tag: 'pattern', price: getMatrixCellPrice(patternMatrix, origin.stopId, dest.stopId) },
+        { tag: 'global', price: getMatrixCellPrice(globalMatrix, origin.stopId, dest.stopId) },
+      ]);
+
+      if (price > 0) {
+        if (!result[origin.stopId]) result[origin.stopId] = {};
+        result[origin.stopId][dest.stopId] = price;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Exception-aware, sparse, per-origin priced OD matrix for one trip:
+ * `{ [originStopId]: { [destinationStopId]: price } }`. Origins with no
+ * priced+bookable destination are omitted entirely.
+ *
+ * This is DELIBERATELY separate from listPricedDestinationsFromOrigin
+ * above: that helper is pattern+global ONLY (trip-exceptions intentionally
+ * skipped, see its docstring) and is fine for its existing lightweight
+ * callers, but is NOT accurate enough to gate booking — a trip-exception
+ * can price (or unprice) a pair the pattern/global tiers disagree with.
+ * buildPricedMatrix is exception-accurate and is the source of truth for
+ * `GET /api/app/trips/:id`'s `pricedMatrix` field and the CSO route
+ * picker's OD-aware "Belum Ada Harga" gating — both need the exact same
+ * answer booking will actually enforce. Do not use
+ * listPricedDestinationsFromOrigin for new booking-gating logic.
+ *
+ * Fetches the pattern matrix, global matrix, and this trip's exceptions
+ * ONCE (Promise.all) regardless of how many stops the pattern has.
+ */
+export async function buildPricedMatrix(args: {
+  patternId: string;
+  tripId: string;
+  serviceDate: string;
+  stops: PricedMatrixStopInput[];
+  allowIntraCityBooking: boolean;
+}): Promise<Record<string, Record<string, number>>> {
+  const [patternMatrixRow, globalMatrixRow, tripExceptions] = await Promise.all([
+    getEffectivePatternMatrix(args.patternId, args.serviceDate),
+    getGlobalMatrix(),
+    getTripExceptionsForTrip(args.tripId),
+  ]);
+
+  return buildPricedMatrixCore({
+    stops: args.stops,
+    patternMatrix: patternMatrixRow?.matrix as PriceRuleBlob | undefined,
+    globalMatrix: globalMatrixRow?.matrix as PriceRuleBlob | undefined,
+    tripExceptions,
+    allowIntraCityBooking: args.allowIntraCityBooking,
   });
 }

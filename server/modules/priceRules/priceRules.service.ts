@@ -12,8 +12,10 @@ import {
   extractMatrixGrid,
   serializeMatrixGrid,
   matrixCellKey,
+  buildPricedMatrix,
   type MatrixGridRow,
   type MatrixGridCell,
+  type PricedMatrixStopInput,
 } from "./priceRules.resolver";
 
 export class StalePriceRuleError extends Error {
@@ -304,5 +306,47 @@ export class PriceRulesService {
       scope: 'pattern', patternId, kind: 'regular', matrix: blob, isActive: true,
     }).returning();
     return created;
+  }
+
+  /**
+   * Exception-aware priced OD matrix for one trip — the CSO-facing sibling
+   * of AppService.getTripDetail's inline buildPricedMatrix call (Step 2 of
+   * the OD-aware pricedMatrix feature). Fetches trip -> pattern ->
+   * stopTimes -> stops itself (CSO's RouteTimeline has no other reason to
+   * already hold this data the way AppService does), then delegates to the
+   * SAME buildPricedMatrix the App API uses, so both consumers agree on
+   * exactly one definition of "priced" — no second, divergent
+   * implementation. Read-only, no permission check (mirrors
+   * listPricedDestinationsFromOrigin's route: booking-flow UI, not admin).
+   * Returns {} for a trip with no pattern.
+   */
+  async getPricedMatrixForTrip(tripId: string): Promise<Record<string, Record<string, number>>> {
+    const trip = await this.storage.getTripById(tripId);
+    if (!trip?.patternId) return {};
+
+    const [pattern, stopTimes] = await Promise.all([
+      this.storage.getTripPatternById(trip.patternId),
+      this.storage.getTripStopTimesWithEffectiveFlags(tripId),
+    ]);
+
+    const stopIds = [...new Set(stopTimes.map(st => st.stopId))];
+    const stopDetails = await this.storage.getStopsByIds(stopIds);
+    const cityByStopId = new Map(stopDetails.map(s => [s.id, s.city ?? null]));
+
+    const stops: PricedMatrixStopInput[] = stopTimes.map(st => ({
+      stopId: st.stopId,
+      stopSequence: st.stopSequence,
+      boardingAllowed: st.effectiveBoardingAllowed,
+      alightingAllowed: st.effectiveAlightingAllowed,
+      city: cityByStopId.get(st.stopId) ?? null,
+    }));
+
+    return buildPricedMatrix({
+      patternId: trip.patternId,
+      tripId,
+      serviceDate: String(trip.serviceDate),
+      stops,
+      allowIntraCityBooking: pattern?.allowIntraCityBooking ?? false,
+    });
   }
 }

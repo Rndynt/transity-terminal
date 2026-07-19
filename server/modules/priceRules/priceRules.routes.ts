@@ -15,6 +15,11 @@ export async function registerPriceRulesRoutes(app: FastifyInstance, storage: IS
   // Read-only, used by CSO "Pilih Rute" (no admin flag needed — just booking UI)
   app.get('/api/pricing/priced-destinations', async (req, reply) => c.pricedDestinations(req, reply));
 
+  // Exception-aware priced OD matrix for one trip (same authority as the App
+  // API's pricedMatrix field) — read-only, used by CSO "Pilih Rute" OD-aware
+  // Naik/Turun gating (no admin flag needed — just booking UI)
+  app.get('/api/pricing/trip-matrix/:tripId', async (req, reply) => c.tripPricedMatrix(req, reply));
+
   // Master data — price rule grids (pattern/global tiers)
   app.get('/api/price-rules', async (req, reply) => c.listPriceRules(req, reply));
   app.get('/api/price-rules/global', async (req, reply) => c.getGlobalList(req, reply));

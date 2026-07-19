@@ -273,8 +273,20 @@ Untuk satu OD tertentu pada satu trip, harga dicari lewat `resolvePassengerCell(
 
 - Trip tanpa harga sama sekali untuk outlet asal yang dipilih: disabled di CSO, tidak bisa dipilih, tampil badge "Belum Ada Harga".
 - Trip dengan SEBAGIAN OD sudah diisi harga tetap bisa dipilih (OD-aware selectability) — hanya kombinasi asal-tujuan yang harganya 0 yang diblokir saat CSO memilih rute spesifik.
-- Kalau OD yang diminta tetap resolve ke harga 0, API mengembalikan error `NO_PRICE_RULE` (HTTP 422).
+- Kalau OD yang diminta tetap resolve ke harga 0, API mengembalikan error `NO_PRICE_RULE` (HTTP 422) — baik dari `/api/pricing/quote-fare` maupun dari pembuatan booking (`POST /api/bookings`, `POST /api/bookings/pending`).
 - Rute pendek dalam kota (mis. dua stop yang sama-sama di kota Bandung pada pola Jakarta-Bandung-Jogja) otomatis tersembunyi dari grid harga kalau pola belum mengaktifkan `allow_intra_city_booking` — lihat bagian Pola Perjalanan.
+
+### `pricedMatrix` — OD-aware priced matrix per trip
+
+Selain `resolvePassengerCell` (satu OD) dan `listPricedDestinationsFromOrigin` (pattern+global saja, dipakai untuk pre-selection cepat yang TIDAK butuh akurasi trip-exception), resolver menyediakan `buildPricedMatrix()`: matrix harga sparse per-trip yang exception-accurate (trip-exception > pattern > global, presis sama dengan precedence `resolvePassengerCell`) DAN sudah difilter oleh 3 syarat kelayakan booking (boarding diizinkan di asal, alighting diizinkan di tujuan, tidak diblokir aturan dalam-kota) — jadi setiap pasangan yang muncul di hasilnya dijamin bisa langsung dibooking.
+
+Bentuk: `{ [originStopId]: { [destinationStopId]: price } }`. Origin tanpa tujuan yang priced+bookable tidak muncul sama sekali (sparse).
+
+Dua konsumen:
+- **App API**: `GET /api/app/trips/:id` mengembalikan field `pricedMatrix` ini di response (bukan di `GET /api/app/trips/search`, yang cuma satu OD per baris hasil pencarian — lihat komentar di `TripSearchResult` pada `app.service.ts`). Konsumen eksternal (Console/OTA) yang ingin menawarkan pemilihan naik/turun selain pasangan default hasil pencarian WAJIB validasi pasangan asal→tujuan pilihannya lewat `pricedMatrix[origin]?.[destination]` sebelum memanggil `POST /api/app/bookings` — bukan lewat flag boolean per-stop.
+- **CSO**: `GET /api/pricing/trip-matrix/:tripId` (endpoint baru, module `priceRules`) memberi data yang sama untuk panel "Pilih Rute" (`RouteTimeline.tsx`) supaya tombol Naik/Turun untuk kombinasi yang tidak priced otomatis di-grey-out dengan badge "Belum Ada Harga", sebelum CSO sempat memicu 422 dari booking.
+
+⚠️ Jangan pakai `listPricedDestinationsFromOrigin`/`hasAnyPricedDestinationFromOrigin` untuk gating booking baru — keduanya sengaja skip trip-exception dan hanya cocok untuk pre-selection ringan yang sudah ada.
 
 ### File Terkait
 
@@ -282,8 +294,11 @@ Untuk satu OD tertentu pada satu trip, harga dicari lewat `resolvePassengerCell(
 |------|--------|
 | `server/modules/priceRules/pricing.service.ts` | `quoteFare()` — perhitungan harga untuk satu booking |
 | `server/modules/priceRules/pricing.controller.ts` | API endpoint `/api/pricing/quote-fare` |
-| `server/modules/priceRules/priceRules.resolver.ts` | `resolvePassengerCell()` — resolver precedence, helper matrix/grid (domain-agnostic, dipakai juga oleh cargo pricing) |
-| `server/modules/priceRules/priceRules.service.ts` | CRUD `price_rules`/`price_rule_exceptions`, sync status, template musiman |
+| `server/modules/priceRules/priceRules.resolver.ts` | `resolvePassengerCell()`, `buildPricedMatrix()` — resolver precedence, helper matrix/grid (domain-agnostic, dipakai juga oleh cargo pricing) |
+| `server/modules/priceRules/priceRules.service.ts` | CRUD `price_rules`/`price_rule_exceptions`, sync status, template musiman, `getPricedMatrixForTrip()` |
+| `server/modules/priceRules/priceRules.controller.ts` | API endpoint `/api/pricing/priced-destinations`, `/api/pricing/trip-matrix/:tripId` |
+| `server/modules/app/app.service.ts` | `getTripDetail()` — menyisipkan `pricedMatrix` ke response App API |
+| `client/src/components/cso/RouteTimeline.tsx` | Panel "Pilih Rute" CSO — OD-aware gating pakai `pricedMatrix` |
 | `shared/schema/pricing.ts` (`priceRules`, `priceRuleExceptions`) | Definisi tabel |
 | `client/src/components/masters/PriceRulesManager.tsx` | UI Master Data "Aturan Harga" |
 
