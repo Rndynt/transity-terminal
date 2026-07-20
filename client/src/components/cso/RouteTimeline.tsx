@@ -4,7 +4,7 @@ import { tripsApi, stopsApi, tripPatternsApi, priceRulesApi } from '@/lib/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { queryClient } from '@/lib/queryClient';
 import {
-  Clock, ArrowDown, MapPin, ArrowRight, Check, ChevronRight, Loader2, AlertTriangle
+  Clock, MapPin, ArrowRight, Check, ChevronRight, Loader2, AlertTriangle
 } from 'lucide-react';
 import type { Trip, Stop } from '@/types';
 
@@ -53,6 +53,12 @@ const formatTime = (timestamp: string | Date | null | undefined): string => {
   } catch { return '--:--'; }
 };
 
+/** Format waktu dengan titik sebagai separator, misal "15.00" */
+const formatTimeDot = (timestamp: string | Date | null | undefined): string => {
+  const t = formatTime(timestamp);
+  return t === '--:--' ? '--' : t.replace(':', '.');
+};
+
 const calculateDuration = (depart: Date | string | null | undefined, arrive: Date | string | null | undefined): number | null => {
   if (!depart || !arrive) return null;
   try {
@@ -82,7 +88,9 @@ export default function RouteTimeline({
   const autoSelectDone = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const circleRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const [lineSegments, setLineSegments] = useState<{ top: number; height: number; color: string }[]>([]);
+  const [lineSegments, setLineSegments] = useState<{ top: number; height: number; isFirst: boolean }[]>([]);
+  // horizontal center of the timeline dots — computed in layout effect
+  const lineLeftRef = useRef(35);
 
   const { data: stopTimes = [], isLoading } = useQuery<EffectiveStopTime[]>({
     queryKey: ['/api/trips', trip.id, 'stop-times', 'effective'],
@@ -106,10 +114,6 @@ export default function RouteTimeline({
     staleTime: 30_000,
   });
 
-  // Dipakai untuk guard rute pendek dalam-kota (lihat isSameCityBlocked di
-  // bawah) — pattern yang belum mengaktifkan allowIntraCityBooking tidak
-  // boleh menawarkan kombinasi naik+turun yang sama-sama di kota yang sama
-  // (mis. Pasteur -> Dipatiukur pada pola Jakarta-Bandung-Karangayu).
   const { data: patterns = [] } = useQuery({
     queryKey: ['/api/trip-patterns'],
     queryFn: tripPatternsApi.getAll,
@@ -117,44 +121,15 @@ export default function RouteTimeline({
   const currentPattern = patterns.find(p => p.id === trip.patternId);
   const allowIntraCityBooking = currentPattern?.allowIntraCityBooking ?? false;
 
-  // A CSO-selectable trip can be a not-yet-materialized "virtual-<baseId>"
-  // placeholder (see getCsoAvailableTrips / AppService's virtual trips) that
-  // has no row in `trips` yet. getPricedMatrixForTrip resolves via
-  // storage.getTripById(tripId) — for a virtual id that lookup finds
-  // nothing and the endpoint returns `{}` as a "successful" empty matrix,
-  // which would make every OD on that trip look unpriced (or, under the old
-  // fail-open gate, every OD look priced). Only ever query the matrix for a
-  // real, materialized trip id; for a virtual id the gate below stays
-  // fail-closed (matrix never "loads") until the trip is materialized.
   const isRealTripId = !!trip.id && !trip.id.startsWith('virtual-');
 
-  // OD-aware pricing gate: same exception-accurate matrix the App API
-  // exposes on trip detail (GET /api/app/trips/:id `pricedMatrix`),
-  // fetched here from its CSO-facing sibling endpoint — CSO uses session
-  // auth and can't call the App API directly, so this hits
-  // PriceRulesService.getPricedMatrixForTrip instead, which delegates to
-  // the SAME buildPricedMatrix. Used below to grey out Naik/Turun
-  // combinations that would form an unpriced OD, so a CSO can never reach
-  // the booking call that would otherwise 422 on NO_PRICE_RULE.
   const { data: pricedMatrix = {}, isSuccess: pricedMatrixLoaded } = useQuery<Record<string, Record<string, number>>>({
     queryKey: ['/api/pricing/trip-matrix', trip.id],
     queryFn: () => priceRulesApi.getTripPricedMatrix(trip.id),
     enabled: isRealTripId,
-    // Fallback for when the PRICE_RULES_CHANGED websocket push (below) was
-    // missed (socket briefly disconnected) — re-check on refocus so an
-    // admin's price change is picked up next time the CSO looks back at
-    // this tab, without requiring a full manual page refresh.
     refetchOnWindowFocus: true,
   });
 
-  // Master Data price-rule edits (Aturan Harga: pattern matrix, global
-  // fallback, or a per-trip exception) used to only reach an already-open
-  // CSO tab on manual browser refresh, because pricedMatrix above is a
-  // plain react-query fetch with no invalidation trigger. Mirrors the same
-  // useWebSocket + invalidate pattern SeatMap.tsx already uses for seat
-  // inventory. Broad prefix invalidate (no exact tripId filter) — cheap,
-  // and correct even for a global-fallback or another pattern's edit that
-  // could still affect this trip's resolver precedence.
   const { isConnected: wsConnected, addEventListener } = useWebSocket();
   useEffect(() => {
     if (!wsConnected) return;
@@ -163,14 +138,6 @@ export default function RouteTimeline({
     });
   }, [wsConnected, addEventListener]);
 
-  // true kalau originStopId -> destinationStopId ADA di pricedMatrix dengan
-  // harga > 0. FAIL-CLOSED: sebelumnya fail-open (anggap priced) selagi
-  // query belum selesai, yang membuka jendela balapan di mana OD yang belum
-  // berharga tetap bisa dipilih sebelum matrix datang. Sekarang pasangan
-  // hanya dianggap priced kalau matrix SUDAH sukses dimuat DAN benar-benar
-  // punya harga > 0 untuk pasangan itu — selagi masih memuat (atau query
-  // di-disable karena trip masih virtual), semua pasangan dianggap BELUM
-  // priced. 422 dari server tetap jadi penjaga terakhir kalau ada balapan.
   const isOdPriced = (originStopId: string, destinationStopId: string) =>
     pricedMatrixLoaded && (pricedMatrix[originStopId]?.[destinationStopId] ?? 0) > 0;
 
@@ -178,9 +145,6 @@ export default function RouteTimeline({
 
   const getStopById = (stopId: string) => stops.find(s => s.id === stopId);
 
-  // true kalau memilih `stop` sebagai lawan dari `otherSelected` (naik
-  // atau turun, urutan pemilihan bebas) menghasilkan pasangan "sama kota"
-  // yang diblokir pattern ini.
   const isSameCityBlocked = (stop: Stop, otherSelected?: Stop) => {
     if (allowIntraCityBooking || !otherSelected) return false;
     if (!stop.city || !otherSelected.city) return false;
@@ -192,10 +156,6 @@ export default function RouteTimeline({
     [stopTimes]
   );
 
-  // Dipakai saat BELUM ada titik naik/turun yang dipilih sama sekali: stop
-  // yang sama sekali tidak muncul sebagai origin manapun, atau tidak
-  // pernah muncul sebagai destination manapun, di pricedMatrix — grey-out
-  // preemptif sebelum CSO sempat mencoba memilihnya.
   const stopsWithNoPricedDestination = useMemo(() => {
     if (!pricedMatrixLoaded) return new Set<string>();
     const withDest = new Set(Object.keys(pricedMatrix));
@@ -243,10 +203,6 @@ export default function RouteTimeline({
   const destIdx = selectedDestination ? sortedStopTimes.findIndex(st => st.stopId === selectedDestination.id) : -1;
   const legCount = originIdx >= 0 && destIdx > originIdx ? destIdx - originIdx : 0;
 
-  // Dipakai bareng oleh kartu ringkasan (desktop + mobile) dan action bar
-  // mobile di bawah — dihitung sekali di sini supaya keduanya selalu
-  // konsisten (logic tampil/enable tombol TIDAK berubah, cuma dipakai di
-  // dua tempat render yang berbeda).
   const originTime = originIdx >= 0 ? formatTime(sortedStopTimes[originIdx]?.departAt) : null;
   const destTime = destIdx >= 0 ? formatTime(sortedStopTimes[destIdx]?.arriveAt) : null;
   const totalDuration = (originIdx >= 0 && destIdx >= 0)
@@ -254,17 +210,8 @@ export default function RouteTimeline({
     : null;
   const originClosed = selectedOrigin ? getStopException(selectedOrigin.id)?.disableBoarding : false;
   const destClosed = selectedDestination ? getStopException(selectedDestination.id)?.disableAlighting : false;
-  // legCount > 0 guard: kalau origin/dest sama stop (leg tidak valid), itu
-  // sudah pesan error tersendiri di bawah — jangan tumpang tindih dengan
-  // pesan "Belum Ada Harga" (pricedMatrix memang tidak pernah punya entry
-  // stop->dirinya sendiri, jadi tanpa guard ini originDestUnpriced bisa
-  // salah ke-true untuk kasus itu juga).
   const originDestUnpriced = !!(selectedOrigin && selectedDestination && legCount > 0
     && !isOdPriced(selectedOrigin.id, selectedDestination.id));
-  // Dipakai untuk membedakan "masih menunggu matrix" dari "sudah dikonfirmasi
-  // belum ada harga" di badge/pesan ringkasan rute — supaya rute yang
-  // sebenarnya priced tidak sekejap terlihat seperti error saat matrix masih
-  // di-fetch.
   const pricingStillLoading = !!(selectedOrigin && selectedDestination && legCount > 0 && !pricedMatrixLoaded);
   const isValid = legCount > 0 && !originClosed && !destClosed && !originDestUnpriced && pricedMatrixLoaded;
 
@@ -273,35 +220,31 @@ export default function RouteTimeline({
     return i >= originIdx && i <= destIdx;
   };
 
-  // Ukur posisi vertikal (center) tiap lingkaran stop secara nyata dari DOM,
-  // lalu gambar SATU garis penghubung absolut per segmen antar-stop. Ini
-  // menghindari garis "putus-putus" yang muncul kalau tiap baris menggambar
-  // separuh garisnya sendiri-sendiri (rawan celah 1px akibat pembulatan
-  // sub-pixel di browser mobile / layar retina).
   const lastSegmentsKey = useRef<string>('');
   useLayoutEffect(() => {
     const measure = () => {
       const container = listRef.current;
       if (!container) return;
-      const containerTop = container.getBoundingClientRect().top;
+      const containerRect = container.getBoundingClientRect();
       const centers = sortedStopTimes.map((_, i) => {
         const el = circleRefs.current[i];
         if (!el) return null;
         const r = el.getBoundingClientRect();
-        return Math.round(r.top - containerTop + r.height / 2);
+        return Math.round(r.top - containerRect.top + r.height / 2);
       });
-      const segments: { top: number; height: number; color: string }[] = [];
+      // compute horizontal center from first circle
+      const firstEl = circleRefs.current[0];
+      if (firstEl) {
+        const r = firstEl.getBoundingClientRect();
+        lineLeftRef.current = Math.round(r.left - containerRect.left + r.width / 2) - 1;
+      }
+      const segments: { top: number; height: number; isFirst: boolean }[] = [];
       for (let i = 0; i < centers.length - 1; i++) {
         const top = centers[i];
         const bottom = centers[i + 1];
         if (top == null || bottom == null) continue;
-        const segmentInRange = originIdx >= 0 && destIdx >= 0 && i >= originIdx && i + 1 <= destIdx;
-        const color = segmentInRange ? 'bg-blue-300' : 'bg-gray-300';
-        segments.push({ top, height: bottom - top, color });
+        segments.push({ top, height: bottom - top, isFirst: i === 0 });
       }
-      // Rounding + skip-if-unchanged guard: a ResizeObserver observing this
-      // same container would otherwise retrigger every time setState causes
-      // a (sub-pixel-identical) re-render, producing an infinite update loop.
       const key = JSON.stringify(segments);
       if (key === lastSegmentsKey.current) return;
       lastSegmentsKey.current = key;
@@ -327,119 +270,240 @@ export default function RouteTimeline({
 
   return (
     <div className="h-full flex flex-col">
-    <div className="flex-1 overflow-y-auto space-y-4">
-      <div>
-        <h3 className="text-sm font-bold text-gray-800 mb-0.5">Pilih Rute</h3>
-        <p className="text-[11px] text-gray-400">Tentukan titik naik dan turun penumpang</p>
-      </div>
+      <div className="flex-1 overflow-y-auto space-y-4">
+        <div>
+          <h3 className="text-sm font-bold text-gray-800 mb-0.5">Pilih Rute</h3>
+          <p className="text-[11px] text-gray-400">Tentukan titik naik dan turun penumpang</p>
+        </div>
 
-      <div ref={listRef} className="relative bg-white border border-gray-200 rounded-xl overflow-hidden">
-        {lineSegments.map((seg, i) => (
-          <div
-            key={i}
-            className={`absolute w-[3px] z-0 ${seg.color}`}
-            style={{ left: '25px', top: seg.top, height: seg.height }}
-          />
-        ))}
-        {sortedStopTimes.map((stopTime, index) => {
-          const stop = getStopById(stopTime.stopId);
-          if (!stop) return null;
+        {/* ── Timeline list ── */}
+        <div ref={listRef} className="relative bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden divide-y divide-gray-100">
 
-          const isFirst = index === 0;
-          const isLast = index === sortedStopTimes.length - 1;
-          const isOrigin = selectedOrigin?.id === stop.id;
-          const isDest = selectedDestination?.id === stop.id;
-          const stopEx = getStopException(stop.id);
-          const boardingClosed = stopEx?.disableBoarding === true;
-          const alightingClosed = stopEx?.disableAlighting === true;
-          const canBoard = stopTime.effectiveBoardingAllowed !== false && !boardingClosed;
-          const canAlight = stopTime.effectiveAlightingAllowed !== false && !alightingClosed;
-          // Stop ini tidak boleh jadi titik NAIK kalau kotanya sama dengan
-          // titik turun yang sudah dipilih (dan sebaliknya untuk turun) —
-          // guard rute pendek dalam-kota (lihat isSameCityBlocked).
-          const blockedByCityAsOrigin = !isDest && isSameCityBlocked(stop, selectedDestination);
-          const blockedByCityAsDest = !isOrigin && isSameCityBlocked(stop, selectedOrigin);
-          // OD-aware "Belum Ada Harga" gate, mirroring blockedByCityAsOrigin/
-          // Dest exactly: kalau lawan pasangannya sudah dipilih, cek pasangan
-          // spesifik itu; kalau belum ada yang dipilih sama sekali, cek
-          // apakah stop ini SECARA TOTAL tidak pernah punya OD berharga ke
-          // arah manapun (preemptive grey-out).
-          const notPricedAsOrigin = !isDest && (
-            selectedDestination ? !isOdPriced(stop.id, selectedDestination.id) : stopsWithNoPricedDestination.has(stop.id)
-          );
-          const notPricedAsDest = !isOrigin && (
-            selectedOrigin ? !isOdPriced(selectedOrigin.id, stop.id) : stopsWithNoPricedOrigin.has(stop.id)
-          );
-          const inRange = isInSelectedRange(index);
+          {/* Connector lines — absolute, one per segment */}
+          {lineSegments.map((seg, i) => (
+            <div
+              key={i}
+              className="absolute z-0 w-[2px]"
+              style={{
+                left: `${lineLeftRef.current}px`,
+                top: seg.top,
+                height: seg.height,
+                // First segment: solid blue line; rest: dashed gray
+                ...(seg.isFirst
+                  ? { backgroundColor: '#2563eb' }
+                  : {
+                      backgroundImage:
+                        'repeating-linear-gradient(to bottom, #d1d5db 0, #d1d5db 5px, transparent 5px, transparent 10px)',
+                    }),
+              }}
+            />
+          ))}
 
-          const nextStopTime = sortedStopTimes[index + 1];
-          const legDuration = nextStopTime ? calculateDuration(stopTime.departAt, nextStopTime.arriveAt) : null;
+          {sortedStopTimes.map((stopTime, index) => {
+            const stop = getStopById(stopTime.stopId);
+            if (!stop) return null;
 
-          return (
-            <div key={stopTime.id}>
-              <div className={`flex items-center px-4 py-3 transition-colors ${
-                isOrigin ? 'bg-emerald-50' : isDest ? 'bg-rose-50' : inRange ? 'bg-blue-50/40' : 'hover:bg-gray-50'
-              }`}>
-                <div className="flex flex-col items-center justify-center mr-4 self-stretch">
-                  <div
-                    ref={(el) => { circleRefs.current[index] = el; }}
-                    className={`relative z-10 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                      isOrigin ? 'bg-emerald-500 ring-[3px] ring-emerald-200 shadow-sm' :
-                      isDest ? 'bg-rose-500 ring-[3px] ring-rose-200 shadow-sm' :
-                      inRange ? 'bg-blue-400 border-2 border-blue-300' :
-                      'bg-white border-2 border-gray-300'
-                    }`}
-                  >
-                    {isOrigin && <ArrowRight className="w-2.5 h-2.5 text-white" />}
-                    {isDest && <MapPin className="w-2.5 h-2.5 text-white" />}
-                    {inRange && !isOrigin && !isDest && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                  </div>
+            const isFirst = index === 0;
+            const isLast = index === sortedStopTimes.length - 1;
+            const isOrigin = selectedOrigin?.id === stop.id;
+            const isDest = selectedDestination?.id === stop.id;
+            const stopEx = getStopException(stop.id);
+            const boardingClosed = stopEx?.disableBoarding === true;
+            const alightingClosed = stopEx?.disableAlighting === true;
+            const canBoard = stopTime.effectiveBoardingAllowed !== false && !boardingClosed;
+            const canAlight = stopTime.effectiveAlightingAllowed !== false && !alightingClosed;
+            const blockedByCityAsOrigin = !isDest && isSameCityBlocked(stop, selectedDestination);
+            const blockedByCityAsDest = !isOrigin && isSameCityBlocked(stop, selectedOrigin);
+            const notPricedAsOrigin = !isDest && (
+              selectedDestination ? !isOdPriced(stop.id, selectedDestination.id) : stopsWithNoPricedDestination.has(stop.id)
+            );
+            const notPricedAsDest = !isOrigin && (
+              selectedOrigin ? !isOdPriced(selectedOrigin.id, stop.id) : stopsWithNoPricedOrigin.has(stop.id)
+            );
+            const inRange = isInSelectedRange(index);
+
+            // Leg duration ke stop berikutnya
+            const nextStopTime = sortedStopTimes[index + 1];
+            const legDuration = !isLast && nextStopTime
+              ? calculateDuration(stopTime.departAt, nextStopTime.arriveAt)
+              : null;
+
+            // Waktu tampil untuk stop ini
+            const timeDisplay = isFirst
+              ? formatTimeDot(stopTime.departAt)
+              : isLast
+              ? formatTimeDot(stopTime.arriveAt)
+              : (!canBoard && canAlight)
+              ? formatTimeDot(stopTime.arriveAt)
+              : formatTimeDot(stopTime.departAt ?? stopTime.arriveAt);
+
+            /* ── Naik badge/button states ── */
+            const naikVisible = !isLast && stopTime.effectiveBoardingAllowed !== false;
+            const naikClickable = naikVisible && !isDest && !blockedByCityAsOrigin && !boardingClosed && pricedMatrixLoaded && !notPricedAsOrigin;
+            const naikLoading = naikVisible && !isDest && !blockedByCityAsOrigin && !boardingClosed && !pricedMatrixLoaded;
+            const naikBlocked = naikVisible && !isDest && (boardingClosed || blockedByCityAsOrigin || (pricedMatrixLoaded && notPricedAsOrigin));
+            const naikIsDest = naikVisible && isDest;
+
+            /* ── Turun badge/button states ── */
+            const turunVisible = !isFirst && stopTime.effectiveAlightingAllowed !== false;
+            const turunClickable = turunVisible && !isOrigin && !blockedByCityAsDest && !alightingClosed && pricedMatrixLoaded && !notPricedAsDest;
+            const turunLoading = turunVisible && !isOrigin && !blockedByCityAsDest && !alightingClosed && !pricedMatrixLoaded;
+            const turunBlocked = turunVisible && !isOrigin && (alightingClosed || blockedByCityAsDest || (pricedMatrixLoaded && notPricedAsDest));
+            const turunIsOrigin = turunVisible && isOrigin;
+
+            return (
+              <div
+                key={stopTime.id}
+                className={`relative flex items-start px-5 py-4 transition-colors ${
+                  isOrigin || isDest ? 'bg-blue-50/40' : inRange ? 'bg-blue-50/20' : ''
+                }`}
+              >
+                {/* ── Timeline dot ── */}
+                <div
+                  ref={(el) => { circleRefs.current[index] = el; }}
+                  className="flex-shrink-0 mr-4 mt-0.5 z-10"
+                >
+                  {isFirst ? (
+                    /* First stop: filled blue circle with white inner circle (radio style) */
+                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shadow-sm">
+                      <div className="w-3 h-3 rounded-full bg-white" />
+                    </div>
+                  ) : isLast ? (
+                    /* Last stop: blue map pin */
+                    <div className="w-8 h-8 flex items-center justify-center">
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="w-7 h-7"
+                        fill="#2563eb"
+                        stroke="white"
+                        strokeWidth="1.2"
+                      >
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                        <circle cx="12" cy="9" r="2.5" fill="white" stroke="none" />
+                      </svg>
+                    </div>
+                  ) : (
+                    /* Middle stop: hollow circle */
+                    <div
+                      className={`w-8 h-8 rounded-full border-2 bg-white flex items-center justify-center ${
+                        inRange ? 'border-blue-400' : 'border-gray-300'
+                      }`}
+                    >
+                      {inRange && <div className="w-2.5 h-2.5 rounded-full bg-blue-400" />}
+                    </div>
+                  )}
                 </div>
 
+                {/* ── Content ── */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className={`text-sm font-semibold ${isOrigin || isDest ? 'text-gray-900' : 'text-gray-700'}`}>{stop.name}</p>
-                    <div className="flex gap-1">
-                      {!isLast && stopTime.effectiveBoardingAllowed !== false && (
-                        isOrigin ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-emerald-500 text-white">Naik</span>
-                        ) : boardingClosed ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-amber-50 text-amber-500 line-through">Naik</span>
-                        ) : (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-emerald-50 text-emerald-600">Naik</span>
-                        )
-                      )}
-                      {!isFirst && stopTime.effectiveAlightingAllowed !== false && (
-                        isDest ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-rose-500 text-white">Turun</span>
-                        ) : alightingClosed ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-amber-50 text-amber-500 line-through">Turun</span>
-                        ) : (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-rose-50 text-rose-500">Turun</span>
-                        )
-                      )}
-                      {!isFirst && !isLast && stopTime.effectiveBoardingAllowed === false && stopTime.effectiveAlightingAllowed === false && (
-                        <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-gray-100 text-gray-400">Transit</span>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-400 font-mono mt-1">
-                    <Clock className="w-3 h-3 inline -mt-px mr-0.5" />
-                    {isFirst
-                      ? formatTime(stopTime.departAt)
-                      : isLast
-                      ? formatTime(stopTime.arriveAt)
-                      : !canBoard && canAlight
-                      ? formatTime(stopTime.arriveAt)
-                      : formatTime(stopTime.departAt ?? stopTime.arriveAt)}
-                    {isFirst && <span className="text-gray-300 ml-1.5">&middot; Keberangkatan</span>}
-                    {isLast && <span className="text-gray-300 ml-1.5">&middot; Tujuan akhir</span>}
-                    {!isFirst && !isLast && canBoard && stopTime.arriveAt && stopTime.departAt && stopTime.arriveAt !== stopTime.departAt && (
-                      <span className="text-gray-300 ml-1.5">&middot; Berangkat</span>
+                  {/* Main row: time + stop name + badges */}
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <span className="text-xl font-bold text-gray-900 tabular-nums leading-none min-w-[3.8rem]">
+                      {timeDisplay}
+                    </span>
+                    <span className={`text-[15px] font-semibold leading-none ${
+                      isOrigin || isDest ? 'text-blue-900' : 'text-gray-800'
+                    }`}>
+                      {stop.name}
+                    </span>
+
+                    {/* NAIK badge */}
+                    {naikVisible && (
+                      naikIsDest ? (
+                        <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-300 cursor-not-allowed" title="Stop ini sudah dipilih sebagai titik turun">
+                          NAIK
+                        </span>
+                      ) : naikBlocked ? (
+                        <span
+                          className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-50 text-gray-300 cursor-not-allowed"
+                          title={notPricedAsOrigin ? 'Belum ada harga untuk titik ini' : blockedByCityAsOrigin ? `Rute dalam kota ${stop.city} tidak dijual` : 'Ditutup operasional'}
+                        >
+                          {(pricedMatrixLoaded && notPricedAsOrigin) && <AlertTriangle className="w-2.5 h-2.5 text-red-300" />}
+                          NAIK
+                        </span>
+                      ) : naikLoading ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-400 cursor-wait">
+                          <Loader2 className="w-2.5 h-2.5 animate-spin" />NAIK
+                        </span>
+                      ) : naikClickable ? (
+                        <button
+                          onClick={() => onOriginSelect(stop, stopTime.stopSequence)}
+                          data-testid={`naik-${index}`}
+                          className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                            isOrigin
+                              ? 'bg-emerald-500 text-white shadow-sm'
+                              : 'bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100'
+                          }`}
+                        >
+                          {isOrigin && <Check className="w-2.5 h-2.5" />}
+                          NAIK
+                        </button>
+                      ) : null
                     )}
-                  </p>
+
+                    {/* TURUN badge */}
+                    {turunVisible && (
+                      turunIsOrigin ? (
+                        <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-300 cursor-not-allowed" title="Stop ini sudah dipilih sebagai titik naik">
+                          TURUN
+                        </span>
+                      ) : turunBlocked ? (
+                        <span
+                          className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-50 text-gray-300 cursor-not-allowed"
+                          title={notPricedAsDest ? 'Belum ada harga untuk titik ini' : blockedByCityAsDest ? `Rute dalam kota ${stop.city} tidak dijual` : 'Ditutup operasional'}
+                        >
+                          {(pricedMatrixLoaded && notPricedAsDest) && <AlertTriangle className="w-2.5 h-2.5 text-red-300" />}
+                          TURUN
+                        </span>
+                      ) : turunLoading ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-400 cursor-wait">
+                          <Loader2 className="w-2.5 h-2.5 animate-spin" />TURUN
+                        </span>
+                      ) : turunClickable ? (
+                        <button
+                          onClick={() => onDestinationSelect(stop, stopTime.stopSequence)}
+                          data-testid={`turun-${index}`}
+                          className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                            isDest
+                              ? 'bg-rose-500 text-white shadow-sm'
+                              : 'bg-rose-50 text-rose-500 border border-rose-200 hover:bg-rose-100'
+                          }`}
+                        >
+                          {isDest && <Check className="w-2.5 h-2.5" />}
+                          TURUN
+                        </button>
+                      ) : null
+                    )}
+
+                    {/* Transit only (no board, no alight) */}
+                    {!isFirst && !isLast && stopTime.effectiveBoardingAllowed === false && stopTime.effectiveAlightingAllowed === false && (
+                      <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-400">TRANSIT</span>
+                    )}
+                  </div>
+
+                  {/* Sub-row: clock + duration, pin + keberangkatan/tujuan */}
+                  <div className="flex items-center gap-4 mt-1.5">
+                    <div className="flex items-center gap-1 text-xs text-gray-400">
+                      <Clock className="w-3 h-3 flex-shrink-0" />
+                      <span>{isLast ? '-' : legDuration ? `±${formatDuration(legDuration)}` : '-'}</span>
+                    </div>
+                    {isFirst && (
+                      <div className="flex items-center gap-1 text-xs text-gray-400">
+                        <MapPin className="w-3 h-3 flex-shrink-0" />
+                        <span>Keberangkatan</span>
+                      </div>
+                    )}
+                    {isLast && (
+                      <div className="flex items-center gap-1 text-xs text-gray-400">
+                        <MapPin className="w-3 h-3 flex-shrink-0" />
+                        <span>Tujuan akhir</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Stop exception warning */}
                   {stopEx && (
-                    <div className="flex items-center gap-1 mt-1">
+                    <div className="flex items-center gap-1 mt-1.5">
                       <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
                       <span className="text-xs text-amber-600 font-medium">
                         Ditutup Ops
@@ -453,120 +517,13 @@ export default function RouteTimeline({
                     </div>
                   )}
                 </div>
-
-                <div className="flex gap-1.5 flex-shrink-0">
-                  {canBoard && !isLast ? (
-                    isDest && !isOrigin ? (
-                      <span
-                        title="Stop ini sudah dipilih sebagai titik turun"
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
-                      >
-                        Naik
-                      </span>
-                    ) : blockedByCityAsOrigin ? (
-                      <span
-                        title={`Rute dalam kota ${stop.city} tidak dijual untuk pola ini`}
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
-                      >
-                        Naik
-                      </span>
-                    ) : !pricedMatrixLoaded ? (
-                      <span
-                        title="Memuat data harga…"
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-wait inline-flex items-center gap-1"
-                      >
-                        <Loader2 className="w-3 h-3 animate-spin" />Naik
-                      </span>
-                    ) : notPricedAsOrigin ? (
-                      <span
-                        title="Belum Ada Harga — kombinasi titik naik & turun ini belum diisi harga"
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-50 border border-red-100 text-red-300 cursor-not-allowed inline-flex items-center gap-1"
-                      >
-                        <AlertTriangle className="w-3 h-3" />Naik
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => onOriginSelect(stop, stopTime.stopSequence)}
-                        data-testid={`naik-${index}`}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-                          isOrigin
-                            ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-200'
-                            : 'bg-white border border-gray-200 text-gray-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'
-                        }`}
-                      >
-                        {isOrigin ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Naik</> : 'Naik'}
-                      </button>
-                    )
-                  ) : !isLast ? (
-                    <span className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">
-                      Naik
-                    </span>
-                  ) : null}
-                  {canAlight && !isFirst ? (
-                    isOrigin && !isDest ? (
-                      <span
-                        title="Stop ini sudah dipilih sebagai titik naik"
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
-                      >
-                        Turun
-                      </span>
-                    ) : blockedByCityAsDest ? (
-                      <span
-                        title={`Rute dalam kota ${stop.city} tidak dijual untuk pola ini`}
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
-                      >
-                        Turun
-                      </span>
-                    ) : !pricedMatrixLoaded ? (
-                      <span
-                        title="Memuat data harga…"
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-wait inline-flex items-center gap-1"
-                      >
-                        <Loader2 className="w-3 h-3 animate-spin" />Turun
-                      </span>
-                    ) : notPricedAsDest ? (
-                      <span
-                        title="Belum Ada Harga — kombinasi titik naik & turun ini belum diisi harga"
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-50 border border-red-100 text-red-300 cursor-not-allowed inline-flex items-center gap-1"
-                      >
-                        <AlertTriangle className="w-3 h-3" />Turun
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => onDestinationSelect(stop, stopTime.stopSequence)}
-                        data-testid={`turun-${index}`}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-                          isDest
-                            ? 'bg-rose-500 text-white shadow-sm shadow-rose-200'
-                            : 'bg-white border border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-600 hover:bg-rose-50'
-                        }`}
-                      >
-                        {isDest ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Turun</> : 'Turun'}
-                      </button>
-                    )
-                  ) : !isFirst ? (
-                    <span className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">
-                      Turun
-                    </span>
-                  ) : null}
-                </div>
               </div>
+            );
+          })}
+        </div>
 
-              {!isLast && legDuration && (
-                <div className="flex px-4 py-2">
-                  <div className="w-5 mr-4 flex-shrink-0" />
-                  <div className="flex items-center gap-1 text-xs text-gray-400">
-                    <ArrowDown className="w-3 h-3" />
-                    <span>{formatDuration(legDuration)}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {selectedOrigin && selectedDestination && (
+        {/* ── Summary card (origin → destination) ── */}
+        {selectedOrigin && selectedDestination && (
           <div className={`rounded-xl overflow-hidden shadow-sm border-2 ${isValid ? 'border-blue-200' : 'border-rose-200'}`}>
             <div className={`px-4 py-3 ${isValid ? 'bg-gradient-to-r from-blue-50 to-indigo-50' : 'bg-rose-50'}`}>
               <div className="flex items-start justify-between gap-3">
@@ -646,30 +603,26 @@ export default function RouteTimeline({
               </button>
             )}
           </div>
-      )}
-    </div>
-
-    {/* Mobile: action bar flex-shrink-0, sibling di luar area scroll di atas
-        (bukan sticky) — jadi selalu nempel di bawah panel tanpa perlu
-        scroll dulu. Logic tampil/enable-nya identik dengan tombol desktop:
-        butuh onProceed + selectedOrigin + selectedDestination, disabled
-        kalau !isValid. */}
-    {selectedOrigin && selectedDestination && onProceed && (
-      <div className="md:hidden flex-shrink-0 border-t border-gray-200 bg-white -mx-3 -mb-3 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <button
-          onClick={isValid ? onProceed : undefined}
-          disabled={!isValid}
-          data-testid="btn-proceed-from-route-mobile"
-          className={`w-full py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
-            isValid
-              ? 'bg-blue-600 hover:bg-blue-700 text-white active:bg-blue-800 shadow-lg shadow-blue-600/20'
-              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-          }`}
-        >
-          Lanjut Pilih Kursi <ChevronRight className="w-4 h-4" />
-        </button>
+        )}
       </div>
-    )}
+
+      {/* Mobile: action bar sticky di bawah panel */}
+      {selectedOrigin && selectedDestination && onProceed && (
+        <div className="md:hidden flex-shrink-0 border-t border-gray-200 bg-white -mx-3 -mb-3 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <button
+            onClick={isValid ? onProceed : undefined}
+            disabled={!isValid}
+            data-testid="btn-proceed-from-route-mobile"
+            className={`w-full py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              isValid
+                ? 'bg-blue-600 hover:bg-blue-700 text-white active:bg-blue-800 shadow-lg shadow-blue-600/20'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            Lanjut Pilih Kursi <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
