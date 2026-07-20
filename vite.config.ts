@@ -40,5 +40,11 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
+    hmr: {
+      // Replit preview proxies WebSocket through an iframe — background tabs
+      // cause Chrome to throttle/suspend the HMR socket. Raising the timeout
+      // prevents Vite from doing a full-page reload on a brief disconnect.
+      timeout: 120000,
+    },
   },
 });

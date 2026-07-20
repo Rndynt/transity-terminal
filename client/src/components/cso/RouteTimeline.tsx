@@ -332,7 +332,7 @@ export default function RouteTimeline({
 
   return (
     <div className="h-full flex flex-col">
-    <div className="flex-1 overflow-y-auto space-y-4">
+    <div className="flex-1 overflow-y-auto space-y-6">
       <div>
         <h3 className="text-sm font-bold text-gray-800 mb-0.5">Pilih Rute</h3>
         <p className="text-[11px] text-gray-400">Tentukan titik naik dan turun penumpang</p>
@@ -413,7 +413,7 @@ export default function RouteTimeline({
                         ? formatTimeDot(stopTime.arriveAt)
                         : formatTimeDot(stopTime.departAt ?? stopTime.arriveAt)}
                     </span>
-                    <span className={`text-sm font-semibold ${isOrigin || isDest ? 'text-gray-900' : 'text-gray-700'}`}>{stop.name}</span>
+                    <span className={`text-sm font-semibold pl-3 ${isOrigin || isDest ? 'text-gray-900' : 'text-gray-700'}`}>{stop.name}</span>
                     <div className="flex gap-1">
                       {!isLast && stopTime.effectiveBoardingAllowed !== false && (
                         isOrigin ? (
@@ -442,8 +442,8 @@ export default function RouteTimeline({
                   <div className="flex items-center gap-1 mt-1 text-xs text-gray-400">
                     {!isLast && (
                       <>
-                        <Clock className="w-3 h-3 flex-shrink-0" />
-                        <span>{legDuration ? `±${formatDuration(legDuration)}` : '-'}</span>
+                        {/* <Clock className="w-3 h-3 flex-shrink-0" />*/}
+                        <span>{legDuration ? `${formatDuration(legDuration)}` : '-'}</span>
                       </>
                     )}
                     {(isFirst || isLast) && (
