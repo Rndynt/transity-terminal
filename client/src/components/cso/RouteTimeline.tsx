@@ -364,17 +364,35 @@ export default function RouteTimeline({
           // guard rute pendek dalam-kota (lihat isSameCityBlocked).
           const blockedByCityAsOrigin = !isDest && isSameCityBlocked(stop, selectedDestination);
           const blockedByCityAsDest = !isOrigin && isSameCityBlocked(stop, selectedOrigin);
+          // Guard arah rute: bus tidak jalan mundur. Kalau titik TURUN sudah
+          // dipilih, stop mana pun SETELAH destIdx secara struktural tidak
+          // mungkin jadi titik NAIK — begitu juga sebaliknya, stop mana pun
+          // SEBELUM originIdx tidak mungkin jadi titik TURUN kalau NAIK
+          // sudah dipilih. Ini murni soal urutan rute, BUKAN soal harga, dan
+          // harus dicek SEBELUM notPricedAsOrigin/Dest — pasangan "mundur"
+          // itu memang tidak pernah punya price rule sama sekali (bukan
+          // berarti "belum diisi harga"), jadi tanpa guard ini stop tersebut
+          // lolos ke branch merah "Belum Ada Harga" padahal seharusnya abu-
+          // abu "diblokir arah".
+          const isAfterSelectedDest = !isDest && destIdx >= 0 && index > destIdx;
+          const isBeforeSelectedOrigin = !isOrigin && originIdx >= 0 && index < originIdx;
           // OD-aware "Belum Ada Harga" gate, mirroring blockedByCityAsOrigin/
-          // Dest exactly: kalau lawan pasangannya sudah dipilih, cek pasangan
-          // spesifik itu; kalau belum ada yang dipilih sama sekali, cek
-          // apakah stop ini SECARA TOTAL tidak pernah punya OD berharga ke
-          // arah manapun (preemptive grey-out).
-          const notPricedAsOrigin = !isDest && (
-            selectedDestination ? !isOdPriced(stop.id, selectedDestination.id) : stopsWithNoPricedDestination.has(stop.id)
-          );
-          const notPricedAsDest = !isOrigin && (
-            selectedOrigin ? !isOdPriced(selectedOrigin.id, stop.id) : stopsWithNoPricedOrigin.has(stop.id)
-          );
+          // Dest — dipecah dua supaya visualnya sesuai tingkat kepastian:
+          // - confirmed*: lawan pasangannya SUDAH dipilih, jadi kombinasi
+          //   spesifik itu bisa dikonfirmasi belum berharga → actionable,
+          //   tampil MERAH dengan ikon peringatan.
+          // - preemptive*: BELUM ada apa-apa yang dipilih; stop ini memang
+          //   tidak pernah muncul sebagai origin/destination manapun di
+          //   matrix. Belum ada pasangan konkret yang "gagal" di sini, jadi
+          //   ini tampil ABU-ABU biasa, bukan warning merah.
+          const confirmedNotPricedAsOrigin = !isDest && !isAfterSelectedDest &&
+            !!selectedDestination && !isOdPriced(stop.id, selectedDestination.id);
+          const preemptivelyUnpricedAsOrigin = !isDest && !isAfterSelectedDest &&
+            !selectedDestination && stopsWithNoPricedDestination.has(stop.id);
+          const confirmedNotPricedAsDest = !isOrigin && !isBeforeSelectedOrigin &&
+            !!selectedOrigin && !isOdPriced(selectedOrigin.id, stop.id);
+          const preemptivelyUnpricedAsDest = !isOrigin && !isBeforeSelectedOrigin &&
+            !selectedOrigin && stopsWithNoPricedOrigin.has(stop.id);
           const inRange = isInSelectedRange(index);
 
           const nextStopTime = sortedStopTimes[index + 1];
@@ -486,6 +504,13 @@ export default function RouteTimeline({
                       >
                         Naik
                       </span>
+                    ) : isAfterSelectedDest ? (
+                      <span
+                        title="Bus tidak bisa mundur — titik naik harus sebelum titik turun yang sudah dipilih"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
+                      >
+                        Naik
+                      </span>
                     ) : !pricedMatrixLoaded ? (
                       <span
                         title="Memuat data harga…"
@@ -493,12 +518,19 @@ export default function RouteTimeline({
                       >
                         <Loader2 className="w-3 h-3 animate-spin" />Naik
                       </span>
-                    ) : notPricedAsOrigin ? (
+                    ) : confirmedNotPricedAsOrigin ? (
                       <span
                         title="Belum Ada Harga — kombinasi titik naik & turun ini belum diisi harga"
                         className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-50 border border-red-100 text-red-300 cursor-not-allowed inline-flex items-center gap-1"
                       >
                         <AlertTriangle className="w-3 h-3" />Naik
+                      </span>
+                    ) : preemptivelyUnpricedAsOrigin ? (
+                      <span
+                        title="Titik ini belum pernah punya harga ke tujuan manapun"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
+                      >
+                        Naik
                       </span>
                     ) : (
                       <button
@@ -533,6 +565,13 @@ export default function RouteTimeline({
                       >
                         Turun
                       </span>
+                    ) : isBeforeSelectedOrigin ? (
+                      <span
+                        title="Bus tidak bisa mundur — titik turun harus setelah titik naik yang sudah dipilih"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
+                      >
+                        Turun
+                      </span>
                     ) : !pricedMatrixLoaded ? (
                       <span
                         title="Memuat data harga…"
@@ -540,12 +579,19 @@ export default function RouteTimeline({
                       >
                         <Loader2 className="w-3 h-3 animate-spin" />Turun
                       </span>
-                    ) : notPricedAsDest ? (
+                    ) : confirmedNotPricedAsDest ? (
                       <span
                         title="Belum Ada Harga — kombinasi titik naik & turun ini belum diisi harga"
                         className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-50 border border-red-100 text-red-300 cursor-not-allowed inline-flex items-center gap-1"
                       >
                         <AlertTriangle className="w-3 h-3" />Turun
+                      </span>
+                    ) : preemptivelyUnpricedAsDest ? (
+                      <span
+                        title="Titik ini belum pernah punya harga dari titik naik manapun"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
+                      >
+                        Turun
                       </span>
                     ) : (
                       <button
