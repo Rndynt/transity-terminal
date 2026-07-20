@@ -59,6 +59,12 @@ interface PassengerFormProps {
 
   // ── Single-trip mode ──────────────────────────────────────────
   totalAmount?: number;
+  // true when the CSO reached this step for an OD the server/RouteTimeline
+  // gate could not confirm a price for (should only ever happen via a
+  // race — RouteTimeline's fail-closed gate is the primary defense). Shows
+  // "Belum Ada Harga" instead of a number and disables booking/pay so the
+  // CSO can never submit a booking the server would 422 on.
+  priceUnavailable?: boolean;
   onBook?: (passengers: PassengerData[]) => void;
   onPay?: (passengers: PassengerData[], payment: { method: string; amount: number }) => void;
   onPaymentUpdate?: (payment: { method: string; amount: number }) => void;
@@ -85,6 +91,7 @@ export default function PassengerForm({
   loading = false,
   // single
   totalAmount = 0,
+  priceUnavailable = false,
   onBook,
   onPay,
   onPaymentUpdate,
@@ -102,6 +109,10 @@ export default function PassengerForm({
   onNext,
 }: PassengerFormProps) {
   const isRoundTrip = !!returnSeats;
+  // Round-trip totals come from ppFares (quoted directly via quoteFare with
+  // its own abort-on-error handling) — priceUnavailable only applies to the
+  // single-trip totalAmount path.
+  const bookingBlockedByPrice = !isRoundTrip && priceUnavailable;
 
   const [formData, setFormData] = useState<PassengerData[]>([]);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -167,13 +178,13 @@ export default function PassengerForm({
     : 0;
 
   const handleBookOnly = () => {
-    if (!isPassengerValid) return;
+    if (!isPassengerValid || bookingBlockedByPrice) return;
     onPassengersUpdate(formData);
     onBook?.(formData);
   };
 
   const handlePayAndPrint = () => {
-    if (!isPassengerValid || !isPaymentValid()) return;
+    if (!isPassengerValid || !isPaymentValid() || bookingBlockedByPrice) return;
     onPassengersUpdate(formData);
     onPay?.(formData, { method: selectedMethod, amount: finalAmount });
   };
@@ -443,13 +454,13 @@ export default function PassengerForm({
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div className="px-3 py-2 flex items-center justify-between border-b border-gray-100">
               <span className="text-xs text-gray-500">{isRoundTrip ? 'Harga per penumpang (PP)' : 'Harga per kursi'}</span>
-              <span className="text-xs font-semibold text-gray-700 font-mono">{fmtCurrency(pricePerSeat)}</span>
+              <span className="text-xs font-semibold text-gray-700 font-mono">{bookingBlockedByPrice ? 'Belum Ada Harga' : fmtCurrency(pricePerSeat)}</span>
             </div>
             <div className="px-3 py-2 flex items-center justify-between border-b border-gray-100">
               <span className="text-xs text-gray-500">{isRoundTrip ? 'Jumlah penumpang' : 'Jumlah kursi'}</span>
               <span className="text-xs font-semibold text-gray-700">{selectedSeats.length} {isRoundTrip ? 'penumpang' : 'kursi'}</span>
             </div>
-            {discountAmount > 0 && (
+            {discountAmount > 0 && !bookingBlockedByPrice && (
               <>
                 <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-100">
                   <span className="text-xs text-gray-500">Subtotal</span>
@@ -463,7 +474,7 @@ export default function PassengerForm({
             )}
             <div className="px-3 py-2.5 flex items-center justify-between bg-blue-50">
               <span className="text-sm font-bold text-gray-700">Total</span>
-              <span className="text-lg font-black text-blue-700 font-mono" data-testid="text-final-total">{fmtCurrency(finalAmount)}</span>
+              <span className="text-lg font-black text-blue-700 font-mono" data-testid="text-final-total">{bookingBlockedByPrice ? 'Belum Ada Harga' : fmtCurrency(finalAmount)}</span>
             </div>
           </div>
 
@@ -558,7 +569,7 @@ export default function PassengerForm({
         {!isRoundTrip && (
           <button
             onClick={handleBookOnly}
-            disabled={!isPassengerValid || loading}
+            disabled={!isPassengerValid || loading || bookingBlockedByPrice}
             className="flex-1 h-10 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs md:text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="btn-book-only"
           >
@@ -578,7 +589,7 @@ export default function PassengerForm({
         )}
         <button
           onClick={handlePayAndPrint}
-          disabled={!isPassengerValid || !isPaymentValid() || loading}
+          disabled={!isPassengerValid || !isPaymentValid() || loading || bookingBlockedByPrice}
           className="flex-1 h-10 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs md:text-sm font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           data-testid="btn-pay-confirm"
         >

@@ -115,6 +115,17 @@ export default function RouteTimeline({
   const currentPattern = patterns.find(p => p.id === trip.patternId);
   const allowIntraCityBooking = currentPattern?.allowIntraCityBooking ?? false;
 
+  // A CSO-selectable trip can be a not-yet-materialized "virtual-<baseId>"
+  // placeholder (see getCsoAvailableTrips / AppService's virtual trips) that
+  // has no row in `trips` yet. getPricedMatrixForTrip resolves via
+  // storage.getTripById(tripId) — for a virtual id that lookup finds
+  // nothing and the endpoint returns `{}` as a "successful" empty matrix,
+  // which would make every OD on that trip look unpriced (or, under the old
+  // fail-open gate, every OD look priced). Only ever query the matrix for a
+  // real, materialized trip id; for a virtual id the gate below stays
+  // fail-closed (matrix never "loads") until the trip is materialized.
+  const isRealTripId = !!trip.id && !trip.id.startsWith('virtual-');
+
   // OD-aware pricing gate: same exception-accurate matrix the App API
   // exposes on trip detail (GET /api/app/trips/:id `pricedMatrix`),
   // fetched here from its CSO-facing sibling endpoint — CSO uses session
@@ -126,15 +137,19 @@ export default function RouteTimeline({
   const { data: pricedMatrix = {}, isSuccess: pricedMatrixLoaded } = useQuery<Record<string, Record<string, number>>>({
     queryKey: ['/api/pricing/trip-matrix', trip.id],
     queryFn: () => priceRulesApi.getTripPricedMatrix(trip.id),
-    enabled: !!trip.id,
+    enabled: isRealTripId,
   });
 
   // true kalau originStopId -> destinationStopId ADA di pricedMatrix dengan
-  // harga > 0. Fail-open (anggap priced) selagi query belum selesai, biar
-  // tombol tidak sekejap nge-grey-out semua lalu "lompat" begitu data
-  // datang — 422 dari server tetap jadi penjaga terakhir kalau ada race.
+  // harga > 0. FAIL-CLOSED: sebelumnya fail-open (anggap priced) selagi
+  // query belum selesai, yang membuka jendela balapan di mana OD yang belum
+  // berharga tetap bisa dipilih sebelum matrix datang. Sekarang pasangan
+  // hanya dianggap priced kalau matrix SUDAH sukses dimuat DAN benar-benar
+  // punya harga > 0 untuk pasangan itu — selagi masih memuat (atau query
+  // di-disable karena trip masih virtual), semua pasangan dianggap BELUM
+  // priced. 422 dari server tetap jadi penjaga terakhir kalau ada balapan.
   const isOdPriced = (originStopId: string, destinationStopId: string) =>
-    !pricedMatrixLoaded || (pricedMatrix[originStopId]?.[destinationStopId] ?? 0) > 0;
+    pricedMatrixLoaded && (pricedMatrix[originStopId]?.[destinationStopId] ?? 0) > 0;
 
   const getStopException = (stopId: string) => stopExceptions.find(e => e.stopId === stopId);
 
@@ -223,7 +238,12 @@ export default function RouteTimeline({
   // salah ke-true untuk kasus itu juga).
   const originDestUnpriced = !!(selectedOrigin && selectedDestination && legCount > 0
     && !isOdPriced(selectedOrigin.id, selectedDestination.id));
-  const isValid = legCount > 0 && !originClosed && !destClosed && !originDestUnpriced;
+  // Dipakai untuk membedakan "masih menunggu matrix" dari "sudah dikonfirmasi
+  // belum ada harga" di badge/pesan ringkasan rute — supaya rute yang
+  // sebenarnya priced tidak sekejap terlihat seperti error saat matrix masih
+  // di-fetch.
+  const pricingStillLoading = !!(selectedOrigin && selectedDestination && legCount > 0 && !pricedMatrixLoaded);
+  const isValid = legCount > 0 && !originClosed && !destClosed && !originDestUnpriced && pricedMatrixLoaded;
 
   const isInSelectedRange = (i: number) => {
     if (originIdx < 0 || destIdx < 0) return false;
@@ -427,6 +447,13 @@ export default function RouteTimeline({
                       >
                         Naik
                       </span>
+                    ) : !pricedMatrixLoaded ? (
+                      <span
+                        title="Memuat data harga…"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-wait inline-flex items-center gap-1"
+                      >
+                        <Loader2 className="w-3 h-3 animate-spin" />Naik
+                      </span>
                     ) : notPricedAsOrigin ? (
                       <span
                         title="Belum Ada Harga — kombinasi titik naik & turun ini belum diisi harga"
@@ -466,6 +493,13 @@ export default function RouteTimeline({
                         className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
                       >
                         Turun
+                      </span>
+                    ) : !pricedMatrixLoaded ? (
+                      <span
+                        title="Memuat data harga…"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-wait inline-flex items-center gap-1"
+                      >
+                        <Loader2 className="w-3 h-3 animate-spin" />Turun
                       </span>
                     ) : notPricedAsDest ? (
                       <span
@@ -551,7 +585,11 @@ export default function RouteTimeline({
 
             {!isValid && (
               <div className="px-4 py-2 bg-rose-50 border-t border-rose-200 flex items-center gap-2">
-                {originDestUnpriced ? (
+                {pricingStillLoading ? (
+                  <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-gray-100 text-gray-500 rounded-md text-[10px] font-semibold flex-shrink-0">
+                    <Loader2 className="w-3 h-3 animate-spin" />Memuat Harga
+                  </span>
+                ) : originDestUnpriced ? (
                   <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-red-100 text-red-700 rounded-md text-[10px] font-semibold flex-shrink-0">
                     <AlertTriangle className="w-3 h-3" />Belum Ada Harga
                   </span>
@@ -563,6 +601,8 @@ export default function RouteTimeline({
                     ? 'Titik yang dipilih sedang ditutup oleh operasional. Pilih stop lain.'
                     : legCount <= 0
                     ? 'Titik naik dan turun tidak boleh sama. Pilih stop yang berbeda.'
+                    : pricingStillLoading
+                    ? 'Sedang memuat data harga untuk rute ini…'
                     : 'Rute ini belum memiliki harga. Pilih titik naik atau turun yang lain.'}
                 </p>
               </div>

@@ -7,6 +7,18 @@ type PaymentInfo = NonNullable<BookingFlowState['payment']>;
 type BookingOverrides = { passengers?: PassengerInput[]; payment?: PaymentInfo };
 type BookingResult = { booking: { id: string; [key: string]: unknown }; printPayload: unknown };
 
+// Shown whenever a fare cannot be determined for the currently selected
+// route/seats — whether because calculateTotalAmount() returned null
+// (incomplete selection) or because pricingApi.quoteFare() threw (e.g. the
+// server's 422 NO_PRICE_RULE for an unpriced OD). There must be exactly ONE
+// such message so the CSO always sees the same, honest explanation instead
+// of a fabricated total.
+const PRICE_UNAVAILABLE_MESSAGE = 'Rute ini belum memiliki harga — tidak bisa dibuat booking';
+
+function isNoPriceRuleError(error: unknown): boolean {
+  return !!error && typeof error === 'object' && (error as { code?: string }).code === 'NO_PRICE_RULE';
+}
+
 const BOOKING_STEPS: BookingStep[] = [
   { id: 1, name: 'Outlet', status: 'pending' },
   { id: 2, name: 'Trip', status: 'pending' },
@@ -102,30 +114,41 @@ export function useBookingFlow() {
     }
   }, [state]);
 
-  const calculateTotalAmount = useCallback(async (): Promise<number> => {
-    const legCount = (state.originSeq !== undefined && state.destinationSeq !== undefined)
-      ? Math.max(state.destinationSeq - state.originSeq, 1)
-      : 1;
-    const fallbackPerLeg = 25000;
-    const fallbackTotal = state.selectedSeats.length * legCount * fallbackPerLeg;
-
+  // NEVER invents a fare. Returns null when the selection is incomplete
+  // (price genuinely cannot be computed yet); rethrows if quoteFare fails
+  // (e.g. server 422 NO_PRICE_RULE for an unpriced OD) so callers can
+  // distinguish "not ready" from "server says this route can't be booked"
+  // and abort instead of silently booking with 0 or a made-up number.
+  const calculateTotalAmount = useCallback(async (): Promise<number | null> => {
     if (!state.trip?.id || state.originSeq === undefined || state.destinationSeq === undefined || state.selectedSeats.length === 0) {
-      return fallbackTotal;
+      return null;
     }
 
-    try {
-      const fareQuote = await pricingApi.quoteFare(
-        state.trip.id,
-        state.originSeq,
-        state.destinationSeq,
-        state.selectedSeats.length
-      );
-      return fareQuote.totalForAllPassengers;
-    } catch (error) {
-      console.error('Failed to calculate dynamic pricing, using fallback:', error);
-      return fallbackTotal;
-    }
+    const fareQuote = await pricingApi.quoteFare(
+      state.trip.id,
+      state.originSeq,
+      state.destinationSeq,
+      state.selectedSeats.length
+    );
+    return fareQuote.totalForAllPassengers;
   }, [state.trip?.id, state.originSeq, state.destinationSeq, state.selectedSeats.length]);
+
+  // Wraps calculateTotalAmount so every caller gets ONE consistent behavior:
+  // either a real, positive fare, or a thrown Error the caller can surface
+  // to the CSO. Never returns a fabricated/zero amount.
+  const getFareOrThrow = useCallback(async (): Promise<number> => {
+    try {
+      const amount = await calculateTotalAmount();
+      if (amount === null) {
+        throw new Error(PRICE_UNAVAILABLE_MESSAGE);
+      }
+      return amount;
+    } catch (error) {
+      if (error instanceof Error && error.message === PRICE_UNAVAILABLE_MESSAGE) throw error;
+      if (isNoPriceRuleError(error)) throw new Error(PRICE_UNAVAILABLE_MESSAGE);
+      throw error;
+    }
+  }, [calculateTotalAmount]);
 
   const validateBookingData = useCallback((overrides?: BookingOverrides) => {
     const s = { ...stateRef.current, ...overrides };
@@ -176,7 +199,7 @@ export function useBookingFlow() {
 
     setLoading(true);
     try {
-      const totalAmount = await calculateTotalAmount();
+      const totalAmount = await getFareOrThrow();
       
       const bookingData = {
         tripId: s.trip!.id,
@@ -231,7 +254,7 @@ export function useBookingFlow() {
     } finally {
       setLoading(false);
     }
-  }, [toast, calculateTotalAmount, validateBookingData]);
+  }, [toast, getFareOrThrow, validateBookingData]);
 
   const applyPromoCode = useCallback(async (code: string): Promise<void> => {
     if (!code.trim()) {
@@ -252,7 +275,7 @@ export function useBookingFlow() {
       throw new Error('Pilih trip dan rute terlebih dahulu');
     }
 
-    const subtotal = await calculateTotalAmount();
+    const subtotal = await getFareOrThrow();
     const trip = s.trip as { patternId?: string };
 
     const result = await promotionsApi.validate({
@@ -278,7 +301,7 @@ export function useBookingFlow() {
       discountAmount: result.discountAmount,
       promoValidation: result,
     }));
-  }, [calculateTotalAmount]);
+  }, [getFareOrThrow]);
 
   const clearPromoCode = useCallback(() => {
     promoSourceRef.current = null;
@@ -309,6 +332,12 @@ export function useBookingFlow() {
       try {
         const subtotal = await calculateTotalAmount();
         if (isStale()) return;
+        // Price genuinely unavailable (incomplete selection, or resolved to
+        // null before a quote could be attempted) — skip auto-apply
+        // silently. Never call the promo API with a fabricated/absent
+        // subtotal. A thrown NO_PRICE_RULE (etc.) from quoteFare falls
+        // through to the catch below, which already skips silently too.
+        if (subtotal === null) return;
         const trip = state.trip as { patternId?: string; serviceDate?: string };
         const best = await promotionsApi.autoApply({
           subtotal,
@@ -376,7 +405,7 @@ export function useBookingFlow() {
 
     setLoading(true);
     try {
-      const subtotal = await calculateTotalAmount();
+      const subtotal = await getFareOrThrow();
       const discount = s.discountAmount || 0;
       const totalAmount = subtotal - discount;
       
@@ -424,7 +453,7 @@ export function useBookingFlow() {
     } finally {
       setLoading(false);
     }
-  }, [toast, calculateTotalAmount, validateBookingData]);
+  }, [toast, getFareOrThrow, validateBookingData]);
 
   const resetFlow = useCallback(() => {
     promoSourceRef.current = null;

@@ -97,7 +97,7 @@ export default function CsoPage() {
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('left');
   const [bookingResult, setBookingResult] = useState<{ booking: any; printPayload: any } | null>(null);
   const [showPrint, setShowPrint] = useState(false);
-  const [totalAmount, setTotalAmount] = useState<number>(0);
+  const [totalAmount, setTotalAmount] = useState<number | null>(null);
   const [selectedCsoTrip, setSelectedCsoTrip] = useState<CsoAvailableTrip | undefined>();
   const [isProcessing, setIsProcessing] = useState(false);
   const [csoMode, setCsoMode] = useState<CsoMode>('penumpang');
@@ -166,15 +166,17 @@ export default function CsoPage() {
 
   useEffect(() => {
     if (state.selectedSeats.length === 0) {
-      setTotalAmount(0);
+      setTotalAmount(null);
       return;
     }
     const timer = setTimeout(async () => {
       try {
         const total = await calculateTotalAmount();
-        setTotalAmount(total);
+        setTotalAmount(total); // number | null — never fabricated
       } catch {
-        setTotalAmount(0);
+        // quoteFare failed (e.g. 422 NO_PRICE_RULE) — price unavailable,
+        // NEVER show Rp 0 as if it were a real fare.
+        setTotalAmount(null);
       }
     }, 300);
     return () => clearTimeout(timer);
@@ -210,7 +212,8 @@ export default function CsoPage() {
       setPpStep(2);
       setMobilePanel('left');
     } catch (e: any) {
-      toast({ title: 'Gagal mengambil harga', description: e.message, variant: 'destructive' });
+      const title = e?.code === 'NO_PRICE_RULE' ? 'Belum Ada Harga' : 'Gagal mengambil harga';
+      toast({ title, description: e.message, variant: 'destructive' });
     } finally {
       setIsProcessing(false);
     }
@@ -259,7 +262,8 @@ export default function CsoPage() {
       setPpFares(prev => ({ ...prev, return: fare.perPassenger }));
       setPpStep(3);
     } catch (e: any) {
-      toast({ title: 'Gagal mengambil harga', description: e.message, variant: 'destructive' });
+      const title = e?.code === 'NO_PRICE_RULE' ? 'Belum Ada Harga' : 'Gagal mengambil harga';
+      toast({ title, description: e.message, variant: 'destructive' });
     } finally {
       setIsProcessing(false);
     }
@@ -990,7 +994,13 @@ export default function CsoPage() {
                   >
                     {bookingMode === 'round-trip' && ppStep === 2
                       ? 'Pilih Rute Pulang'
-                      : bookingMode === 'round-trip' ? 'Penumpang & Bayar' : `Data & Bayar${totalAmount > 0 ? ` (${fmtCurrency(totalAmount)})` : ''}`}
+                      : bookingMode === 'round-trip' ? 'Penumpang & Bayar' : `Data & Bayar${
+                          selectedSeats.length === 0
+                            ? ''
+                            : totalAmount === null
+                            ? ' (Belum Ada Harga)'
+                            : ` (${fmtCurrency(totalAmount)})`
+                        }`}
                   </button>
                 </div>
               </div>
@@ -1298,7 +1308,8 @@ export default function CsoPage() {
                       seatNo,
                     }))}
                     onPassengersUpdate={handlePassengersUpdate}
-                    totalAmount={totalAmount}
+                    totalAmount={totalAmount ?? 0}
+                    priceUnavailable={totalAmount === null}
                     onBook={handleBookWithData}
                     onPay={(passengers, payment) => { void handlePayWithData(passengers, { ...payment, method: payment.method as 'cash' | 'qr' | 'ewallet' | 'bank' }); }}
                     onPaymentUpdate={handlePaymentUpdate}
@@ -1347,7 +1358,7 @@ export default function CsoPage() {
                   <span className="hidden sm:inline">Kursi: </span>
                   <span className="font-semibold text-blue-600">{sortedSeats.join(', ')}</span>
                   <span className="mx-0.5">|</span>
-                  <span className="font-bold text-blue-700">{fmtCurrency(totalAmount)}</span>
+                  <span className="font-bold text-blue-700">{totalAmount === null ? 'Belum Ada Harga' : fmtCurrency(totalAmount)}</span>
                 </span>
               )}
             </div>

@@ -9,7 +9,11 @@ import type {
 async function assertOk<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error((body as any).error || (body as any).message || `Request failed (${response.status})`);
+    const message = (body as any).error || (body as any).message || `Request failed (${response.status})`;
+    const err = new Error(message) as Error & { code?: string; status?: number };
+    if ((body as any).code) err.code = (body as any).code;
+    err.status = response.status;
+    throw err;
   }
   return response.json() as Promise<T>;
 }
