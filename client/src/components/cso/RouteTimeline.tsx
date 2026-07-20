@@ -68,6 +68,11 @@ const formatDuration = (mins: number): string => {
   return `${mins}m`;
 };
 
+const formatTimeDot = (timestamp: string | Date | null | undefined): string => {
+  const t = formatTime(timestamp);
+  return t === '--:--' ? '--.--' : t.replace(':', '.');
+};
+
 export default function RouteTimeline({
   trip,
   selectedOrigin,
@@ -397,47 +402,54 @@ export default function RouteTimeline({
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className={`text-sm font-semibold ${isOrigin || isDest ? 'text-gray-900' : 'text-gray-700'}`}>{stop.name}</p>
+                  {/* Baris 1: jam bold · nama stop · badge status */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-bold tabular-nums text-gray-900">
+                      {isFirst
+                        ? formatTimeDot(stopTime.departAt)
+                        : isLast
+                        ? formatTimeDot(stopTime.arriveAt)
+                        : !canBoard && canAlight
+                        ? formatTimeDot(stopTime.arriveAt)
+                        : formatTimeDot(stopTime.departAt ?? stopTime.arriveAt)}
+                    </span>
+                    <span className={`text-sm font-semibold ${isOrigin || isDest ? 'text-gray-900' : 'text-gray-700'}`}>{stop.name}</span>
                     <div className="flex gap-1">
                       {!isLast && stopTime.effectiveBoardingAllowed !== false && (
                         isOrigin ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-emerald-500 text-white">Naik</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded border border-emerald-500 leading-none text-[9px] font-bold uppercase bg-emerald-500 text-white">NAIK</span>
                         ) : boardingClosed ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-amber-50 text-amber-500 line-through">Naik</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded border border-amber-300 leading-none text-[9px] font-bold uppercase text-amber-400 line-through">NAIK</span>
                         ) : (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-emerald-50 text-emerald-600">Naik</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded border border-emerald-400 leading-none text-[9px] font-bold uppercase text-emerald-600">NAIK</span>
                         )
                       )}
                       {!isFirst && stopTime.effectiveAlightingAllowed !== false && (
                         isDest ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-rose-500 text-white">Turun</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded border border-rose-500 leading-none text-[9px] font-bold uppercase bg-rose-500 text-white">TURUN</span>
                         ) : alightingClosed ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-amber-50 text-amber-500 line-through">Turun</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded border border-amber-300 leading-none text-[9px] font-bold uppercase text-amber-400 line-through">TURUN</span>
                         ) : (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-rose-50 text-rose-500">Turun</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded border border-rose-400 leading-none text-[9px] font-bold uppercase text-rose-500">TURUN</span>
                         )
                       )}
                       {!isFirst && !isLast && stopTime.effectiveBoardingAllowed === false && stopTime.effectiveAlightingAllowed === false && (
-                        <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-gray-100 text-gray-400">Transit</span>
+                        <span className="inline-block px-1.5 py-0.5 rounded border border-gray-300 leading-none text-[9px] font-bold uppercase text-gray-400">TRANSIT</span>
                       )}
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400 font-mono mt-1">
-                    <Clock className="w-3 h-3 inline -mt-px mr-0.5" />
-                    {isFirst
-                      ? formatTime(stopTime.departAt)
-                      : isLast
-                      ? formatTime(stopTime.arriveAt)
-                      : !canBoard && canAlight
-                      ? formatTime(stopTime.arriveAt)
-                      : formatTime(stopTime.departAt ?? stopTime.arriveAt)}
-                    {isFirst && <span className="text-gray-300 ml-1.5">&middot; Keberangkatan</span>}
-                    {isLast && <span className="text-gray-300 ml-1.5">&middot; Tujuan akhir</span>}
-                    {!isFirst && !isLast && canBoard && stopTime.arriveAt && stopTime.departAt && stopTime.arriveAt !== stopTime.departAt && (
-                      <span className="text-gray-300 ml-1.5">&middot; Berangkat</span>
+                  {/* Baris 2: clock ±durasi · pin label (hanya stop pertama & terakhir) */}
+                  <div className="flex items-center gap-1 mt-1 text-xs text-gray-400">
+                    <Clock className="w-3 h-3 flex-shrink-0" />
+                    <span>{legDuration ? `±${formatDuration(legDuration)}` : '-'}</span>
+                    {(isFirst || isLast) && (
+                      <>
+                        <span className="text-gray-300 mx-0.5">·</span>
+                        <MapPin className="w-3 h-3 flex-shrink-0" />
+                        <span>{isFirst ? 'Keberangkatan' : 'Tujuan akhir'}</span>
+                      </>
                     )}
-                  </p>
+                  </div>
                   {stopEx && (
                     <div className="flex items-center gap-1 mt-1">
                       <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
@@ -552,15 +564,6 @@ export default function RouteTimeline({
                 </div>
               </div>
 
-              {!isLast && legDuration && (
-                <div className="flex px-4 py-2">
-                  <div className="w-5 mr-4 flex-shrink-0" />
-                  <div className="flex items-center gap-1 text-xs text-gray-400">
-                    <ArrowDown className="w-3 h-3" />
-                    <span>{formatDuration(legDuration)}</span>
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}
