@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@server/db";
 import { IStorage } from "@server/storage.interface";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
+import { webSocketService } from "@server/realtime/ws";
 import {
   priceRules,
   priceRuleExceptions,
@@ -126,6 +127,7 @@ export class PriceRulesService {
         })
         .where(eq(priceRules.id, existing.id))
         .returning();
+      webSocketService.emitPriceRulesChanged({ patternId: params.patternId });
       return updated;
     }
 
@@ -145,6 +147,7 @@ export class PriceRulesService {
       matrix: blob,
       isActive: true,
     }).returning();
+    webSocketService.emitPriceRulesChanged({ patternId: params.patternId });
     return created;
   }
 
@@ -178,17 +181,20 @@ export class PriceRulesService {
       matrix: { version: 1, cells },
       isActive: true,
     }).returning();
+    webSocketService.emitPriceRulesChanged({ patternId });
     return created;
   }
 
   async setPriceRuleActive(matrixId: string, isActive: boolean, ctx: ServiceContext): Promise<void> {
     requirePermission(ctx, 'master.price_rules');
     await db.update(priceRules).set({ isActive, updatedAt: new Date() }).where(eq(priceRules.id, matrixId));
+    webSocketService.emitPriceRulesChanged();
   }
 
   async deletePriceRule(matrixId: string, ctx: ServiceContext): Promise<void> {
     requirePermission(ctx, 'master.price_rules');
     await db.update(priceRules).set({ deletedAt: new Date() }).where(eq(priceRules.id, matrixId));
+    webSocketService.emitPriceRulesChanged();
   }
 
   // ---- Trip exceptions -----------------------------------------------
@@ -212,17 +218,21 @@ export class PriceRulesService {
         .set({ price: price.toFixed(2), updatedAt: new Date() })
         .where(eq(priceRuleExceptions.id, existing.id))
         .returning();
+      webSocketService.emitPriceRulesChanged({ tripId });
       return updated;
     }
     const [created] = await db.insert(priceRuleExceptions).values({
       tripId, originStopId, destinationStopId, price: price.toFixed(2),
     }).returning();
+    webSocketService.emitPriceRulesChanged({ tripId });
     return created;
   }
 
   async deleteTripException(id: string, ctx: ServiceContext): Promise<void> {
     requirePermission(ctx, 'master.price_rules');
+    const [existing] = await db.select().from(priceRuleExceptions).where(eq(priceRuleExceptions.id, id));
     await db.update(priceRuleExceptions).set({ deletedAt: new Date() }).where(eq(priceRuleExceptions.id, id));
+    webSocketService.emitPriceRulesChanged({ tripId: existing?.tripId });
   }
 
   // ---- Sync (read-time, no webhooks) ----------------------------------
@@ -300,11 +310,13 @@ export class PriceRulesService {
         .set({ matrix: blob, updatedAt: new Date() })
         .where(eq(priceRules.id, existing.id))
         .returning();
+      webSocketService.emitPriceRulesChanged({ patternId });
       return updated;
     }
     const [created] = await db.insert(priceRules).values({
       scope: 'pattern', patternId, kind: 'regular', matrix: blob, isActive: true,
     }).returning();
+    webSocketService.emitPriceRulesChanged({ patternId });
     return created;
   }
 

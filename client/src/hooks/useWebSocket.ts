@@ -9,6 +9,7 @@ export interface WSEvents {
   TRIP_MATERIALIZED: { baseId: string; serviceDate: string; tripId: string };
   INVENTORY_UPDATED: { tripId: string; seatNo: string; legIndexes?: number[] };
   STOP_EXCEPTION_CHANGED: { baseId: string; serviceDate: string; stopId: string };
+  PRICE_RULES_CHANGED: { patternId?: string; tripId?: string };
 }
 
 export type WSEventName = keyof WSEvents;
@@ -94,7 +95,8 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
       'HOLDS_RELEASED',
       'TRIP_MATERIALIZED',
       'INVENTORY_UPDATED',
-      'STOP_EXCEPTION_CHANGED'
+      'STOP_EXCEPTION_CHANGED',
+      'PRICE_RULES_CHANGED'
     ];
 
     eventNames.forEach(eventName => {

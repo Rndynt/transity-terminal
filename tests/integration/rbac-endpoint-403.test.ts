@@ -104,6 +104,7 @@ vi.mock("@server/realtime/ws", () => ({
     emitInventoryUpdated: vi.fn(),
     emitToTrip: vi.fn(),
     emitHoldsReleased: vi.fn(),
+    emitPriceRulesChanged: vi.fn(),
   },
 }));
 

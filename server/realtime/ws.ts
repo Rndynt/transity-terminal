@@ -37,6 +37,12 @@ export interface WSEvents {
   TRIP_MATERIALIZED: { baseId: string; serviceDate: string; tripId: string };
   INVENTORY_UPDATED: { tripId: string; seatNo: string; legIndexes?: number[] };
   STOP_EXCEPTION_CHANGED: { baseId: string; serviceDate: string; stopId: string };
+  // Fired whenever any price_rules / price_rule_exceptions row changes
+  // (Master Data "Aturan Harga" save, activate/deactivate, delete, sync
+  // missing pairs, or a per-trip exception). patternId/tripId are best-
+  // effort hints for future targeted invalidation — clients currently just
+  // treat any occurrence as "re-fetch the priced matrix I have open".
+  PRICE_RULES_CHANGED: { patternId?: string; tripId?: string };
 }
 
 export type WSEventName = keyof WSEvents;
@@ -344,6 +350,16 @@ class WebSocketService {
     }
   }
 
+  // Helper to emit PRICE_RULES_CHANGED. Price rules aren't naturally scoped
+  // to a single trip/base/cso room (a pattern-level or global-fallback edit
+  // can affect many trips across many outlets at once), and this only fires
+  // on an explicit admin save/delete/sync — infrequent enough that a full
+  // broadcast is the right tool rather than trying to fan out to every
+  // affected room.
+  emitPriceRulesChanged(data: WSEventData<'PRICE_RULES_CHANGED'> = {}) {
+    this.broadcast('PRICE_RULES_CHANGED', data);
+  }
+
   getConnectedClientsCount(): number {
     return this.io?.engine.clientsCount || 0;
   }
@@ -365,5 +381,6 @@ export const {
   emitTripStatusChanged,
   emitHoldsReleased,
   emitTripMaterialized,
-  emitInventoryUpdated
+  emitInventoryUpdated,
+  emitPriceRulesChanged
 } = webSocketService;

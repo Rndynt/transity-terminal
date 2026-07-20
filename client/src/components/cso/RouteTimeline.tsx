@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { tripsApi, stopsApi, tripPatternsApi, priceRulesApi } from '@/lib/api';
+import { useWebSocket } from '@/hooks/useWebSocket';
+import { queryClient } from '@/lib/queryClient';
 import {
   Clock, ArrowDown, MapPin, ArrowRight, Check, ChevronRight, Loader2, AlertTriangle
 } from 'lucide-react';
@@ -138,7 +140,28 @@ export default function RouteTimeline({
     queryKey: ['/api/pricing/trip-matrix', trip.id],
     queryFn: () => priceRulesApi.getTripPricedMatrix(trip.id),
     enabled: isRealTripId,
+    // Fallback for when the PRICE_RULES_CHANGED websocket push (below) was
+    // missed (socket briefly disconnected) — re-check on refocus so an
+    // admin's price change is picked up next time the CSO looks back at
+    // this tab, without requiring a full manual page refresh.
+    refetchOnWindowFocus: true,
   });
+
+  // Master Data price-rule edits (Aturan Harga: pattern matrix, global
+  // fallback, or a per-trip exception) used to only reach an already-open
+  // CSO tab on manual browser refresh, because pricedMatrix above is a
+  // plain react-query fetch with no invalidation trigger. Mirrors the same
+  // useWebSocket + invalidate pattern SeatMap.tsx already uses for seat
+  // inventory. Broad prefix invalidate (no exact tripId filter) — cheap,
+  // and correct even for a global-fallback or another pattern's edit that
+  // could still affect this trip's resolver precedence.
+  const { isConnected: wsConnected, addEventListener } = useWebSocket();
+  useEffect(() => {
+    if (!wsConnected) return;
+    return addEventListener('PRICE_RULES_CHANGED', () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/pricing/trip-matrix'] });
+    });
+  }, [wsConnected, addEventListener]);
 
   // true kalau originStopId -> destinationStopId ADA di pricedMatrix dengan
   // harga > 0. FAIL-CLOSED: sebelumnya fail-open (anggap priced) selagi
