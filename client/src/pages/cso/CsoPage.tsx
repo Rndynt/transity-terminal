@@ -910,7 +910,7 @@ export default function CsoPage() {
 
               {/* Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden md:max-w-7xl md:w-full md:mx-auto">
           <div className={`flex-1 border-r border-gray-200 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'left' ? 'block' : 'hidden md:block'}`} data-testid="panel-trip-selector">
             <TripSelector
               selectedOutlet={state.outlet}
@@ -1007,7 +1007,7 @@ export default function CsoPage() {
 
               {/* Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex overflow-hidden md:max-w-7xl md:w-full md:mx-auto">
 
             {/* LEFT PANEL */}
             <div className={`flex-1 border-r border-gray-200 overflow-y-auto p-3 md:p-5 ${mobilePanel === 'left' ? 'block' : 'hidden md:block'}`} data-testid="panel-seat-map">

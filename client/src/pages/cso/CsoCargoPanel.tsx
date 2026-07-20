@@ -67,7 +67,7 @@ export default function CsoCargoPanel({
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden md:max-w-7xl md:w-full md:mx-auto">
         <div className={`flex-1 overflow-y-auto p-3 md:p-5 border-r border-gray-100 ${mobileCargoPanel === 'left' ? 'block' : 'hidden md:block'}`} data-testid="panel-cargo-form">
           <div className="max-w-2xl mx-auto">
             {state.trip?.id ? (
