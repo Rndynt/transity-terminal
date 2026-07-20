@@ -68,6 +68,11 @@ const formatDuration = (mins: number): string => {
   return `${mins}m`;
 };
 
+const formatTimeDot = (timestamp: string | Date | null | undefined): string => {
+  const t = formatTime(timestamp);
+  return t === '--:--' ? '--.-' : t.replace(':', '.');
+};
+
 export default function RouteTimeline({
   trip,
   selectedOrigin,
@@ -82,7 +87,7 @@ export default function RouteTimeline({
   const autoSelectDone = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const circleRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const [lineSegments, setLineSegments] = useState<{ top: number; height: number; color: string }[]>([]);
+  const [lineSegments, setLineSegments] = useState<{ top: number; height: number; segIdx: number; inRange: boolean }[]>([]);
 
   const { data: stopTimes = [], isLoading } = useQuery<EffectiveStopTime[]>({
     queryKey: ['/api/trips', trip.id, 'stop-times', 'effective'],
@@ -290,14 +295,13 @@ export default function RouteTimeline({
         const r = el.getBoundingClientRect();
         return Math.round(r.top - containerTop + r.height / 2);
       });
-      const segments: { top: number; height: number; color: string }[] = [];
+      const segments: { top: number; height: number; segIdx: number; inRange: boolean }[] = [];
       for (let i = 0; i < centers.length - 1; i++) {
         const top = centers[i];
         const bottom = centers[i + 1];
         if (top == null || bottom == null) continue;
-        const segmentInRange = originIdx >= 0 && destIdx >= 0 && i >= originIdx && i + 1 <= destIdx;
-        const color = segmentInRange ? 'bg-blue-300' : 'bg-gray-300';
-        segments.push({ top, height: bottom - top, color });
+        const inRange = originIdx >= 0 && destIdx >= 0 && i >= originIdx && i + 1 <= destIdx;
+        segments.push({ top, height: bottom - top, segIdx: i, inRange });
       }
       // Rounding + skip-if-unchanged guard: a ResizeObserver observing this
       // same container would otherwise retrigger every time setState causes
@@ -334,13 +338,25 @@ export default function RouteTimeline({
       </div>
 
       <div ref={listRef} className="relative bg-white border border-gray-200 rounded-xl overflow-hidden">
+        {/* Connector lines: segment 0 = solid blue, rest = dashed gray */}
         {lineSegments.map((seg, i) => (
           <div
             key={i}
-            className={`absolute w-[3px] z-0 ${seg.color}`}
-            style={{ left: '25px', top: seg.top, height: seg.height }}
+            className="absolute z-0"
+            style={{
+              left: '27px',
+              top: seg.top,
+              height: seg.height,
+              width: '2px',
+              background: seg.segIdx === 0
+                ? '#2563eb'
+                : seg.inRange
+                ? '#93c5fd'
+                : 'repeating-linear-gradient(to bottom,#d1d5db 0,#d1d5db 4px,transparent 4px,transparent 8px)',
+            }}
           />
         ))}
+
         {sortedStopTimes.map((stopTime, index) => {
           const stop = getStopById(stopTime.stopId);
           if (!stop) return null;
@@ -354,16 +370,8 @@ export default function RouteTimeline({
           const alightingClosed = stopEx?.disableAlighting === true;
           const canBoard = stopTime.effectiveBoardingAllowed !== false && !boardingClosed;
           const canAlight = stopTime.effectiveAlightingAllowed !== false && !alightingClosed;
-          // Stop ini tidak boleh jadi titik NAIK kalau kotanya sama dengan
-          // titik turun yang sudah dipilih (dan sebaliknya untuk turun) —
-          // guard rute pendek dalam-kota (lihat isSameCityBlocked).
           const blockedByCityAsOrigin = !isDest && isSameCityBlocked(stop, selectedDestination);
           const blockedByCityAsDest = !isOrigin && isSameCityBlocked(stop, selectedOrigin);
-          // OD-aware "Belum Ada Harga" gate, mirroring blockedByCityAsOrigin/
-          // Dest exactly: kalau lawan pasangannya sudah dipilih, cek pasangan
-          // spesifik itu; kalau belum ada yang dipilih sama sekali, cek
-          // apakah stop ini SECARA TOTAL tidak pernah punya OD berharga ke
-          // arah manapun (preemptive grey-out).
           const notPricedAsOrigin = !isDest && (
             selectedDestination ? !isOdPriced(stop.id, selectedDestination.id) : stopsWithNoPricedDestination.has(stop.id)
           );
@@ -375,192 +383,166 @@ export default function RouteTimeline({
           const nextStopTime = sortedStopTimes[index + 1];
           const legDuration = nextStopTime ? calculateDuration(stopTime.departAt, nextStopTime.arriveAt) : null;
 
+          const displayTime = isFirst
+            ? formatTimeDot(stopTime.departAt)
+            : isLast
+            ? formatTimeDot(stopTime.arriveAt)
+            : !canBoard && canAlight
+            ? formatTimeDot(stopTime.arriveAt)
+            : formatTimeDot(stopTime.departAt ?? stopTime.arriveAt);
+
           return (
-            <div key={stopTime.id}>
-              <div className={`flex items-center px-4 py-3 transition-colors ${
-                isOrigin ? 'bg-emerald-50' : isDest ? 'bg-rose-50' : inRange ? 'bg-blue-50/40' : 'hover:bg-gray-50'
-              }`}>
-                <div className="flex flex-col items-center justify-center mr-4 self-stretch">
+            <div
+              key={stopTime.id}
+              className={`flex items-start px-3 py-3 gap-3 transition-colors border-b last:border-b-0 border-gray-100 ${
+                isOrigin ? 'bg-emerald-50' : isDest ? 'bg-rose-50' : inRange ? 'bg-blue-50/30' : 'hover:bg-gray-50'
+              }`}
+            >
+              {/* ── Timeline dot column ── */}
+              <div className="w-7 flex-shrink-0 flex justify-center pt-[3px]">
+                {isFirst ? (
+                  /* First stop: filled blue circle + white inner ring */
                   <div
                     ref={(el) => { circleRefs.current[index] = el; }}
-                    className={`relative z-10 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                      isOrigin ? 'bg-emerald-500 ring-[3px] ring-emerald-200 shadow-sm' :
-                      isDest ? 'bg-rose-500 ring-[3px] ring-rose-200 shadow-sm' :
-                      inRange ? 'bg-blue-400 border-2 border-blue-300' :
-                      'bg-white border-2 border-gray-300'
-                    }`}
+                    className="relative z-10 w-[18px] h-[18px] rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0"
                   >
-                    {isOrigin && <ArrowRight className="w-2.5 h-2.5 text-white" />}
-                    {isDest && <MapPin className="w-2.5 h-2.5 text-white" />}
-                    {inRange && !isOrigin && !isDest && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                    <div className="w-[7px] h-[7px] rounded-full bg-white" />
                   </div>
-                </div>
+                ) : isLast ? (
+                  /* Last stop: blue map-pin SVG */
+                  <div ref={(el) => { circleRefs.current[index] = el; }} className="relative z-10 flex-shrink-0 w-[18px] flex justify-center">
+                    <svg width="16" height="20" viewBox="0 0 16 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M8 0C3.589 0 0 3.589 0 8c0 5.25 7.2 11.55 7.51 11.82a.75.75 0 0 0 .98 0C8.8 19.55 16 13.25 16 8c0-4.411-3.589-8-8-8z" fill="#2563eb"/>
+                      <circle cx="8" cy="8" r="3" fill="white"/>
+                    </svg>
+                  </div>
+                ) : (
+                  /* Middle stops: hollow circle, blue when in selected range */
+                  <div
+                    ref={(el) => { circleRefs.current[index] = el; }}
+                    className={`relative z-10 w-[18px] h-[18px] rounded-full border-2 bg-white flex-shrink-0 transition-colors ${
+                      inRange ? 'border-blue-400' : 'border-gray-300'
+                    }`}
+                  />
+                )}
+              </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className={`text-sm font-semibold ${isOrigin || isDest ? 'text-gray-900' : 'text-gray-700'}`}>{stop.name}</p>
-                    <div className="flex gap-1">
-                      {!isLast && stopTime.effectiveBoardingAllowed !== false && (
-                        isOrigin ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-emerald-500 text-white">Naik</span>
-                        ) : boardingClosed ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-amber-50 text-amber-500 line-through">Naik</span>
-                        ) : (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-emerald-50 text-emerald-600">Naik</span>
-                        )
-                      )}
-                      {!isFirst && stopTime.effectiveAlightingAllowed !== false && (
-                        isDest ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-rose-500 text-white">Turun</span>
-                        ) : alightingClosed ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-amber-50 text-amber-500 line-through">Turun</span>
-                        ) : (
-                          <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-rose-50 text-rose-500">Turun</span>
-                        )
-                      )}
-                      {!isFirst && !isLast && stopTime.effectiveBoardingAllowed === false && stopTime.effectiveAlightingAllowed === false && (
-                        <span className="inline-block px-1.5 py-0.5 rounded leading-none text-[9px] font-bold uppercase bg-gray-100 text-gray-400">Transit</span>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-400 font-mono mt-1">
-                    <Clock className="w-3 h-3 inline -mt-px mr-0.5" />
-                    {isFirst
-                      ? formatTime(stopTime.departAt)
-                      : isLast
-                      ? formatTime(stopTime.arriveAt)
-                      : !canBoard && canAlight
-                      ? formatTime(stopTime.arriveAt)
-                      : formatTime(stopTime.departAt ?? stopTime.arriveAt)}
-                    {isFirst && <span className="text-gray-300 ml-1.5">&middot; Keberangkatan</span>}
-                    {isLast && <span className="text-gray-300 ml-1.5">&middot; Tujuan akhir</span>}
-                    {!isFirst && !isLast && canBoard && stopTime.arriveAt && stopTime.departAt && stopTime.arriveAt !== stopTime.departAt && (
-                      <span className="text-gray-300 ml-1.5">&middot; Berangkat</span>
-                    )}
-                  </p>
-                  {stopEx && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
-                      <span className="text-xs text-amber-600 font-medium">
-                        Ditutup Ops
-                        {boardingClosed && !alightingClosed && ' (Naik)'}
-                        {alightingClosed && !boardingClosed && ' (Turun)'}
-                        {boardingClosed && alightingClosed && ' (Naik & Turun)'}
-                      </span>
-                      {stopEx.reason && (
-                        <span className="text-xs text-amber-400 ml-0.5">— {stopEx.reason}</span>
-                      )}
-                    </div>
+              {/* ── Info column ── */}
+              <div className="flex-1 min-w-0">
+                {/* Row 1: time · name · status badge */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-bold text-gray-900 tabular-nums leading-none">{displayTime}</span>
+                  <span className={`text-sm font-medium leading-none ${isOrigin || isDest ? 'text-gray-900' : 'text-gray-700'}`}>{stop.name}</span>
+                  {/* Status badges (informational) */}
+                  {!isLast && stopTime.effectiveBoardingAllowed !== false && (
+                    isOrigin
+                      ? <span className="inline-block px-1.5 py-0.5 rounded border border-emerald-500 leading-none text-[9px] font-bold uppercase bg-emerald-500 text-white">NAIK</span>
+                      : boardingClosed
+                      ? <span className="inline-block px-1.5 py-0.5 rounded border border-amber-300 leading-none text-[9px] font-bold uppercase text-amber-400 line-through">NAIK</span>
+                      : <span className="inline-block px-1.5 py-0.5 rounded border border-emerald-400 leading-none text-[9px] font-bold uppercase text-emerald-600">NAIK</span>
+                  )}
+                  {!isFirst && stopTime.effectiveAlightingAllowed !== false && (
+                    isDest
+                      ? <span className="inline-block px-1.5 py-0.5 rounded border border-rose-500 leading-none text-[9px] font-bold uppercase bg-rose-500 text-white">TURUN</span>
+                      : alightingClosed
+                      ? <span className="inline-block px-1.5 py-0.5 rounded border border-amber-300 leading-none text-[9px] font-bold uppercase text-amber-400 line-through">TURUN</span>
+                      : <span className="inline-block px-1.5 py-0.5 rounded border border-rose-400 leading-none text-[9px] font-bold uppercase text-rose-500">TURUN</span>
+                  )}
+                  {!isFirst && !isLast && stopTime.effectiveBoardingAllowed === false && stopTime.effectiveAlightingAllowed === false && (
+                    <span className="inline-block px-1.5 py-0.5 rounded border border-gray-300 leading-none text-[9px] font-bold uppercase text-gray-400">TRANSIT</span>
                   )}
                 </div>
 
-                <div className="flex gap-1.5 flex-shrink-0">
-                  {canBoard && !isLast ? (
-                    isDest && !isOrigin ? (
-                      <span
-                        title="Stop ini sudah dipilih sebagai titik turun"
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
-                      >
-                        Naik
-                      </span>
-                    ) : blockedByCityAsOrigin ? (
-                      <span
-                        title={`Rute dalam kota ${stop.city} tidak dijual untuk pola ini`}
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
-                      >
-                        Naik
-                      </span>
-                    ) : !pricedMatrixLoaded ? (
-                      <span
-                        title="Memuat data harga…"
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-wait inline-flex items-center gap-1"
-                      >
-                        <Loader2 className="w-3 h-3 animate-spin" />Naik
-                      </span>
-                    ) : notPricedAsOrigin ? (
-                      <span
-                        title="Belum Ada Harga — kombinasi titik naik & turun ini belum diisi harga"
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-50 border border-red-100 text-red-300 cursor-not-allowed inline-flex items-center gap-1"
-                      >
-                        <AlertTriangle className="w-3 h-3" />Naik
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => onOriginSelect(stop, stopTime.stopSequence)}
-                        data-testid={`naik-${index}`}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-                          isOrigin
-                            ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-200'
-                            : 'bg-white border border-gray-200 text-gray-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'
-                        }`}
-                      >
-                        {isOrigin ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Naik</> : 'Naik'}
-                      </button>
-                    )
-                  ) : !isLast ? (
-                    <span className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">
-                      Naik
-                    </span>
-                  ) : null}
-                  {canAlight && !isFirst ? (
-                    isOrigin && !isDest ? (
-                      <span
-                        title="Stop ini sudah dipilih sebagai titik naik"
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
-                      >
-                        Turun
-                      </span>
-                    ) : blockedByCityAsDest ? (
-                      <span
-                        title={`Rute dalam kota ${stop.city} tidak dijual untuk pola ini`}
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
-                      >
-                        Turun
-                      </span>
-                    ) : !pricedMatrixLoaded ? (
-                      <span
-                        title="Memuat data harga…"
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-wait inline-flex items-center gap-1"
-                      >
-                        <Loader2 className="w-3 h-3 animate-spin" />Turun
-                      </span>
-                    ) : notPricedAsDest ? (
-                      <span
-                        title="Belum Ada Harga — kombinasi titik naik & turun ini belum diisi harga"
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-50 border border-red-100 text-red-300 cursor-not-allowed inline-flex items-center gap-1"
-                      >
-                        <AlertTriangle className="w-3 h-3" />Turun
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => onDestinationSelect(stop, stopTime.stopSequence)}
-                        data-testid={`turun-${index}`}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-                          isDest
-                            ? 'bg-rose-500 text-white shadow-sm shadow-rose-200'
-                            : 'bg-white border border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-600 hover:bg-rose-50'
-                        }`}
-                      >
-                        {isDest ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Turun</> : 'Turun'}
-                      </button>
-                    )
-                  ) : !isFirst ? (
-                    <span className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">
-                      Turun
-                    </span>
-                  ) : null}
+                {/* Row 2: duration sub-info */}
+                <div className="flex items-center gap-1 mt-1 text-[11px] text-gray-400">
+                  <Clock className="w-3 h-3 flex-shrink-0" />
+                  <span>{legDuration ? `±${formatDuration(legDuration)}` : '-'}</span>
+                  {(isFirst || isLast) && (
+                    <>
+                      <span className="mx-0.5 text-gray-300">·</span>
+                      <MapPin className="w-3 h-3 flex-shrink-0" />
+                      <span>{isFirst ? 'Keberangkatan' : 'Tujuan akhir'}</span>
+                    </>
+                  )}
                 </div>
+
+                {/* Stop exception */}
+                {stopEx && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                    <span className="text-xs text-amber-600 font-medium">
+                      Ditutup Ops
+                      {boardingClosed && !alightingClosed && ' (Naik)'}
+                      {alightingClosed && !boardingClosed && ' (Turun)'}
+                      {boardingClosed && alightingClosed && ' (Naik & Turun)'}
+                    </span>
+                    {stopEx.reason && <span className="text-xs text-amber-400 ml-0.5">— {stopEx.reason}</span>}
+                  </div>
+                )}
               </div>
 
-              {!isLast && legDuration && (
-                <div className="flex px-4 py-2">
-                  <div className="w-5 mr-4 flex-shrink-0" />
-                  <div className="flex items-center gap-1 text-xs text-gray-400">
-                    <ArrowDown className="w-3 h-3" />
-                    <span>{formatDuration(legDuration)}</span>
-                  </div>
-                </div>
-              )}
+              {/* ── Button column (unchanged logic, all states preserved) ── */}
+              <div className="flex gap-1.5 flex-shrink-0">
+                {canBoard && !isLast ? (
+                  isDest && !isOrigin ? (
+                    <span title="Stop ini sudah dipilih sebagai titik turun" className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">Naik</span>
+                  ) : blockedByCityAsOrigin ? (
+                    <span title={`Rute dalam kota ${stop.city} tidak dijual untuk pola ini`} className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">Naik</span>
+                  ) : !pricedMatrixLoaded ? (
+                    <span title="Memuat data harga…" className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-wait inline-flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" />Naik
+                    </span>
+                  ) : notPricedAsOrigin ? (
+                    <span title="Belum Ada Harga — kombinasi titik naik & turun ini belum diisi harga" className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-50 border border-red-100 text-red-300 cursor-not-allowed inline-flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />Naik
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => onOriginSelect(stop, stopTime.stopSequence)}
+                      data-testid={`naik-${index}`}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                        isOrigin
+                          ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-200'
+                          : 'bg-white border border-gray-200 text-gray-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'
+                      }`}
+                    >
+                      {isOrigin ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Naik</> : 'Naik'}
+                    </button>
+                  )
+                ) : !isLast ? (
+                  <span className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">Naik</span>
+                ) : null}
+
+                {canAlight && !isFirst ? (
+                  isOrigin && !isDest ? (
+                    <span title="Stop ini sudah dipilih sebagai titik naik" className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">Turun</span>
+                  ) : blockedByCityAsDest ? (
+                    <span title={`Rute dalam kota ${stop.city} tidak dijual untuk pola ini`} className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">Turun</span>
+                  ) : !pricedMatrixLoaded ? (
+                    <span title="Memuat data harga…" className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-wait inline-flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" />Turun
+                    </span>
+                  ) : notPricedAsDest ? (
+                    <span title="Belum Ada Harga — kombinasi titik naik & turun ini belum diisi harga" className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-50 border border-red-100 text-red-300 cursor-not-allowed inline-flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />Turun
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => onDestinationSelect(stop, stopTime.stopSequence)}
+                      data-testid={`turun-${index}`}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                        isDest
+                          ? 'bg-rose-500 text-white shadow-sm shadow-rose-200'
+                          : 'bg-white border border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-600 hover:bg-rose-50'
+                      }`}
+                    >
+                      {isDest ? <><Check className="w-3 h-3 inline -mt-px mr-0.5" />Turun</> : 'Turun'}
+                    </button>
+                  )
+                ) : !isFirst ? (
+                  <span className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed">Turun</span>
+                ) : null}
+              </div>
             </div>
           );
         })}
