@@ -10,6 +10,7 @@ import { buildScheduleTripPayload } from "@server/lib/scheduleSnapshot";
 import { webSocketService } from "@server/realtime/ws";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 import { createComponentLogger } from "@server/lib/logger";
+import { formatTimeInTZ } from "@server/utils/timezone";
 
 const log = createComponentLogger("scheduler.service");
 
@@ -61,7 +62,7 @@ export class SchedulerService {
     const items: CalendarItem[] = [];
 
     for (const trip of realTrips) {
-      const departHHMM = trip.originDepartHHMM || '00:00';
+      const departHHMM = this.resolveTripDepartHHMM(trip);
       const [hStr] = departHHMM.split(':');
       const hour = parseInt(hStr, 10) || 0;
 
@@ -169,6 +170,28 @@ export class SchedulerService {
     });
 
     return items;
+  }
+
+  // `trips.originDepartHHMM` is only a snapshot filled in at auto-
+  // materialization time (see TripBasesService.materializeTrip, which
+  // derives it from the base's default timestamps). For a trip created
+  // ad-hoc via "+ Tambah Trip" (not from a recurring TripBase), that
+  // column is NULL at insert — and the actual departure time, entered
+  // afterwards through the "Jadwal Keberangkatan" dialog, is saved via
+  // bulkUpsertTripStopTimes() straight into trip_stop_times, which never
+  // back-fills originDepartHHMM. getCalendar()'s hour bucketing used to
+  // read only that stale/absent column, so such a trip always landed in
+  // the 00:00 slot no matter what departure time was actually scheduled.
+  // `getTripsForDateRange` already exposes `scheduleTime` (MIN(depart_at)
+  // across the trip's own stop times) — that's the live, always-correct
+  // source, so prefer it and only fall back to the snapshot (then to
+  // '00:00') when a trip genuinely has no stop times scheduled yet.
+  private resolveTripDepartHHMM(trip: { scheduleTime?: string | null; originDepartHHMM?: string | null }): string {
+    if (trip.scheduleTime) {
+      const formatted = formatTimeInTZ(new Date(trip.scheduleTime), 'Asia/Jakarta');
+      if (formatted) return formatted;
+    }
+    return trip.originDepartHHMM || '00:00';
   }
 
   async getPatternStopMap(): Promise<Record<string, string[]>> {
