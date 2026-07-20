@@ -350,8 +350,6 @@ export default function RouteTimeline({
               width: '2px',
               background: seg.segIdx === 0
                 ? '#2563eb'
-                : seg.inRange
-                ? '#93c5fd'
                 : 'repeating-linear-gradient(to bottom,#d1d5db 0,#d1d5db 4px,transparent 4px,transparent 8px)',
             }}
           />
