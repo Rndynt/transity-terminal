@@ -440,11 +440,15 @@ export default function RouteTimeline({
                   </div>
                   {/* Baris 2: clock ±durasi · pin label (hanya stop pertama & terakhir) */}
                   <div className="flex items-center gap-1 mt-1 text-xs text-gray-400">
-                    <Clock className="w-3 h-3 flex-shrink-0" />
-                    <span>{legDuration ? `±${formatDuration(legDuration)}` : '-'}</span>
+                    {!isLast && (
+                      <>
+                        <Clock className="w-3 h-3 flex-shrink-0" />
+                        <span>{legDuration ? `±${formatDuration(legDuration)}` : '-'}</span>
+                      </>
+                    )}
                     {(isFirst || isLast) && (
                       <>
-                        <span className="text-gray-300 mx-0.5">·</span>
+                        {!isLast && <span className="text-gray-300 mx-0.5">·</span>}
                         <MapPin className="w-3 h-3 flex-shrink-0" />
                         <span>{isFirst ? 'Keberangkatan' : 'Tujuan akhir'}</span>
                       </>
