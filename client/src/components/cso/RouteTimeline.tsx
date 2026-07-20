@@ -348,7 +348,7 @@ export default function RouteTimeline({
               top: seg.top,
               height: seg.height,
               width: '2px',
-              background: seg.segIdx === 0
+              background: (seg.segIdx === 0 || seg.inRange)
                 ? '#2563eb'
                 : 'repeating-linear-gradient(to bottom,#d1d5db 0,#d1d5db 4px,transparent 4px,transparent 8px)',
             }}
@@ -392,8 +392,8 @@ export default function RouteTimeline({
           return (
             <div
               key={stopTime.id}
-              className={`flex items-start px-3 py-3 gap-3 transition-colors border-b last:border-b-0 border-gray-100 ${
-                isOrigin ? 'bg-emerald-50' : isDest ? 'bg-rose-50' : inRange ? 'bg-blue-50/30' : 'hover:bg-gray-50'
+              className={`relative z-[1] flex items-start px-3 py-3 gap-3 transition-colors border-b last:border-b-0 border-gray-100 ${
+                isOrigin ? 'bg-emerald-50' : isDest ? 'bg-rose-50' : inRange ? 'bg-blue-50/30' : 'bg-white hover:bg-gray-50'
               }`}
             >
               {/* ── Timeline dot column ── */}
