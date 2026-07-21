@@ -69,10 +69,54 @@ export default function RedesignPreviewPage() {
   const toastStack = useAnimatedToastStack();
 
   const expandableItems: ExpandableTabsItem[] = [
-    { id: "home", label: "Home", icon: <Home className="h-4 w-4" />, content: null },
-    { id: "notif", label: "Notifikasi", icon: <Bell className="h-4 w-4" />, content: null },
-    { id: "profile", label: "Profil", icon: <User className="h-4 w-4" />, content: null },
-    { id: "settings", label: "Setting", icon: <Settings className="h-4 w-4" />, content: null },
+    {
+      id: "home",
+      label: "Home",
+      icon: <Home className="h-4 w-4" />,
+      content: (
+        <div className="w-56 space-y-1 p-1 text-sm">
+          <div className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-muted">
+            <span>Trip hari ini</span>
+            <span className="text-muted-foreground">12</span>
+          </div>
+          <div className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-muted">
+            <span>Kursi terisi</span>
+            <span className="text-muted-foreground">86%</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "notif",
+      label: "Notifikasi",
+      icon: <Bell className="h-4 w-4" />,
+      content: (
+        <div className="w-56 space-y-1 p-1 text-sm">
+          <div className="rounded-lg px-2 py-1.5 hover:bg-muted">Booking 2B baru masuk</div>
+          <div className="rounded-lg px-2 py-1.5 hover:bg-muted">Refund #A102 disetujui</div>
+        </div>
+      ),
+    },
+    {
+      id: "profile",
+      label: "Profil",
+      icon: <User className="h-4 w-4" />,
+      content: (
+        <div className="w-56 p-1 text-sm">
+          <div className="rounded-lg px-2 py-1.5 hover:bg-muted">CSO User · Outlet Senen</div>
+        </div>
+      ),
+    },
+    {
+      id: "settings",
+      label: "Setting",
+      icon: <Settings className="h-4 w-4" />,
+      content: (
+        <div className="w-56 p-1 text-sm">
+          <div className="rounded-lg px-2 py-1.5 hover:bg-muted">Preferensi akun</div>
+        </div>
+      ),
+    },
   ];
 
   const commandItems: CommandItem[] = [
