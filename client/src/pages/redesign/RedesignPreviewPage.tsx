@@ -88,6 +88,7 @@ export default function RedesignPreviewPage() {
   };
 
   return (
+    <div className="h-full overflow-y-auto">
     <div className="mx-auto max-w-5xl space-y-8 p-4 md:p-10">
       <div className="space-y-2">
         <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
@@ -267,6 +268,7 @@ export default function RedesignPreviewPage() {
       </Section>
 
       <AnimatedToastStack toasts={toastStack.toasts} onDismiss={toastStack.dismissToast} fixed />
+    </div>
     </div>
   );
 }
