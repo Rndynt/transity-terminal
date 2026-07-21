@@ -33,11 +33,21 @@ import { WheelPicker } from "@/components/motion/wheel-picker";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-4 rounded-xl border border-border bg-card p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </h2>
-      <div className="flex flex-wrap items-center gap-4">{children}</div>
+    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <div className="border-b border-border px-6 py-3">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          {title}
+        </h2>
+      </div>
+      <div
+        className="relative isolate flex min-h-[260px] flex-wrap items-center justify-center gap-6 p-8"
+        style={{
+          backgroundImage: "radial-gradient(var(--border) 1px, transparent 1px)",
+          backgroundSize: "18px 18px",
+        }}
+      >
+        {children}
+      </div>
     </section>
   );
 }
@@ -78,13 +88,16 @@ export default function RedesignPreviewPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-8">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">beUI Redesign Preview</h1>
-        <p className="text-sm text-muted-foreground">
+    <div className="mx-auto max-w-5xl space-y-8 p-4 md:p-10">
+      <div className="space-y-2">
+        <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+          Redesign preview
+        </span>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">beUI Component Kit</h1>
+        <p className="max-w-2xl text-sm text-muted-foreground">
           Komponen dari{" "}
           <a
-            className="underline"
+            className="underline underline-offset-2"
             href="https://github.com/starc007/ui-components"
             target="_blank"
             rel="noreferrer"
@@ -92,7 +105,10 @@ export default function RedesignPreviewPage() {
             starc007/ui-components (beUI)
           </a>{" "}
           yang sudah dibawa masuk ke{" "}
-          <code className="rounded bg-muted px-1 py-0.5">client/src/components/motion</code>.
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+            client/src/components/motion
+          </code>
+          . Tiap kotak di bawah = satu component, live &amp; interaktif.
         </p>
       </div>
 
