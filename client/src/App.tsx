@@ -38,6 +38,7 @@ const CashierPage = lazy(() => import("@/pages/cashier/CashierPage"));
 const RefundsPage = lazy(() => import("@/pages/refunds/RefundsPage"));
 const CustomersPage = lazy(() => import("@/pages/customers/CustomersPage"));
 const SettingsPage = lazy(() => import("@/pages/admin/SettingsPage"));
+const RedesignPreviewPage = lazy(() => import("@/pages/redesign/RedesignPreviewPage"));
 
 
 // Enables PermissionsProvider only once auth is confirmed, so the two
@@ -220,6 +221,9 @@ function Router() {
                       <RequireFlag flag="admin.flags.manage">
                         <SettingsPage />
                       </RequireFlag>
+                    </Route>
+                    <Route path="/redesign-preview">
+                      <RedesignPreviewPage />
                     </Route>
                     <Route component={NotFound} />
                   </Switch>
