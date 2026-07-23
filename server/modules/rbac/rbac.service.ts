@@ -60,6 +60,9 @@ const FALLBACK_FLAGS: Record<string, string[]> = {
     "action.booking.create", "action.booking.cancel", "action.passenger.assign_seat",
     "action.payment.create", "action.cargo.create",
   ],
+  driver: [
+    "access.driver_app", "page.manifest", "page.dashboard",
+  ],
 };
 
 async function getFlagsFromDb(roleId: string): Promise<Set<string>> {

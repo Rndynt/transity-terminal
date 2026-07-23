@@ -4,6 +4,7 @@ import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { driverStatusEnum } from "./enums";
+import { users } from "./users";
 
 export const drivers = pgTable("drivers", {
   id:          uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -14,11 +15,14 @@ export const drivers = pgTable("drivers", {
   licenseType: text("license_type").notNull().default('B2'),
   status:      driverStatusEnum("status").notNull().default('active'),
   notes:       text("notes"),
+  userId:      text("user_id").references(() => users.id),
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
   deletedAt:   timestamp("deleted_at", { withTimezone: true })
 }, (table) => ({
   idxDriversStatus: sql`CREATE INDEX IF NOT EXISTS idx_drivers_status ON ${table} (status) WHERE deleted_at IS NULL`,
-  idxDriversActive: sql`CREATE INDEX IF NOT EXISTS idx_drivers_active ON ${table} (deleted_at) WHERE deleted_at IS NULL`
+  idxDriversActive: sql`CREATE INDEX IF NOT EXISTS idx_drivers_active ON ${table} (deleted_at) WHERE deleted_at IS NULL`,
+  // Unique lookup index: resolves a logged-in user to their driver record.
+  idxDriversUserId: sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_drivers_user_id ON ${table} (user_id) WHERE user_id IS NOT NULL`
 }));
 
 export const insertDriverSchema = createInsertSchema(drivers).omit({ id: true, createdAt: true });

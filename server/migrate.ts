@@ -80,6 +80,23 @@ export async function runMigrations() {
     `);
     log.info("price_rule_scope: ensured 'global' enum label exists");
 
+    // drivers: pastikan kolom user_id ada (link ke users.id, prasyarat
+    // "my assigned trips" scoping di driver app). Net ini hanya menjamin
+    // keberadaan kolom — UNIQUE + FK constraint dimiliki oleh migration
+    // 0029_drivers_user_id.sql, tidak diulang di sini.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_name = 'drivers'
+        ) THEN
+          ALTER TABLE drivers ADD COLUMN IF NOT EXISTS user_id text;
+        END IF;
+      END $$;
+    `);
+    log.info("drivers: ensured user_id column exists");
+
   } catch (err) {
     log.error({ err }, "safety-net migration failed");
     throw err;

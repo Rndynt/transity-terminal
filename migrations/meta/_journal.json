@@ -197,6 +197,13 @@
       "when": 1752457300000,
       "tag": "0028_fix_price_rule_scope_enum",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1752457400000,
+      "tag": "0029_drivers_user_id",
+      "breakpoints": true
     }
   ]
 }
