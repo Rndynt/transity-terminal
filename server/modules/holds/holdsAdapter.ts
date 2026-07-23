@@ -539,12 +539,3 @@ export class HoldsAdapter {
     );
   }
 }
-
-// Module-level singleton used by routes/services that don't construct it
-// themselves. For unit tests, prefer instantiating HoldsAdapter directly
-// with a mocked AtomicHoldService.
-let _default: HoldsAdapter | null = null;
-export function getHoldsAdapter(nodeService: AtomicHoldService): HoldsAdapter {
-  if (!_default) _default = new HoldsAdapter(nodeService);
-  return _default;
-}

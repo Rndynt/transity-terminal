@@ -9,6 +9,7 @@ interface SeatHold {
   tripId: string;
   originSeq: number;
   destinationSeq: number;
+  initialTtl: number;
 }
 
 export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
@@ -88,7 +89,8 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
           expiresAt: response.expiresAt ?? Date.now() + (ttlSeconds * 1000),
           tripId,
           originSeq,
-          destinationSeq
+          destinationSeq,
+          initialTtl: ttlSeconds
         };
 
         holdsRef.current.set(seatNo, hold);
@@ -171,6 +173,11 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
     return Math.max(0, Math.floor((hold.expiresAt - Date.now()) / 1000));
   }, [tick]);
 
+  const getInitialTTL = useCallback((seatNo: string): number => {
+    const hold = holdsRef.current.get(seatNo);
+    return hold?.initialTtl ?? 300;
+  }, []);
+
   const isHeld = useCallback((seatNo: string): boolean => {
     void tick;
     const hold = holdsRef.current.get(seatNo);
@@ -184,6 +191,7 @@ export function useSeatHold(onHoldExpired?: (seatNo: string) => void) {
     releaseHold,
     releaseAllHolds,
     getHoldTTL,
+    getInitialTTL,
     isHeld,
     tick
   };

@@ -131,7 +131,7 @@ export default function SeatMap({
     onSeatDeselect(seatNo);
   }, [onSeatDeselect]);
 
-  const { createHold, releaseHold, getHoldTTL, isHeld } = useSeatHold(handleHoldExpired);
+  const { createHold, releaseHold, getHoldTTL, getInitialTTL, isHeld } = useSeatHold(handleHoldExpired);
 
   const { isConnected, subscribeToTrip, unsubscribeFromTrip, addEventListener } = useWebSocket();
 
@@ -417,6 +417,25 @@ export default function SeatMap({
 
   const minTTL = getMinTTL();
 
+  // Initial TTL of whichever selected seat has the minimum remaining TTL —
+  // used as the progress bar's divider instead of a hardcoded 300s, so a
+  // long-hold (e.g. 1800s) doesn't overflow past 100%. Falls back to 300
+  // via getInitialTTL() when no hold is found.
+  const getMinTTLInitial = useCallback(() => {
+    let minRemaining = Infinity;
+    let initialForMin = 300;
+    for (const s of Array.from(localSelectedSeats)) {
+      const remaining = getHoldTTL(s);
+      if (remaining > 0 && remaining < minRemaining) {
+        minRemaining = remaining;
+        initialForMin = getInitialTTL(s);
+      }
+    }
+    return initialForMin;
+  }, [localSelectedSeats, getHoldTTL, getInitialTTL]);
+
+  const minTTLInitial = getMinTTLInitial();
+
   const seatMapLayout = seatmap?.layout?.seatMap as any[] | undefined;
 
   const { gridCols, seatGrid } = useMemo(() => {
@@ -630,7 +649,7 @@ export default function SeatMap({
                 <span className="font-mono font-bold text-blue-600">{formatTTL(minTTL)}</span>
               </div>
               <div className="h-1 bg-blue-100 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${(minTTL / 300) * 100}%` }} />
+                <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${Math.min(100, (minTTL / minTTLInitial) * 100)}%` }} />
               </div>
             </div>
           )}

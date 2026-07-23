@@ -276,15 +276,13 @@ export class BookingsService {
     } catch (err: unknown) {
       // B1: race-loss path. If two concurrent requests with the same
       // idempotency key reach the INSERT at the same time, the loser will hit
-      // the partial unique index `uniq_bookings_idempotency_key`. Recover by
-      // returning the winner's booking instead of bubbling a generic 500.
+      // a unique-violation. Recover by returning the winner's booking instead
+      // of bubbling a generic 500. The recovery DECISION is based on whether
+      // a row actually exists for this idempotencyKey — not on the
+      // constraint name — so a future rename of
+      // uniq_bookings_idempotency_key can't silently break this path.
       const dbErr = err as { code?: string; constraint?: string };
-      if (
-        idempotencyKey &&
-        dbErr?.code === '23505' &&
-        (dbErr?.constraint === 'uniq_bookings_idempotency_key' ||
-          dbErr?.constraint?.includes('idempotency_key'))
-      ) {
+      if (idempotencyKey && dbErr?.code === '23505') {
         const [existing] = await db
           .select()
           .from(bookingsTable)
@@ -307,6 +305,13 @@ export class BookingsService {
           const printPayload = await this.printService.generatePrintPayload(existing.id);
           return { booking: bookingWithRelations, printPayload };
         }
+        // 23505 but no row for this idempotencyKey: the violation was on a
+        // DIFFERENT constraint (e.g. booking_code), not the idempotency
+        // one. Log for observability and fall through — do not swallow it.
+        log.warn(
+          { err: dbErr, constraint: dbErr?.constraint, idempotencyKey, op: "createPaidBooking" },
+          "unique violation on booking insert but no existing row for idempotencyKey — rethrowing"
+        );
       }
       // Any other tx failure with engine confirms in flight: compensate.
       if (engineConfirmed.length > 0) {
