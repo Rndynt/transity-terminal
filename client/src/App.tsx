@@ -10,6 +10,7 @@ import { RequireFlag } from "@/components/rbac/RequireFlag";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { useLocation, Redirect } from "wouter";
 import { PageLoader } from "@/components/ui/page-loader";
+import ForbiddenPage from "@/pages/auth/ForbiddenPage";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const LoginPage = lazy(() => import("@/pages/auth/LoginPage"));
@@ -38,6 +39,7 @@ const CashierPage = lazy(() => import("@/pages/cashier/CashierPage"));
 const RefundsPage = lazy(() => import("@/pages/refunds/RefundsPage"));
 const CustomersPage = lazy(() => import("@/pages/customers/CustomersPage"));
 const SettingsPage = lazy(() => import("@/pages/admin/SettingsPage"));
+const MySchedulePage = lazy(() => import("@/pages/driver/MySchedulePage"));
 
 
 // Enables PermissionsProvider only once auth is confirmed, so the two
@@ -55,7 +57,7 @@ function PermissionsProviderWithAuth({ children }: { children: React.ReactNode }
 // Single gate that covers auth + setup check + permissions in ONE loader mount.
 function AppGate({ children }: { children: React.ReactNode }) {
   const { isLoading: authLoading, isAuthenticated } = useAuth();
-  const { isLoading: permLoading } = usePermissions();
+  const { isLoading: permLoading, can } = usePermissions();
   const [setupChecked, setSetupChecked] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [, navigate] = useLocation();
@@ -82,6 +84,10 @@ function AppGate({ children }: { children: React.ReactNode }) {
   if (authLoading) return null;
   if (!isAuthenticated) return <Redirect to="/login" />;
   if (needsSetup) return <Redirect to="/setup" />;
+  // Driver-only accounts (access.driver_app but no access.terminal) can be
+  // authenticated but must not enter the terminal web UI. Checked only once
+  // permissions have resolved so we don't flash Forbidden before we know.
+  if (!permLoading && !can("access.terminal")) return <ForbiddenPage />;
   return <>{children}</>;
 }
 
@@ -154,6 +160,11 @@ function Router() {
                     <Route path="/customers">
                       <RequireFlag flag="page.customers">
                         <CustomersPage />
+                      </RequireFlag>
+                    </Route>
+                    <Route path="/my-schedule">
+                      <RequireFlag flag="page.my_schedule">
+                        <MySchedulePage />
                       </RequireFlag>
                     </Route>
                     <Route path="/spj">

@@ -9,6 +9,7 @@ const PAGE_ROUTES: Array<{ flag: string; path: string; label: string }> = [
   { flag: 'page.schedule', path: '/schedule', label: 'Jadwal Harian' },
   { flag: 'page.spj', path: '/spj', label: 'SPJ' },
   { flag: 'page.manifest', path: '/manifest', label: 'Manifest' },
+  { flag: 'page.my_schedule', path: '/my-schedule', label: 'Jadwal Saya' },
   { flag: 'page.masters', path: '/masters', label: 'Master Data' },
   { flag: 'report.revenue', path: '/reports/revenue', label: 'Laporan Pendapatan' },
   { flag: 'report.sales', path: '/reports/sales', label: 'Laporan Penjualan' },

@@ -27,7 +27,7 @@ const FALLBACK_FLAGS: Record<string, string[]> = {
     "action.booking.create", "action.booking.cancel", "action.passenger.unseat", "action.passenger.reschedule", "action.passenger.assign_seat",
     "action.trip.materialize", "action.trip.close", "action.trip.batch_reschedule", "action.payment.create", "action.cargo.create", "action.cargo.manage",
     "action.spj.create", "action.spj.issue", "action.spj.settle",
-    "admin.staff.manage", "admin.flags.manage", "page.schedule.closed", "page.cso.view_closed",
+    "admin.staff.manage", "admin.flags.manage", "page.schedule.closed", "page.cso.view_closed", "page.my_schedule",
   ],
   finance: [
     "page.bookings", "page.reports",
@@ -38,7 +38,7 @@ const FALLBACK_FLAGS: Record<string, string[]> = {
     "report.revenue", "report.sales", "report.trip_profitability", "report.load_factor", "report.cancellations", "report.cargo", "report.payments",
     "action.booking.create", "action.booking.cancel", "action.passenger.unseat", "action.passenger.reschedule", "action.passenger.assign_seat",
     "action.trip.materialize", "action.trip.close", "action.trip.batch_reschedule", "action.payment.create", "action.cargo.create", "action.cargo.manage",
-    "action.spj.create", "action.spj.issue", "action.spj.settle", "page.schedule.closed", "page.cso.view_closed",
+    "action.spj.create", "action.spj.issue", "action.spj.settle", "page.schedule.closed", "page.cso.view_closed", "page.my_schedule",
   ],
   spv_operations: [
     "page.cargo", "page.bookings", "page.schedule", "page.spj", "page.manifest",
@@ -61,7 +61,7 @@ const FALLBACK_FLAGS: Record<string, string[]> = {
     "action.payment.create", "action.cargo.create",
   ],
   driver: [
-    "access.driver_app", "page.manifest", "page.dashboard",
+    "access.driver_app", "page.manifest", "page.dashboard", "page.my_schedule",
   ],
 };
 

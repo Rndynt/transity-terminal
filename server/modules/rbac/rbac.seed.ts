@@ -67,6 +67,7 @@ const FEATURE_FLAGS = [
   { id: "page.cashier",     name: "Halaman Kasir",         description: "Akses halaman rekonsiliasi kasir",       category: "page" },
   { id: "page.refunds",     name: "Halaman Refund",        description: "Akses halaman manajemen refund",         category: "page" },
   { id: "page.customers",   name: "Halaman Pelanggan",     description: "Akses halaman CRM pelanggan",            category: "page" },
+  { id: "page.my_schedule", name: "Halaman Jadwal Saya",   description: "Akses halaman Jadwal Saya (driver)",     category: "page" },
 
   { id: "action.refund.create",  name: "Buat Refund",      description: "Ajukan permintaan refund baru",           category: "action" },
   { id: "action.refund.approve", name: "Approve Refund",   description: "Setujui atau tolak permintaan refund",    category: "action" },
@@ -139,6 +140,7 @@ const DEFAULT_MATRIX: Record<string, FlagMatrix> = {
   "page.cashier":     { owner: true, finance: true,  manager: true,  spv_operations: true,  operations: false, spv_cso: true,  cso: true, driver: false },
   "page.refunds":     { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: true,  cso: true, driver: false },
   "page.customers":   { owner: true, finance: false, manager: true,  spv_operations: false, operations: false, spv_cso: true,  cso: true, driver: false },
+  "page.my_schedule": { owner: true, finance: false, manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false, driver: true  },
 
   "action.refund.create":  { owner: true, finance: false, manager: true,  spv_operations: false, operations: false, spv_cso: true,  cso: true, driver: false },
   "action.refund.approve": { owner: true, finance: true,  manager: true,  spv_operations: false, operations: false, spv_cso: false, cso: false, driver: false },

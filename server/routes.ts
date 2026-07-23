@@ -5,6 +5,7 @@ import { requireAuth } from "./modules/auth/realmio";
 import { requireFlag } from "./modules/rbac/rbac.middleware";
 
 import { registerDriversRoutes } from "./modules/drivers/drivers.routes";
+import { registerDriverAppRoutes } from "./modules/driverApp/driverApp.routes";
 import { registerStopsRoutes } from "./modules/stops/stops.routes";
 import { registerOutletsRoutes } from "./modules/outlets/outlets.routes";
 import { registerVehiclesRoutes } from "./modules/vehicles/vehicles.routes";
@@ -279,6 +280,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<FastifyInsta
   };
 
   registerDriversRoutes(app, storage, masterDataCache);
+  registerDriverAppRoutes(app);
   registerStopsRoutes(app, storage, masterDataCache);
   registerOutletsRoutes(app, storage, masterDataCache);
   registerVehiclesRoutes(app, storage, masterDataCache);
