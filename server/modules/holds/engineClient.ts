@@ -34,6 +34,13 @@ const ENGINE_BASE_URL =
   process.env.RESERVATION_ENGINE_URL?.replace(/\/+$/, "") ??
   "http://engine:8000";
 
+// Without a timeout, a hung engine sidecar (network partition, deadlocked
+// engine-side tx) would leave every hold/confirm/cancel-seats call pending
+// forever, wedging the caller's request (and, for confirmForBooking, the
+// booking flow that runs it BEFORE opening the local DB tx). Configurable
+// because engine tx latency budgets differ per deployment.
+const ENGINE_TIMEOUT_MS = Number(process.env.RESERVATION_ENGINE_TIMEOUT_MS) || 8000;
+
 function getSecret(): string {
   const s = process.env.RESERVATION_ENGINE_HMAC_SECRET;
   if (!s || s.length < 16) {
@@ -92,9 +99,17 @@ async function call<T>(
       method,
       headers,
       body: rawBody.length > 0 ? rawBody : undefined,
+      signal: AbortSignal.timeout(ENGINE_TIMEOUT_MS),
     });
   } catch (e) {
-    throw new EngineError(0, "INTERNAL", `Engine unreachable at ${url}: ${(e as Error).message}`);
+    const isTimeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+    throw new EngineError(
+      0,
+      "INTERNAL",
+      isTimeout
+        ? `Engine request timed out after ${ENGINE_TIMEOUT_MS}ms at ${url}`
+        : `Engine unreachable at ${url}: ${(e as Error).message}`,
+    );
   }
 
   // 204 No Content — release/delete success path

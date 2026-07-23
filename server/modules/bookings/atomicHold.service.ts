@@ -26,7 +26,7 @@ const log = createComponentLogger("atomicHold");
  * This must stay aligned with the engine implementation in
  * `engine/crates/engine-core/src/hold.rs::run_hold_txn`.
  */
-function isHoldActive(
+export function isHoldActive(
   holdExpiresAt: Date | null,
   holdBookingId: string | null,
   now: Date,

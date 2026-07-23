@@ -7,6 +7,7 @@ import { generateBookingCode, generateTicketNumber } from "@server/utils/codeGen
 import { db } from "@server/db";
 import { eq, and, inArray, gt, sql } from "drizzle-orm";
 import { createComponentLogger } from "@server/lib/logger";
+import { isHoldActive } from "./atomicHold.service";
 
 const log = createComponentLogger("booking.helpers");
 
@@ -343,16 +344,31 @@ export async function checkSeatsAvailable(
 ) {
   const legArr = sql`ARRAY[${sql.join(legIndexes.map(i => sql`${i}::int`), sql`, `)}]`;
   const seatArr = sql`ARRAY[${sql.join(seatNos.map(s => sql`${s}`), sql`, `)}]`;
+  // P2 §10.7 parity: left-join seat_holds so an orphaned hold_ref (reaper
+  // hasn't swept an expired hold yet) does NOT block the seat. Mirrors
+  // atomicHold.service.ts's isHoldActive() so the two "is this seat held"
+  // checks in the codebase can never drift again — see that file's
+  // isHoldActive doc comment for the exact activeness rule.
+  // FOR UPDATE OF si is required (not bare FOR UPDATE) because the query
+  // now has an outer join: Postgres forbids locking the nullable side.
   const inv = await tx.execute(sql`
-    SELECT seat_no, booked, hold_ref FROM seat_inventory
-    WHERE trip_id = ${tripId}
-      AND seat_no = ANY(${seatArr})
-      AND leg_index = ANY(${legArr})
-    FOR UPDATE
+    SELECT si.seat_no, si.booked, si.hold_ref, sh.expires_at, sh.booking_id
+    FROM seat_inventory si
+    LEFT JOIN seat_holds sh ON sh.hold_ref = si.hold_ref
+    WHERE si.trip_id = ${tripId}
+      AND si.seat_no = ANY(${seatArr})
+      AND si.leg_index = ANY(${legArr})
+    FOR UPDATE OF si
   `);
+  const now = new Date();
   for (const row of inv.rows as Record<string, unknown>[]) {
     if (row.booked === true) throw new Error(`Seat ${row.seat_no} is already booked`);
-    if (!!row.hold_ref) throw new Error(`Seat ${row.seat_no} is currently held by another user`);
+    if (
+      row.hold_ref &&
+      isHoldActive(row.expires_at as Date | null, row.booking_id as string | null, now)
+    ) {
+      throw new Error(`Seat ${row.seat_no} is currently held by another user`);
+    }
   }
 }
 

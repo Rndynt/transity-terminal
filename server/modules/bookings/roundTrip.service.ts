@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { db } from "@server/db";
 import { 
   bookingGroups as bookingGroupsTable, 
@@ -18,6 +18,8 @@ import { PrintService } from "@modules/printing/print.service";
 import { IStorage } from "@server/storage.interface";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
 import { assertTripBookable } from "./booking.helpers";
+import { AtomicHoldService } from "./atomicHold.service";
+import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
 
 interface OutboundPassengerInput {
   name: string;
@@ -58,10 +60,12 @@ export interface RoundTripBookingInput {
 export class RoundTripService {
   private pricingService: PricingService;
   private printService: PrintService;
+  private holdsAdapter: HoldsAdapter;
 
   constructor(private storage: IStorage) {
     this.pricingService = new PricingService(storage);
     this.printService = new PrintService();
+    this.holdsAdapter = new HoldsAdapter(new AtomicHoldService(storage));
   }
 
   async createRoundTripBooking(data: RoundTripBookingInput, operatorId: string, ctx: ServiceContext) {
@@ -144,8 +148,48 @@ export class RoundTripService {
     const outboundSeatNosArr = outbound.passengers.map((p) => p.seatNo);
     const returnSeatNosArr = returnData.passengers.map((p) => p.seatNo);
 
+    // 5b. Engine mode: pre-generate both booking IDs and confirm BOTH legs'
+    // seats in the engine BEFORE opening the local DB tx below — same
+    // reasoning as bookings.service.ts createPaidBooking: the engine runs
+    // its own tx and we cannot compose it with the local one. Previously
+    // this method wrote straight to seat_inventory/seat_holds (see the
+    // direct tx.update/tx.delete further down) regardless of
+    // RESERVATION_ENGINE_ENABLED, so a round-trip booking never actually
+    // went through the engine gate at all while single-trip bookings did.
+    //
+    // Two legs means two independent confirmForBooking() calls; if the
+    // return leg fails after the outbound leg already confirmed, the
+    // outbound confirms must be compensated (cancelled) here so no seat is
+    // left confirmed under a bookingId that will never be inserted.
+    const outboundBookingId = isEngineEnabled() ? randomUUID() : undefined;
+    const returnBookingId = isEngineEnabled() ? randomUUID() : undefined;
+    let outboundConfirmed: Array<{ seatNo: string; holdRef: string }> = [];
+    let returnConfirmed: Array<{ seatNo: string; holdRef: string }> = [];
+
+    if (outboundBookingId && returnBookingId) {
+      outboundConfirmed = await this.holdsAdapter.confirmForBooking({
+        bookingId: outboundBookingId,
+        tripId: outbound.tripId,
+        seatNos: outboundSeatNosArr,
+        legIndexes: outboundLegIndexes,
+        operatorId,
+      });
+      try {
+        returnConfirmed = await this.holdsAdapter.confirmForBooking({
+          bookingId: returnBookingId,
+          tripId: returnData.tripId,
+          seatNos: returnSeatNosArr,
+          legIndexes: returnLegIndexes,
+          operatorId,
+        });
+      } catch (e) {
+        await this.holdsAdapter.compensateConfirms(outbound.tripId, outboundConfirmed, outboundLegIndexes);
+        throw e;
+      }
+    }
+
     // 6. DB Transaction with advisory lock to prevent deadlocks
-    const result = await db.transaction(async (tx) => {
+    const runLocalTx = () => db.transaction(async (tx) => {
       const sortedTripIds = [outbound.tripId, returnData.tripId].sort();
       for (const tid of sortedTripIds) {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${tid}))`);
@@ -168,6 +212,7 @@ export class RoundTripService {
       const outTrip = tripsMap.get(outbound.tripId);
 
       const [outboundBooking] = await tx.insert(bookingsTable).values({
+        ...(outboundBookingId ? { id: outboundBookingId } : {}),
         bookingCode: generateBookingCode(),
         status: 'paid',
         groupId: group.id,
@@ -196,26 +241,32 @@ export class RoundTripService {
       }));
       await tx.insert(passengersTable).values(outboundPaxValues);
 
-      await tx.update(seatInventory)
-        .set({ booked: true, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, outbound.tripId),
-          inArray(seatInventory.seatNo, outboundSeatNosArr),
-          inArray(seatInventory.legIndex, outboundLegIndexes)
-        ));
+      // Engine mode: seats already confirmed via confirmForBooking() above
+      // (see step 5b). Skip the local SQL to avoid double-write and to
+      // actually route through the engine gate instead of bypassing it.
+      if (!outboundBookingId) {
+        await tx.update(seatInventory)
+          .set({ booked: true, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, outbound.tripId),
+            inArray(seatInventory.seatNo, outboundSeatNosArr),
+            inArray(seatInventory.legIndex, outboundLegIndexes)
+          ));
 
-      await tx.delete(seatHolds)
-        .where(and(
-          eq(seatHolds.tripId, outbound.tripId),
-          inArray(seatHolds.seatNo, outboundSeatNosArr),
-          eq(seatHolds.operatorId, operatorId)
-        ));
+        await tx.delete(seatHolds)
+          .where(and(
+            eq(seatHolds.tripId, outbound.tripId),
+            inArray(seatHolds.seatNo, outboundSeatNosArr),
+            eq(seatHolds.operatorId, operatorId)
+          ));
+      }
 
       const retOriginStop = stopsMap.get(returnData.originStopId);
       const retDestStop = stopsMap.get(returnData.destinationStopId);
       const retTrip = tripsMap.get(returnData.tripId);
 
       const [returnBooking] = await tx.insert(bookingsTable).values({
+        ...(returnBookingId ? { id: returnBookingId } : {}),
         bookingCode: generateBookingCode(),
         status: 'paid',
         groupId: group.id,
@@ -244,20 +295,24 @@ export class RoundTripService {
       }));
       await tx.insert(passengersTable).values(returnPaxValues);
 
-      await tx.update(seatInventory)
-        .set({ booked: true, holdRef: null })
-        .where(and(
-          eq(seatInventory.tripId, returnData.tripId),
-          inArray(seatInventory.seatNo, returnSeatNosArr),
-          inArray(seatInventory.legIndex, returnLegIndexes)
-        ));
+      // Engine mode: seats already confirmed via confirmForBooking() above
+      // (see step 5b). Skip the local SQL to avoid double-write.
+      if (!returnBookingId) {
+        await tx.update(seatInventory)
+          .set({ booked: true, holdRef: null })
+          .where(and(
+            eq(seatInventory.tripId, returnData.tripId),
+            inArray(seatInventory.seatNo, returnSeatNosArr),
+            inArray(seatInventory.legIndex, returnLegIndexes)
+          ));
 
-      await tx.delete(seatHolds)
-        .where(and(
-          eq(seatHolds.tripId, returnData.tripId),
-          inArray(seatHolds.seatNo, returnSeatNosArr),
-          eq(seatHolds.operatorId, operatorId)
-        ));
+        await tx.delete(seatHolds)
+          .where(and(
+            eq(seatHolds.tripId, returnData.tripId),
+            inArray(seatHolds.seatNo, returnSeatNosArr),
+            eq(seatHolds.operatorId, operatorId)
+          ));
+      }
 
       // Round-trip booking is created with status='paid' for both legs
       // (line 176 above), so the payment row needs the matching
@@ -282,6 +337,23 @@ export class RoundTripService {
 
       return { group, outboundBooking, returnBooking };
     });
+
+    let result: Awaited<ReturnType<typeof runLocalTx>>;
+    try {
+      result = await runLocalTx();
+    } catch (err) {
+      // Local tx failed AFTER engine already confirmed one or both legs
+      // (see step 5b) — compensate whatever was confirmed so no seat is
+      // left booked in the engine under a booking_id that was never
+      // actually persisted in TT.
+      if (outboundConfirmed.length > 0) {
+        await this.holdsAdapter.compensateConfirms(outbound.tripId, outboundConfirmed, outboundLegIndexes);
+      }
+      if (returnConfirmed.length > 0) {
+        await this.holdsAdapter.compensateConfirms(returnData.tripId, returnConfirmed, returnLegIndexes);
+      }
+      throw err;
+    }
 
     for (const p of outbound.passengers) {
       webSocketService.emitInventoryUpdated(outbound.tripId, p.seatNo, outboundLegIndexes);
