@@ -13,6 +13,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
@@ -30,6 +31,16 @@ interface StaffMember {
   outletId: string | null;
   isActive: boolean;
   createdAt: string | null;
+  driverId?: string | null;
+  driverName?: string | null;
+}
+
+interface DriverOption {
+  id: string;
+  name: string;
+  code: string;
+  status: string;
+  userId: string | null;
 }
 
 interface Role {
@@ -60,8 +71,8 @@ const ROLE_COLORS: Record<string, string> = {
   cso:            'bg-teal-100 text-teal-700',
 };
 
-const EMPTY_CREATE = { name: '', email: '', password: '', roleId: '', outletId: '' };
-const EMPTY_EDIT   = { roleId: '', outletId: '' };
+const EMPTY_CREATE = { name: '', email: '', password: '', roleId: '', outletId: '', driverId: '' };
+const EMPTY_EDIT   = { roleId: '', outletId: '', driverId: '' };
 
 export default function AdminStaffPage() {
   usePageTitle("Kelola Staff", "Manajemen akun & role tim");
@@ -89,6 +100,11 @@ export default function AdminStaffPage() {
     queryFn: () => apiFetch('/api/outlets'),
   });
 
+  const { data: driversList = [] } = useQuery<DriverOption[]>({
+    queryKey: ['/api/drivers'],
+    queryFn: () => apiFetch('/api/drivers'),
+  });
+
   const createMutation = useMutation({
     mutationFn: (data: typeof EMPTY_CREATE) =>
       apiFetch('/api/admin/staff', {
@@ -99,6 +115,7 @@ export default function AdminStaffPage() {
           password: data.password,
           roleId:   data.roleId,
           outletId: data.outletId || null,
+          driverId: data.driverId || undefined,
         }),
       }),
     onSuccess: () => {
@@ -110,7 +127,7 @@ export default function AdminStaffPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { roleId?: string; outletId?: string | null; isActive?: boolean } }) =>
+    mutationFn: ({ id, data }: { id: string; data: { roleId?: string; outletId?: string | null; isActive?: boolean; driverId?: string | null } }) =>
       apiFetch(`/api/admin/staff/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/staff'] });
@@ -143,7 +160,7 @@ export default function AdminStaffPage() {
 
   const openEdit = (staff: StaffMember) => {
     setEditTarget(staff);
-    setEditForm({ roleId: staff.roleId, outletId: staff.outletId || '' });
+    setEditForm({ roleId: staff.roleId, outletId: staff.outletId || '', driverId: staff.driverId ?? '' });
     setShowDialog(true);
   };
 
@@ -151,7 +168,13 @@ export default function AdminStaffPage() {
     if (editTarget) {
       updateMutation.mutate({
         id: editTarget.id,
-        data: { roleId: editForm.roleId, outletId: editForm.outletId || null },
+        data: {
+          roleId: editForm.roleId,
+          outletId: editForm.outletId || null,
+          driverId: editForm.roleId === 'driver'
+            ? (editForm.driverId || null)
+            : (editTarget.driverId ? null : undefined),
+        },
       });
     } else {
       createMutation.mutate(createForm);
@@ -162,9 +185,12 @@ export default function AdminStaffPage() {
     createForm.name.trim().length > 0 &&
     createForm.email.trim().length > 0 &&
     createForm.password.length >= 8 &&
-    createForm.roleId.length > 0;
+    createForm.roleId.length > 0 &&
+    (createForm.roleId !== 'driver' || createForm.driverId.length > 0);
 
-  const isEditValid = editForm.roleId.length > 0;
+  const isEditValid =
+    editForm.roleId.length > 0 &&
+    (editForm.roleId !== 'driver' || editForm.driverId.length > 0);
 
   const filtered = staffList.filter(s => {
     const q = search.toLowerCase();
@@ -179,6 +205,11 @@ export default function AdminStaffPage() {
   const getOutletName = (outletId: string | null)  => outletId ? (outlets.find(o => o.id === outletId)?.name || outletId.slice(0, 8) + '…') : 'Semua Outlet';
 
   const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const currentRoleId = editTarget ? editForm.roleId : createForm.roleId;
+  const driverOptions = driversList
+    .filter(d => !d.userId || d.userId === editTarget?.userId)
+    .map(d => ({ value: d.id, label: d.name, badge: d.code, subtitle: d.status }));
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="admin-staff-page">
@@ -250,6 +281,11 @@ export default function AdminStaffPage() {
                             <Store className="w-3 h-3 text-gray-400" />
                             {getOutletName(staff.outletId)}
                           </span>
+                          {staff.roleId === 'driver' && (
+                            <span className={`block text-[11px] mt-0.5 ${staff.driverName ? 'text-gray-400' : 'text-amber-500'}`}>
+                              {staff.driverName || 'belum tertaut'}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Badge variant={staff.isActive ? 'default' : 'secondary'} className="text-xs">
@@ -346,8 +382,8 @@ export default function AdminStaffPage() {
               <Select
                 value={editTarget ? editForm.roleId : createForm.roleId}
                 onValueChange={v => editTarget
-                  ? setEditForm(f => ({ ...f, roleId: v }))
-                  : setCreateForm(f => ({ ...f, roleId: v }))
+                  ? setEditForm(f => ({ ...f, roleId: v, driverId: v === 'driver' ? f.driverId : '' }))
+                  : setCreateForm(f => ({ ...f, roleId: v, driverId: v === 'driver' ? f.driverId : '' }))
                 }
               >
                 <SelectTrigger data-testid="select-staff-role">
@@ -365,6 +401,25 @@ export default function AdminStaffPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {currentRoleId === 'driver' && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700">Tautkan ke Driver</label>
+                <SearchableSelect
+                  value={editTarget ? editForm.driverId : createForm.driverId}
+                  options={driverOptions}
+                  onChange={v => editTarget
+                    ? setEditForm(f => ({ ...f, driverId: v }))
+                    : setCreateForm(f => ({ ...f, driverId: v }))
+                  }
+                  placeholder="Pilih driver..."
+                  searchPlaceholder="Cari driver..."
+                  emptyLabel="Tidak ada driver tersedia"
+                  data-testid="select-staff-driver"
+                />
+                <p className="text-xs text-gray-400">Wajib untuk role driver agar bisa melihat Jadwal Saya-nya sendiri.</p>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-gray-700">Outlet <span className="text-gray-400 font-normal">(opsional)</span></label>

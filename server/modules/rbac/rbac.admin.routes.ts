@@ -3,7 +3,7 @@ import { db } from "@server/db";
 import { eq, and } from "drizzle-orm";
 import { requireFlag, requireAnyFlag } from "./rbac.middleware";
 import { createRealmioUser } from "@modules/auth/realmio";
-import { staffMembers, users } from "@shared/schema";
+import { staffMembers, users, drivers } from "@shared/schema";
 
 export function registerAdminRoutes(app: FastifyInstance) {
   app.get('/api/admin/roles', { preHandler: [requireAnyFlag('admin.flags.manage', 'admin.staff.manage')] }, async (_req: FastifyRequest, reply: FastifyReply) => {
@@ -50,25 +50,35 @@ export function registerAdminRoutes(app: FastifyInstance) {
         createdAt: staffMembers.createdAt,
         name:      users.name,
         email:     users.email,
+        driverId:  drivers.id,
+        driverName: drivers.name,
       })
       .from(staffMembers)
-      .leftJoin(users, eq(staffMembers.userId, users.id));
+      .leftJoin(users, eq(staffMembers.userId, users.id))
+      .leftJoin(drivers, eq(drivers.userId, staffMembers.userId));
 
     reply.send(rows);
   });
 
   app.post('/api/admin/staff', { preHandler: [requireFlag('admin.staff.manage')] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { name, email, password, roleId, outletId, isActive } = req.body as {
+    const { name, email, password, roleId, outletId, isActive, driverId } = req.body as {
       name?: string;
       email?: string;
       password?: string;
       roleId?: string;
       outletId?: string | null;
       isActive?: boolean;
+      driverId?: string;
     };
 
     if (!name || !email || !password || !roleId) {
       return reply.code(400).send({ message: 'name, email, password, dan roleId wajib diisi' });
+    }
+
+    if (driverId) {
+      const [targetDriver] = await db.select({ userId: drivers.userId }).from(drivers).where(eq(drivers.id, driverId));
+      if (!targetDriver) return reply.code(400).send({ message: 'Driver tidak ditemukan' });
+      if (targetDriver.userId) return reply.code(409).send({ message: 'Driver ini sudah tertaut ke user lain' });
     }
 
     let realmioUser: { userId: string; email: string; name: string };
@@ -104,6 +114,22 @@ export function registerAdminRoutes(app: FastifyInstance) {
       })
       .returning();
 
+    if (driverId) {
+      try {
+        await db.update(drivers).set({ userId: realmioUser.userId }).where(eq(drivers.id, driverId));
+      } catch (err: any) {
+        if (err?.code === '23505') {
+          return reply.code(201).send({
+            ...created,
+            name:  realmioUser.name,
+            email: realmioUser.email,
+            driverLinkError: 'Driver ini sudah tertaut ke user lain',
+          });
+        }
+        throw err;
+      }
+    }
+
     reply.code(201).send({
       ...created,
       name:  realmioUser.name,
@@ -113,10 +139,11 @@ export function registerAdminRoutes(app: FastifyInstance) {
 
   app.put('/api/admin/staff/:id', { preHandler: [requireFlag('admin.staff.manage')] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
-    const { roleId, outletId, isActive } = req.body as {
+    const { roleId, outletId, isActive, driverId } = req.body as {
       roleId?: string;
       outletId?: string | null;
       isActive?: boolean;
+      driverId?: string | null;
     };
     const updates: Partial<typeof staffMembers.$inferInsert> = {};
     if (roleId !== undefined) updates.roleId = roleId;
@@ -130,6 +157,28 @@ export function registerAdminRoutes(app: FastifyInstance) {
       .returning();
 
     if (!updated) return reply.code(404).send({ message: 'Staff member not found' });
+
+    if (driverId !== undefined) {
+      if (driverId === null) {
+        await db.update(drivers).set({ userId: null }).where(eq(drivers.userId, updated.userId));
+      } else {
+        const [targetDriver] = await db.select({ userId: drivers.userId }).from(drivers).where(eq(drivers.id, driverId));
+        if (!targetDriver) return reply.code(400).send({ message: 'Driver tidak ditemukan' });
+        if (targetDriver.userId && targetDriver.userId !== updated.userId) {
+          return reply.code(409).send({ message: 'Driver ini sudah tertaut ke user lain' });
+        }
+        // A user maps to at most one driver: clear any other driver currently pointing at this user.
+        await db.update(drivers).set({ userId: null }).where(eq(drivers.userId, updated.userId));
+        try {
+          await db.update(drivers).set({ userId: updated.userId }).where(eq(drivers.id, driverId));
+        } catch (err: any) {
+          if (err?.code === '23505') {
+            return reply.code(409).send({ message: 'Driver ini sudah tertaut ke user lain' });
+          }
+          throw err;
+        }
+      }
+    }
 
     const user = await db.select({ name: users.name, email: users.email })
       .from(users)
