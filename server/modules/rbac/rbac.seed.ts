@@ -191,22 +191,31 @@ export async function seedRbac() {
   console.log(`  ✓ ${inserted} role-flag mappings inserted, ${skipped} already exist (preserved)`);
 
   if (process.env.NODE_ENV !== 'production') {
-    console.log("[RBAC] Seeding dev staff member...");
-    await db.execute(sql`
-      INSERT INTO staff_members (id, user_id, role_id, outlet_id, is_active)
-      VALUES (
-        'aaaaaaaa-0000-0000-0000-000000000001',
-        'dev-user-001',
-        'owner',
-        NULL,
-        true
-      )
-      ON CONFLICT (user_id) DO UPDATE SET
-        role_id = EXCLUDED.role_id,
-        outlet_id = NULL,
-        is_active = EXCLUDED.is_active
-    `);
-    console.log("  ✓ dev staff member (owner, no outlet scope — sees all bookings/reports)");
+    // Only insert dev staff member when no real staff members exist yet
+    // (i.e. initial setup hasn't been done). This prevents blocking the
+    // owner-account setup flow on every server restart.
+    const existing = await db.execute(sql`SELECT COUNT(*) as c FROM staff_members WHERE user_id != 'dev-user-001'`);
+    const realCount = Number((existing.rows[0] as { c: string }).c);
+    if (realCount === 0) {
+      console.log("[RBAC] Seeding dev staff member...");
+      await db.execute(sql`
+        INSERT INTO staff_members (id, user_id, role_id, outlet_id, is_active)
+        VALUES (
+          'aaaaaaaa-0000-0000-0000-000000000001',
+          'dev-user-001',
+          'owner',
+          NULL,
+          true
+        )
+        ON CONFLICT (user_id) DO UPDATE SET
+          role_id = EXCLUDED.role_id,
+          outlet_id = NULL,
+          is_active = EXCLUDED.is_active
+      `);
+      console.log("  ✓ dev staff member (owner, no outlet scope — sees all bookings/reports)");
+    } else {
+      console.log("[RBAC] Skipping dev staff member — real owner account already exists.");
+    }
   }
 
   console.log("[RBAC] Seed complete.");

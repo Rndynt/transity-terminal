@@ -169,12 +169,16 @@ export function registerAuthRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/setup/status", async (_req, reply) => {
-    const rows = await db.select().from(staffMembers).limit(1);
+    // Exclude the dev-user-001 seeded by rbac.seed in non-production mode —
+    // it must not count as "setup done" for the owner-creation flow.
+    const { ne } = await import("drizzle-orm");
+    const rows = await db.select().from(staffMembers).where(ne(staffMembers.userId, "dev-user-001")).limit(1);
     return reply.send({ needsSetup: rows.length === 0 });
   });
 
   app.post("/api/setup/init", { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
-    const existing = await db.select().from(staffMembers).limit(1);
+    const { ne } = await import("drizzle-orm");
+    const existing = await db.select().from(staffMembers).where(ne(staffMembers.userId, "dev-user-001")).limit(1);
     if (existing.length > 0) {
       return reply.code(403).send({ message: "Setup sudah dilakukan. Halaman ini tidak bisa diakses lagi." });
     }
