@@ -35,6 +35,21 @@ shared/          Shared Drizzle schema definitions
 migrations/      SQL migration files (managed by Drizzle)
 ```
 
+## Seeding
+
+Data is already seeded with the **nusa** dataset (Nusa Shuttle — Jakarta/Bandung/Semarang/Yogyakarta routes).
+
+To re-seed from scratch:
+```bash
+# Non-trip data (stops → cargo) — fast
+CONSOLE_URL="" npx tsx server/seeds/index.ts nusa
+
+# Trip materialization in parallel (much faster than the built-in sequential seed)
+CONSOLE_URL="" npx tsx scripts/seed-trips-parallel.ts 14 10
+```
+
+`scripts/seed-trips-parallel.ts` accepts `<days> <concurrency>` args (default 14 days, 10 concurrent).
+
 ## User preferences
 
 - Keep existing project structure and stack — do not restructure or migrate.
