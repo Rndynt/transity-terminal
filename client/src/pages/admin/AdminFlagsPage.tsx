@@ -34,6 +34,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
+  access: 'Akses',
   page: 'Halaman',
   report: 'Laporan',
   master: 'Master Data',
@@ -42,6 +43,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
+  access: 'bg-slate-50 text-slate-700 border-slate-300',
   page: 'bg-blue-50 text-blue-700 border-blue-200',
   report: 'bg-green-50 text-green-700 border-green-200',
   master: 'bg-purple-50 text-purple-700 border-purple-200',
@@ -50,7 +52,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 const ROLE_ORDER = ['owner', 'finance', 'manager', 'spv_operations', 'operations', 'spv_cso', 'cso'];
-const CATEGORY_ORDER = ['page', 'report', 'master', 'action', 'admin'];
+const CATEGORY_ORDER = ['access', 'page', 'report', 'master', 'action', 'admin'];
 
 export default function AdminFlagsPage() {
   usePageTitle("Feature Flags", "Toggle permission per role");
