@@ -240,7 +240,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
     }
 
     try {
-      const upstream = await fetch(`${REALMIO_BASE_URL}/me`, {
+      const upstream = await fetch(`${REALMIO_BASE_URL}/api/auth/get-session`, {
         headers: {
           "X-Tenant-Id": REALMIO_TENANT_ID,
           ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}),
@@ -255,6 +255,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
       }
 
       const data = await upstream.json();
+      if (!data?.user) {
+        return reply.code(401).send({ user: null });
+      }
       return reply.send(data);
     } catch {
       return reply.code(401).send({ user: null });

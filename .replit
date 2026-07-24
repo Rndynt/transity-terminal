@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "python-3.12", "bash", "web"]
+modules = ["nodejs-20", "python-3.12", "bash", "web", "postgresql-16"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
@@ -97,7 +97,7 @@ PENDING_BOOKING_AUTO_RELEASE = "true"
 
 [userenv.development]
 NODE_ENV = "development"
-DEV_BYPASS_AUTH = "true"
+DEV_BYPASS_AUTH = "false"
 TERMINAL_SERVICE_KEY = "sk_dev_test_key_12345"
 
 [userenv.production]

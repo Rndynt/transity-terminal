@@ -50,13 +50,17 @@ async function verifyWithRealmio(
   if (authHeader) headers["Authorization"] = authHeader;
 
   try {
-    const res = await fetch(`${REALMIO_BASE_URL}/me`, {
+    const res = await fetch(`${REALMIO_BASE_URL}/api/auth/get-session`, {
       headers,
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
     const data = await res.json();
-    return data.user ?? data;
+    // better-auth returns { user, session } or null
+    if (!data) return null;
+    const user = data.user ?? data;
+    if (!user?.id) return null;
+    return user as RealmioUser;
   } catch {
     return null;
   }
