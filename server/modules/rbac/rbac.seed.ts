@@ -190,6 +190,28 @@ export async function seedRbac() {
   const skipped = roleFlagRows.length - inserted;
   console.log(`  ✓ ${inserted} role-flag mappings inserted, ${skipped} already exist (preserved)`);
 
+  // access.terminal / access.driver_app are critical entry-gates, not regular
+  // feature toggles: a DB seeded before these flags existed would have no row
+  // for them (or a stale one from a partial run), and the DO NOTHING strategy
+  // above would never correct that — silently locking users out of the
+  // terminal. Admins also have no reason to have intentionally disabled a
+  // gate flag that didn't exist yet, so it's safe to force-sync just these
+  // two to match DEFAULT_MATRIX on every restart, while every other flag
+  // keeps preserving admin toggles via DO NOTHING.
+  const accessFlagRows: ReturnType<typeof sql>[] = [];
+  for (const flagId of ["access.terminal", "access.driver_app"] as const) {
+    const matrix = DEFAULT_MATRIX[flagId];
+    for (const roleId of Object.keys(matrix) as RoleId[]) {
+      accessFlagRows.push(sql`(${roleId}, ${flagId}, ${matrix[roleId]})`);
+    }
+  }
+  await db.execute(sql`
+    INSERT INTO role_flags (role_id, flag_id, enabled)
+    VALUES ${sql.join(accessFlagRows, sql`, `)}
+    ON CONFLICT (role_id, flag_id) DO UPDATE SET enabled = EXCLUDED.enabled
+  `);
+  console.log("  ✓ access.* gate flags force-synced");
+
   if (process.env.NODE_ENV !== 'production') {
     // Only insert dev staff member when no real staff members exist yet
     // (i.e. initial setup hasn't been done). This prevents blocking the

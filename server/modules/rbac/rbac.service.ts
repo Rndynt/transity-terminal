@@ -28,10 +28,12 @@ const FALLBACK_FLAGS: Record<string, string[]> = {
     "action.trip.materialize", "action.trip.close", "action.trip.batch_reschedule", "action.payment.create", "action.cargo.create", "action.cargo.manage",
     "action.spj.create", "action.spj.issue", "action.spj.settle",
     "admin.staff.manage", "admin.flags.manage", "page.schedule.closed", "page.cso.view_closed", "page.my_schedule",
+    "access.terminal", "access.driver_app",
   ],
   finance: [
     "page.bookings", "page.reports",
     "report.revenue", "report.sales", "report.trip_profitability", "report.cancellations", "report.cargo", "report.payments", "report.commercial_fee",
+    "access.terminal",
   ],
   manager: [
     "page.cso", "page.cargo", "page.bookings", "page.schedule", "page.spj", "page.manifest", "page.reports",
@@ -39,26 +41,31 @@ const FALLBACK_FLAGS: Record<string, string[]> = {
     "action.booking.create", "action.booking.cancel", "action.passenger.unseat", "action.passenger.reschedule", "action.passenger.assign_seat",
     "action.trip.materialize", "action.trip.close", "action.trip.batch_reschedule", "action.payment.create", "action.cargo.create", "action.cargo.manage",
     "action.spj.create", "action.spj.issue", "action.spj.settle", "page.schedule.closed", "page.cso.view_closed", "page.my_schedule",
+    "access.terminal", "access.driver_app",
   ],
   spv_operations: [
     "page.cargo", "page.bookings", "page.schedule", "page.spj", "page.manifest",
     "report.load_factor", "report.cargo",
     "action.trip.materialize", "action.trip.close", "action.trip.batch_reschedule", "action.cargo.create", "action.cargo.manage",
     "action.spj.create", "action.spj.issue", "action.spj.settle", "page.schedule.closed", "page.cso.view_closed",
+    "access.terminal", "access.driver_app",
   ],
   operations: [
     "page.cargo", "page.schedule", "page.spj", "page.manifest",
     "action.cargo.create", "action.cargo.manage", "action.spj.create",
+    "access.terminal",
   ],
   spv_cso: [
     "page.cso", "page.cargo", "page.bookings", "page.manifest",
     "action.booking.create", "action.booking.cancel", "action.passenger.unseat", "action.passenger.reschedule", "action.passenger.assign_seat",
     "action.payment.create", "action.cargo.create",
+    "access.terminal",
   ],
   cso: [
     "page.cso", "page.cargo", "page.manifest",
     "action.booking.create", "action.booking.cancel", "action.passenger.assign_seat",
     "action.payment.create", "action.cargo.create",
+    "access.terminal",
   ],
   driver: [
     "access.driver_app", "page.manifest", "page.dashboard", "page.my_schedule",

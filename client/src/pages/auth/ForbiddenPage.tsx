@@ -1,6 +1,7 @@
-import { ShieldOff } from 'lucide-react';
+import { ShieldOff, LogOut } from 'lucide-react';
 import { Link } from 'wouter';
 import { usePermissions } from '@/lib/permissions';
+import { useAuth } from '@/lib/auth';
 
 const PAGE_ROUTES: Array<{ flag: string; path: string; label: string }> = [
   { flag: 'page.cso', path: '/cso', label: 'Reservasi' },
@@ -24,6 +25,7 @@ const PAGE_ROUTES: Array<{ flag: string; path: string; label: string }> = [
 
 export default function ForbiddenPage() {
   const { can } = usePermissions();
+  const { signOut } = useAuth();
   const homePage = PAGE_ROUTES.find(r => can(r.flag));
 
   return (
@@ -38,13 +40,29 @@ export default function ForbiddenPage() {
         </p>
       </div>
       {homePage ? (
-        <Link href={homePage.path}>
-          <span className="text-sm text-blue-600 hover:underline cursor-pointer">
-            Kembali ke {homePage.label}
-          </span>
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href={homePage.path}>
+            <span className="text-sm text-blue-600 hover:underline cursor-pointer">
+              Kembali ke {homePage.label}
+            </span>
+          </Link>
+          <button
+            onClick={() => { void signOut(); }}
+            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-red-500 transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5" /> Keluar
+          </button>
+        </div>
       ) : (
-        <p className="text-xs text-gray-400">Hubungi administrator untuk mendapatkan akses.</p>
+        <>
+          <button
+            onClick={() => { void signOut(); }}
+            className="flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-2 transition-colors shadow-sm shadow-blue-600/20"
+          >
+            <LogOut className="w-4 h-4" /> Keluar &amp; kembali ke Login
+          </button>
+          <p className="text-xs text-gray-400">Hubungi administrator untuk mendapatkan akses.</p>
+        </>
       )}
     </div>
   );
