@@ -103,9 +103,7 @@ function Router() {
               <Suspense fallback={null}>
                   <Switch>
                     <Route path="/">
-                      <RequireFlag flag="page.cso">
-                        <CsoPage />
-                      </RequireFlag>
+                      <HomeRedirect />
                     </Route>
                     <Route path="/cso">
                       <RequireFlag flag="page.cso">

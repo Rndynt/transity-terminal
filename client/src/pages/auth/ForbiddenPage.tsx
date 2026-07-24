@@ -26,7 +26,10 @@ const PAGE_ROUTES: Array<{ flag: string; path: string; label: string }> = [
 export default function ForbiddenPage() {
   const { can } = usePermissions();
   const { signOut } = useAuth();
-  const homePage = PAGE_ROUTES.find(r => can(r.flag));
+  // Navigation links are only meaningful inside the terminal web UI.
+  // If the user doesn't have access.terminal, all pages are gated anyway —
+  // only show the logout button so they aren't offered a dead link.
+  const homePage = can("access.terminal") ? PAGE_ROUTES.find(r => can(r.flag)) : null;
 
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 text-center p-8">
