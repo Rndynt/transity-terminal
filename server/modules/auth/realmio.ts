@@ -107,12 +107,19 @@ export async function createRealmioUser(
     return { userId: fakeId, email, name };
   }
 
-  // Realmio requires an Origin header — fall back to the configured CORS origin
-  // when the caller doesn't supply one (e.g. server-initiated account creation).
+  // Realmio validates Origin for tenant-isolation. Use the full dev domain
+  // (REPLIT_DEV_DOMAIN) which is the whitelisted origin — NOT the browser's
+  // Origin header, which may be a short alias that Realmio doesn't recognise.
+  // In production, APP_CORS_ORIGINS should list the canonical deployment URL.
+  const corsOrigins = (process.env.APP_CORS_ORIGINS ?? "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter((o) => o && o !== "*");
+  const replitDevOrigin = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    : null;
   const effectiveOrigin =
-    origin ||
-    (process.env.APP_CORS_ORIGINS ?? "").split(",")[0].trim() ||
-    REALMIO_BASE_URL;
+    corsOrigins[0] || replitDevOrigin || REALMIO_BASE_URL;
 
   const res = await fetch(`${REALMIO_BASE_URL}/api/auth/sign-up/email`, {
     method: "POST",
