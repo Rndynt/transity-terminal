@@ -91,6 +91,20 @@ function AppGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Smart home redirect — hanya berjalan setelah AppGate (access.terminal sudah terjamin).
+// Arahkan ke halaman pertama yang bisa diakses berdasarkan flag user.
+function HomeRedirect() {
+  const { can } = usePermissions();
+  if (can("page.cso")) return <Redirect to="/cso" />;
+  if (can("page.schedule")) return <Redirect to="/schedule" />;
+  if (can("page.bookings")) return <Redirect to="/bookings" />;
+  if (can("page.manifest")) return <Redirect to="/manifest" />;
+  if (can("page.my_schedule")) return <Redirect to="/my-schedule" />;
+  if (can("page.reports")) return <Redirect to="/reports/revenue" />;
+  if (can("page.masters")) return <Redirect to="/masters" />;
+  return <ForbiddenPage />;
+}
+
 function Router() {
   return (
     <Suspense fallback={null}>
