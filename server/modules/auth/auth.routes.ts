@@ -193,7 +193,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
 
     let realmioUser: { userId: string; email: string; name: string };
     try {
-      realmioUser = await createRealmioUser(name, email, password);
+      realmioUser = await createRealmioUser(name, email, password, req.headers.origin as string | null);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Gagal membuat akun di sistem autentikasi";
       return reply.code(422).send({ message });

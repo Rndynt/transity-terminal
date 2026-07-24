@@ -99,18 +99,27 @@ export interface RealmioCreateUserResult {
 export async function createRealmioUser(
   name: string,
   email: string,
-  password: string
+  password: string,
+  origin?: string | null,
 ): Promise<RealmioCreateUserResult> {
   if (!REALMIO_BASE_URL) {
     const fakeId = `dev-${Date.now()}`;
     return { userId: fakeId, email, name };
   }
 
+  // Realmio requires an Origin header — fall back to the configured CORS origin
+  // when the caller doesn't supply one (e.g. server-initiated account creation).
+  const effectiveOrigin =
+    origin ||
+    (process.env.APP_CORS_ORIGINS ?? "").split(",")[0].trim() ||
+    REALMIO_BASE_URL;
+
   const res = await fetch(`${REALMIO_BASE_URL}/api/auth/sign-up/email`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Tenant-Id": REALMIO_TENANT_ID,
+      ...(effectiveOrigin ? { Origin: effectiveOrigin } : {}),
     },
     body: JSON.stringify({ name, email, password }),
     signal: AbortSignal.timeout(8000),
