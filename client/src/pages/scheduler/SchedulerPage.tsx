@@ -1382,108 +1382,105 @@ export default function SchedulerPage() {
   return (
     <div className="flex flex-col h-full bg-background" data-testid="scheduler-page">
       <PageHeader icon={CalendarRange} title="Penjadwalan" subtitle="Atur jadwal trip bulanan" />
-      {/* Toolbar — 2 rows: controls | legend */}
-      <div className="px-3 md:px-6 py-2 border-b bg-muted/20 shrink-0 flex flex-col gap-1.5">
-        {/* Row 1: left controls + Pilih Jadwal on the right */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-1 overflow-x-auto">
-            <SearchableSelect
-              value={selectedOutletId}
-              onChange={setSelectedOutletId}
-              options={outletOptions}
-              placeholder="Semua Outlet"
-              searchPlaceholder="Cari outlet..."
-              clearValue="all"
-              icon={<Building2 className="w-3.5 h-3.5" />}
-              className="w-[140px] sm:w-[180px] h-8 shrink-0"
-              data-testid="select-outlet-filter"
-            />
-            {/* View range toggle */}
-            <div className="flex items-center border rounded-lg overflow-hidden shrink-0">
-              <Button
-                variant={rangeMode === 'week' ? 'default' : 'ghost'}
-                size="sm"
-                className="rounded-none h-8 px-2.5 text-xs"
-                onClick={() => setRangeMode('week')}
-                data-testid="btn-range-weekly"
-              >
-                Mingguan
-              </Button>
-              <Button
-                variant={rangeMode === 'twoWeek' ? 'default' : 'ghost'}
-                size="sm"
-                className="rounded-none h-8 px-2.5 text-xs"
-                onClick={() => setRangeMode('twoWeek')}
-                data-testid="btn-range-biweekly"
-              >
-                14 Hari
-              </Button>
-              <Button
-                variant={rangeMode === 'month' ? 'default' : 'ghost'}
-                size="sm"
-                className="rounded-none h-8 px-2.5 text-xs"
-                onClick={() => setRangeMode('month')}
-                data-testid="btn-range-monthly"
-              >
-                Bulanan
-              </Button>
-            </div>
-            {/* Date navigation */}
-            <div className="flex items-center border rounded-lg overflow-hidden shrink-0">
-              <Button variant="ghost" size="sm" className="rounded-none h-8 px-2" onClick={prevRange} data-testid="btn-prev-month">
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-none h-8 px-2 text-xs font-medium whitespace-nowrap"
-                onClick={goToday}
-                data-testid="btn-today"
-              >
-                {formatRangeLabel(dates, rangeMode)}
-              </Button>
-              <Button variant="ghost" size="sm" className="rounded-none h-8 px-2" onClick={nextRange} data-testid="btn-next-month">
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
+      {/* Toolbar — mobile-first 2-row layout */}
+      <div className="px-3 md:px-6 py-2 border-b bg-muted/20 shrink-0 flex flex-col gap-2">
 
-          {/* Pilih Jadwal — always pinned to the right */}
+        {/* Row 1: Outlet (flex-1) + Pilih Jadwal (pinned right) */}
+        <div className="flex items-center gap-2">
+          <SearchableSelect
+            value={selectedOutletId}
+            onChange={setSelectedOutletId}
+            options={outletOptions}
+            placeholder="Semua Outlet"
+            searchPlaceholder="Cari outlet..."
+            clearValue="all"
+            icon={<Building2 className="w-3.5 h-3.5" />}
+            className="flex-1 min-w-0 h-8"
+            data-testid="select-outlet-filter"
+          />
           <Button
             variant={selectMode ? "default" : "outline"}
             size="sm"
-            className="h-8 gap-1.5 text-xs shrink-0 ml-auto"
+            className="h-8 gap-1.5 text-xs shrink-0"
             onClick={toggleSelectMode}
             data-testid="btn-toggle-select-mode"
           >
             <MousePointerSquareDashed className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Pilih Jadwal</span>
-            <span className="sm:hidden">Pilih</span>
+            Pilih Jadwal
           </Button>
         </div>
 
-        {/* Row 2: legend + loading indicator */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <div className="w-2.5 h-2.5 rounded border border-blue-300 bg-blue-50" />
-            <span>Trip Aktif</span>
+        {/* Row 2: range toggle + date navigation + legend (desktop) */}
+        <div className="flex items-center gap-2">
+          {/* View range toggle */}
+          <div className="flex items-center border rounded-lg overflow-hidden shrink-0">
+            <Button
+              variant={rangeMode === 'week' ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-none h-8 px-2.5 text-xs"
+              onClick={() => setRangeMode('week')}
+              data-testid="btn-range-weekly"
+            >
+              Mingguan
+            </Button>
+            <Button
+              variant={rangeMode === 'twoWeek' ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-none h-8 px-2.5 text-xs"
+              onClick={() => setRangeMode('twoWeek')}
+              data-testid="btn-range-biweekly"
+            >
+              14 Hari
+            </Button>
+            <Button
+              variant={rangeMode === 'month' ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-none h-8 px-2.5 text-xs"
+              onClick={() => setRangeMode('month')}
+              data-testid="btn-range-monthly"
+            >
+              Bulanan
+            </Button>
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <div className="w-2.5 h-2.5 rounded border border-dashed border-muted-foreground/40 bg-muted/30" />
-            <span>Virtual</span>
+
+          {/* Date navigation */}
+          <div className="flex items-center border rounded-lg overflow-hidden shrink-0">
+            <Button variant="ghost" size="sm" className="rounded-none h-8 px-2" onClick={prevRange} data-testid="btn-prev-month">
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-none h-8 px-2 text-xs font-medium whitespace-nowrap"
+              onClick={goToday}
+              data-testid="btn-today"
+            >
+              {formatRangeLabel(dates, rangeMode)}
+            </Button>
+            <Button variant="ghost" size="sm" className="rounded-none h-8 px-2" onClick={nextRange} data-testid="btn-next-month">
+              <ChevronRight className="w-4 h-4" />
+            </Button>
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <div className="w-2.5 h-2.5 rounded border border-red-300 bg-red-50" />
-            <span>Pengecualian</span>
+
+          {/* Legend — desktop only */}
+          <div className="hidden md:flex items-center gap-3 ml-2">
+            {[
+              { color: 'border-blue-300 bg-blue-50', label: 'Trip Aktif' },
+              { color: 'border-dashed border-muted-foreground/40 bg-muted/30', label: 'Virtual' },
+              { color: 'border-red-300 bg-red-50', label: 'Pengecualian' },
+              { color: 'border-green-300 bg-green-50', label: 'Dalam Perjalanan' },
+            ].map(({ color, label }) => (
+              <div key={label} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <div className={`w-2.5 h-2.5 rounded border ${color}`} />
+                <span>{label}</span>
+              </div>
+            ))}
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <div className="w-2.5 h-2.5 rounded border border-green-300 bg-green-50" />
-            <span>Dalam Perjalanan</span>
-          </div>
+
           {isLoading && (
             <div className="flex items-center gap-1 text-[11px] text-muted-foreground ml-auto">
               <Loader2 className="w-3 h-3 animate-spin" />
-              <span>Memuat...</span>
+              <span className="hidden sm:inline">Memuat...</span>
             </div>
           )}
         </div>
