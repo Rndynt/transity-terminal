@@ -1395,7 +1395,7 @@ export default function SchedulerPage() {
             searchPlaceholder="Cari outlet..."
             clearValue="all"
             icon={<Building2 className="w-3.5 h-3.5" />}
-            className="flex-1 min-w-0 h-8"
+            className="w-[160px] sm:w-[200px] h-8 shrink-0"
             data-testid="select-outlet-filter"
           />
           <Button
