@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import {
   CalendarRange, ChevronLeft, ChevronRight, Plus, Bus, Truck,
   Clock, Users, Ban, MapPin, User, AlertTriangle,
@@ -15,7 +16,8 @@ import {
 import { cn } from '@/lib/utils';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { outletsApi } from '@/lib/api';
+import { outletsApi, stopsApi } from '@/lib/api';
+import type { Stop } from '@/types';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const TIME_COL_W = 56;
@@ -27,18 +29,68 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function addDaysStr(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return toDateStr(d);
+}
+
+function startOfWeek(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() - d.getDay());
+  return toDateStr(d);
+}
+
+// Uses Date-object arithmetic (not manual day-count clamping) so 28/29/30/31-day
+// months always render every day, including the trailing partial week.
 function getMonthDates(year: number, month: number): string[] {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const dates: string[] = [];
   for (let d = 1; d <= daysInMonth; d++) {
-    dates.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+    dates.push(toDateStr(new Date(year, month, d)));
   }
   return dates;
 }
 
+// Returns `days` consecutive dates starting from the Sunday of the week
+// containing `refDate` (used for the Mingguan/14 Hari range modes).
+function getRangeDates(refDate: string, days: number): string[] {
+  const start = startOfWeek(refDate);
+  const dates: string[] = [];
+  for (let i = 0; i < days; i++) {
+    dates.push(addDaysStr(start, i));
+  }
+  return dates;
+}
+
+type RangeMode = 'week' | 'twoWeek' | 'month';
+
 function formatMonthTitle(year: number, month: number) {
   const d = new Date(year, month, 1);
   return d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+}
+
+const SHORT_MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+function formatRangeLabel(dates: string[], mode: RangeMode): string {
+  if (dates.length === 0) return '';
+  if (mode === 'month') {
+    const d = new Date(dates[0] + 'T00:00:00');
+    return formatMonthTitle(d.getFullYear(), d.getMonth());
+  }
+  const sd = new Date(dates[0] + 'T00:00:00');
+  const ed = new Date(dates[dates.length - 1] + 'T00:00:00');
+  if (sd.getFullYear() === ed.getFullYear()) {
+    if (sd.getMonth() === ed.getMonth()) {
+      return `${sd.getDate()}–${ed.getDate()} ${SHORT_MONTHS_ID[sd.getMonth()]} ${sd.getFullYear()}`;
+    }
+    return `${sd.getDate()} ${SHORT_MONTHS_ID[sd.getMonth()]} – ${ed.getDate()} ${SHORT_MONTHS_ID[ed.getMonth()]} ${sd.getFullYear()}`;
+  }
+  return `${sd.getDate()} ${SHORT_MONTHS_ID[sd.getMonth()]} ${sd.getFullYear()} – ${ed.getDate()} ${SHORT_MONTHS_ID[ed.getMonth()]} ${ed.getFullYear()}`;
 }
 
 function formatShortDate(dateStr: string) {
@@ -1053,9 +1105,8 @@ function BulkCloseTripDialog({ open, count, onClose, onConfirm, isSubmitting }: 
 
 export default function SchedulerPage() {
   usePageTitle("Penjadwalan", "Atur jadwal trip bulanan");
-  const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth());
+  const [refDate, setRefDate] = useState(todayStr());
+  const [rangeMode, setRangeMode] = useState<RangeMode>('week');
   const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null);
   const [emptyCell, setEmptyCell] = useState<EmptyCellInfo | null>(null);
   const [selectedOutletId, setSelectedOutletId] = useState<string>('all');
@@ -1065,7 +1116,13 @@ export default function SchedulerPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  const dates = useMemo(() => getMonthDates(year, month), [year, month]);
+  const dates = useMemo(() => {
+    if (rangeMode === 'month') {
+      const d = new Date(refDate + 'T00:00:00');
+      return getMonthDates(d.getFullYear(), d.getMonth());
+    }
+    return getRangeDates(refDate, rangeMode === 'twoWeek' ? 14 : 7);
+  }, [refDate, rangeMode]);
   const gridWidth = TIME_COL_W + dates.length * CELL_W;
   const fromDate = dates[0];
   const toDate = dates[dates.length - 1];
@@ -1075,6 +1132,27 @@ export default function SchedulerPage() {
     queryFn: () => outletsApi.getAll(),
     staleTime: 60_000,
   });
+
+  const { data: stops = [] } = useQuery<Stop[]>({
+    queryKey: ['/api/stops'],
+    queryFn: stopsApi.getAll,
+    staleTime: 60_000,
+  });
+
+  const stopCityMap = useMemo(() => {
+    const map: Record<string, string | null | undefined> = {};
+    for (const s of stops) map[s.id] = s.city;
+    return map;
+  }, [stops]);
+
+  const outletOptions = useMemo<SearchableSelectOption[]>(() => [
+    { value: 'all', label: 'Semua Outlet' },
+    ...outlets.map(o => ({
+      value: o.id,
+      label: o.name,
+      group: stopCityMap[o.stopId] || 'Lainnya',
+    })),
+  ], [outlets, stopCityMap]);
 
   const { data: patternStopMap = {} } = useQuery<Record<string, string[]>>({
     queryKey: ['/api/scheduler/pattern-stop-map'],
@@ -1273,47 +1351,87 @@ export default function SchedulerPage() {
     }
   }, [dates]);
 
-  const prevMonth = () => {
-    if (month === 0) { setYear(y => y - 1); setMonth(11); }
-    else setMonth(m => m - 1);
+  const prevRange = () => {
+    if (rangeMode === 'month') {
+      setRefDate(d => {
+        const dt = new Date(d + 'T00:00:00');
+        dt.setDate(1);
+        dt.setMonth(dt.getMonth() - 1);
+        return toDateStr(dt);
+      });
+    } else {
+      setRefDate(d => addDaysStr(d, rangeMode === 'twoWeek' ? -14 : -7));
+    }
   };
 
-  const nextMonth = () => {
-    if (month === 11) { setYear(y => y + 1); setMonth(0); }
-    else setMonth(m => m + 1);
+  const nextRange = () => {
+    if (rangeMode === 'month') {
+      setRefDate(d => {
+        const dt = new Date(d + 'T00:00:00');
+        dt.setDate(1);
+        dt.setMonth(dt.getMonth() + 1);
+        return toDateStr(dt);
+      });
+    } else {
+      setRefDate(d => addDaysStr(d, rangeMode === 'twoWeek' ? 14 : 7));
+    }
   };
 
-  const goToday = () => {
-    const t = new Date();
-    setYear(t.getFullYear());
-    setMonth(t.getMonth());
-  };
+  const goToday = () => setRefDate(todayStr());
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="scheduler-page">
       <PageHeader icon={CalendarRange} title="Penjadwalan" subtitle="Atur jadwal trip bulanan" />
       <div className="px-3 md:px-6 py-2 border-b bg-muted/20 shrink-0 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2 flex-wrap">
-          <Select value={selectedOutletId} onValueChange={setSelectedOutletId}>
-            <SelectTrigger className="h-8 w-[110px] xs:w-[140px] sm:w-[180px] text-xs shrink min-w-0" data-testid="select-outlet-filter">
-              <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground shrink-0" />
-              <SelectValue placeholder="Semua Outlet" className="truncate" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Outlet</SelectItem>
-              {outlets.map(o => (
-                <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={selectedOutletId}
+            onChange={setSelectedOutletId}
+            options={outletOptions}
+            placeholder="Semua Outlet"
+            searchPlaceholder="Cari outlet..."
+            clearValue="all"
+            icon={<Building2 className="w-3.5 h-3.5" />}
+            className="w-[110px] xs:w-[140px] sm:w-[180px] h-8 shrink min-w-0"
+            data-testid="select-outlet-filter"
+          />
           <div className="flex items-center border rounded-lg overflow-hidden shrink-0">
-            <Button variant="ghost" size="sm" className="rounded-none h-8 px-2" onClick={prevMonth} data-testid="btn-prev-month">
+            <Button
+              variant={rangeMode === 'week' ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-none h-8 px-2 text-xs"
+              onClick={() => setRangeMode('week')}
+              data-testid="btn-range-weekly"
+            >
+              Mingguan
+            </Button>
+            <Button
+              variant={rangeMode === 'twoWeek' ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-none h-8 px-2 text-xs"
+              onClick={() => setRangeMode('twoWeek')}
+              data-testid="btn-range-biweekly"
+            >
+              14 Hari
+            </Button>
+            <Button
+              variant={rangeMode === 'month' ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-none h-8 px-2 text-xs"
+              onClick={() => setRangeMode('month')}
+              data-testid="btn-range-monthly"
+            >
+              Bulanan
+            </Button>
+          </div>
+          <div className="flex items-center border rounded-lg overflow-hidden shrink-0">
+            <Button variant="ghost" size="sm" className="rounded-none h-8 px-2" onClick={prevRange} data-testid="btn-prev-month">
               <ChevronLeft className="w-4 h-4" />
             </Button>
             <Button variant="ghost" size="sm" className="rounded-none h-8 px-2 sm:px-3 text-xs font-medium min-w-[90px] sm:min-w-[140px] whitespace-nowrap" onClick={goToday} data-testid="btn-today">
-              {formatMonthTitle(year, month)}
+              {formatRangeLabel(dates, rangeMode)}
             </Button>
-            <Button variant="ghost" size="sm" className="rounded-none h-8 px-2" onClick={nextMonth} data-testid="btn-next-month">
+            <Button variant="ghost" size="sm" className="rounded-none h-8 px-2" onClick={nextRange} data-testid="btn-next-month">
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
