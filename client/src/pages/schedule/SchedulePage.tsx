@@ -11,7 +11,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { EmptyState } from '@/components/ui/empty-state';
 import ManifestDialog from '@/components/manifest/ManifestDialog';
@@ -264,25 +263,28 @@ export default function SchedulePage() {
             <Badge variant="outline" className="text-xs" data-testid="badge-total-trips">
               {outletFilteredTrips.length} trip
             </Badge>
-            <Tabs value={statusTab} onValueChange={(v) => setStatusTab(v as StatusTab)}>
-              <TabsList className="h-8 p-0.5" data-testid="tabs-schedule-status">
-                <TabsTrigger value="all" className="h-7 text-xs px-2.5" data-testid="tab-status-all">
-                  Semua ({outletFilteredTrips.length})
-                </TabsTrigger>
-                <TabsTrigger value="noDriver" className="h-7 text-xs px-2.5" data-testid="tab-status-no-driver">
-                  Belum Assign ({tripsNoDriver.length})
-                </TabsTrigger>
-                <TabsTrigger value="hasDriver" className="h-7 text-xs px-2.5" data-testid="tab-status-has-driver">
-                  Sudah Assign ({tripsHasDriver.length})
-                </TabsTrigger>
-                <TabsTrigger value="noSpj" className="h-7 text-xs px-2.5" data-testid="tab-status-no-spj">
-                  Belum SPJ ({tripsNoSpj.length})
-                </TabsTrigger>
-                <TabsTrigger value="hasSpj" className="h-7 text-xs px-2.5" data-testid="tab-status-has-spj">
-                  Sudah SPJ ({tripsHasSpj.length})
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex gap-1.5 overflow-x-auto" data-testid="filter-status-group">
+              {([
+                { value: 'all',       label: 'Semua',        count: outletFilteredTrips.length },
+                { value: 'noDriver',  label: 'Belum Assign', count: tripsNoDriver.length },
+                { value: 'hasDriver', label: 'Sudah Assign', count: tripsHasDriver.length },
+                { value: 'noSpj',     label: 'Belum SPJ',    count: tripsNoSpj.length },
+                { value: 'hasSpj',    label: 'Sudah SPJ',    count: tripsHasSpj.length },
+              ] as const).map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => setStatusTab(f.value)}
+                  data-testid={`filter-status-${f.value}`}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border whitespace-nowrap transition-colors ${
+                    statusTab === f.value
+                      ? 'bg-blue-50 border-blue-300 text-blue-700'
+                      : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  {f.label} ({f.count})
+                </button>
+              ))}
+            </div>
             {canViewClosed && closedCount > 0 && (
               <button
                 onClick={() => setShowClosed(v => !v)}
