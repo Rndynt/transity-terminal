@@ -93,6 +93,18 @@ export class AtomicHoldService {
         // engine's `FOR UPDATE OF i` in
         // engine/crates/engine-core/src/hold.rs::run_hold_txn.
         // seat_holds rows are read-only inside this transaction.
+        //
+        // noWait: true — fail immediately if another in-flight
+        // transaction already holds this row's lock, instead of
+        // blocking until it releases. Two people going for the same
+        // seat at the same moment is a normal, frequent outcome (not
+        // an error) and the caller-facing result is identical either
+        // way (SEAT_CONFLICT, see the catch block below) — the only
+        // thing this changes is how long the loser waits to find out.
+        // Benchmarked lock-wait on a contended row was ~127ms
+        // (docs/query-performance.md Q03); NOWAIT turns that into an
+        // immediate, correctly-labeled result instead of a blocked
+        // request thread.
         const inventoryRows = await tx
           .select({
             booked: seatInventory.booked,
@@ -107,7 +119,7 @@ export class AtomicHoldService {
             eq(seatInventory.seatNo, seatNo),
             inArray(seatInventory.legIndex, legIndexes)
           ))
-          .for('update', { of: seatInventory });
+          .for('update', { of: seatInventory, noWait: true });
 
         if (inventoryRows.length !== legIndexes.length) {
           return {
@@ -169,6 +181,20 @@ export class AtomicHoldService {
 
       return result;
     } catch (error) {
+      // 55P03 = lock_not_available, the SQLSTATE Postgres raises for FOR
+      // UPDATE NOWAIT hitting a row another in-flight transaction already
+      // holds. Expected and frequent under contention (not a bug), so it
+      // gets the same result shape every other "someone else has this
+      // seat" case returns, and is deliberately NOT logged as an error —
+      // logging every contested-seat race would spam the error log for
+      // normal traffic. Drizzle/pg sometimes surfaces the original pg
+      // error under `.cause` rather than directly (same pattern already
+      // used for 23505 elsewhere in this codebase, e.g. promos.service.ts).
+      const pgCode = (error as { code?: string })?.code
+        ?? (error as { cause?: { code?: string } })?.cause?.code;
+      if (pgCode === '55P03') {
+        return { success: false, reason: 'SEAT_CONFLICT', conflictSeats: [seatNo] };
+      }
       log.error({ err: error, tripId, seatNo }, "hold creation failed");
       return {
         success: false,

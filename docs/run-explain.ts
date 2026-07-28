@@ -379,6 +379,61 @@ ORDER BY revenue DESC
 `,
     },
 
+    // Q06b/Q07b — same as Q06/Q07 but with an outlet filter, which is the
+    // ANALISA_PERFORMA_RACE_CONDITION.md #5 gap: canUseMv requires
+    // !f.outletId, so a report scoped to one outlet (the normal case for a
+    // multi-outlet operator checking their own branch) loses the
+    // mv_trip_stats fast path and falls to this live scan instead. The
+    // idx_bookings_rpt_outlet covering index (migration 0027) was built
+    // for the byOutlet/byChannel/byRoute breakdown queries, which share
+    // this same (trip_id, status, outlet_id) shape — these two queries
+    // check whether that same index also carries the summary/daily
+    // sub-queries adequately, or whether the gap is real enough to
+    // justify extending mv_trip_stats with an outlet/channel dimension.
+    // Compare this query's timing directly against Q06/Q07 above.
+    {
+      id: "Q06b",
+      name: "getRevenueSummary — ringkasan DENGAN filter outlet (live-scan path)",
+      source: "reports.repository.ts:139 (canUseMv=false branch, f.outletId set)",
+      description: "Sama seperti Q06, tapi dengan f.outletId di-set — inilah query yang benar-benar jalan saat operator multi-outlet melihat laporan cabang mereka sendiri. canUseMv mensyaratkan !f.outletId, jadi mv_trip_stats TIDAK dipakai di sini.",
+      query: (p) => `
+EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+SELECT
+  COALESCE(SUM(b.total_amount::numeric), 0) AS total_revenue,
+  COUNT(*)::int AS total_bookings,
+  COALESCE(AVG(b.total_amount::numeric), 0) AS avg_per_booking,
+  COUNT(DISTINCT b.trip_id)::int AS total_trips
+FROM bookings b
+INNER JOIN trips t ON b.trip_id = t.id
+WHERE t.service_date >= '${p.date_from}'
+  AND t.service_date <= '${p.date_to}'
+  AND b.status IN ('paid','confirmed','checked_in')
+  AND b.outlet_id = '${p.outlet_id}'
+`,
+    },
+
+    {
+      id: "Q07b",
+      name: "getRevenueSummary — harian DENGAN filter outlet (live-scan path)",
+      source: "reports.repository.ts:171 (canUseMv=false branch, f.outletId set)",
+      description: "Sama seperti Q07, tapi dengan f.outletId di-set. Sub-query 'daily' kehilangan fast-path MV yang sama seperti Q06b.",
+      query: (p) => `
+EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+SELECT
+  t.service_date::text AS date,
+  COALESCE(SUM(b.total_amount::numeric), 0) AS revenue,
+  COUNT(*)::int AS bookings
+FROM bookings b
+INNER JOIN trips t ON b.trip_id = t.id
+WHERE t.service_date >= '${p.date_from}'
+  AND t.service_date <= '${p.date_to}'
+  AND b.status IN ('paid','confirmed','checked_in')
+  AND b.outlet_id = '${p.outlet_id}'
+GROUP BY t.service_date
+ORDER BY t.service_date
+`,
+    },
+
     {
       id: "Q10",
       name: "getSalesReport — ringkasan dengan FILTER aggregates",
