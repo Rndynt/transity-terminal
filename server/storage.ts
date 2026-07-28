@@ -256,12 +256,32 @@ export class DatabaseStorage implements IStorage {
   createTripCostItem(data: InsertTripCostItem): Promise<TripCostItem> { return this.finance.createTripCostItem(data); }
   updateTripCostItem(id: string, data: Partial<InsertTripCostItem>): Promise<TripCostItem> { return this.finance.updateTripCostItem(id, data); }
   deleteTripCostItem(id: string): Promise<void> { return this.finance.deleteTripCostItem(id); }
-  getPromotions(): Promise<Promotion[]> { return this.finance.getPromotions(); }
+  getPromotions(): Promise<Promotion[]> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.finance.getPromotions();
+    if (ctx.promotionsCache) return ctx.promotionsCache;
+    const promise = this.finance.getPromotions();
+    ctx.promotionsCache = promise;
+    promise.catch(() => { ctx.promotionsCache = undefined; });
+    return promise;
+  }
   getPromotionById(id: string): Promise<Promotion | undefined> { return this.finance.getPromotionById(id); }
   getPromotionByCode(code: string): Promise<Promotion | undefined> { return this.finance.getPromotionByCode(code); }
-  createPromotion(data: InsertPromotion): Promise<Promotion> { return this.finance.createPromotion(data); }
-  updatePromotion(id: string, data: Partial<InsertPromotion>): Promise<Promotion> { return this.finance.updatePromotion(id, data); }
-  deletePromotion(id: string): Promise<void> { return this.finance.deletePromotion(id); }
+  createPromotion(data: InsertPromotion): Promise<Promotion> {
+    const ctx = getRequestContext();
+    if (ctx) { ctx.promotionsCache = undefined; }
+    return this.finance.createPromotion(data);
+  }
+  updatePromotion(id: string, data: Partial<InsertPromotion>): Promise<Promotion> {
+    const ctx = getRequestContext();
+    if (ctx) { ctx.promotionsCache = undefined; }
+    return this.finance.updatePromotion(id, data);
+  }
+  deletePromotion(id: string): Promise<void> {
+    const ctx = getRequestContext();
+    if (ctx) { ctx.promotionsCache = undefined; }
+    return this.finance.deletePromotion(id);
+  }
   incrementPromoUsage(id: string): Promise<void> { return this.finance.incrementPromoUsage(id); }
   createBookingPromoApplications(rows: InsertBookingPromoApplication[]): Promise<BookingPromoApplication[]> { return this.finance.createBookingPromoApplications(rows); }
   getBookingPromoApplications(bookingId: string): Promise<BookingPromoApplication[]> { return this.finance.getBookingPromoApplications(bookingId); }
@@ -269,8 +289,22 @@ export class DatabaseStorage implements IStorage {
   getBookingPromoApplicationsWithNameForBookings(bookingIds: string[]) { return this.finance.getBookingPromoApplicationsWithNameForBookings(bookingIds); }
   deleteBookingPromoApplications(bookingId: string): Promise<void> { return this.finance.deleteBookingPromoApplications(bookingId); }
   getPromoConditions(promoId: string): Promise<PromoCondition[]> { return this.finance.getPromoConditions(promoId); }
-  getPromoConditionsForPromos(promoIds: string[]): Promise<Map<string, PromoCondition[]>> { return this.finance.getPromoConditionsForPromos(promoIds); }
-  replacePromoConditions(promoId: string, conditions: PromoConditionInput[]): Promise<PromoCondition[]> { return this.finance.replacePromoConditions(promoId, conditions); }
+  getPromoConditionsForPromos(promoIds: string[]): Promise<Map<string, PromoCondition[]>> {
+    const ctx = getRequestContext();
+    if (!ctx) return this.finance.getPromoConditionsForPromos(promoIds);
+    const key = [...promoIds].sort().join(',');
+    const cached = ctx.promoConditionsCache.get(key);
+    if (cached) return cached;
+    const promise = this.finance.getPromoConditionsForPromos(promoIds);
+    ctx.promoConditionsCache.set(key, promise);
+    promise.catch(() => { ctx.promoConditionsCache.delete(key); });
+    return promise;
+  }
+  replacePromoConditions(promoId: string, conditions: PromoConditionInput[]): Promise<PromoCondition[]> {
+    const ctx = getRequestContext();
+    if (ctx) { ctx.promoConditionsCache.clear(); }
+    return this.finance.replacePromoConditions(promoId, conditions);
+  }
   getVouchers(promoId?: string): Promise<Voucher[]> { return this.finance.getVouchers(promoId); }
   getVoucherById(id: string): Promise<Voucher | undefined> { return this.finance.getVoucherById(id); }
   getVoucherByCode(code: string): Promise<Voucher | undefined> { return this.finance.getVoucherByCode(code); }
