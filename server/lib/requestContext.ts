@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { FastifyInstance } from "fastify";
-import type { Trip, Outlet, Stop, Vehicle, TripPattern, Layout } from "@shared/schema";
+import type { Trip, Outlet, Stop, Vehicle, TripPattern, Layout, Promotion, PromoCondition } from "@shared/schema";
 
 /**
  * Request-scoped context for in-flight memoization. Each Fastify request
@@ -16,6 +16,13 @@ import type { Trip, Outlet, Stop, Vehicle, TripPattern, Layout } from "@shared/s
  *  - Master data (outlet/stop/vehicle/tripPattern/layout): 9-14 call sites
  *    each across booking, cargo, manifest, snapshots. Booking detail flow
  *    alone calls `getStopById` 3+ times (origin + destination + fare lookup).
+ *  - Promotions: trip search enriches every trip on the results page with
+ *    `findBestAutoApplicablePromo()`, which reads the *entire* promotions
+ *    table + their conditions. That data is identical for every trip in
+ *    one response (only per-trip eligibility differs, evaluated in-memory)
+ *    — without this cache a full page of results fired one getPromotions()
+ *    + one getPromoConditionsForPromos() per trip, all concurrently, up to
+ *    ~2x the page size in redundant DB round-trips per search request.
  *
  * Memoizing the in-flight Promise turns those into a single DB round-trip
  * per request. Caches are scoped to a single request lifecycle and never
@@ -28,6 +35,14 @@ export interface RequestContext {
   vehicleCache: Map<string, Promise<Vehicle | undefined>>;
   tripPatternCache: Map<string, Promise<TripPattern | undefined>>;
   layoutCache: Map<string, Promise<Layout | undefined>>;
+  /** getPromotions() takes no args and returns the full table, so this is
+   *  a single slot rather than an id-keyed Map like the caches above. */
+  promotionsCache: Promise<Promotion[]> | undefined;
+  /** Keyed by the sorted/joined promoIds requested, so a repeat call with
+   *  the same id set (the common case — see doc above) hits the cache,
+   *  while a differently-scoped call is still always correct (cache miss,
+   *  fetched fresh) rather than risking a wrong answer. */
+  promoConditionsCache: Map<string, Promise<Map<string, PromoCondition[]>>>;
 }
 
 const als = new AsyncLocalStorage<RequestContext>();
@@ -44,6 +59,8 @@ export function createRequestContext(): RequestContext {
     vehicleCache: new Map(),
     tripPatternCache: new Map(),
     layoutCache: new Map(),
+    promotionsCache: undefined,
+    promoConditionsCache: new Map(),
   };
 }
 

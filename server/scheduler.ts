@@ -324,11 +324,14 @@ export class Scheduler {
     }
 
     // Run immediately on start so a backlog from the previous process
-    // gets swept without waiting a full minute.
+    // gets swept without waiting a full minute. Wrapped in the same
+    // advisory lock as the interval job above for consistency: if several
+    // instances boot at once (e.g. a rolling deploy), only one actually
+    // runs the sweep instead of all of them redundantly racing on it.
     if (!engineOwnsHolds) {
-      this.cleanupExpiredHolds();
+      void withAdvisoryLock(LOCK_HOLDS_CLEANUP, () => this.cleanupExpiredHolds());
     } else {
-      void this.cleanupExpiredSeatHoldsOnly();
+      void withAdvisoryLock(LOCK_HOLDS_CLEANUP, () => this.cleanupExpiredSeatHoldsOnly());
     }
 
     // PERF: Refresh mv_trip_stats every 5 minutes so report fast-path stays
