@@ -226,13 +226,22 @@ export async function resolvePassengerCell(args: {
   originStopId: string;
   destinationStopId: string;
   serviceDate: string;
+  /** Pre-fetched global matrix, for callers resolving many cells in one
+   *  request (it never varies by pattern/trip, only by nothing at all —
+   *  so re-fetching it per cell is 100% redundant work). Omit to fall
+   *  back to the original per-call fetch; existing callers are
+   *  unaffected. */
+  preloadedGlobalMatrix?: PriceRule | null;
+  /** Same idea for the pattern matrix, for callers resolving several
+   *  cells that share one patternId + serviceDate. */
+  preloadedPatternMatrix?: PriceRule | null;
 }): Promise<{ price: number; source: 'trip' | 'pattern' | 'global' | 'none' }> {
-  const { patternId, tripId, originStopId, destinationStopId, serviceDate } = args;
+  const { patternId, tripId, originStopId, destinationStopId, serviceDate, preloadedGlobalMatrix, preloadedPatternMatrix } = args;
 
   const [tripPrice, patternMatrix, globalMatrix] = await Promise.all([
     tripId ? getTripExceptionPrice(tripId, originStopId, destinationStopId) : Promise.resolve(0),
-    getEffectivePatternMatrix(patternId, serviceDate),
-    getGlobalMatrix(),
+    preloadedPatternMatrix !== undefined ? preloadedPatternMatrix : getEffectivePatternMatrix(patternId, serviceDate),
+    preloadedGlobalMatrix !== undefined ? preloadedGlobalMatrix : getGlobalMatrix(),
   ]);
 
   return pickFirstPriced<'trip' | 'pattern' | 'global'>([

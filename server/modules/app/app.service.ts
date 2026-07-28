@@ -25,7 +25,7 @@ import {
 } from "@modules/bookings/booking.helpers";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
 import { AtomicHoldService } from "@modules/bookings/atomicHold.service";
-import { resolvePassengerCell, buildPricedMatrix } from "@modules/priceRules/priceRules.resolver";
+import { resolvePassengerCell, buildPricedMatrix, getGlobalMatrix, getEffectivePatternMatrix } from "@modules/priceRules/priceRules.resolver";
 import { createComponentLogger } from "@server/lib/logger";
 
 const log = createComponentLogger("app.service");
@@ -765,14 +765,25 @@ export class AppService {
 
     const uniquePatternIds = [...new Set(bases.map(b => b.patternId))];
 
-    const [patterns, patternStopsRows] = await Promise.all([
+    // Hoisted out of the per-base loop below: getGlobalMatrix() never
+    // varies within this search (no args at all), so fetching it once per
+    // base was N identical, 100% redundant queries. Pattern matrices are
+    // fetched once per UNIQUE patternId (concurrently) rather than once
+    // per base, since several bases commonly share one pattern (same
+    // route, different departure times).
+    const [patterns, patternStopsRows, globalMatrix, patternMatrixEntries] = await Promise.all([
       db.select().from(tripPatterns).where(inArray(tripPatterns.id, uniquePatternIds)),
       db.query.patternStops.findMany({
         where: and(inArray(patternStops.patternId, uniquePatternIds), isNull(patternStops.deletedAt)),
         orderBy: patternStops.stopSequence,
         with: { stop: true }
       }),
+      getGlobalMatrix(),
+      Promise.all(uniquePatternIds.map(async (pid) =>
+        [pid, await getEffectivePatternMatrix(pid, params.date)] as const
+      )),
     ]);
+    const patternMatrixByPatternId = new Map(patternMatrixEntries);
 
     const patternsMap = new Map(patterns.map(p => [p.id, p]));
     const patternStopsMap = new Map<string, typeof patternStopsRows>();
@@ -782,11 +793,13 @@ export class AppService {
       patternStopsMap.set(ps.patternId, list);
     }
 
-    const results: (TripSearchResult & { _baseId?: string })[] = [];
-
-    for (const base of bases) {
+    // Each base is resolved concurrently (was a sequential `for...await`,
+    // meaning search latency grew linearly with the number of matching
+    // virtual bases). Returns null for bases that don't match the
+    // origin/destination pair; filtered out below.
+    const perBaseResults = await Promise.all(bases.map(async (base): Promise<(TripSearchResult & { _baseId?: string }) | null> => {
       const pattern = patternsMap.get(base.patternId);
-      if (!pattern) continue;
+      if (!pattern) return null;
 
       const pStops = patternStopsMap.get(base.patternId) || [];
       const defaultTimes = (base.defaultStopTimes as DefaultStopTime[] | null) || [];
@@ -797,12 +810,12 @@ export class AppService {
         const originSeq = pStops.find(o => originStopIds.includes(o.stopId))?.stopSequence ?? Infinity;
         return ps.stopSequence > originSeq;
       });
-      if (!hasOrigin || !hasDestAfterOrigin) continue;
+      if (!hasOrigin || !hasDestAfterOrigin) return null;
 
       const originPS = pStops.find(ps => originStopIds.includes(ps.stopId));
       const destPSList = pStops.filter(ps => destStopIds.includes(ps.stopId) && ps.stopSequence > (originPS?.stopSequence ?? 0));
       const destPS = destPSList.length > 0 ? destPSList[destPSList.length - 1] : null;
-      if (!originPS || !destPS) continue;
+      if (!originPS || !destPS) return null;
 
       const originTime = defaultTimes.find(t => t.stopSequence === originPS.stopSequence);
       const destTime = defaultTimes.find(t => t.stopSequence === destPS.stopSequence);
@@ -820,6 +833,8 @@ export class AppService {
         originStopId: originPS.stopId,
         destinationStopId: destPS.stopId,
         serviceDate: params.date,
+        preloadedGlobalMatrix: globalMatrix,
+        preloadedPatternMatrix: patternMatrixByPatternId.get(base.patternId) ?? null,
       });
       if (resolved.price > 0) {
         fareQuote = resolved.price;
@@ -842,7 +857,7 @@ export class AppService {
         };
       });
 
-      results.push({
+      return {
         _baseId: base.id,
         tripId: `virtual-${base.id}`,
         serviceDate: params.date,
@@ -876,8 +891,11 @@ export class AppService {
         appliedPromo: null,
         stops: stopsData,
         isVirtual: true,
-      });
-    }
+      };
+    }));
+
+    const results: (TripSearchResult & { _baseId?: string })[] =
+      perBaseResults.filter((r): r is TripSearchResult & { _baseId?: string } => r !== null);
 
     return results;
   }
