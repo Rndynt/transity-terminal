@@ -171,33 +171,41 @@ export class RefundsService {
       }
       claimed = true;
 
-      // 2. Mark passengers refunded + history per passenger
-      for (const p of targetPassengers) {
-        await tx.update(passengers)
-          .set({ ticketStatus: 'refunded' })
-          .where(eq(passengers.id, p.id));
+      // 2. Mark passengers refunded + history — batched (inArray/multi-row
+      // insert) instead of looping per-passenger. Refunds targeting a
+      // whole group booking (passengerId=null) could otherwise be up to
+      // 3xN sequential round-trips for an N-passenger group; every
+      // passenger here gets the exact same treatment and none of the
+      // writes depend on another passenger's row, so batching is safe.
+      await tx.update(passengers)
+        .set({ ticketStatus: 'refunded' })
+        .where(inArray(passengers.id, targetPassengers.map(p => p.id)));
 
-        await tx.insert(bookingHistory).values({
-          bookingId: booking.id,
-          passengerId: p.id,
-          action: 'cancelled',
-          details: {
-            seatNo: p.seatNo,
-            reason: 'refund_approved',
-            refundId: id,
-            previousStatus: p.ticketStatus,
-          },
-          performedBy: approvedBy,
-        });
+      await tx.insert(bookingHistory).values(targetPassengers.map(p => ({
+        bookingId: booking.id,
+        passengerId: p.id,
+        action: 'cancelled' as const,
+        details: {
+          seatNo: p.seatNo,
+          reason: 'refund_approved',
+          refundId: id,
+          previousStatus: p.ticketStatus,
+        },
+        performedBy: approvedBy,
+      })));
 
-        // Legacy mode: release seat inline. Engine mode: skip — handled post-tx
-        // (engine API runs its own tx, can't compose).
-        if (!engineMode && p.seatNo && legIndexes.length > 0) {
+      // Legacy mode: release seats inline. Engine mode: skip — handled
+      // post-tx (engine API runs its own tx, can't compose).
+      if (!engineMode && legIndexes.length > 0) {
+        const seatNosToRelease = targetPassengers
+          .map(p => p.seatNo)
+          .filter((s): s is string => !!s);
+        if (seatNosToRelease.length > 0) {
           await tx.update(seatInventory)
             .set({ booked: false, holdRef: null })
             .where(and(
               eq(seatInventory.tripId, booking.tripId),
-              eq(seatInventory.seatNo, p.seatNo),
+              inArray(seatInventory.seatNo, seatNosToRelease),
               inArray(seatInventory.legIndex, legIndexes),
             ));
         }
