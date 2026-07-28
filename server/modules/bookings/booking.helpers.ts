@@ -336,6 +336,73 @@ export async function confirmSeatsBooked(
     ));
 }
 
+/**
+ * B2-style fix for RescheduleService: lock the target seat's inventory rows
+ * FOR UPDATE, verify none of them are booked or covered by a still-active
+ * hold (isHoldActive — same rule AtomicHoldService.atomicHold uses via its
+ * seat_holds leftJoin), then claim it (booked=true, holdRef=null) — all
+ * under ONE lock, inside the CALLER'S transaction.
+ *
+ * Reschedule previously checked availability with a plain `db.select()`
+ * (no lock, not even inside a tx) and then blindly UPDATEd the seat inside
+ * a *later*, separate transaction with no re-check and no CAS guard on the
+ * WHERE clause. That left a window where a concurrent atomicHold(), a
+ * normal booking confirm, or another concurrent reschedule could claim the
+ * same seat in between — a silent double-booking (UPDATE always "succeeds"
+ * since it targets an existing row; there's no unique-constraint to catch
+ * it). This closes that window the same way confirmSeatsBooked's B2 fix
+ * closed it for the normal hold→confirm path, just for the "claim a
+ * specific free seat directly" shape reschedule needs instead.
+ *
+ * Must be called with the `tx` from an in-flight `db.transaction(...)` —
+ * the lock is only meaningful inside that transaction's lifetime. Throws
+ * (does not return a result object) to match this file's existing
+ * convention (see confirmSeatsBooked above) for tx-internal guards.
+ */
+export async function claimSeatAtomically(
+  tx: Tx,
+  tripId: string,
+  seatNo: string,
+  legIndexes: number[],
+): Promise<void> {
+  const rows = await tx
+    .select({
+      booked: seatInventory.booked,
+      holdRef: seatInventory.holdRef,
+      holdExpiresAt: seatHolds.expiresAt,
+      holdBookingId: seatHolds.bookingId,
+    })
+    .from(seatInventory)
+    .leftJoin(seatHolds, eq(seatHolds.holdRef, seatInventory.holdRef))
+    .where(and(
+      eq(seatInventory.tripId, tripId),
+      eq(seatInventory.seatNo, seatNo),
+      inArray(seatInventory.legIndex, legIndexes)
+    ))
+    .for('update', { of: seatInventory });
+
+  if (rows.length !== legIndexes.length) {
+    throw new Error(`Inventori kursi ${seatNo} untuk trip tujuan belum diinisialisasi`);
+  }
+
+  const now = new Date();
+  const conflict = rows.some(r =>
+    r.booked || (r.holdRef && isHoldActive(r.holdExpiresAt, r.holdBookingId, now))
+  );
+  if (conflict) {
+    throw new Error(`Kursi ${seatNo} di trip baru tidak tersedia`);
+  }
+
+  await tx
+    .update(seatInventory)
+    .set({ booked: true, holdRef: null })
+    .where(and(
+      eq(seatInventory.tripId, tripId),
+      eq(seatInventory.seatNo, seatNo),
+      inArray(seatInventory.legIndex, legIndexes)
+    ));
+}
+
 export async function checkSeatsAvailable(
   tx: Tx,
   tripId: string,
@@ -394,15 +461,17 @@ export async function createSeatHoldsForBooking(
 
   await tx.insert(seatHolds).values(holdValues);
 
-  for (const seatNo of seatNos) {
-    await tx.update(seatInventory)
-      .set({ holdRef: `app-hold:${bookingId}:${seatNo}` })
-      .where(and(
-        eq(seatInventory.tripId, tripId),
-        eq(seatInventory.seatNo, seatNo),
-        inArray(seatInventory.legIndex, legIndexes)
-      ));
-  }
+  // hold_ref is `app-hold:${bookingId}:${seatNo}` — a deterministic
+  // function of a column that's already on the row (seat_no) plus
+  // bookingId, so every seat can be stamped in one UPDATE instead of N
+  // sequential round-trips (N = passenger/seat count in this booking).
+  await tx.execute(sql`
+    UPDATE seat_inventory
+    SET hold_ref = 'app-hold:' || ${bookingId} || ':' || seat_no
+    WHERE trip_id = ${tripId}
+      AND seat_no = ANY(${seatNos})
+      AND leg_index = ANY(${legIndexes})
+  `);
 }
 
 export interface PromoResult {

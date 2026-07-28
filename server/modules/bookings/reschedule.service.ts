@@ -6,7 +6,7 @@ import { IStorage, type ActivePassengerForTrip } from "@server/storage.interface
 import { generateBookingCode } from "@server/utils/codeGenerator";
 import { HoldsAdapter, isEngineEnabled } from "@modules/holds/holdsAdapter";
 import { AtomicHoldService } from "./atomicHold.service";
-import { assertTripBookable } from "./booking.helpers";
+import { assertTripBookable, claimSeatAtomically } from "./booking.helpers";
 import { enqueueCancelSeats } from "@modules/holds/compensationQueue";
 import { randomUUID } from "node:crypto";
 import { requirePermission, type ServiceContext } from "@modules/rbac/rbac.guard";
@@ -62,6 +62,12 @@ export class RescheduleService {
     // closed or cancelled.
     await assertTripBookable(this.storage, newTripId);
 
+    // Advisory-only pre-check: runs before any lock is taken (and before we
+    // decide to spend effort on the engine call below), purely to fail
+    // fast on the obviously-unavailable case. This is NOT race-safe by
+    // itself — the authoritative check is claimSeatAtomically() inside the
+    // tx further down, which re-verifies under FOR UPDATE right before
+    // claiming the seat. Do not rely on this block alone for correctness.
     const newSeatAvailability = await db.select().from(seatInventory)
       .where(and(
         eq(seatInventory.tripId, newTripId),
@@ -122,13 +128,13 @@ export class RescheduleService {
             inArray(seatInventory.legIndex, oldLegIndexes)
           ));
 
-        await tx.update(seatInventory)
-          .set({ booked: true, holdRef: null })
-          .where(and(
-            eq(seatInventory.tripId, newTripId),
-            eq(seatInventory.seatNo, newSeatNo),
-            inArray(seatInventory.legIndex, newLegIndexes)
-          ));
+        // Re-check + claim the NEW seat under a row lock, inside this same
+        // tx, instead of trusting the plain SELECT done earlier (that one
+        // ran before this tx even started, with no lock held). This is
+        // the authoritative guard: it closes the race window against a
+        // concurrent atomicHold / booking confirm / other reschedule
+        // claiming the same seat in between. See claimSeatAtomically doc.
+        await claimSeatAtomically(tx, newTripId, newSeatNo, newLegIndexes);
       }
 
       if (isSoleActivePassenger || !tripChanged) {
@@ -387,13 +393,14 @@ export class RescheduleService {
                 inArray(seatInventory.legIndex, oldLegIndexes)
               ));
 
-            await tx.update(seatInventory)
-              .set({ booked: true, holdRef: null })
-              .where(and(
-                eq(seatInventory.tripId, newTripId),
-                eq(seatInventory.seatNo, targetSeat!),
-                inArray(seatInventory.legIndex, newLegIndexes)
-              ));
+            // targetSeat was picked from an in-memory snapshot taken before
+            // this loop started (line ~295), so it may have been claimed
+            // by a concurrent atomicHold/booking/reschedule since then.
+            // claimSeatAtomically re-verifies under a row lock right here;
+            // if it throws, the catch block below records this passenger
+            // in `failed[]` (with compensation) and the loop continues —
+            // it does not abort the rest of the batch.
+            await claimSeatAtomically(tx, newTripId, targetSeat!, newLegIndexes);
           }
 
           await tx.update(passengers)
