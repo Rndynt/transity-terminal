@@ -25,6 +25,7 @@
  * (partial via importActual).
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { SYSTEM_CONTEXT } from "@modules/rbac/rbac.guard";
 
 // ===== mocks =====
 
@@ -153,6 +154,7 @@ const bookingFix = {
 const storageMock: any = {
   getBookingById: vi.fn(async (_id: string) => bookingFix),
   getActivePassengersForTrip: vi.fn(async () => []),
+  getTripById: vi.fn(async (_id: string) => ({ id: "trip-NEW", status: "scheduled" })),
 };
 
 beforeEach(() => {
@@ -164,6 +166,7 @@ beforeEach(() => {
   enqueueCancelSeatsMock.mockReset();
   enqueueCancelSeatsMock.mockResolvedValue("fake-id");
   storageMock.getBookingById.mockClear();
+  storageMock.getTripById.mockClear();
 });
 
 // Helper: setup queue results untuk reschedulePassenger flow.
@@ -193,7 +196,7 @@ describe("RescheduleService chaos (S2-03)", () => {
     const svc = new RescheduleService(storageMock);
 
     await expect(
-      svc.reschedulePassenger("p1", "trip-NEW", "B2", "S0", "S1", 0, 1, "u-op", "test")
+      svc.reschedulePassenger("p1", "trip-NEW", "B2", "S0", "S1", 0, 1, "u-op", "test", SYSTEM_CONTEXT)
     ).rejects.toThrow(/CHAOS: engine down/);
 
     expect(cancelSeatsMock).not.toHaveBeenCalled();
@@ -215,7 +218,7 @@ describe("RescheduleService chaos (S2-03)", () => {
     const svc = new RescheduleService(storageMock);
 
     await expect(
-      svc.reschedulePassenger("p1", "trip-NEW", "B2", "S0", "S1", 0, 1, "u-op", "test")
+      svc.reschedulePassenger("p1", "trip-NEW", "B2", "S0", "S1", 0, 1, "u-op", "test", SYSTEM_CONTEXT)
     ).rejects.toThrow(/tx commit fail/);
 
     expect(cancelSeatsMock).toHaveBeenCalledTimes(1);
@@ -237,7 +240,7 @@ describe("RescheduleService chaos (S2-03)", () => {
     const svc = new RescheduleService(storageMock);
 
     await expect(
-      svc.reschedulePassenger("p1", "trip-NEW", "B2", "S0", "S1", 0, 1, "u-op", "test")
+      svc.reschedulePassenger("p1", "trip-NEW", "B2", "S0", "S1", 0, 1, "u-op", "test", SYSTEM_CONTEXT)
     ).rejects.toThrow(/tx commit fail/);
 
     expect(cancelSeatsMock).toHaveBeenCalledTimes(1);
@@ -268,7 +271,7 @@ describe("RescheduleService chaos (S2-03)", () => {
     const svc = new RescheduleService(storageMock);
 
     const result = await svc.reschedulePassenger(
-      "p1", "trip-NEW", "B2", "S0", "S1", 0, 1, "u-op", "test"
+      "p1", "trip-NEW", "B2", "S0", "S1", 0, 1, "u-op", "test", SYSTEM_CONTEXT
     );
 
     expect(result.success).toBe(true);
