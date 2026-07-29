@@ -56,7 +56,11 @@ function timeLabel(v: string | null | undefined) {
 function clockFromIso(iso: string | null | undefined): string | null {
   if (!iso) return null;
   try {
-    return new Date(iso).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false });
+    // 'id-ID' renders 24-jam dengan pemisah TITIK ("07.00"), sedangkan
+    // defaultStopTimes (mode Dasar Trip) tersimpan pakai TITIK DUA
+    // ("07:00"). Pakai 'en-GB' supaya selalu titik dua, konsisten dengan
+    // mode Dasar Trip dan dengan parser di durationLabel().
+    return new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false });
   } catch {
     return null;
   }
@@ -73,8 +77,8 @@ function dateLabel(v: string | null | undefined) {
 
 function durationLabel(start: string | null | undefined, end: string | null | undefined) {
   if (!start || !end) return '—';
-  const [sh, sm] = start.split(':').map(Number);
-  const [eh, em] = end.split(':').map(Number);
+  const [sh, sm] = start.split(/[:.]/).map(Number);
+  const [eh, em] = end.split(/[:.]/).map(Number);
   if ([sh, sm, eh, em].some(Number.isNaN)) return '—';
   let mins = (eh * 60 + em) - (sh * 60 + sm);
   if (mins < 0) mins += 24 * 60; // lewat tengah malam
@@ -405,8 +409,10 @@ export default function RoutePreview() {
             <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
               <Info className="w-4 h-4 mt-0.5 shrink-0" />
               <span>
-                Ada gap urutan sequence di pola ini ({sequenceGaps.join(', ')}) — biasanya karena ada halte yang pernah
-                dihapus dari rute. Bukan berarti error, tapi cek ulang kalau ini tidak disengaja.
+                Ada gap nomor urut di data pola ini ({sequenceGaps.join(', ')}). Urutan titik di tabel di bawah tetap
+                benar (dibaca dari urutan, bukan dari nomornya) — ini cuma sisa nomor lama dari halte yang pernah
+                dihapus dan belum ke-normalisasi ulang. Buka "Pola Rute" → "Kelola Halte" untuk rute ini, lalu klik
+                Simpan sekali (tanpa perlu ubah apa-apa) untuk merapikan nomornya jadi 1, 2, 3, dst berurutan.
               </span>
             </div>
           )}

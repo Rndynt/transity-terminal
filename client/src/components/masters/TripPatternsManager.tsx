@@ -239,10 +239,17 @@ export default function TripPatternsManager() {
   const savePatternStops = async () => {
     if (!selectedPatternForStops) return;
     try {
-      const validStops = patternStops.filter(stop => stop.stopId).map(stop => ({
+      // Renumber ke 1..N berdasarkan urutan baris saat ini, JANGAN pakai
+      // stopSequence lama apa adanya. Kalau halte di tengah dihapus lalu
+      // Simpan, sequence sisanya akan tetap 1,2,4,5,... (bolong) kalau kita
+      // kirim apa adanya -- karena bulkReplace() di backend soft-delete
+      // semua baris lama lalu insert ulang persis nilai yang dikirim, tidak
+      // ada normalisasi di server. Preview Rute mendeteksi bolong ini dan
+      // menampilkannya sebagai warning ke operator.
+      const validStops = patternStops.filter(stop => stop.stopId).map((stop, index) => ({
         patternId: selectedPatternForStops.id,
         stopId: stop.stopId,
-        stopSequence: stop.stopSequence,
+        stopSequence: index + 1,
         dwellSeconds: stop.dwellSeconds,
         boardingAllowed: stop.boardingAllowed !== false,
         alightingAllowed: stop.alightingAllowed !== false
