@@ -2,22 +2,28 @@ import "@server/lib/loadEnv";
 import { db } from "@server/db";
 import { sql } from "drizzle-orm";
 
-type SeedSet = "nusa" | "buskita";
+type SeedSet = "nusa" | "buskita" | "aoshuttle";
 
 /**
- * Seed context shape is identical between buskita and nusa
- * (`server/seeds/{nusa,buskita}/context.ts`). Typed as a structural
- * `Record` here because the actual type is loaded via dynamic import
- * and TS can't statically resolve `${base}/context`. Seed runners cast
- * to the concrete `SeedContext` they need internally.
+ * Seed context shape is identical across nusa/buskita/aoshuttle
+ * (`server/seeds/{nusa,buskita,aoshuttle}/context.ts`). Typed as a
+ * structural `Record` here because the actual type is loaded via dynamic
+ * import and TS can't statically resolve `${base}/context`. Seed runners
+ * cast to the concrete `SeedContext` they need internally.
  */
 type SeedCtx = Record<string, unknown>;
 
 interface CountRow { c: string | number }
 interface CityRow { city: string }
 
+const SEED_SET_BASE: Record<SeedSet, string> = {
+  nusa: "./nusa",
+  buskita: "./buskita",
+  aoshuttle: "./aoshuttle",
+};
+
 async function loadSeedModules(set: SeedSet) {
-  const base = set === "nusa" ? "./nusa" : "./buskita";
+  const base = SEED_SET_BASE[set];
   const { createSeedContext } = await import(`${base}/context`);
   const { seedStops, seedOutlets } = await import(`${base}/01-stops`);
   const { seedLayouts } = await import(`${base}/02-layouts`);
@@ -167,6 +173,7 @@ Usage: npx tsx server/seeds/index.ts <dataset> [target...]
 Datasets:
   nusa        Nusa Shuttle (Jakarta-Bandung-Semarang-Yogyakarta)
   buskita     BusKita (Surabaya-Malang-Bali)
+  aoshuttle   AO Shuttle (Lippo Cikarang - Blok M, via MRT Istora/Senayan/Blok M BCA)
 
 Targets:
   (none)      Run ALL seeds (clean + full reseed)
@@ -183,6 +190,7 @@ Targets:
 Examples:
   npx tsx server/seeds/index.ts buskita          # Full seed BusKita
   npx tsx server/seeds/index.ts nusa             # Full seed Nusa
+  npx tsx server/seeds/index.ts aoshuttle        # Full seed AO Shuttle
   npx tsx server/seeds/index.ts buskita trips    # Only materialize trips (BusKita)
 `);
 }
@@ -195,11 +203,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(0);
   }
 
-  const validSets = ["nusa", "buskita"];
+  const validSets = ["nusa", "buskita", "aoshuttle"];
   const set = (args[0] && validSets.includes(args[0]) ? args[0] : null) as SeedSet | null;
 
   if (!set) {
-    console.error(`Error: dataset wajib. Gunakan: nusa | buskita`);
+    console.error(`Error: dataset wajib. Gunakan: nusa | buskita | aoshuttle`);
     printHelp();
     process.exit(1);
   }
