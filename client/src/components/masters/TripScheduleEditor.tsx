@@ -9,6 +9,8 @@ import { queryClient } from '@/lib/queryClient';
 import { Save, Zap, AlertTriangle, Clock, ArrowDown, ArrowUp, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Trip, TripStopTimeWithEffectiveFlags } from '@shared/schema';
+import StopTimeField from './StopTimeField';
+import { TripStatusBadge } from '@/components/shared/StatusBadges';
 
 function utcToLocalDatetime(utcTimestamp: string | Date | null): string {
   if (!utcTimestamp) return '';
@@ -24,6 +26,10 @@ function utcToLocalDatetime(utcTimestamp: string | Date | null): string {
 interface TripScheduleEditorProps {
   trip: Trip;
   onClose: () => void;
+  summary?: {
+    serviceDateLabel: string;
+    vehicleLabel: string;
+  };
 }
 
 interface StopTimeFormData {
@@ -103,20 +109,37 @@ function OverridePill({
   );
 }
 
-export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditorProps) {
+export default function TripScheduleEditor({ trip, onClose, summary }: TripScheduleEditorProps) {
   const [stopTimes, setStopTimes] = useState<StopTimeFormData[]>([]);
   const [validationErrors, setValidationErrors] = useState<Record<number, string[]>>({});
   const [backendErrors, setBackendErrors] = useState<Array<{ stopSequence: number; field: string; message: string }>>([]);
   const { toast } = useToast();
 
-  // Minimum datetime for all inputs = trip's service date at 00:00.
-  // This prevents picking dates before the trip date and anchors the
-  // mobile drum-roll picker to open on the correct date when empty.
+  // Ultimate fallback lower-bound = trip's service date at 00:00 (used only
+  // for the very first field, before any stop has a time set yet).
   const tripDateMin = useMemo(() => {
     if (!trip.serviceDate) return '';
     const d = String(trip.serviceDate).slice(0, 10); // "YYYY-MM-DD"
     return `${d}T00:00`;
   }, [trip.serviceDate]);
+
+  const serviceDateOnly = tripDateMin.slice(0, 10);
+
+  // Per-row lower bounds, cascading forward from whatever time was actually
+  // set on the previous stop (not just the trip's start-of-day). This is what
+  // both blocks picking a time earlier than the previous stop, and powers the
+  // "gunakan waktu ini" one-tap suggestion shown on empty fields.
+  const anchors = useMemo(() => {
+    const result: { arriveMin: string; departMin: string }[] = [];
+    let carry = tripDateMin;
+    for (const st of stopTimes) {
+      const arriveMin = carry;
+      const departMin = st.arriveAt || arriveMin;
+      result.push({ arriveMin, departMin });
+      carry = st.departAt || st.arriveAt || carry;
+    }
+    return result;
+  }, [stopTimes, tripDateMin]);
 
   const { data: stopTimesData = [], isLoading } = useQuery({
     queryKey: ['/api/trips', trip.id, 'stop-times', 'effective'],
@@ -276,7 +299,7 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
 
   if (stopTimes.length === 0 && !isLoading) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-3 px-4 sm:px-5 py-4">
         <Alert>
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>Tidak ada halte ditemukan untuk trip ini. Jika Anda sudah menambahkan halte ke pola rute, klik tombol di bawah untuk memuat halte.</AlertDescription>
@@ -297,25 +320,51 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
   const globalBackendError = backendErrors.find(e => e.stopSequence === 0);
 
   return (
-    <div className="flex flex-col gap-4" data-testid="trip-schedule-editor">
-      {hasNoScheduleYet && (
-        <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300">
-          <AlertTriangle className="h-4 w-4 text-amber-500" />
-          <AlertDescription className="text-amber-800 dark:text-amber-300">
-            <strong>Jadwal belum diatur.</strong> Trip ini tidak akan tampil di reservasi hingga waktu keberangkatan setiap halte diisi. Isi jadwal di bawah lalu klik <em>Simpan & Bangun Inventori</em>.
-          </AlertDescription>
-        </Alert>
-      )}
+    <div className="flex flex-col flex-1 min-h-0" data-testid="trip-schedule-editor">
+      {/* Fixed top: trip summary + alerts (always visible, never scrolls away) */}
+      <div className="shrink-0 px-4 sm:px-5 pt-4 space-y-3">
+        {summary && (
+          <div className="bg-muted/40 border border-border rounded-xl p-3 sm:p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-sm">
+              <div>
+                <span className="text-xs text-muted-foreground font-medium block mb-0.5">Tanggal</span>
+                <span className="font-medium">{summary.serviceDateLabel}</span>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground font-medium block mb-0.5">Kendaraan</span>
+                <span className="font-medium">{summary.vehicleLabel}</span>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground font-medium block mb-0.5">Kapasitas</span>
+                <span className="font-medium">{trip.capacity} kursi</span>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground font-medium block mb-0.5">Status</span>
+                <TripStatusBadge status={trip.status || 'scheduled'} />
+              </div>
+            </div>
+          </div>
+        )}
 
-      {globalBackendError && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{globalBackendError.message}</AlertDescription>
-        </Alert>
-      )}
+        {hasNoScheduleYet && (
+          <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <AlertDescription className="text-amber-800 dark:text-amber-300">
+              <strong>Jadwal belum diatur.</strong> Isi waktu setiap halte, lalu klik <em>Simpan & Bangun Inventori</em>.
+            </AlertDescription>
+          </Alert>
+        )}
 
-      {/* Stop cards */}
-      <div className="space-y-1">
+        {globalBackendError && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{globalBackendError.message}</AlertDescription>
+          </Alert>
+        )}
+      </div>
+
+      {/* Scrollable middle: one card per halte */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-3 space-y-1">
         {stopTimes.map((st, index) => {
           const info = getStopInfo(st.stopId);
           const isFirst = index === 0;
@@ -393,16 +442,13 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
                         <span className="text-xs text-muted-foreground/40">—</span>
                       </div>
                     ) : (
-                      <Input
-                        type="datetime-local"
+                      <StopTimeField
                         value={st.arriveAt}
-                        min={tripDateMin}
-                        onChange={e => updateStop(index, 'arriveAt', e.target.value)}
-                        onFocus={() => {
-                          if (!st.arriveAt && tripDateMin) updateStop(index, 'arriveAt', tripDateMin);
-                        }}
-                        className="h-8 text-xs w-44 px-2"
-                        data-testid={`arrive-time-${index}`}
+                        onChange={v => updateStop(index, 'arriveAt', v)}
+                        minValue={anchors[index]?.arriveMin}
+                        fallbackDate={serviceDateOnly}
+                        hasError={hasErr}
+                        testId={`arrive-time-${index}`}
                       />
                     )}
                   </div>
@@ -420,19 +466,13 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
                         <span className="text-xs text-muted-foreground/40">—</span>
                       </div>
                     ) : (
-                      <Input
-                        type="datetime-local"
+                      <StopTimeField
                         value={st.departAt}
-                        min={tripDateMin}
-                        onChange={e => updateStop(index, 'departAt', e.target.value)}
-                        onFocus={() => {
-                          if (!st.departAt && tripDateMin) updateStop(index, 'departAt', tripDateMin);
-                        }}
-                        className={cn(
-                          'h-8 text-xs w-44 px-2',
-                          isFirst && !st.departAt && 'border-amber-400'
-                        )}
-                        data-testid={`depart-time-${index}`}
+                        onChange={v => updateStop(index, 'departAt', v)}
+                        minValue={anchors[index]?.departMin}
+                        fallbackDate={serviceDateOnly}
+                        hasError={hasErr || (isFirst && !st.departAt)}
+                        testId={`depart-time-${index}`}
                       />
                     )}
                   </div>
@@ -493,57 +533,62 @@ export default function TripScheduleEditor({ trip, onClose }: TripScheduleEditor
             </div>
           );
         })}
-      </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground px-1">
-        <span className="font-semibold">Pill Naik/Turun:</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-muted border border-border" /> Abu = warisi aturan pola (default)</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400" /> Hijau = izinkan (override)</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-red-400" /> Merah = larang (override)</span>
-        <span className="text-muted-foreground/60">· Klik pill untuk ubah</span>
-      </div>
-
-      {/* Action bar */}
-      <div className="flex items-center justify-between gap-2 pt-2 border-t">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose} data-testid="close-button">
-            Tutup
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              if (confirm('Ini akan menimpa halte trip dengan halte terbaru dari pola rute. Waktu jadwal yang sudah diisi akan direset. Lanjutkan?')) {
-                syncMutation.mutate();
-              }
-            }}
-            disabled={syncMutation.isPending || bulkUpsertMutation.isPending}
-          >
-            <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', syncMutation.isPending && 'animate-spin')} />
-            {syncMutation.isPending ? 'Sync...' : 'Sync dari Rute'}
-          </Button>
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground px-1 pt-2">
+          <span className="font-semibold">Pill Naik/Turun:</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-muted border border-border" /> Abu = warisi aturan pola</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400" /> Hijau = izinkan</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-red-400" /> Merah = larang</span>
+          <span className="text-muted-foreground/60">· Klik pill untuk ubah</span>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleSave(false)}
-            disabled={bulkUpsertMutation.isPending || hasErrors}
-            data-testid="save-schedule-button"
-          >
-            <Save className="w-3.5 h-3.5 mr-1.5" />
-            {bulkUpsertMutation.isPending ? 'Menyimpan...' : 'Simpan Jadwal'}
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => handleSave(true)}
-            disabled={bulkUpsertMutation.isPending || hasErrors}
-            data-testid="save-and-build-button"
-          >
-            <Zap className="w-3.5 h-3.5 mr-1.5" />
-            {bulkUpsertMutation.isPending ? 'Memproses...' : 'Simpan & Bangun Inventori'}
-          </Button>
+      </div>
+
+      {/* Fixed bottom: action bar — grid on mobile so buttons never overflow off-screen */}
+      <div className="shrink-0 border-t bg-background px-4 sm:px-5 py-3">
+        <div className="grid grid-cols-2 sm:flex sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="col-span-2 sm:col-span-1 flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={onClose} className="flex-1 sm:flex-none" data-testid="close-button">
+              Tutup
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              onClick={() => {
+                if (confirm('Ini akan menimpa halte trip dengan halte terbaru dari pola rute. Waktu jadwal yang sudah diisi akan direset. Lanjutkan?')) {
+                  syncMutation.mutate();
+                }
+              }}
+              disabled={syncMutation.isPending || bulkUpsertMutation.isPending}
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', syncMutation.isPending && 'animate-spin')} />
+              {syncMutation.isPending ? 'Sync...' : 'Sync dari Rute'}
+            </Button>
+          </div>
+          <div className="col-span-2 sm:col-span-1 flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              onClick={() => handleSave(false)}
+              disabled={bulkUpsertMutation.isPending || hasErrors}
+              data-testid="save-schedule-button"
+            >
+              <Save className="w-3.5 h-3.5 mr-1.5" />
+              {bulkUpsertMutation.isPending ? 'Menyimpan...' : 'Simpan Jadwal'}
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1 sm:flex-none whitespace-normal text-center leading-tight"
+              onClick={() => handleSave(true)}
+              disabled={bulkUpsertMutation.isPending || hasErrors}
+              data-testid="save-and-build-button"
+            >
+              <Zap className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+              {bulkUpsertMutation.isPending ? 'Memproses...' : 'Simpan & Bangun Inventori'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

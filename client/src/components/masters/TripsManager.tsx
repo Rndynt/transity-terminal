@@ -19,7 +19,6 @@ import TripsFilterPanel from './TripsFilterPanel';
 import TripsGroupList from './TripsGroupList';
 import type { Trip, TripPattern, Vehicle, Layout, Driver } from '@/types';
 import { todayStr } from '@/lib/date';
-import { TripStatusBadge } from '@/components/shared/StatusBadges';
 import TripScheduleEditor from './TripScheduleEditor';
 import ManifestDialog from '@/components/manifest/ManifestDialog';
 import { usePermissions } from '@/lib/permissions';
@@ -734,41 +733,26 @@ export default function TripsManager() {
 
       {/* Scheduling Dialog */}
       <Dialog open={isSchedulingDialogOpen} onOpenChange={setIsSchedulingDialogOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[92vh] flex flex-col p-0 gap-0" data-testid="scheduling-dialog">
-          <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
-            <DialogTitle>Jadwal Keberangkatan — {schedulingTrip && getPattern(schedulingTrip.patternId)?.name}</DialogTitle>
+        <DialogContent
+          className="w-[95vw] sm:max-w-4xl h-[88vh] sm:h-auto sm:max-h-[92vh] flex flex-col p-0 gap-0"
+          data-testid="scheduling-dialog"
+        >
+          <DialogHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 sm:pb-4 border-b shrink-0">
+            <DialogTitle className="text-base sm:text-lg">
+              Jadwal Keberangkatan — {schedulingTrip && getPattern(schedulingTrip.patternId)?.name}
+            </DialogTitle>
             <DialogDescription>Atur waktu tiba dan berangkat untuk setiap halte dalam trip ini.</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-            {schedulingTrip && (
-              <div className="bg-muted/40 border border-border rounded-xl p-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <span className="text-xs text-muted-foreground font-medium block mb-0.5">Tanggal</span>
-                    <span className="font-medium">{formatServiceDate(schedulingTrip.serviceDate)}</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground font-medium block mb-0.5">Kendaraan</span>
-                    <span className="font-medium">{(() => { const v = getVehicle(schedulingTrip.vehicleId); return v ? `${v.code} (${v.plate})` : '-'; })()}</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground font-medium block mb-0.5">Kapasitas</span>
-                    <span className="font-medium">{schedulingTrip.capacity} kursi</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground font-medium block mb-0.5">Status</span>
-                    <TripStatusBadge status={schedulingTrip.status || 'scheduled'} />
-                  </div>
-                </div>
-              </div>
-            )}
-            {schedulingTrip && (
-              <TripScheduleEditor trip={schedulingTrip} onClose={() => setIsSchedulingDialogOpen(false)} />
-            )}
-          </div>
-          <div className="px-5 py-4 border-t shrink-0 bg-background flex justify-end">
-            <Button variant="outline" onClick={() => setIsSchedulingDialogOpen(false)}>Tutup</Button>
-          </div>
+          {schedulingTrip && (
+            <TripScheduleEditor
+              trip={schedulingTrip}
+              onClose={() => setIsSchedulingDialogOpen(false)}
+              summary={{
+                serviceDateLabel: formatServiceDate(schedulingTrip.serviceDate),
+                vehicleLabel: (() => { const v = getVehicle(schedulingTrip.vehicleId); return v ? `${v.code} (${v.plate})` : '-'; })(),
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>
