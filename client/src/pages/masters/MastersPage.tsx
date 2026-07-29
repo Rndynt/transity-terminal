@@ -24,8 +24,10 @@ import {
   Package,
   Wallet,
   Ticket,
+  Eye,
 } from 'lucide-react';
 import StopsManager from '@/components/masters/StopsManager';
+import RoutePreview from '@/components/masters/RoutePreview';
 import OutletsManager from '@/components/masters/OutletsManager';
 import VehiclesManager from '@/components/masters/VehiclesManager';
 import DriversManager from '@/components/masters/DriversManager';
@@ -56,6 +58,7 @@ const ALL_TABS: TabDef[] = [
   { id: 'drivers', label: 'Driver', icon: UserCheck, flag: 'master.drivers', component: DriversManager },
   { id: 'layouts', label: 'Layout Kursi', icon: LayoutGrid, flag: 'master.layouts', component: LayoutsManager },
   { id: 'patterns', label: 'Pola Rute', icon: Route, flag: 'master.trip_patterns', component: TripPatternsManager },
+  { id: 'preview', label: 'Preview Rute', icon: Eye, flag: 'master.trip_patterns', component: RoutePreview },
   { id: 'trip-bases', label: 'Dasar Trip', icon: CalendarPlus, flag: 'master.trips', component: TripBasesManager },
   { id: 'trips', label: 'Trip', icon: CalendarDays, flag: 'master.trips', component: TripsManager },
   { id: 'pricing', label: 'Aturan Harga', icon: DollarSign, flag: 'master.price_rules', component: PriceRulesManager },
