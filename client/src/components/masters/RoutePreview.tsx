@@ -5,7 +5,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, CheckCircle2, XCircle, Route as RouteIcon, ListOrdered, AlertTriangle, Info } from 'lucide-react';
+import { MapPin, CheckCircle2, XCircle, Route as RouteIcon, ListOrdered, AlertTriangle } from 'lucide-react';
 import { tripPatternsApi, tripBasesApi, tripsApi, priceRulesApi } from '@/lib/api';
 import { PriceGrid, type MatrixGridRow } from './PriceGrid';
 import MasterPageHeader from './MasterPageHeader';
@@ -21,6 +21,25 @@ interface DefaultStopTime {
   departAt: string | null;
 }
 
+// Sama persis dengan tipe yang dipakai client/src/components/cso/RouteTimeline.tsx
+// untuk hasil GET /api/scheduler/stop-exceptions -- penutupan naik/turun di
+// satu halte untuk 1 tanggal servis tertentu (di luar default pola & di
+// luar override per-trip).
+interface StopException {
+  id: string;
+  stopId: string;
+  disableBoarding: boolean;
+  disableAlighting: boolean;
+  reason: string | null;
+}
+
+// Baris master topologi (posisi & nama selalu dari sini), digabung dengan
+// jam & status naik/turun dari sumber yang sedang dipilih (Dasar Trip atau
+// Trip spesifik). `stopSequence` DIPAKAI CUMA UNTUK SORTING -- tidak pernah
+// ditampilkan ke operator. Nomor DB tidak dijamin rapat 1..N (halte yang
+// pernah dihapus dari pola menyisakan lompatan nomor secara permanen di
+// baris lain yang sudah kadung tersimpan), jadi yang ditampilkan ke
+// operator selalu posisi baris (1, 2, 3, ...), bukan nomor mentahnya.
 interface ResolvedStopRow {
   stopId: string;
   stopSequence: number;
@@ -29,19 +48,23 @@ interface ResolvedStopRow {
   city?: string | null;
   boardingAllowed: boolean;
   alightingAllowed: boolean;
-  arriveAt: string | null; // HH:MM (local)
-  departAt: string | null; // HH:MM (local)
-  overridden: boolean; // true when a trip's actual naik/turun beda dari default pola
+  arriveAt: string | null; // "HH:MM", untuk fallback durasi & tampilan
+  departAt: string | null;
+  arriveAtIso: string | null; // hanya terisi utk mode Trip -- dipakai buat hitung durasi via Date, bukan parse string
+  departAtIso: string | null;
+  overrideNote: string | null; // alasan kenapa naik/turun beda dari default pola (override trip atau stop exception)
 }
 
 interface SegmentRow {
   key: string;
-  originSeq: number;
+  originPos: number;
   originName: string;
-  destSeq: number;
+  destPos: number;
   destName: string;
   departAt: string | null;
   arriveAt: string | null;
+  departIso: string | null;
+  arriveIso: string | null;
   price: number | null;
 }
 
@@ -49,17 +72,18 @@ const CHANNELS = ['CSO', 'WEB', 'APP', 'OTA'] as const;
 const DAY_LABEL: Record<string, string> = { mon: 'Sen', tue: 'Sel', wed: 'Rab', thu: 'Kam', fri: 'Jum', sat: 'Sab', sun: 'Min' };
 const STATUS_LABEL: Record<string, string> = { scheduled: 'Terjadwal', cancelled: 'Dibatalkan', closed: 'Ditutup' };
 
-function timeLabel(v: string | null | undefined) {
-  return v || '—';
+// Tampilan jam dengan titik ("07.00"), mengikuti gaya yang sama persis
+// dipakai reservasi (lihat formatTimeDot di RouteTimeline.tsx). Ini murni
+// soal tampilan -- perhitungan durasi TIDAK parsing string ini.
+function dot(v: string | null) {
+  return v ? v.replace(':', '.') : '—';
 }
 
-function clockFromIso(iso: string | null | undefined): string | null {
+// "HH:MM" (titik dua) kanonikal dari timestamp ISO, dipakai sebagai
+// representasi internal sebelum di-dot() untuk ditampilkan.
+function colonFromIso(iso: string | null | undefined): string | null {
   if (!iso) return null;
   try {
-    // 'id-ID' renders 24-jam dengan pemisah TITIK ("07.00"), sedangkan
-    // defaultStopTimes (mode Dasar Trip) tersimpan pakai TITIK DUA
-    // ("07:00"). Pakai 'en-GB' supaya selalu titik dua, konsisten dengan
-    // mode Dasar Trip dan dengan parser di durationLabel().
     return new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false });
   } catch {
     return null;
@@ -75,10 +99,22 @@ function dateLabel(v: string | null | undefined) {
   }
 }
 
-function durationLabel(start: string | null | undefined, end: string | null | undefined) {
-  if (!start || !end) return '—';
-  const [sh, sm] = start.split(/[:.]/).map(Number);
-  const [eh, em] = end.split(/[:.]/).map(Number);
+// Sama persis pola calculateDuration+formatDuration di RouteTimeline.tsx:
+// kalau ada timestamp ISO asli (mode Trip), hitung selisih lewat Date --
+// BUKAN parsing ulang string jam yang sudah diformat (ini sumber bug
+// "NaNm" sebelumnya). Fallback ke selisih string "HH:MM" cuma dipakai utk
+// mode Dasar Trip, yang memang cuma template jam tanpa tanggal/Date asli.
+function segmentDuration(departIso: string | null, arriveIso: string | null, departHHMM: string | null, arriveHHMM: string | null): string {
+  if (departIso && arriveIso) {
+    const ms = new Date(arriveIso).getTime() - new Date(departIso).getTime();
+    if (!Number.isNaN(ms) && ms >= 0) {
+      const mins = Math.round(ms / 60000);
+      return mins >= 60 ? `${Math.floor(mins / 60)}j ${mins % 60}m` : `${mins}m`;
+    }
+  }
+  if (!departHHMM || !arriveHHMM) return '—';
+  const [sh, sm] = departHHMM.split(':').map(Number);
+  const [eh, em] = arriveHHMM.split(':').map(Number);
   if ([sh, sm, eh, em].some(Number.isNaN)) return '—';
   let mins = (eh * 60 + em) - (sh * 60 + sm);
   if (mins < 0) mins += 24 * 60; // lewat tengah malam
@@ -126,24 +162,6 @@ export default function RoutePreview() {
   const allBasesQuery = useQuery({ queryKey: ['/api/trip-bases'], queryFn: tripBasesApi.getAll });
   const allTripsQuery = useQuery({ queryKey: ['/api/trips'], queryFn: () => tripsApi.getAll() });
 
-  const gridQuery = useQuery({
-    queryKey: ['/api/price-rules/pattern', patternId],
-    queryFn: () => priceRulesApi.getPatternGrid(patternId, 'regular'),
-    enabled: !!patternId && selection?.kind !== 'trip',
-  });
-
-  const tripStopTimesQuery = useQuery({
-    queryKey: ['/api/trips', selection?.id, 'stop-times', 'effective'],
-    queryFn: () => tripsApi.getStopTimesWithEffectiveFlags(selection!.id) as Promise<TripStopTimeWithEffectiveFlags[]>,
-    enabled: selection?.kind === 'trip',
-  });
-
-  const tripMatrixQuery = useQuery({
-    queryKey: ['/api/pricing/trip-matrix', selection?.id],
-    queryFn: () => priceRulesApi.getTripPricedMatrix(selection!.id),
-    enabled: selection?.kind === 'trip',
-  });
-
   const patterns: TripPattern[] = patternsQuery.data ?? [];
   const selectedPattern = patterns.find(p => p.id === patternId);
   const allowIntraCity = !!selectedPattern?.allowIntraCityBooking;
@@ -163,9 +181,6 @@ export default function RoutePreview() {
     [allTripsQuery.data, patternId]
   );
 
-  // Auto-pilih pertama kali data rute ini kelar dimuat — prioritaskan
-  // jadwal berkala (paling umum), tapi kalau rute ini cuma punya trip
-  // ad-hoc (dibuat langsung di tab Trip tanpa Dasar Trip), itu yang dipilih.
   useEffect(() => {
     if (!patternId || selection) return;
     if (basesForPattern.length > 0) setSelection({ kind: 'base', id: basesForPattern[0].id });
@@ -175,6 +190,38 @@ export default function RoutePreview() {
   const selectedBase = selection?.kind === 'base' ? basesForPattern.find(b => b.id === selection.id) : undefined;
   const selectedTrip = selection?.kind === 'trip' ? tripsForPattern.find(t => t.id === selection.id) : undefined;
   const selectedTripBaseName = selectedTrip?.baseId ? basesForPattern.find(b => b.id === selectedTrip.baseId)?.name : null;
+
+  const gridQuery = useQuery({
+    queryKey: ['/api/price-rules/pattern', patternId],
+    queryFn: () => priceRulesApi.getPatternGrid(patternId, 'regular'),
+    enabled: !!patternId && selection?.kind !== 'trip',
+  });
+
+  const tripStopTimesQuery = useQuery({
+    queryKey: ['/api/trips', selection?.id, 'stop-times', 'effective'],
+    queryFn: () => tripsApi.getStopTimesWithEffectiveFlags(selection!.id) as Promise<TripStopTimeWithEffectiveFlags[]>,
+    enabled: selection?.kind === 'trip',
+  });
+
+  // Exact endpoint yang sama dipakai reservasi (RouteTimeline.tsx) buat
+  // penutupan naik/turun per-halte per-tanggal servis -- di luar default
+  // pola maupun override per-trip. Kalau ini dilewatkan, Preview bisa
+  // nunjukin "boleh naik" padahal di reservasi sebenarnya sudah ditutup.
+  const stopExceptionsQuery = useQuery<StopException[]>({
+    queryKey: ['/api/scheduler/stop-exceptions', selectedTrip?.baseId, selectedTrip?.serviceDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/scheduler/stop-exceptions?baseId=${selectedTrip!.baseId}&date=${selectedTrip!.serviceDate}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: selection?.kind === 'trip' && !!selectedTrip?.baseId && !!selectedTrip?.serviceDate,
+  });
+
+  const tripMatrixQuery = useQuery({
+    queryKey: ['/api/pricing/trip-matrix', selection?.id],
+    queryFn: () => priceRulesApi.getTripPricedMatrix(selection!.id),
+    enabled: selection?.kind === 'trip',
+  });
 
   const baseStopTimes: DefaultStopTime[] = (selectedBase?.defaultStopTimes as DefaultStopTime[] | undefined) ?? [];
   const baseTimeByStopSeq = new Map(baseStopTimes.map(t => [t.stopSequence, t]));
@@ -192,10 +239,13 @@ export default function RoutePreview() {
     [patternCellMap]
   );
 
-  // Baris master topologi (selalu dari pola rute) digabung dengan jam &
-  // status naik/turun dari sumber yang sedang dipilih — Dasar Trip
-  // (default per pola) ATAU trip spesifik/ad-hoc (actual, termasuk override
-  // per-trip kalau ada).
+  const getStopException = (stopId: string): StopException | undefined =>
+    (stopExceptionsQuery.data ?? []).find(e => e.stopId === stopId);
+
+  // Baris master topologi digabung jam & status naik/turun dari sumber yang
+  // dipilih. Mode Trip pakai formula PERSIS sama dengan RouteTimeline.tsx
+  // (canBoard/canAlight): effectiveBoardingAllowed dari trip DAN belum
+  // ditutup lewat stop exception hari itu.
   const resolvedRows: ResolvedStopRow[] = useMemo(() => {
     if (selection?.kind === 'trip' && tripStopTimesQuery.data) {
       const byStopId = new Map(stops.map(ps => [ps.stopId, ps]));
@@ -205,17 +255,27 @@ export default function RoutePreview() {
           const ps = byStopId.get(t.stopId);
           const patternBoarding = !!ps?.boardingAllowed;
           const patternAlighting = !!ps?.alightingAllowed;
+          const ex = getStopException(t.stopId);
+          const boardingClosed = ex?.disableBoarding === true;
+          const alightingClosed = ex?.disableAlighting === true;
+          const canBoard = t.effectiveBoardingAllowed !== false && !boardingClosed;
+          const canAlight = t.effectiveAlightingAllowed !== false && !alightingClosed;
+          let overrideNote: string | null = null;
+          if (boardingClosed || alightingClosed) overrideNote = ex?.reason || 'Ditutup khusus tanggal ini (stop exception)';
+          else if (canBoard !== patternBoarding || canAlight !== patternAlighting) overrideNote = 'Beda dari default pola untuk trip ini';
           return {
             stopId: t.stopId,
             stopSequence: t.stopSequence,
             stopName: t.stopName || ps?.stop?.name || '(halte tidak dikenal)',
             stopCode: t.stopCode || ps?.stop?.code,
             city: ps?.stop?.city ?? null,
-            boardingAllowed: t.effectiveBoardingAllowed,
-            alightingAllowed: t.effectiveAlightingAllowed,
-            arriveAt: clockFromIso(t.arriveAt as unknown as string),
-            departAt: clockFromIso(t.departAt as unknown as string),
-            overridden: t.effectiveBoardingAllowed !== patternBoarding || t.effectiveAlightingAllowed !== patternAlighting,
+            boardingAllowed: canBoard,
+            alightingAllowed: canAlight,
+            arriveAt: colonFromIso(t.arriveAt as unknown as string),
+            departAt: colonFromIso(t.departAt as unknown as string),
+            arriveAtIso: (t.arriveAt as unknown as string) ?? null,
+            departAtIso: (t.departAt as unknown as string) ?? null,
+            overrideNote,
           };
         });
     }
@@ -231,20 +291,13 @@ export default function RoutePreview() {
         alightingAllowed: !!ps.alightingAllowed,
         arriveAt: t?.arriveAt ?? null,
         departAt: t?.departAt ?? null,
-        overridden: false,
+        arriveAtIso: null,
+        departAtIso: null,
+        overrideNote: null,
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stops, selection, baseStopTimes, tripStopTimesQuery.data]);
-
-  const sequenceGaps = useMemo(() => {
-    const seqs = stops.map(s => s.stopSequence).sort((a, b) => a - b);
-    const gaps: string[] = [];
-    for (let i = 1; i < seqs.length; i++) {
-      if (seqs[i] - seqs[i - 1] > 1) gaps.push(`#${seqs[i - 1]} → #${seqs[i]}`);
-    }
-    return gaps;
-  }, [stops]);
+  }, [stops, selection, baseStopTimes, tripStopTimesQuery.data, stopExceptionsQuery.data]);
 
   const priceFor = (originStopId: string, destStopId: string): number | null => {
     if (selection?.kind === 'trip') {
@@ -254,6 +307,11 @@ export default function RoutePreview() {
     return patternCellMap.get(`${originStopId}|${destStopId}`) ?? null;
   };
 
+  // Sama kayak isSameCityBlocked di RouteTimeline.tsx: aturan blokir
+  // dalam-kota berlaku terlepas dari mode Dasar Trip atau Trip -- matrix
+  // harga sendiri TIDAK otomatis menyaring pasangan sama-kota, jadi kalau
+  // filter ini dilewatkan di mode Trip, Preview bisa nunjukin kombinasi
+  // yang sebenarnya tidak akan pernah bisa dipesan CSO.
   const segments: SegmentRow[] = useMemo(() => {
     if (resolvedRows.length < 2) return [];
     const list: SegmentRow[] = [];
@@ -263,25 +321,25 @@ export default function RoutePreview() {
       for (let j = i + 1; j < resolvedRows.length; j++) {
         const dest = resolvedRows[j];
         if (!dest.alightingAllowed) continue;
-        if (selection?.kind !== 'trip') {
-          const sameCity = !allowIntraCity && !!origin.city && !!dest.city && origin.city === dest.city;
-          if (sameCity) continue;
-        }
+        const sameCity = !allowIntraCity && !!origin.city && !!dest.city && origin.city === dest.city;
+        if (sameCity) continue;
         list.push({
           key: `${origin.stopId}-${dest.stopId}`,
-          originSeq: origin.stopSequence,
+          originPos: i + 1,
           originName: origin.stopName,
-          destSeq: dest.stopSequence,
+          destPos: j + 1,
           destName: dest.stopName,
           departAt: origin.departAt,
           arriveAt: dest.arriveAt,
+          departIso: origin.departAtIso,
+          arriveIso: dest.arriveAtIso,
           price: priceFor(origin.stopId, dest.stopId),
         });
       }
     }
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedRows, selection, patternCellMap, tripMatrixQuery.data, allowIntraCity]);
+  }, [resolvedRows, allowIntraCity, patternCellMap, tripMatrixQuery.data]);
 
   const missingPriceCount = segments.filter(s => !s.price || s.price <= 0).length;
   const isLoadingSelection =
@@ -346,7 +404,7 @@ export default function RoutePreview() {
                       <SelectLabel>Trip / Tanggal Spesifik{tripsForPattern.some(t => !t.baseId) ? ' (termasuk non-berkala)' : ''}</SelectLabel>
                       {tripsForPattern.map(t => (
                         <SelectItem key={t.id} value={`trip:${t.id}`}>
-                          {dateLabel(t.serviceDate)} · {t.originDepartHHMM || clockFromIso(t.scheduleTime as any) || '—'}
+                          {dateLabel(t.serviceDate)} · {dot(t.originDepartHHMM ?? colonFromIso(t.scheduleTime as any)) }
                           {!t.baseId ? ' · non-berkala' : ''}
                         </SelectItem>
                       ))}
@@ -405,23 +463,11 @@ export default function RoutePreview() {
         <div className="text-sm text-muted-foreground text-center p-8">Memuat data rute...</div>
       ) : (
         <>
-          {sequenceGaps.length > 0 && (
-            <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <Info className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>
-                Ada gap nomor urut di data pola ini ({sequenceGaps.join(', ')}). Urutan titik di tabel di bawah tetap
-                benar (dibaca dari urutan, bukan dari nomornya) — ini cuma sisa nomor lama dari halte yang pernah
-                dihapus dan belum ke-normalisasi ulang. Buka "Pola Rute" → "Kelola Halte" untuk rute ini, lalu klik
-                Simpan sekali (tanpa perlu ubah apa-apa) untuk merapikan nomornya jadi 1, 2, 3, dst berurutan.
-              </span>
-            </div>
-          )}
-
           <Card>
             <CardContent className="pt-4">
               <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
                 <MapPin className="w-4 h-4" /> Titik Naik / Turun
-                {selection?.kind === 'trip' && <span className="text-[11px] font-normal text-muted-foreground">(jam &amp; status aktual trip ini)</span>}
+                {selection?.kind === 'trip' && <span className="text-[11px] font-normal text-muted-foreground">(jam &amp; status aktual trip ini — sudah termasuk stop exception hari itu, kalau ada)</span>}
                 {selection?.kind === 'base' && <span className="text-[11px] font-normal text-muted-foreground">(jam default dari Dasar Trip)</span>}
               </h4>
               <div className="overflow-x-auto border rounded-lg">
@@ -438,13 +484,13 @@ export default function RoutePreview() {
                     </tr>
                   </thead>
                   <tbody>
-                    {resolvedRows.map(row => (
-                      <tr key={row.stopId} data-testid={`row-preview-stop-${row.stopSequence}`} className={row.overridden ? 'bg-amber-50' : undefined}>
-                        <td className="p-2 border-b text-muted-foreground">{row.stopSequence}</td>
+                    {resolvedRows.map((row, idx) => (
+                      <tr key={row.stopId} data-testid={`row-preview-stop-${idx + 1}`} className={row.overrideNote ? 'bg-amber-50' : undefined}>
+                        <td className="p-2 border-b text-muted-foreground">{idx + 1}</td>
                         <td className="p-2 border-b font-medium">
                           {row.stopName}
                           {row.stopCode && <span className="text-muted-foreground font-normal ml-1">({row.stopCode})</span>}
-                          {row.overridden && <span title="Naik/turun di trip ini beda dari default pola" className="ml-1 text-amber-600">•diubah</span>}
+                          {row.overrideNote && <span title={row.overrideNote} className="ml-1 text-amber-600 font-normal">• {row.overrideNote}</span>}
                         </td>
                         <td className="p-2 border-b text-muted-foreground">{row.city ?? '—'}</td>
                         <td className="p-2 border-b text-center">
@@ -453,8 +499,8 @@ export default function RoutePreview() {
                         <td className="p-2 border-b text-center">
                           {row.alightingAllowed ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600 inline" /> : <XCircle className="w-3.5 h-3.5 text-muted-foreground/40 inline" />}
                         </td>
-                        <td className="p-2 border-b text-center">{timeLabel(row.arriveAt)}</td>
-                        <td className="p-2 border-b text-center">{timeLabel(row.departAt)}</td>
+                        <td className="p-2 border-b text-center">{dot(row.arriveAt)}</td>
+                        <td className="p-2 border-b text-center">{dot(row.departAt)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -486,8 +532,9 @@ export default function RoutePreview() {
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground mb-3">
-                Gabungan titik + jam + harga di atas, dipecah per pasangan asal→tujuan sesuai urutan sequence — supaya
-                kelihatan langsung kombinasi mana yang sudah lengkap dan mana yang belum.
+                Gabungan titik + jam + harga di atas, dipecah per pasangan asal→tujuan sesuai urutan — sama seperti
+                kombinasi yang akan CSO lihat saat booking trip ini (termasuk aturan blokir dalam-kota &amp; harga
+                exception per-trip kalau ada), supaya kelihatan langsung mana yang sudah lengkap dan mana yang belum.
               </p>
               <div className="overflow-x-auto border rounded-lg max-h-[480px] overflow-y-auto">
                 <table className="w-full text-xs border-collapse">
@@ -514,13 +561,13 @@ export default function RoutePreview() {
                     ) : segments.map((s, idx) => {
                       const noPrice = !s.price || s.price <= 0;
                       return (
-                        <tr key={s.key} data-testid={`row-segment-${s.originSeq}-${s.destSeq}`} className={noPrice ? 'bg-destructive/5' : undefined}>
+                        <tr key={s.key} data-testid={`row-segment-${s.originPos}-${s.destPos}`} className={noPrice ? 'bg-destructive/5' : undefined}>
                           <td className="p-2 border-b text-muted-foreground">{idx + 1}</td>
-                          <td className="p-2 border-b font-medium"><span className="text-muted-foreground font-normal mr-1">{s.originSeq}.</span>{s.originName}</td>
-                          <td className="p-2 border-b font-medium"><span className="text-muted-foreground font-normal mr-1">{s.destSeq}.</span>{s.destName}</td>
-                          <td className="p-2 border-b text-center">{timeLabel(s.departAt)}</td>
-                          <td className="p-2 border-b text-center">{timeLabel(s.arriveAt)}</td>
-                          <td className="p-2 border-b text-center text-muted-foreground">{durationLabel(s.departAt, s.arriveAt)}</td>
+                          <td className="p-2 border-b font-medium"><span className="text-muted-foreground font-normal mr-1">{s.originPos}.</span>{s.originName}</td>
+                          <td className="p-2 border-b font-medium"><span className="text-muted-foreground font-normal mr-1">{s.destPos}.</span>{s.destName}</td>
+                          <td className="p-2 border-b text-center">{dot(s.departAt)}</td>
+                          <td className="p-2 border-b text-center">{dot(s.arriveAt)}</td>
+                          <td className="p-2 border-b text-center text-muted-foreground">{segmentDuration(s.departIso, s.arriveIso, s.departAt, s.arriveAt)}</td>
                           <td className="p-2 border-b text-right">
                             {noPrice ? <span className="text-destructive font-medium">Belum diset</span> : <span className="font-medium">{formatPrice(s.price!)}</span>}
                           </td>
