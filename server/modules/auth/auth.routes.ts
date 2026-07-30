@@ -169,6 +169,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/setup/status", async (_req, reply) => {
+    // In dev bypass mode there is no real owner account — skip the setup flow entirely.
+    if (DEV_BYPASS_AUTH) return reply.send({ needsSetup: false });
     // Exclude the dev-user-001 seeded by rbac.seed in non-production mode —
     // it must not count as "setup done" for the owner-creation flow.
     const { ne } = await import("drizzle-orm");
