@@ -105,8 +105,8 @@ export default function PatternCodeBuilder({
     setSuffix('');
   };
 
-  // Race-safe: two chips share one open/close slot. A stale blur-close timeout
-  // from chip A must not clobber chip B if B has since taken over as the open one.
+  // Defensive: both chips share one open/close slot, so a close call is only
+  // ever honored if that chip is still the one actually open.
   const makeOpenHandler = (role: ChipRole) => (open: boolean) =>
     setOpenPicker(prev => (open ? role : prev === role ? null : prev));
 
@@ -217,6 +217,26 @@ function StopChip({
 }) {
   const [search, setSearch] = useState('');
   const selected = options.find(o => o.value === value) || null;
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Real click/tap-outside detection instead of onBlur+setTimeout. The old
+  // onBlur approach broke on mobile: the search input's autoFocus stole focus
+  // from the trigger button the instant the panel opened, firing the button's
+  // blur handler immediately, which then auto-closed the panel ~150ms later
+  // regardless of what the user did — closing before a tap could register and
+  // dismissing the keyboard with it. mousedown (not click) matches the timing
+  // SearchableSelect already relies on elsewhere in this codebase, so a tap on
+  // an option inside this same wrapper is never misread as "outside".
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        onOpenChange(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isOpen, onOpenChange]);
 
   const filtered = useMemo(() => {
     // A stop already picked as the other endpoint can't also be picked here —
@@ -243,13 +263,12 @@ function StopChip({
   }, [filtered]);
 
   return (
-    <div className="relative flex-1 min-w-0">
+    <div ref={wrapperRef} className="relative flex-1 min-w-0">
       <button
         type="button"
         aria-label={ariaLabel}
         aria-expanded={isOpen}
         onClick={() => onOpenChange(!isOpen)}
-        onBlur={() => setTimeout(() => onOpenChange(false), 150)}
         className={cn(
           'w-full h-full px-2.5 flex items-center text-xs truncate transition-colors hover:bg-accent/50 rounded-xl',
           'focus:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:z-10',
@@ -264,7 +283,6 @@ function StopChip({
           <div className="p-1.5 border-b shrink-0 relative">
             <Search className="h-3 w-3 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <input
-              autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => { if (e.key === 'Escape') onOpenChange(false); }}
@@ -283,7 +301,7 @@ function StopChip({
                   <button
                     key={opt.value}
                     type="button"
-                    onMouseDown={() => { onChange(opt.value); onOpenChange(false); setSearch(''); }}
+                    onClick={() => { onChange(opt.value); onOpenChange(false); setSearch(''); }}
                     className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-accent"
                     data-testid={`${testId}-option-${opt.badge}`}
                   >
