@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, RotateCcw } from 'lucide-react';
+import { Search, RotateCcw, MapPin, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SearchableSelectOption } from '@/components/ui/searchable-select';
 import { computeNextPatternSeq, buildPatternCode } from '@/lib/patternCode';
@@ -296,19 +296,30 @@ function StopChip({
             )}
             {grouped.map(([group, items]) => (
               <div key={group}>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-2.5 pt-1.5 pb-0.5">{group}</p>
-                {items.map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => { onChange(opt.value); onOpenChange(false); setSearch(''); }}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-accent"
-                    data-testid={`${testId}-option-${opt.badge}`}
-                  >
-                    <span className="font-mono font-medium text-[11px] text-primary bg-primary/10 rounded px-1 py-0.5 shrink-0">{opt.badge}</span>
-                    <span className="truncate">{opt.label}</span>
-                  </button>
-                ))}
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 sticky top-0 bg-muted/60 border-b">
+                  <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{group}</span>
+                  <span className="text-[10px] text-muted-foreground/70 ml-auto">{items.length}</span>
+                </div>
+                {items.map(opt => {
+                  const isSelected = opt.value === value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => { onChange(opt.value); onOpenChange(false); setSearch(''); }}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-2.5 py-2 text-left text-xs transition-colors',
+                        isSelected ? 'bg-primary/5 text-primary font-medium' : 'hover:bg-accent'
+                      )}
+                      data-testid={`${testId}-option-${opt.badge}`}
+                    >
+                      <span className="flex-1 min-w-0 truncate">{opt.label}</span>
+                      <span className="font-mono font-medium text-[10px] text-primary bg-primary/10 rounded px-1.5 py-0.5 shrink-0">{opt.badge}</span>
+                      {isSelected && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                    </button>
+                  );
+                })}
               </div>
             ))}
           </div>
