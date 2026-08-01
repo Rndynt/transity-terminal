@@ -132,6 +132,7 @@ export default function PatternCodeBuilder({
           isOpen={openPicker === 'origin'}
           onOpenChange={makeOpenHandler('origin')}
           testId="pattern-origin-chip"
+          roundedSide="left"
         />
         <Separator />
         <StopChip
@@ -144,6 +145,7 @@ export default function PatternCodeBuilder({
           isOpen={openPicker === 'destination'}
           onOpenChange={makeOpenHandler('destination')}
           testId="pattern-dest-chip"
+          roundedSide="none"
         />
         <Separator />
         <div
@@ -204,6 +206,7 @@ function StopChip({
   isOpen,
   onOpenChange,
   testId,
+  roundedSide,
 }: {
   ariaLabel: string;
   placeholder: string;
@@ -214,6 +217,11 @@ function StopChip({
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   testId: string;
+  /** Which corners this segment's hover/focus fill should round — must match
+   *  its actual position against the outer unified control's own rounded-xl
+   *  border, otherwise a hover/focus background on a middle segment shows as
+   *  a mismatched floating pill instead of reading as one continuous field. */
+  roundedSide: 'left' | 'right' | 'none';
 }) {
   const [search, setSearch] = useState('');
   const selected = options.find(o => o.value === value) || null;
@@ -270,7 +278,8 @@ function StopChip({
         aria-expanded={isOpen}
         onClick={() => onOpenChange(!isOpen)}
         className={cn(
-          'w-full h-full px-2.5 flex items-center text-xs truncate transition-colors hover:bg-accent/50 rounded-xl',
+          'w-full h-full px-2.5 flex items-center text-xs truncate transition-colors hover:bg-accent/50',
+          roundedSide === 'left' ? 'rounded-l-xl' : roundedSide === 'right' ? 'rounded-r-xl' : '',
           'focus:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:z-10',
           selected ? 'font-mono font-semibold text-foreground' : 'text-muted-foreground/70'
         )}
@@ -296,7 +305,7 @@ function StopChip({
             )}
             {grouped.map(([group, items]) => (
               <div key={group}>
-                <div className="flex items-center gap-1.5 px-2.5 py-1.5 sticky top-0 bg-muted/60 border-b">
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 sticky top-0 z-10 bg-muted border-b">
                   <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
                   <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{group}</span>
                   <span className="text-[10px] text-muted-foreground/70 ml-auto">{items.length}</span>
