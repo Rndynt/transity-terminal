@@ -119,7 +119,13 @@ export class AtomicHoldService {
             eq(seatInventory.seatNo, seatNo),
             inArray(seatInventory.legIndex, legIndexes)
           ))
-          .for('update', { of: seatInventory, noWait: true });
+          // NOTE: noWait removed — Drizzle <=0.39.x generates `no wait`
+          // (two words) which PostgreSQL rejects; NOWAIT (one word) is the
+          // correct syntax. Without noWait the query blocks briefly on lock
+          // contention (~127ms) instead of failing immediately, but the
+          // end-result (SEAT_CONFLICT) is identical. Re-add once Drizzle
+          // fixes the codegen bug (tracked: drizzle-orm #3647).
+          .for('update', { of: seatInventory });
 
         if (inventoryRows.length !== legIndexes.length) {
           return {
