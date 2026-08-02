@@ -124,7 +124,7 @@ export default function PassengerDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose} data-testid="passenger-detail-modal">
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Armchair className="w-4 h-4 text-primary" />
@@ -200,14 +200,18 @@ export default function PassengerDetailModal({
                     {isOpen && (
                       <div className="p-4 space-y-4">
                         <div className="rounded-lg border bg-muted/20 p-3.5 space-y-3">
-                          <div className="flex items-center gap-2 text-sm font-medium" data-testid="origin-destination">
-                            <MapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                            <span className="truncate">{b.originStop?.name ?? '—'}</span>
-                            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                            <span className="truncate">{b.destinationStop?.name ?? '—'}</span>
+                          <div className="flex items-start gap-2 text-sm font-medium" data-testid="origin-destination">
+                            <MapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                            <div className="min-w-0 space-y-0.5">
+                              <p className="leading-tight break-words">{b.originStop?.name ?? '—'}</p>
+                              <div className="flex items-center gap-1.5 text-muted-foreground">
+                                <ArrowRight className="w-3 h-3 flex-shrink-0" />
+                                <p className="leading-tight break-words font-medium text-foreground">{b.destinationStop?.name ?? '—'}</p>
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs min-w-0">
                             <div>
                               <p className="text-muted-foreground">Channel</p>
                               <p className="font-medium mt-0.5">
@@ -239,15 +243,15 @@ export default function PassengerDetailModal({
                               </p>
                             </div>
                             {b.outlet && (
-                              <div>
+                              <div className="min-w-0">
                                 <p className="text-muted-foreground">Outlet</p>
-                                <p className="font-medium mt-0.5 truncate">{b.outlet.name}</p>
+                                <p className="font-medium mt-0.5 break-words">{b.outlet.name}</p>
                               </div>
                             )}
                             {b.vehicle && (
-                              <div>
+                              <div className="min-w-0">
                                 <p className="text-muted-foreground">Kendaraan</p>
-                                <p className="font-medium mt-0.5">{b.vehicle.plate} ({b.vehicle.code})</p>
+                                <p className="font-medium mt-0.5 break-words">{b.vehicle.plate} ({b.vehicle.code})</p>
                               </div>
                             )}
                             {b.departAt && (
@@ -380,12 +384,12 @@ export default function PassengerDetailModal({
                             </div>
                             <div className="divide-y">
                               {bookingData.payments.map((pay, pi) => (
-                                <div key={pay.id} className="px-4 py-2.5 flex items-center justify-between text-sm" data-testid={`payment-${pi}`}>
-                                  <div>
+                                <div key={pay.id} className="px-4 py-2.5 flex items-center justify-between gap-3 text-sm" data-testid={`payment-${pi}`}>
+                                  <div className="min-w-0">
                                     <p className="font-medium">{getPaymentLabel(pay.method)}</p>
                                     {pay.paidAt && <p className="text-xs text-muted-foreground mt-0.5">{fmtDate(pay.paidAt)}</p>}
                                   </div>
-                                  <p className="font-semibold text-emerald-700">{fmtCurrency(pay.amount ?? 0)}</p>
+                                  <p className="font-semibold text-emerald-700 flex-shrink-0 whitespace-nowrap">{fmtCurrency(pay.amount ?? 0)}</p>
                                 </div>
                               ))}
                             </div>
