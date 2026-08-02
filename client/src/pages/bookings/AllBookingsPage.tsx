@@ -106,7 +106,7 @@ function BookingDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Ticket className="w-4 h-4 text-blue-600" />
@@ -139,25 +139,29 @@ function BookingDetailModal({
               </div>
 
               {/* Route */}
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <MapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                <span className="truncate">{detail.originStop?.name ?? '—'}</span>
-                <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                <span className="truncate">{detail.destinationStop?.name ?? '—'}</span>
+              <div className="flex items-start gap-2 text-sm font-medium">
+                <MapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <div className="min-w-0 space-y-0.5">
+                  <p className="leading-tight break-words">{detail.originStop?.name ?? '—'}</p>
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <ArrowRight className="w-3 h-3 flex-shrink-0" />
+                    <p className="leading-tight break-words font-medium text-foreground">{detail.destinationStop?.name ?? '—'}</p>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs min-w-0">
+                <div className="min-w-0">
                   <p className="text-muted-foreground">Channel</p>
                   <p className="font-medium mt-0.5">
                     {detail.channel ? <ChannelBadge channel={detail.channel} /> : '—'}
                   </p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-muted-foreground">Total</p>
-                  <p className="font-semibold text-emerald-700 mt-0.5">{fmtCurrency(detail.totalAmount ?? 0)}</p>
+                  <p className="font-semibold text-emerald-700 mt-0.5 whitespace-nowrap">{fmtCurrency(detail.totalAmount ?? 0)}</p>
                   {detail.discountAmount && parseFloat(String(detail.discountAmount)) > 0 && (
-                    <p className="text-[11px] text-orange-600 mt-0.5" data-testid="text-discount-summary">
+                    <p className="text-[11px] text-orange-600 mt-0.5 break-words" data-testid="text-discount-summary">
                       Diskon: -{fmtCurrency(detail.discountAmount)}
                       {Array.isArray(detail.promoApplications) && detail.promoApplications.length > 0
                         ? ` (${detail.promoApplications.map((a: any) => a.promoName).join(' + ')})`
@@ -165,34 +169,34 @@ function BookingDetailModal({
                     </p>
                   )}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-muted-foreground">Dibuat</p>
                   <p className="font-medium mt-0.5">{fmtDate(detail.createdAt)}</p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-muted-foreground">Oleh</p>
-                  <p className="font-medium mt-0.5 truncate">{detail.createdBy ?? '—'}</p>
+                  <p className="font-medium mt-0.5 break-words">{detail.createdBy ?? '—'}</p>
                 </div>
                 {detail.outlet && (
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-muted-foreground">Outlet</p>
-                    <p className="font-medium mt-0.5 truncate">{detail.outlet.name}</p>
+                    <p className="font-medium mt-0.5 break-words">{detail.outlet.name}</p>
                   </div>
                 )}
                 {detail.vehicle && (
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-muted-foreground">Kendaraan</p>
-                    <p className="font-medium mt-0.5">{detail.vehicle.plate} ({detail.vehicle.code})</p>
+                    <p className="font-medium mt-0.5 break-words">{detail.vehicle.plate} ({detail.vehicle.code})</p>
                   </div>
                 )}
                 {detail.departAt && (
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-muted-foreground">Berangkat</p>
                     <p className="font-medium mt-0.5">{fmtShortDate(detail.departAt)}</p>
                   </div>
                 )}
                 {detail.arriveAt && (
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-muted-foreground">Tiba</p>
                     <p className="font-medium mt-0.5">{fmtShortDate(detail.arriveAt)}</p>
                   </div>
@@ -332,12 +336,12 @@ function BookingDetailModal({
                     {!!detail.payments?.length && (
                       <div className="pt-2 space-y-1.5 border-t mt-2">
                         {detail.payments.map((pay: any, idx: number) => (
-                          <div key={pay.id ?? idx} className="flex items-center justify-between text-xs">
-                            <div>
+                          <div key={pay.id ?? idx} className="flex items-center justify-between gap-3 text-xs">
+                            <div className="min-w-0">
                               <span className="font-medium">{getPaymentLabel(pay.method)}</span>
                               {pay.paidAt && <span className="text-muted-foreground ml-1.5">{fmtShortDate(pay.paidAt)}</span>}
                             </div>
-                            <span className="font-mono text-emerald-700">{fmtCurrency(pay.amount ?? 0)}</span>
+                            <span className="font-mono text-emerald-700 flex-shrink-0 whitespace-nowrap">{fmtCurrency(pay.amount ?? 0)}</span>
                           </div>
                         ))}
                       </div>
